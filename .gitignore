@@ -8,6 +8,7 @@ dist
 *.tsbuildinfo
 vercel.json
 .vercel
+.login-v27-reference
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
