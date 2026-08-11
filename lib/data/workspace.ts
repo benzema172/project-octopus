@@ -21,12 +21,12 @@ export const ensureWorkspaceForUser = cache(async function ensureWorkspaceForUse
 
   const readMembership = () =>
     supabase
-    .from("workspace_members")
-    .select("workspace_id, role, workspaces(id, name)")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle<WorkspaceMemberRow>();
+      .from("workspace_members")
+      .select("workspace_id, role, workspaces(id, name)")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle<WorkspaceMemberRow>();
 
   let membershipResult = await readMembership();
 
@@ -61,9 +61,15 @@ export const ensureWorkspaceForUser = cache(async function ensureWorkspaceForUse
     .single<WorkspaceSummary>();
 
   if (isMissingOwnerId(workspaceResult.error?.message)) {
+    const workspaceSlug = `workspace-${user.id}`;
+
     workspaceResult = await supabase
       .from("workspaces")
-      .insert({ name: workspaceName })
+      .insert({
+        name: workspaceName,
+        slug: workspaceSlug,
+        created_by: user.id
+      })
       .select("id, name")
       .single<WorkspaceSummary>();
   }
