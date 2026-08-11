@@ -8,6 +8,7 @@ import type { DocumentSummary } from "@/lib/types";
 type DocumentUploadProps = {
   projectId: string;
   documents: DocumentSummary[];
+  storageReady: boolean;
 };
 
 type UploadResponse = {
@@ -32,7 +33,7 @@ async function sha256(file: File) {
     .join("");
 }
 
-export function DocumentUpload({ projectId, documents }: DocumentUploadProps) {
+export function DocumentUpload({ projectId, documents, storageReady }: DocumentUploadProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -99,6 +100,10 @@ export function DocumentUpload({ projectId, documents }: DocumentUploadProps) {
   }
 
   async function handleFiles(files: FileList | null) {
+    if (!storageReady) {
+      return;
+    }
+
     const file = files?.[0];
 
     if (!file) {
@@ -120,11 +125,19 @@ export function DocumentUpload({ projectId, documents }: DocumentUploadProps) {
   return (
     <div className="documents-layout">
       <div className="upload-panel">
-        <input ref={inputRef} type="file" onChange={(event) => handleFiles(event.target.files)} />
-        <button type="button" className="primary-button" onClick={() => inputRef.current?.click()} disabled={isPending}>
+        <input ref={inputRef} type="file" onChange={(event) => handleFiles(event.target.files)} disabled={!storageReady} />
+        <button
+          type="button"
+          className="primary-button"
+          onClick={() => inputRef.current?.click()}
+          disabled={isPending || !storageReady}
+        >
           <UploadCloud size={18} aria-hidden="true" />
           Dodaj plik
         </button>
+        {!storageReady ? (
+          <p className="form-message">Dokumentacja będzie dostępna po zakończeniu aktualizacji bazy.</p>
+        ) : null}
         {status ? <p className="upload-status">{status}</p> : null}
         {error ? <p className="form-message form-message--error">{error}</p> : null}
       </div>

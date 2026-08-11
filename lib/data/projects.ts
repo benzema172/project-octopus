@@ -4,22 +4,39 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { AuthenticatedUser, ProjectSummary } from "@/lib/types";
 import { ensureWorkspaceForUser } from "@/lib/data/workspace";
 
+type ProjectRow = Pick<ProjectSummary, "id" | "workspace_id" | "name"> & Partial<ProjectSummary>;
+
+function normalizeProject(row: ProjectRow): ProjectSummary {
+  return {
+    id: row.id,
+    workspace_id: row.workspace_id,
+    name: row.name,
+    description: row.description ?? null,
+    investor_name: row.investor_name ?? null,
+    general_contractor: row.general_contractor ?? null,
+    location: row.location ?? null,
+    status: row.status ?? "active",
+    created_at: row.created_at ?? "",
+    updated_at: row.updated_at ?? row.created_at ?? ""
+  };
+}
+
 export async function listProjectsForUser(user: AuthenticatedUser): Promise<ProjectSummary[]> {
   const workspace = await ensureWorkspaceForUser(user);
   const supabase = createServiceSupabaseClient();
 
   const { data, error } = await supabase
     .from("projects")
-    .select("id, workspace_id, name, description, investor_name, general_contractor, location, status, created_at, updated_at")
+    .select("*")
     .eq("workspace_id", workspace.id)
     .order("updated_at", { ascending: false })
-    .returns<ProjectSummary[]>();
+    .returns<ProjectRow[]>();
 
   if (error) {
     throw new Error(`Nie udało się pobrać inwestycji: ${error.message}`);
   }
 
-  return data ?? [];
+  return (data ?? []).map(normalizeProject);
 }
 
 export async function getProjectForUser(user: AuthenticatedUser, projectId: string): Promise<ProjectSummary | null> {
@@ -28,16 +45,16 @@ export async function getProjectForUser(user: AuthenticatedUser, projectId: stri
 
   const { data, error } = await supabase
     .from("projects")
-    .select("id, workspace_id, name, description, investor_name, general_contractor, location, status, created_at, updated_at")
+    .select("*")
     .eq("workspace_id", workspace.id)
     .eq("id", projectId)
-    .maybeSingle<ProjectSummary>();
+    .maybeSingle<ProjectRow>();
 
   if (error) {
     throw new Error(`Nie udało się pobrać inwestycji: ${error.message}`);
   }
 
-  return data;
+  return data ? normalizeProject(data) : null;
 }
 
 export async function userHasProjectAccess(user: AuthenticatedUser, projectId: string) {

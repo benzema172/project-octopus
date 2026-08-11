@@ -1,12 +1,13 @@
 import "server-only";
 
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { getPublicSupabaseConfig } from "@/lib/env";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { AuthenticatedUser } from "@/lib/types";
 
-export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
+export const getCurrentUser = cache(async function getCurrentUser(): Promise<AuthenticatedUser | null> {
   try {
     const supabase = await createServerSupabaseClient();
     const { data, error } = await supabase.auth.getUser();
@@ -22,7 +23,7 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
   } catch {
     return null;
   }
-}
+});
 
 export async function requireCurrentUser(): Promise<AuthenticatedUser> {
   const user = await getCurrentUser();

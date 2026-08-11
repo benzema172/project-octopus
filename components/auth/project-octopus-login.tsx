@@ -15,6 +15,7 @@ type LogoPoint = {
   y: number;
   className: string;
   core: boolean;
+  pulse: boolean;
   tentacleId: string | null;
   color: string;
   glow: string;
@@ -330,6 +331,7 @@ function buildLogo() {
       y: point.y,
       className: point.className,
       core: point.className.includes("core"),
+      pulse: (point.x * 7 + point.y * 11) % 5 === 0,
       tentacleId,
       color: color.solid,
       glow: color.glow,
@@ -347,28 +349,12 @@ function buildLogo() {
   return { points, handles };
 }
 
-function createGridCells() {
-  return Array.from({ length: COLS * ROWS }, (_, index) => {
-    const x = index % COLS;
-    const y = Math.floor(index / COLS);
-    const seed = (x * 37 + y * 17) % 100;
-
-    return {
-      key: `${x}-${y}`,
-      spark: seed < 11,
-      delay: `${(-(((x * 23 + y * 41) % 800) / 100)).toFixed(2)}s`,
-      duration: `${(6.2 + (((x * 19 + y * 13) % 36) / 10)).toFixed(2)}s`
-    };
-  });
-}
-
 export function ProjectOctopusLogin({ configReady }: ProjectOctopusLoginProps) {
   const router = useRouter();
   const loginInputRef = useRef<HTMLInputElement>(null);
   const activeDrag = useRef<ActiveDrag | null>(null);
   const hideTimer = useRef<number | null>(null);
   const focusTimer = useRef<number | null>(null);
-  const gridCells = useMemo(() => createGridCells(), []);
   const logo = useMemo(() => buildLogo(), []);
   const [loginMounted, setLoginMounted] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
@@ -395,7 +381,7 @@ export function ProjectOctopusLogin({ configReady }: ProjectOctopusLoginProps) {
 
     focusTimer.current = window.setTimeout(() => {
       loginInputRef.current?.focus();
-    }, 680);
+    }, 180);
   }
 
   function endDrag(pointerId?: number) {
@@ -486,7 +472,6 @@ export function ProjectOctopusLogin({ configReady }: ProjectOctopusLoginProps) {
       }
 
       router.replace("/workspace");
-      router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Nie udało się połączyć z Supabase.");
     } finally {
@@ -546,20 +531,7 @@ export function ProjectOctopusLogin({ configReady }: ProjectOctopusLoginProps) {
             </svg>
           </div>
 
-          <div className="v27-grid-layer" aria-hidden="true">
-            {gridCells.map((cell) => (
-              <span
-                key={cell.key}
-                className={cell.spark ? "v27-grid-cell spark" : "v27-grid-cell"}
-                style={
-                  {
-                    "--delay": cell.delay,
-                    "--dur": cell.duration
-                  } as React.CSSProperties
-                }
-              />
-            ))}
-          </div>
+          <div className="v27-grid-layer" aria-hidden="true" />
 
           <div className="v27-logo-layer" aria-hidden="true">
             {logo.points.map((point) => {
@@ -572,6 +544,7 @@ export function ProjectOctopusLogin({ configReady }: ProjectOctopusLoginProps) {
                     "v27-logo-cell",
                     "on",
                     point.core ? "core" : "",
+                    point.pulse ? "v27-logo-cell--pulse" : "",
                     point.tentacleId ? "v27-logo-cell--tentacle" : "",
                     isDragged ? "is-dragging is-grabbed" : ""
                   ].join(" ")}

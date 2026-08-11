@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { BrainPanel } from "@/components/brain/brain-panel";
 import { DocumentUpload } from "@/components/documents/document-upload";
 import { requireCurrentUser } from "@/lib/auth";
-import { listDocumentsForProject } from "@/lib/data/documents";
+import { isDocumentStorageSchemaReady, listDocumentsForProject } from "@/lib/data/documents";
 import { getProjectForUser } from "@/lib/data/projects";
 import { getAiRuntimeStatus } from "@/lib/env";
 
@@ -23,7 +23,10 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     notFound();
   }
 
-  const documents = await listDocumentsForProject(project.id);
+  const [documents, storageSchemaReady] = await Promise.all([
+    listDocumentsForProject(project.id),
+    isDocumentStorageSchemaReady()
+  ]);
   const aiStatus = getAiRuntimeStatus();
 
   return (
@@ -59,7 +62,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             <h2>Pliki inwestycji</h2>
           </div>
         </div>
-        <DocumentUpload projectId={project.id} documents={documents} />
+        <DocumentUpload projectId={project.id} documents={documents} storageReady={storageSchemaReady} />
       </section>
 
       <section className="section-band" id="brain">

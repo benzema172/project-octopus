@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { AuthenticatedUser, WorkspaceSummary } from "@/lib/types";
 
@@ -9,16 +10,32 @@ type WorkspaceMemberRow = {
   workspaces: WorkspaceSummary | WorkspaceSummary[] | null;
 };
 
-export async function ensureWorkspaceForUser(user: AuthenticatedUser): Promise<WorkspaceSummary> {
+function isMissingOwnerId(message: string | undefined) {
+  return Boolean(message?.includes("owner_id") && (message.includes("schema cache") || message.includes("does not exist")));
+}
+
+export const ensureWorkspaceForUser = cache(async function ensureWorkspaceForUser(
+  user: AuthenticatedUser
+): Promise<WorkspaceSummary> {
   const supabase = createServiceSupabaseClient();
 
-  const { data: membership, error: membershipError } = await supabase
+  const readMembership = () =>
+    supabase
     .from("workspace_members")
     .select("workspace_id, role, workspaces(id, name)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle<WorkspaceMemberRow>();
+
+  let membershipResult = await readMembership();
+
+  if (membershipResult.error?.message.includes("JWT issued at future")) {
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    membershipResult = await readMembership();
+  }
+
+  const { data: membership, error: membershipError } = membershipResult;
 
   if (membershipError) {
     throw new Error(`Nie udało się odczytać workspace użytkownika: ${membershipError.message}`);
@@ -34,7 +51,7 @@ export async function ensureWorkspaceForUser(user: AuthenticatedUser): Promise<W
 
   const workspaceName = user.email ? `Workspace ${user.email}` : "Workspace Project Octopus";
 
-  const { data: workspace, error: workspaceError } = await supabase
+  let workspaceResult = await supabase
     .from("workspaces")
     .insert({
       name: workspaceName,
@@ -42,6 +59,16 @@ export async function ensureWorkspaceForUser(user: AuthenticatedUser): Promise<W
     })
     .select("id, name")
     .single<WorkspaceSummary>();
+
+  if (isMissingOwnerId(workspaceResult.error?.message)) {
+    workspaceResult = await supabase
+      .from("workspaces")
+      .insert({ name: workspaceName })
+      .select("id, name")
+      .single<WorkspaceSummary>();
+  }
+
+  const { data: workspace, error: workspaceError } = workspaceResult;
 
   if (workspaceError || !workspace) {
     throw new Error(`Nie udało się utworzyć workspace: ${workspaceError?.message ?? "brak danych"}`);
@@ -58,4 +85,4 @@ export async function ensureWorkspaceForUser(user: AuthenticatedUser): Promise<W
   }
 
   return workspace;
-}
+});

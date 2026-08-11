@@ -20,7 +20,7 @@ export async function createProjectAction(formData: FormData) {
     throw new Error("Nazwa inwestycji jest wymagana.");
   }
 
-  const { data, error } = await supabase
+  let createResult = await supabase
     .from("projects")
     .insert({
       workspace_id: workspace.id,
@@ -33,6 +33,25 @@ export async function createProjectAction(formData: FormData) {
     })
     .select("id")
     .single<{ id: string }>();
+
+  if (createResult.error?.message.includes("location")) {
+    const compatibleDescription = [description, location ? `Lokalizacja: ${location}` : ""].filter(Boolean).join("\n\n");
+
+    createResult = await supabase
+      .from("projects")
+      .insert({
+        workspace_id: workspace.id,
+        name,
+        investor_name: investorName || null,
+        description: compatibleDescription || null,
+        status: "active",
+        created_by: user.id
+      })
+      .select("id")
+      .single<{ id: string }>();
+  }
+
+  const { data, error } = createResult;
 
   if (error || !data) {
     throw new Error(`Nie udało się utworzyć inwestycji: ${error?.message ?? "brak danych"}`);
