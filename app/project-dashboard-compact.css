@@ -1,0 +1,224 @@
+/* Compact investment dashboard refinement — unified vertical rhythm and shorter top sections. */
+
+.pw-dashboard--combined {
+  gap: 12px !important;
+}
+
+.pw-dashboard--combined > section {
+  margin: 0 !important;
+}
+
+.pw-time-card,
+.pw-finance-card,
+.pw-ops-grid,
+.pw-ops-grid--two {
+  margin: 0 !important;
+}
+
+/* Compact time / readiness section */
+.pw-time-card {
+  min-height: 0 !important;
+  border-radius: 20px !important;
+  align-items: stretch !important;
+}
+
+.pw-time-card__count,
+.pw-time-card__timeline,
+.pw-readiness-card {
+  padding: 13px 17px !important;
+}
+
+.pw-time-card__count > strong {
+  margin-top: 0 !important;
+  font-size: clamp(52px, 5vw, 76px) !important;
+  line-height: .9 !important;
+}
+
+.pw-time-card__count > span {
+  font-size: 14px !important;
+  line-height: 1.1 !important;
+}
+
+.pw-time-card__count > small {
+  margin-top: 8px !important;
+  padding: 6px 9px !important;
+  font-size: 9px !important;
+}
+
+.pw-time-card__timeline {
+  gap: 9px !important;
+}
+
+.pw-time-card__timeline .pw-card-title-row {
+  gap: 10px !important;
+}
+
+.pw-progress-track {
+  height: 8px !important;
+}
+
+.pw-time-dates {
+  gap: 8px !important;
+}
+
+.pw-time-dates > div {
+  gap: 2px !important;
+  padding-left: 9px !important;
+}
+
+.pw-time-dates small {
+  font-size: 8px !important;
+}
+
+.pw-time-dates strong {
+  gap: 5px !important;
+  font-size: 10px !important;
+}
+
+.pw-info-strip {
+  padding: 7px 9px !important;
+  font-size: 9px !important;
+  border-radius: 10px !important;
+}
+
+.pw-readiness-card {
+  gap: 6px !important;
+}
+
+.pw-readiness-ring {
+  width: 86px !important;
+  height: 86px !important;
+}
+
+.pw-readiness-ring::before {
+  inset: 9px !important;
+}
+
+.pw-readiness-ring span {
+  font-size: 21px !important;
+}
+
+.pw-readiness-card > small {
+  font-size: 8px !important;
+}
+
+.pw-readiness-card > b {
+  font-size: 9px !important;
+}
+
+/* Compact finance section */
+.pw-finance-card {
+  border-radius: 20px !important;
+  padding: 13px 17px !important;
+}
+
+.pw-finance-card .pw-card-title-row h2 {
+  font-size: 17px !important;
+}
+
+.pw-finance-card > .pw-card-title-row > small {
+  font-size: 8px !important;
+}
+
+.pw-finance-metrics {
+  margin-top: 10px !important;
+  padding-bottom: 10px !important;
+}
+
+.pw-finance-metrics > div {
+  min-height: 78px !important;
+  gap: 2px !important;
+  padding: 0 13px 0 46px !important;
+}
+
+.pw-finance-metrics > div:first-child {
+  padding-left: 46px !important;
+}
+
+.pw-finance-icon {
+  left: 2px !important;
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 10px !important;
+}
+
+.pw-finance-metrics small {
+  font-size: 8px !important;
+}
+
+.pw-finance-metrics strong {
+  font-size: clamp(19px, 1.9vw, 26px) !important;
+  line-height: 1.02 !important;
+}
+
+.pw-finance-metrics p {
+  font-size: 8px !important;
+}
+
+.pw-budget-row {
+  gap: 15px !important;
+  margin-top: 10px !important;
+}
+
+.pw-budget-main {
+  gap: 5px !important;
+}
+
+.pw-budget-main .pw-card-title-row > span,
+.pw-budget-main .pw-card-title-row > b {
+  font-size: 8px !important;
+}
+
+.pw-budget-labels small {
+  font-size: 8px !important;
+}
+
+.pw-work-value {
+  gap: 8px !important;
+  padding-left: 15px !important;
+}
+
+.pw-work-value > svg:first-child {
+  width: 34px !important;
+  height: 34px !important;
+  padding: 8px !important;
+}
+
+.pw-work-value span {
+  gap: 1px !important;
+}
+
+.pw-work-value small,
+.pw-work-value b {
+  font-size: 8px !important;
+}
+
+.pw-work-value strong {
+  font-size: 16px !important;
+}
+
+/* Consistent rhythm below */
+.pw-ops-grid,
+.pw-ops-grid--two {
+  gap: 12px !important;
+}
+
+.pw-ops-card {
+  border-radius: 20px !important;
+  padding: 15px !important;
+}
+
+@media (max-width: 1180px) {
+  .pw-time-card__count,
+  .pw-time-card__timeline,
+  .pw-readiness-card,
+  .pw-finance-card {
+    padding: 13px 14px !important;
+  }
+}
+
+@media (max-width: 860px) {
+  .pw-dashboard--combined {
+    gap: 10px !important;
+  }
+}
