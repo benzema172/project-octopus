@@ -25,10 +25,12 @@ export function CompanySelector({ companies, schemaReady, userEmail }: CompanySe
         <div className="co-wordmark" aria-label="Project Octopus">
           <strong>OCTOPUS</strong>
           <div className="co-wordmark-meta">
-            <span>Project Octopus</span>
-            <a className="co-pureinvest-button" href="https://pure-invest.pl" aria-label="Przejdź do PureInvest Wiktor Purczyński">
-              PureInvest Wiktor Purczyński
-            </a>
+            <span>
+              Project Octopus by{" "}
+              <a className="co-pureinvest-button" href="https://pure-invest.pl" aria-label="Przejdź do PureInvest Wiktor Purczyński">
+                PureInvest Wiktor Purczyński
+              </a>
+            </span>
           </div>
         </div>
         <div className="co-selector-account">
