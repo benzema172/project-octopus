@@ -62,23 +62,23 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
   }
 
   if (MODULES[section]) {
-    const module = MODULES[section];
+    const moduleConfig = MODULES[section];
     return (
       <main className="co-page">
         <header className="co-page-heading">
           <div>
-            <p className="co-kicker">{module.kicker}</p>
-            <h1>{module.title}</h1>
-            <p>{module.description}</p>
+            <p className="co-kicker">{moduleConfig.kicker}</p>
+            <h1>{moduleConfig.title}</h1>
+            <p>{moduleConfig.description}</p>
           </div>
         </header>
         <section className="co-section">
           <div className="co-feature-grid">
-            {module.features.map((feature, index) => (
+            {moduleConfig.features.map((feature, index) => (
               <article className="co-feature-card" key={feature}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
                 <h2>{feature}</h2>
-                <p>Obszar przygotowany jako część modułu {module.kicker.toLowerCase()} i gotowy do dalszego rozwijania.</p>
+                <p>Obszar przygotowany jako część modułu {moduleConfig.kicker.toLowerCase()} i gotowy do dalszego rozwijania.</p>
               </article>
             ))}
           </div>
