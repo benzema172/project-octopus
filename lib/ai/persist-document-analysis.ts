@@ -167,10 +167,10 @@ export async function persistDocumentAnalysis(input: {
       project_id: input.projectId,
       item_number: item.item_number || null,
       description: item.description,
-      quantity: Number.isFinite(item.quantity) ? item.quantity : null,
+      quantity: item.quantity !== null && Number.isFinite(item.quantity) ? item.quantity : null,
       unit: item.unit || null,
-      unit_price: Number.isFinite(item.unit_price) ? item.unit_price : null,
-      total_price: Number.isFinite(item.total_price) ? item.total_price : null,
+      unit_price: item.unit_price !== null && Number.isFinite(item.unit_price) ? item.unit_price : null,
+      total_price: item.total_price !== null && Number.isFinite(item.total_price) ? item.total_price : null,
       source_reference_id: sourceId("boq", index)
     })));
     if (error) throw new Error(`Nie udało się zapisać pozycji kosztorysu: ${error.message}`);
