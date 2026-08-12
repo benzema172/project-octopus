@@ -8,6 +8,7 @@ import "./project-workspace-v2.css";
 import "./project-dashboard-combined.css";
 import "./project-dashboard-compact.css";
 import "./project-dashboard-layout-refinement.css";
+import "./project-intake.css";
 
 export const metadata: Metadata = {
   title: "Project Octopus",
