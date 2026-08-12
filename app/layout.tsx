@@ -3,6 +3,7 @@ import "./globals.css";
 import "./octopus-app.css";
 import "./company-selector-refinement.css";
 import "./investments-refinement.css";
+import "./project-workspace-v2.css";
 
 export const metadata: Metadata = {
   title: "Project Octopus",
