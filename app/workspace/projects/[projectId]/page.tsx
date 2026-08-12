@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   Circle,
   Clock3,
-  FileCheck2,
   Flag,
   TrendingUp,
   WalletCards
@@ -84,12 +83,6 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   const workValue = 2_230_000;
   const workProgress = 46;
   const readiness = Math.min(96, 62 + Math.min(documentsCount, 6));
-
-  const receipts = [
-    { title: "Odbiór instalacji wentylacji mechanicznej", date: "28.08.2026", status: "Zaplanowany" },
-    { title: "Odbiór robót elewacyjnych — Etap II", date: "15.09.2026", status: "Zaplanowany" },
-    { title: "Odbiór końcowy", date: dateLabel(finish), status: "Planowany" }
-  ];
 
   const alerts = [
     { level: "danger", title: "Ryzyko opóźnienia robót instalacyjnych", text: "Aktualny postęp wskazuje ryzyko przesunięcia jednego z odbiorów o około 7 dni." },
@@ -170,7 +163,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         </div>
       </section>
 
-      <section className="pw-ops-grid">
+      <section className="pw-ops-grid pw-ops-grid--primary">
         <article className="pw-ops-card pw-progress-card">
           <div className="pw-card-title-row"><p className="co-kicker">Postęp robót</p><BarChart3 size={17} /></div>
           <div className="pw-progress-content">
@@ -182,14 +175,6 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             </dl>
           </div>
           <Link href={`${base}/schedule`}>Przejdź do harmonogramu <ArrowRight size={14} /></Link>
-        </article>
-
-        <article className="pw-ops-card">
-          <div className="pw-card-title-row"><p className="co-kicker">Najbliższe odbiory</p><FileCheck2 size={17} /></div>
-          <div className="pw-list-stack">
-            {receipts.map((item) => <div className="pw-receipt-row" key={item.title}><span><strong>{item.title}</strong><small>{item.date}</small></span><b>{item.status}</b></div>)}
-          </div>
-          <Link href={`${base}/protocols`}>Zobacz odbiory i protokoły <ArrowRight size={14} /></Link>
         </article>
 
         <article className="pw-ops-card pw-alert-card">
