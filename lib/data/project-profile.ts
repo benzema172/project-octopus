@@ -100,8 +100,15 @@ export const getProjectProfile = cache(async function getProjectProfile(
     .limit(1)
     .maybeSingle<ProjectProfileRow>();
 
+  // Profil inwestycji jest warstwą rozszerzoną. Brak tabeli/kolumny lub chwilowy
+  // problem z jej odczytem nie może blokować wejścia do całego workspace projektu.
+  // W takim przypadku korzystamy z danych bazowych z tabeli projects.
   if (error) {
-    throw new Error(`Nie udało się odczytać danych inwestycji: ${error.message}`);
+    console.error("Project Octopus: project profile fallback", {
+      projectId: project.id,
+      message: error.message
+    });
+    return normalizeProfile(null, project);
   }
 
   return normalizeProfile(data?.value_json, project);
