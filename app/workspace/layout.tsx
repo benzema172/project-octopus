@@ -1,4 +1,3 @@
-import { AppShell } from "@/components/layout/app-shell";
 import { requireCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +7,7 @@ export default async function WorkspaceLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const user = await requireCurrentUser();
+  await requireCurrentUser();
 
-  return <AppShell userEmail={user.email ?? "Project Octopus"}>{children}</AppShell>;
+  return <div className="octopus-app-light">{children}</div>;
 }

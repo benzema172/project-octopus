@@ -1,7 +1,23 @@
-export type WorkspaceSummary = {
+export type CompanyWorkspace = {
   id: string;
   name: string;
+  tax_id: string | null;
+  regon: string | null;
+  street: string | null;
+  postal_code: string | null;
+  city: string | null;
+  email: string | null;
+  phone: string | null;
+  contact_person: string | null;
+  industry: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  project_count?: number;
+  role?: string;
 };
+
+export type WorkspaceSummary = Pick<CompanyWorkspace, "id" | "name">;
 
 export type ProjectSummary = {
   id: string;

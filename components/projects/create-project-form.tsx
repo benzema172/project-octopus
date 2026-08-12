@@ -15,9 +15,14 @@ function SubmitButton() {
   );
 }
 
-export function CreateProjectForm() {
+type CreateProjectFormProps = {
+  workspaceId?: string;
+};
+
+export function CreateProjectForm({ workspaceId }: CreateProjectFormProps) {
   return (
     <form className="create-project" action={createProjectAction}>
+      {workspaceId ? <input type="hidden" name="workspace_id" value={workspaceId} /> : null}
       <label className="field field--light">
         <Building2 size={18} aria-hidden="true" />
         <input name="name" placeholder="Nazwa inwestycji" required minLength={2} />

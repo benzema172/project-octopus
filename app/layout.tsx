@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./octopus-app.css";
 
 export const metadata: Metadata = {
   title: "Project Octopus",
-  description: "Workspace inwestycji, dokumentacji i Octopus Brain."
+  description: "System operacyjny firmy, inwestycji, dokumentacji i OctopusAI."
 };
 
 export default function RootLayout({
