@@ -64,11 +64,10 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
         <header className="pw-project-header pw-project-header--contract">
           <div className="pw-project-header__identity">
             <span className="pw-project-status">{STATUS_LABELS[profile.status] ?? profile.status}</span>
-            <h1>{shortName}</h1>
+            <h1>„{shortName}”</h1>
           </div>
 
           <div className="pw-project-contract" aria-label="Dane kontraktowe inwestycji">
-            <small>Nazwa inwestycji z kontraktu</small>
             <strong>{officialName}</strong>
             <span>Kontrakt: {contractNumber}</span>
           </div>
