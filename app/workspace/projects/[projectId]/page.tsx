@@ -28,10 +28,21 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
 
   if (!project) notFound();
 
-  const [profile, documents] = await Promise.all([
-    getProjectProfile(project),
-    listDocumentsForProject(project.id)
-  ]);
+  const profile = await getProjectProfile(project);
+  let documentsCount = 0;
+  let documentsAvailable = true;
+
+  try {
+    const documents = await listDocumentsForProject(project.id);
+    documentsCount = documents.length;
+  } catch (error) {
+    documentsAvailable = false;
+    console.error("Project Octopus: documents dashboard fallback", {
+      projectId: project.id,
+      message: error instanceof Error ? error.message : String(error)
+    });
+  }
+
   const completion = getProjectProfileCompletion(profile);
   const aiStatus = getAiRuntimeStatus();
   const base = `/workspace/projects/${project.id}`;
@@ -41,7 +52,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       href: `${base}/documentation`,
       icon: FileText,
       title: "Dokumentacja źródłowa",
-      value: `${documents.length} plików`,
+      value: documentsAvailable ? `${documentsCount} plików` : "Sprawdź dokumentację",
       text: "Projekty, opisy, STWiORB, umowy i rewizje — podstawowe źródło wiedzy inwestycji."
     },
     {
@@ -64,7 +75,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     <div className="project-tab-content pw-dashboard">
       <section className="pw-status-strip" aria-label="Stan inwestycji">
         <div><span>Dane inwestycji</span><strong>{completion}%</strong><small>kompletności karty</small></div>
-        <div><span>Dokumentacja</span><strong>{documents.length}</strong><small>plików źródłowych</small></div>
+        <div><span>Dokumentacja</span><strong>{documentsAvailable ? documentsCount : "—"}</strong><small>{documentsAvailable ? "plików źródłowych" : "wymaga sprawdzenia"}</small></div>
         <div><span>Octopus Brain</span><strong>{aiStatus.ready ? "Gotowy" : "Oczekuje"}</strong><small>środowisko AI</small></div>
         <div><span>Model pracy</span><strong>Źródła → wiedza</strong><small>bez ponownego przepisywania</small></div>
       </section>
