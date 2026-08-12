@@ -1,3 +1,5 @@
+import { suggestDocumentClassification } from "@/lib/documents/classification";
+
 export function sanitizeFileName(fileName: string): string {
   const trimmed = fileName.trim();
   const normalized = trimmed
@@ -15,31 +17,13 @@ export function sanitizeFileName(fileName: string): string {
 }
 
 export function inferDocumentCategory(mimeType: string, fileName: string): string {
-  const lowerName = fileName.toLowerCase();
-
-  if (mimeType.includes("pdf") || lowerName.endsWith(".pdf")) {
-    return "pdf";
-  }
-
-  if (mimeType.includes("spreadsheet") || lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") || lowerName.endsWith(".csv")) {
-    return "kosztorys";
-  }
-
-  if (lowerName.endsWith(".zip") || mimeType.includes("zip")) {
-    return "paczka";
-  }
-
-  if (mimeType.includes("word") || lowerName.endsWith(".docx")) {
-    return "dokument";
-  }
-
-  return "inne";
+  return suggestDocumentClassification(fileName, mimeType).category;
 }
 
 export function attachmentContentDisposition(fileName: string): string {
   const asciiName = sanitizeFileName(fileName).replace(/["\\]/g, "-");
   const encodedName = encodeURIComponent(fileName)
-    .replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+    .replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase())}`);
 
   return `attachment; filename="${asciiName}"; filename*=UTF-8''${encodedName}`;
 }
