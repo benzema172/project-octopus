@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRef } from "react";
-import { ArrowRight, Building2, MapPin, Plus, X } from "lucide-react";
+import { ArrowRight, Building2, ExternalLink, MapPin, Plus, X } from "lucide-react";
 import { createCompanyAction } from "@/app/actions";
 import type { CompanyWorkspace } from "@/lib/types";
 
@@ -24,7 +24,13 @@ export function CompanySelector({ companies, schemaReady, userEmail }: CompanySe
       <header className="co-selector-topbar">
         <div className="co-wordmark" aria-label="Project Octopus">
           <strong>OCTOPUS</strong>
-          <span>Project Octopus · PureInvest</span>
+          <div className="co-wordmark-meta">
+            <span>Project Octopus</span>
+            <a className="co-pureinvest-button" href="https://pure-invest.pl" aria-label="Przejdź do PureInvest Wiktor Purczyński">
+              PureInvest Wiktor Purczyński
+              <ExternalLink size={12} aria-hidden="true" />
+            </a>
+          </div>
         </div>
         <div className="co-selector-account">
           <span>{userEmail}</span>
