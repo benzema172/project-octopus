@@ -2,6 +2,7 @@ import { BarChart3, CircleDollarSign, ListTodo, PercentCircle } from "lucide-rea
 import { notFound } from "next/navigation";
 import { ProjectModuleFoundation } from "@/components/projects/project-module-foundation";
 import { requireCurrentUser } from "@/lib/auth";
+import { listDocumentsForCategories } from "@/lib/data/documents";
 import { getProjectForUser } from "@/lib/data/projects";
 
 export const dynamic = "force-dynamic";
@@ -11,17 +12,32 @@ export default async function ProgressPage({ params }: Props) {
   const { projectId } = await params;
   const user = await requireCurrentUser();
   if (!(await getProjectForUser(user, projectId))) notFound();
+  const documents = await listDocumentsForCategories(projectId, ["kosztorys", "harmonogram", "protokol"]);
 
   return <ProjectModuleFoundation
     kicker="Przerób i wykonanie"
     title="Postęp robót"
-    description="Miejsce do rejestrowania wykonania zakresów i późniejszego przeliczania ich na wartość przerobu."
+    description="Miejsce do rejestrowania wykonania zakresów i przeliczania ich na wartość przerobu."
+    status={documents.length ? "Źródła gotowe do powiązania" : "Oczekuje na kosztorys i harmonogram"}
+    metrics={[
+      { label: "Źródła powiązań", value: String(documents.length), hint: "kosztorys, harmonogram, protokoły" },
+      { label: "Model", value: "Ilość × cena", hint: "wartość przerobu z kosztorysu" },
+      { label: "Statusy", value: "4 etapy", hint: "niewykonane → odebrane" }
+    ]}
+    documents={documents}
+    intakeLabel="Źródła dla przerobu"
+    workflow={[
+      "Połącz zakres z pozycją kosztorysu",
+      "Wprowadź ilość lub procent wykonania",
+      "Powiąż odbiór i potwierdzenie wykonania",
+      "Octopus wylicza przerób i odchylenie od planu"
+    ]}
     items={[
       { title: "Postęp zakresów", description: "Stan pozycji i etapów: niewykonane, w toku, wykonane, odebrane.", icon: ListTodo },
       { title: "Procent wykonania", description: "Kontrola rzeczywistego postępu dla branż, zakresów i całej inwestycji.", icon: PercentCircle },
-      { title: "Wartość przerobu", description: "Docelowe przeliczenie wykonanych ilości i zakresów według kosztorysu kontraktowego.", icon: CircleDollarSign },
+      { title: "Wartość przerobu", description: "Przeliczenie wykonanych ilości i zakresów według kosztorysu kontraktowego.", icon: CircleDollarSign },
       { title: "Porównanie planu", description: "Zestawienie harmonogramu, kosztorysu i faktycznego wykonania w jednym widoku.", icon: BarChart3 }
     ]}
-    principle="Przerób ma wynikać z tych samych pozycji kosztorysowych i zakresów, które znamy już w inwestycji. Dzięki temu późniejsze zestawienia wykonanych robót nie będą tworzone od zera."
+    principle="Przerób wynika z tych samych pozycji kosztorysowych i zakresów, które znamy już w inwestycji. Dzięki temu późniejsze zestawienia wykonanych robót nie są tworzone od zera."
   />;
 }
