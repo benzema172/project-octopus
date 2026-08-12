@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Building2, MapPin } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { CompanyShell } from "@/components/layout/company-shell";
 import { ProjectNavigation } from "@/components/projects/project-navigation";
@@ -40,7 +40,10 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
 
   const location = [profile.street, [profile.postalCode, profile.city].filter(Boolean).join(" ")]
     .filter(Boolean)
-    .join(", ");
+    .join(", ") || project.location || "Do uzupełnienia";
+  const shortName = profile.shortName || project.name;
+  const fullName = profile.projectName || project.name;
+  const contractNumber = profile.contractNumber || "Do uzupełnienia";
 
   return (
     <CompanyShell workspaceId={workspace.id} companyName={workspace.name} userEmail={user.email ?? "Project Octopus"}>
@@ -50,24 +53,16 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
           Wszystkie inwestycje
         </Link>
 
-        <header className="pw-project-header">
+        <header className="pw-project-header pw-project-header--compact">
           <div className="pw-project-header__main">
             <div className="pw-project-title-row">
               <span className="pw-project-status">{STATUS_LABELS[profile.status] ?? profile.status}</span>
-              <span className="pw-project-company">{workspace.name}</span>
             </div>
-            <h1>{profile.projectName || project.name}</h1>
-            <p>{profile.description || project.description || "Centrum operacyjne tej inwestycji w Project Octopus."}</p>
-          </div>
-
-          <div className="pw-project-meta">
-            <div>
-              <Building2 size={15} aria-hidden="true" />
-              <span><small>Inwestor</small><strong>{profile.investorName || project.investor_name || "Do uzupełnienia"}</strong></span>
-            </div>
-            <div>
-              <MapPin size={15} aria-hidden="true" />
-              <span><small>Lokalizacja</small><strong>{location || project.location || "Do uzupełnienia"}</strong></span>
+            <h1>{shortName}</h1>
+            <div className="pw-project-subtitle-line" aria-label="Podstawowe dane inwestycji">
+              <strong>{fullName}</strong>
+              <span>Kontrakt: {contractNumber}</span>
+              <span>Lokalizacja: {location}</span>
             </div>
           </div>
         </header>
