@@ -14,6 +14,12 @@ type FoundationMetric = {
   hint: string;
 };
 
+type KnowledgeItem = {
+  title: string;
+  description: string;
+  tag?: string;
+};
+
 type ProjectModuleFoundationProps = {
   kicker: string;
   title: string;
@@ -25,6 +31,8 @@ type ProjectModuleFoundationProps = {
   documents?: DocumentSummary[];
   workflow?: string[];
   intakeLabel?: string;
+  knowledge?: KnowledgeItem[];
+  knowledgeTitle?: string;
 };
 
 export function ProjectModuleFoundation({
@@ -42,7 +50,9 @@ export function ProjectModuleFoundation({
     "Użytkownik zatwierdza ważne dane",
     "Moduł wykorzystuje zatwierdzoną wiedzę"
   ],
-  intakeLabel = "Pliki przypisane do modułu"
+  intakeLabel = "Pliki przypisane do modułu",
+  knowledge = [],
+  knowledgeTitle = "Dane rozpoznane przez Brain"
 }: ProjectModuleFoundationProps) {
   return (
     <div className="project-tab-content pw-module-page pw-module-page--operational">
@@ -113,6 +123,23 @@ export function ProjectModuleFoundation({
           )}
         </div>
       </section>
+
+      {knowledge.length > 0 ? (
+        <section className="pw-module-knowledge">
+          <div className="pw-module-section-title">
+            <span className="pw-card-icon"><Sparkles size={18} /></span>
+            <div><p className="co-kicker">Brain → moduł</p><h3>{knowledgeTitle}</h3></div>
+          </div>
+          <div className="pw-module-knowledge-list">
+            {knowledge.slice(0, 12).map((item, index) => (
+              <article key={`${item.title}-${index}`}>
+                <div><strong>{item.title}</strong><p>{item.description}</p></div>
+                {item.tag ? <span>{item.tag}</span> : null}
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="pw-module-feature-grid">
         {items.map(({ title: itemTitle, description: itemDescription, icon: Icon }) => (
