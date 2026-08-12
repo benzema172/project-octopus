@@ -90,6 +90,24 @@ export async function listDocumentsForProject(projectId: string, trashed = false
   });
 }
 
+export async function safeListDocumentsForProject(projectId: string): Promise<DocumentSummary[]> {
+  try {
+    return await listDocumentsForProject(projectId);
+  } catch (error) {
+    console.error("Project Octopus: module document list fallback", {
+      projectId,
+      message: error instanceof Error ? error.message : String(error)
+    });
+    return [];
+  }
+}
+
+export async function listDocumentsForCategories(projectId: string, categories: string[]): Promise<DocumentSummary[]> {
+  const documents = await safeListDocumentsForProject(projectId);
+  const accepted = new Set(categories.map((category) => category.toLocaleLowerCase("pl")));
+  return documents.filter((document) => document.category && accepted.has(document.category.toLocaleLowerCase("pl")));
+}
+
 export async function isDocumentStorageSchemaReady() {
   const supabase = createServiceSupabaseClient();
   const { data, error } = await supabase
