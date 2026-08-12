@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Building2, MapPin } from "lucide-react";
 import { notFound } from "next/navigation";
 import { CompanyShell } from "@/components/layout/company-shell";
 import { ProjectNavigation } from "@/components/projects/project-navigation";
@@ -42,8 +42,16 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
     .filter(Boolean)
     .join(", ") || project.location || "Do uzupełnienia";
   const shortName = profile.shortName || project.name;
-  const fullName = profile.projectName || project.name;
+  const descriptionContractName = project.description
+    ?.replace(/\s*Lokalizacja:.*$/i, "")
+    .trim();
+  const officialName =
+    (profile.projectName && profile.projectName !== shortName ? profile.projectName : "") ||
+    descriptionContractName ||
+    profile.projectName ||
+    project.name;
   const contractNumber = profile.contractNumber || "Do uzupełnienia";
+  const investorName = profile.investorName || project.investor_name || "Do uzupełnienia";
 
   return (
     <CompanyShell workspaceId={workspace.id} companyName={workspace.name} userEmail={user.email ?? "Project Octopus"}>
@@ -53,16 +61,26 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
           Wszystkie inwestycje
         </Link>
 
-        <header className="pw-project-header pw-project-header--compact">
-          <div className="pw-project-header__main">
-            <div className="pw-project-title-row">
-              <span className="pw-project-status">{STATUS_LABELS[profile.status] ?? profile.status}</span>
-            </div>
+        <header className="pw-project-header pw-project-header--contract">
+          <div className="pw-project-header__identity">
+            <span className="pw-project-status">{STATUS_LABELS[profile.status] ?? profile.status}</span>
             <h1>{shortName}</h1>
-            <div className="pw-project-subtitle-line" aria-label="Podstawowe dane inwestycji">
-              <strong>{fullName}</strong>
-              <span>Kontrakt: {contractNumber}</span>
-              <span>Lokalizacja: {location}</span>
+          </div>
+
+          <div className="pw-project-contract" aria-label="Dane kontraktowe inwestycji">
+            <small>Nazwa inwestycji z kontraktu</small>
+            <strong>{officialName}</strong>
+            <span>Kontrakt: {contractNumber}</span>
+          </div>
+
+          <div className="pw-project-meta pw-project-meta--header">
+            <div>
+              <Building2 size={16} aria-hidden="true" />
+              <span><small>Inwestor</small><strong>{investorName}</strong></span>
+            </div>
+            <div>
+              <MapPin size={16} aria-hidden="true" />
+              <span><small>Lokalizacja</small><strong>{location}</strong></span>
             </div>
           </div>
         </header>
