@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { AuthenticatedUser, ProjectSummary } from "@/lib/types";
 import { ensureWorkspaceForUser } from "@/lib/data/workspace";
@@ -39,7 +40,10 @@ export async function listProjectsForUser(user: AuthenticatedUser): Promise<Proj
   return (data ?? []).map(normalizeProject);
 }
 
-export async function getProjectForUser(user: AuthenticatedUser, projectId: string): Promise<ProjectSummary | null> {
+export const getProjectForUser = cache(async function getProjectForUser(
+  user: AuthenticatedUser,
+  projectId: string
+): Promise<ProjectSummary | null> {
   const workspace = await ensureWorkspaceForUser(user);
   const supabase = createServiceSupabaseClient();
 
@@ -55,7 +59,7 @@ export async function getProjectForUser(user: AuthenticatedUser, projectId: stri
   }
 
   return data ? normalizeProject(data) : null;
-}
+});
 
 export async function userHasProjectAccess(user: AuthenticatedUser, projectId: string) {
   const project = await getProjectForUser(user, projectId);

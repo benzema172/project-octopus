@@ -16,6 +16,58 @@ export type ProjectSummary = {
   updated_at: string;
 };
 
+export type ProjectProfile = {
+  projectName: string;
+  status: string;
+  shortName: string;
+  projectType: string;
+  description: string;
+  street: string;
+  postalCode: string;
+  city: string;
+  municipality: string;
+  county: string;
+  voivodeship: string;
+  plotNumbers: string;
+  buildingPermit: string;
+  contractNumber: string;
+  contractDate: string;
+  startDate: string;
+  completionDate: string;
+  warrantyEndDate: string;
+  contractValue: string;
+  currency: string;
+  fundingSource: string;
+  contractScope: string;
+  investorName: string;
+  investorAddress: string;
+  investorTaxId: string;
+  investorRepresentative: string;
+  investorEmail: string;
+  investorPhone: string;
+  generalContractorName: string;
+  generalContractorAddress: string;
+  generalContractorTaxId: string;
+  generalContractorRepresentative: string;
+  designerName: string;
+  designerAddress: string;
+  contractEngineerName: string;
+  supervisionInspectorName: string;
+  supervisionInspectorBranch: string;
+  supervisionInspectorEmail: string;
+  supervisionInspectorPhone: string;
+  siteManagerName: string;
+  siteManagerEmail: string;
+  siteManagerPhone: string;
+  sanitaryWorksManagerName: string;
+  sanitaryWorksManagerEmail: string;
+  sanitaryWorksManagerPhone: string;
+  electricalWorksManagerName: string;
+  electricalWorksManagerEmail: string;
+  electricalWorksManagerPhone: string;
+  notes: string;
+};
+
 export type DocumentSummary = {
   id: string;
   project_id: string;

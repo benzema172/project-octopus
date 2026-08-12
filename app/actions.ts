@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireCurrentUser } from "@/lib/auth";
+import { EMPTY_PROJECT_PROFILE, saveProjectProfile } from "@/lib/data/project-profile";
+import { getProjectForUser } from "@/lib/data/projects";
 import { ensureWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
@@ -57,6 +59,56 @@ export async function createProjectAction(formData: FormData) {
     throw new Error(`Nie udało się utworzyć inwestycji: ${error?.message ?? "brak danych"}`);
   }
 
+  const initialProfile = {
+    ...EMPTY_PROJECT_PROFILE,
+    projectName: name,
+    status: "active",
+    description,
+    city: location,
+    investorName
+  };
+
+  const { error: profileError } = await supabase.from("project_facts").insert({
+    project_id: data.id,
+    fact_type: "project_profile",
+    value_text: name,
+    value_json: initialProfile,
+    confidence: 1
+  });
+
+  if (profileError) {
+    console.error("Nie udalo sie zapisac poczatkowej karty inwestycji:", profileError.message);
+  }
+
   revalidatePath("/workspace");
   redirect(`/workspace/projects/${data.id}`);
+}
+
+export async function updateProjectProfileAction(projectId: string, formData: FormData) {
+  const user = await requireCurrentUser();
+  const project = await getProjectForUser(user, projectId);
+
+  if (!project) {
+    throw new Error("Nie znaleziono inwestycji lub nie masz do niej dostępu.");
+  }
+
+  const profile = { ...EMPTY_PROJECT_PROFILE };
+
+  for (const key of Object.keys(profile) as Array<keyof typeof profile>) {
+    profile[key] = String(formData.get(key) ?? "").trim().slice(0, 12000);
+  }
+
+  if (profile.projectName.length < 2) {
+    throw new Error("Nazwa inwestycji musi mieć co najmniej 2 znaki.");
+  }
+
+  const allowedStatuses = new Set(["planned", "tender", "active", "paused", "completed", "archived"]);
+  profile.status = allowedStatuses.has(profile.status) ? profile.status : "active";
+  profile.currency = profile.currency || "PLN";
+
+  await saveProjectProfile(project, profile);
+
+  revalidatePath("/workspace");
+  revalidatePath(`/workspace/projects/${project.id}`, "layout");
+  redirect(`/workspace/projects/${project.id}/data?saved=1`);
 }
