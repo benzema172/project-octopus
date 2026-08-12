@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { BrainPanel } from "@/components/brain/brain-panel";
 import { requireCurrentUser } from "@/lib/auth";
+import { listDocumentsForCategories } from "@/lib/data/documents";
 import { getProjectForUser } from "@/lib/data/projects";
 import { getAiRuntimeStatus } from "@/lib/env";
 
@@ -19,9 +20,11 @@ export default async function ProjectBrainPage({ params }: ProjectBrainPageProps
     notFound();
   }
 
+  const reviewDocuments = await listDocumentsForCategories(projectId, ["do_weryfikacji"]);
+
   return (
     <div className="project-tab-content">
-      <BrainPanel status={getAiRuntimeStatus()} />
+      <BrainPanel status={getAiRuntimeStatus()} reviewDocuments={reviewDocuments} />
     </div>
   );
 }
