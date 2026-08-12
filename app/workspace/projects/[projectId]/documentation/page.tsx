@@ -19,8 +19,9 @@ export default async function ProjectDocumentationPage({ params }: ProjectDocume
     notFound();
   }
 
-  const [documents, storageSchemaReady] = await Promise.all([
+  const [documents, trashedDocuments, storageSchemaReady] = await Promise.all([
     listDocumentsForProject(project.id),
+    listDocumentsForProject(project.id, true),
     isDocumentStorageSchemaReady()
   ]);
 
@@ -34,7 +35,12 @@ export default async function ProjectDocumentationPage({ params }: ProjectDocume
           </div>
           <p>{documents.length} plików</p>
         </div>
-        <DocumentUpload projectId={project.id} documents={documents} storageReady={storageSchemaReady} />
+        <DocumentUpload
+          projectId={project.id}
+          documents={documents}
+          trashedDocuments={trashedDocuments}
+          storageReady={storageSchemaReady}
+        />
       </section>
     </div>
   );

@@ -1,4 +1,4 @@
-import { HeadObjectCommand } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
@@ -26,6 +26,10 @@ function normalizeSha256(value: string | undefined) {
 
   const normalized = value.trim().toLowerCase();
   return /^[a-f0-9]{64}$/.test(normalized) ? normalized : null;
+}
+
+function normalizeEtag(value: string | undefined) {
+  return value?.replace(/^"|"$/g, "") || null;
 }
 
 export async function POST(request: Request) {
@@ -63,12 +67,18 @@ export async function POST(request: Request) {
 
   const r2Config = getR2Config();
   const r2 = createR2Client();
-  const head = await r2.send(
-    new HeadObjectCommand({
-      Bucket: r2Config.bucketName,
-      Key: intent.objectKey
-    })
-  );
+  let head;
+
+  try {
+    head = await r2.send(
+      new HeadObjectCommand({
+        Bucket: r2Config.bucketName,
+        Key: intent.objectKey
+      })
+    );
+  } catch {
+    return jsonError("Nie znaleziono przesłanego pliku w R2.", 409);
+  }
 
   if (typeof head.ContentLength === "number" && head.ContentLength !== intent.fileSize) {
     return jsonError("Rozmiar pliku w R2 nie zgadza się z intencją uploadu.", 409);
@@ -78,51 +88,47 @@ export async function POST(request: Request) {
   const category = inferDocumentCategory(intent.mimeType, intent.fileName);
   const uploadedAt = new Date().toISOString();
 
-  const { error: documentError } = await supabase.from("documents").insert({
-    id: intent.documentId,
-    workspace_id: intent.workspaceId,
-    project_id: intent.projectId,
-    name: intent.fileName,
-    category,
-    created_by: user.id
-  });
-
-  if (documentError) {
-    return jsonError(`Nie udało się zapisać dokumentu: ${documentError.message}`, 500);
-  }
-
-  const { error: versionError } = await supabase.from("document_versions").insert({
-    id: intent.versionId,
-    document_id: intent.documentId,
-    project_id: intent.projectId,
-    version_number: 1,
-    file_name: intent.fileName,
-    mime_type: intent.mimeType,
-    file_size_bytes: intent.fileSize,
-    r2_bucket: r2Config.bucketName,
-    r2_object_key: intent.objectKey,
-    sha256: normalizeSha256(body.sha256),
-    upload_status: "uploaded",
-    uploaded_by: user.id,
-    uploaded_at: uploadedAt
-  });
-
-  if (versionError) {
-    return jsonError(`Nie udało się zapisać wersji dokumentu: ${versionError.message}`, 500);
-  }
-
-  await supabase
-    .from("documents")
-    .update({
-      current_version_id: intent.versionId,
-      updated_at: uploadedAt
+  const { data: completed, error: completeError } = await supabase
+    .rpc("complete_document_upload", {
+      p_document_id: intent.documentId,
+      p_version_id: intent.versionId,
+      p_workspace_id: intent.workspaceId,
+      p_project_id: intent.projectId,
+      p_file_name: intent.fileName,
+      p_category: category,
+      p_mime_type: intent.mimeType,
+      p_file_size_bytes: intent.fileSize,
+      p_r2_bucket: r2Config.bucketName,
+      p_r2_object_key: intent.objectKey,
+      p_r2_etag: normalizeEtag(head.ETag),
+      p_sha256: normalizeSha256(body.sha256),
+      p_uploaded_by: user.id,
+      p_uploaded_at: uploadedAt
     })
-    .eq("id", intent.documentId);
+    .single<{ document_id: string; version_id: string; version_number: number }>();
+
+  if (completeError || !completed) {
+    await r2
+      .send(
+        new DeleteObjectCommand({
+          Bucket: r2Config.bucketName,
+          Key: intent.objectKey
+        })
+      )
+      .catch(() => undefined);
+
+    return jsonError(`Nie udało się atomowo zapisać dokumentu: ${completeError?.message ?? "brak danych"}`, 500);
+  }
 
   return NextResponse.json({
     ok: true,
-    documentId: intent.documentId,
-    versionId: intent.versionId,
+    documentId: completed.document_id,
+    versionId: completed.version_id,
+    versionNumber: completed.version_number,
     objectKey: intent.objectKey
+  }, {
+    headers: {
+      "Cache-Control": "no-store"
+    }
   });
 }

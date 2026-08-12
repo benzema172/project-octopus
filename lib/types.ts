@@ -75,6 +75,7 @@ export type DocumentSummary = {
   name: string;
   category: string | null;
   current_version_id: string | null;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
   document_versions?: DocumentVersionSummary[];
@@ -90,6 +91,7 @@ export type DocumentVersionSummary = {
   file_size_bytes: number;
   r2_bucket: string;
   r2_object_key: string;
+  r2_etag: string | null;
   sha256: string | null;
   upload_status: string;
   uploaded_at: string | null;

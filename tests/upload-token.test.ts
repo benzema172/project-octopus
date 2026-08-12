@@ -31,4 +31,10 @@ describe("upload token", () => {
 
     expect(() => verifyUploadToken(token, "test-secret")).toThrow();
   });
+
+  it("rejects a validly signed token with an invalid payload shape", () => {
+    const malformed = createUploadToken({ ...intent, fileSize: Number.NaN }, "test-secret");
+
+    expect(() => verifyUploadToken(malformed, "test-secret")).toThrow("nieprawidłową strukturę");
+  });
 });

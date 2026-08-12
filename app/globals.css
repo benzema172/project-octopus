@@ -1520,10 +1520,54 @@ button:disabled {
 
 .document-row {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto 1fr auto;
   gap: 12px;
   align-items: center;
   padding: 14px;
+}
+
+.document-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.document-row__actions .secondary-button {
+  min-height: 36px;
+  padding-inline: 11px;
+  font-size: 0.86rem;
+}
+
+.secondary-button--danger {
+  border-color: rgba(255, 114, 114, 0.28);
+  color: #ffb1b1;
+}
+
+.trash-panel {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 10px;
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.trash-panel > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.trash-panel > div:first-child p:last-child {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.document-row--trashed {
+  opacity: 0.72;
 }
 
 .document-row p {
@@ -1641,6 +1685,19 @@ button:disabled {
   .project-overview div + div {
     border-top: 1px solid var(--line);
     border-left: 0;
+  }
+
+  .document-row {
+    grid-template-columns: auto 1fr;
+  }
+
+  .document-row__actions {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+
+  .document-row__actions .secondary-button {
+    flex: 1;
   }
 }
 

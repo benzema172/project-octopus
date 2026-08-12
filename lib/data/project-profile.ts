@@ -146,6 +146,8 @@ export async function saveProjectProfile(project: ProjectSummary, profile: Proje
       name: profile.projectName,
       description: profile.description || null,
       investor_name: profile.investorName || null,
+      general_contractor: profile.generalContractorName || null,
+      location: profile.city || null,
       status: profile.status,
       updated_at: new Date().toISOString()
     })
