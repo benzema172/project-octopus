@@ -1,50 +1,27 @@
-import { ClipboardCheck, FileSignature, FileText, PackageCheck } from "lucide-react";
+import { Archive, FileCheck2, FileSignature, FileText } from "lucide-react";
 import { notFound } from "next/navigation";
+import { ProjectModuleFoundation } from "@/components/projects/project-module-foundation";
 import { requireCurrentUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
 
 export const dynamic = "force-dynamic";
+type Props = { params: Promise<{ projectId: string }> };
 
-type ProjectOutputsPageProps = {
-  params: Promise<{ projectId: string }>;
-};
-
-const OUTPUT_TYPES = [
-  { title: "Wniosek materiałowy", icon: PackageCheck },
-  { title: "Protokół próby", icon: ClipboardCheck },
-  { title: "Protokół odbioru / zanikowy", icon: FileSignature },
-  { title: "RFI i pismo projektowe", icon: FileText }
-];
-
-export default async function ProjectOutputsPage({ params }: ProjectOutputsPageProps) {
+export default async function ProjectOutputsPage({ params }: Props) {
   const { projectId } = await params;
   const user = await requireCurrentUser();
-  const project = await getProjectForUser(user, projectId);
+  if (!(await getProjectForUser(user, projectId))) notFound();
 
-  if (!project) {
-    notFound();
-  }
-
-  return (
-    <div className="project-tab-content">
-      <section className="section-band">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Generatory</p>
-            <h2>Wnioski i protokoły</h2>
-          </div>
-          <span className="status-pill">Etap 4</span>
-        </div>
-        <div className="output-type-grid">
-          {OUTPUT_TYPES.map(({ title, icon: Icon }) => (
-            <div key={title} className="output-type-row">
-              <Icon size={20} aria-hidden="true" />
-              <strong>{title}</strong>
-              <span>Planowane</span>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
+  return <ProjectModuleFoundation
+    kicker="Repozytorium wyników"
+    title="Gotowe dokumenty inwestycji"
+    description="Jedno miejsce na wszystkie materiały wygenerowane lub zatwierdzone w Project Octopus."
+    items={[
+      { title: "Wnioski materiałowe", description: "Zatwierdzone i robocze wersje wniosków wraz z załącznikami technicznymi.", icon: FileCheck2 },
+      { title: "Protokoły", description: "Próby, odbiory, roboty zanikowe i pozostałe dokumenty wykonawcze.", icon: FileSignature },
+      { title: "Raporty i zestawienia", description: "Zestawienia postępu, przerobu, braków i analiz wygenerowanych przez system.", icon: FileText },
+      { title: "Eksporty końcowe", description: "Docelowe PDF/DOCX i paczki dokumentacji gotowe do przekazania dalej.", icon: Archive }
+    ]}
+    principle="Wyniki nie są osobnym źródłem danych. Są efektem pracy pozostałych modułów i powinny zawsze zachowywać powiązanie z danymi oraz źródłami, z których powstały."
+  />;
 }
