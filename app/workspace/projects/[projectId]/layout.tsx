@@ -69,7 +69,7 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
 
           <div className="pw-project-contract" aria-label="Dane kontraktowe inwestycji">
             <strong>{officialName}</strong>
-            <span>Kontrakt: {contractNumber}</span>
+            <span>Numer kontraktu: {contractNumber}</span>
           </div>
 
           <div className="pw-project-meta pw-project-meta--header">
