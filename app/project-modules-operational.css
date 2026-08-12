@@ -93,6 +93,31 @@
 .pw-module-empty-input p { max-width: 440px; margin: 0; color: #8b8191; font-size: 8.5px; line-height: 1.45; }
 .pw-module-empty-input b { color: #6130a9; }
 
+.brain-panel--workspace { display: grid; gap: 14px; }
+.brain-panel--workspace .brain-status-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.brain-review-queue,
+.brain-next-stage {
+  border: 1px solid #e8e1ed;
+  border-radius: 18px;
+  background: rgba(255,255,255,.82);
+  padding: 14px;
+}
+.brain-review-queue__head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.brain-review-queue__head .eyebrow { margin-bottom: 3px; }
+.brain-review-queue__head h3 { margin: 0; color: #302738; font-size: 14px; }
+.brain-review-queue__head > span { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; background: #f5effa; color: #6e3ab5; padding: 6px 9px; font-size: 8.5px; font-weight: 850; }
+.brain-review-queue > p { margin: 10px 0 0; color: #847a8b; font-size: 9px; line-height: 1.5; }
+.brain-review-list { display: grid; gap: 6px; margin-top: 10px; }
+.brain-review-list article { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 8px; border: 1px solid #eee8f1; border-radius: 11px; background: #fff; padding: 8px 9px; }
+.brain-review-list article > svg { color: #7942bd; }
+.brain-review-list article span { display: grid; gap: 2px; }
+.brain-review-list strong { color: #3b3142; font-size: 9px; }
+.brain-review-list small { color: #8c8292; font-size: 7.5px; }
+.brain-next-stage { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: start; gap: 10px; background: linear-gradient(120deg,rgba(138,43,226,.04),rgba(30,91,255,.04),rgba(0,174,176,.035)); }
+.brain-next-stage > svg { color: #713db7; }
+.brain-next-stage p { margin: 0; color: #74697d; font-size: 9px; line-height: 1.55; }
+.brain-next-stage strong { color: #4c3e56; }
+
 @media (max-width: 1050px) {
   .pw-module-workbench { grid-template-columns: 1fr; }
 }
@@ -101,4 +126,6 @@
   .pw-module-metrics { grid-template-columns: 1fr; }
   .pw-module-flow ol { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .pw-module-flow li > i { display: none; }
+  .brain-panel--workspace .brain-status-grid { grid-template-columns: 1fr; }
+  .brain-review-queue__head { align-items: flex-start; flex-direction: column; }
 }
