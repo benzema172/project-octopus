@@ -1,0 +1,112 @@
+/* Company selector refinement: centered hierarchy and balanced cards. */
+
+.co-selector-heading {
+  display: grid;
+  width: min(780px, 100%);
+  justify-items: center;
+  margin: 54px auto 48px;
+  text-align: center;
+}
+
+.co-selector-heading .co-kicker {
+  margin-bottom: 10px;
+}
+
+.co-selector-heading > p:last-child {
+  max-width: 720px;
+  margin: 13px auto 0;
+  text-align: center;
+}
+
+.co-company-grid {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+}
+
+.co-company-card {
+  min-height: 250px;
+}
+
+.co-wordmark {
+  display: grid;
+  justify-items: start;
+}
+
+.co-wordmark-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-top: 7px;
+}
+
+.co-wordmark .co-wordmark-meta > span {
+  margin-top: 0;
+}
+
+.co-pureinvest-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(138, 43, 226, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #5b5067 !important;
+  padding: 6px 9px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  text-decoration: none;
+  box-shadow: 0 7px 20px rgba(69, 42, 91, 0.06);
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.co-pureinvest-button:hover {
+  border-color: rgba(138, 43, 226, 0.3);
+  box-shadow: 0 10px 24px rgba(69, 42, 91, 0.1);
+  transform: translateY(-1px);
+}
+
+.co-pureinvest-button svg {
+  color: #7d3fd0;
+}
+
+@media (max-width: 900px) {
+  .co-selector-heading {
+    margin-top: 42px;
+    margin-bottom: 34px;
+  }
+
+  .co-company-grid {
+    grid-template-columns: 1fr;
+    width: min(620px, 100%);
+  }
+}
+
+@media (max-width: 640px) {
+  .co-selector-topbar {
+    align-items: flex-start;
+  }
+
+  .co-selector-account > span {
+    display: none;
+  }
+
+  .co-selector-heading {
+    margin-top: 34px;
+  }
+
+  .co-wordmark-meta {
+    display: grid;
+    justify-items: start;
+  }
+
+  .co-company-card {
+    min-height: 230px;
+  }
+}
