@@ -46,9 +46,18 @@ export function CompanyShell({ workspaceId, companyName, userEmail, children }: 
         </Link>
 
         <div className="co-company-switcher">
-          <small>Aktywna firma</small>
+          <div className="co-company-switcher__topline">
+            <small>Aktywna firma</small>
+            <Link
+              href="/workspace"
+              className="co-company-switcher__change"
+              aria-label="Zmień firmę"
+              title="Zmień firmę"
+            >
+              <ArrowLeftRight size={15} aria-hidden="true" />
+            </Link>
+          </div>
           <strong>{companyName}</strong>
-          <Link href="/workspace"><ArrowLeftRight size={15} aria-hidden="true" /> Zmień firmę</Link>
         </div>
 
         <nav className="co-sidebar-nav" aria-label="Moduły firmy">
