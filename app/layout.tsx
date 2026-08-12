@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./octopus-app.css";
+import "./company-selector-refinement.css";
 
 export const metadata: Metadata = {
   title: "Project Octopus",
