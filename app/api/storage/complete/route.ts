@@ -2,6 +2,7 @@ import { DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
+import { normalizeDocumentCategory } from "@/lib/documents/classification";
 import { getR2Config, requireServerEnv } from "@/lib/env";
 import { createR2Client } from "@/lib/r2/client";
 import { inferDocumentCategory } from "@/lib/r2/sanitize";
@@ -13,6 +14,7 @@ export const runtime = "nodejs";
 type CompleteBody = {
   token?: string;
   sha256?: string;
+  category?: string;
 };
 
 function jsonError(message: string, status: number) {
@@ -85,7 +87,8 @@ export async function POST(request: Request) {
   }
 
   const supabase = createServiceSupabaseClient();
-  const category = inferDocumentCategory(intent.mimeType, intent.fileName);
+  const reviewedCategory = normalizeDocumentCategory(body.category);
+  const category = reviewedCategory ?? inferDocumentCategory(intent.mimeType, intent.fileName);
   const uploadedAt = new Date().toISOString();
 
   const { data: completed, error: completeError } = await supabase
@@ -125,6 +128,7 @@ export async function POST(request: Request) {
     documentId: completed.document_id,
     versionId: completed.version_id,
     versionNumber: completed.version_number,
+    category,
     objectKey: intent.objectKey
   }, {
     headers: {
