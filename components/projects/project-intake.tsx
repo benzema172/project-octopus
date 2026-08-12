@@ -13,7 +13,7 @@ type ProjectIntakeProps = {
   projectId: string;
 };
 
-type IntakeStatus = "ready" | "uploading" | "done" | "error";
+type IntakeStatus = "ready" | "uploading" | "analyzing" | "done" | "error";
 
 type IntakeItem = {
   id: string;
@@ -22,6 +22,7 @@ type IntakeItem = {
   confidence: "wysoka" | "średnia" | "niska";
   reason: string;
   status: IntakeStatus;
+  analysis?: string;
   error?: string;
 };
 
@@ -29,6 +30,18 @@ type UploadResponse = {
   uploadUrl: string;
   token: string;
   headers: Record<string, string>;
+};
+
+type CompleteResponse = {
+  documentId: string;
+  versionId: string;
+};
+
+type ProcessingResponse = {
+  category?: string;
+  confidence?: number;
+  summary?: string;
+  error?: string;
 };
 
 const ACCEPT = ".pdf,.doc,.docx,.xls,.xlsx,.csv";
@@ -69,7 +82,7 @@ export function ProjectIntake({ projectId }: ProjectIntakeProps) {
     const rejected = Array.from(files).length - accepted.length;
 
     if (rejected > 0) {
-      setGeneralError("Wrzutnia obsługuje teraz PDF, Word oraz Excel/CSV. Pozostałe pliki pominięto.");
+      setGeneralError("Wrzutnia obsługuje PDF, Word oraz Excel/CSV. Pozostałe pliki pominięto.");
     }
 
     const next = accepted.map((file) => {
@@ -96,7 +109,7 @@ export function ProjectIntake({ projectId }: ProjectIntakeProps) {
   }
 
   async function uploadItem(item: IntakeItem) {
-    setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "uploading", error: undefined } : row));
+    setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "uploading", error: undefined, analysis: undefined } : row));
 
     try {
       const digest = await sha256ForSmallFile(item.file);
@@ -139,7 +152,37 @@ export function ProjectIntake({ projectId }: ProjectIntakeProps) {
         throw new Error(payload?.error ?? "Nie udało się zapisać dokumentu.");
       }
 
-      setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "done" } : row));
+      const completed = (await completeResponse.json()) as CompleteResponse;
+      setItems((current) => current.map((row) => row.id === item.id ? {
+        ...row,
+        status: "analyzing",
+        analysis: "Ekstrakcja treści → Gemini → Brain"
+      } : row));
+
+      const processingResponse = await fetch("/api/brain/process-document", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, documentId: completed.documentId, versionId: completed.versionId })
+      });
+      const processing = (await processingResponse.json().catch(() => null)) as ProcessingResponse | null;
+
+      if (!processingResponse.ok) {
+        setItems((current) => current.map((row) => row.id === item.id ? {
+          ...row,
+          status: "done",
+          analysis: "Plik bezpiecznie zapisany w R2 i Supabase",
+          error: `Analiza AI nie została zakończona: ${processing?.error ?? `HTTP ${processingResponse.status}`}`
+        } : row));
+        return true;
+      }
+
+      const confidence = typeof processing?.confidence === "number" ? `${Math.round(processing.confidence * 100)}%` : "—";
+      setItems((current) => current.map((row) => row.id === item.id ? {
+        ...row,
+        status: "done",
+        analysis: `Brain: ${processing?.category ?? "przeanalizowano"} · pewność ${confidence}`,
+        error: undefined
+      } : row));
       return true;
     } catch (error) {
       setItems((current) => current.map((row) => row.id === item.id ? {
@@ -164,7 +207,7 @@ export function ProjectIntake({ projectId }: ProjectIntakeProps) {
     }
   }
 
-  const busy = items.some((item) => item.status === "uploading") || isPending;
+  const busy = items.some((item) => item.status === "uploading" || item.status === "analyzing") || isPending;
   const readyCount = items.filter((item) => item.status === "ready" || item.status === "error").length;
 
   return (
@@ -180,7 +223,7 @@ export function ProjectIntake({ projectId }: ProjectIntakeProps) {
             <div>
               <p className="co-kicker">Centralne wejście plików</p>
               <h3>Wrzutnia</h3>
-              <p>Octopus proponuje miejsce na podstawie nazwy i typu pliku. Ty możesz poprawić klasyfikację przed wysłaniem.</p>
+              <p>Plik trafia do R2, treść jest wydobywana, Gemini analizuje dokument, a zatwierdzona wiedza zasila Brain i moduły inwestycji.</p>
             </div>
             <button type="button" className="pw-intake-close" onClick={() => setOpen(false)} aria-label="Zamknij Wrzutnię">
               <X size={17} />
@@ -216,7 +259,7 @@ export function ProjectIntake({ projectId }: ProjectIntakeProps) {
 
           <div className="pw-intake-ai-note">
             <Sparkles size={16} />
-            <span><strong>Tryb bezpieczny:</strong> automatyczna sugestia + zatwierdzenie. Po uruchomieniu ekstrakcji treści Brain AI będzie dodatkowo potwierdzał klasyfikację zawartością dokumentu.</span>
+            <span><strong>Pipeline:</strong> R2 → ekstrakcja treści → Gemini → klasyfikacja → fakty i źródła → Brain → moduły. Twoje ręczne przypisanie ma pierwszeństwo, a AI zgłasza rozbieżność zamiast po cichu je nadpisywać.</span>
           </div>
 
           {generalError ? <p className="pw-intake-error">{generalError}</p> : null}
@@ -230,15 +273,15 @@ export function ProjectIntake({ projectId }: ProjectIntakeProps) {
                     <span className="pw-intake-file-icon"><Icon size={18} /></span>
                     <div className="pw-intake-file-main">
                       <strong title={item.file.name}>{item.file.name}</strong>
-                      <small>{formatFileSize(item.file.size)} · pewność: {item.confidence}</small>
-                      <p>{item.reason}</p>
+                      <small>{formatFileSize(item.file.size)} · sugestia wstępna: {item.confidence}</small>
+                      <p>{item.analysis ?? item.reason}</p>
                     </div>
                     <label className="pw-intake-destination">
                       <span>Przypisz do</span>
                       <select
                         value={item.category}
                         onChange={(event) => updateCategory(item.id, event.target.value as DocumentCategory)}
-                        disabled={item.status === "uploading" || item.status === "done"}
+                        disabled={item.status === "uploading" || item.status === "analyzing" || item.status === "done"}
                       >
                         {DOCUMENT_DESTINATIONS.map((destination) => (
                           <option key={destination.value} value={destination.value}>{destination.label}</option>
@@ -246,7 +289,9 @@ export function ProjectIntake({ projectId }: ProjectIntakeProps) {
                       </select>
                     </label>
                     {item.status === "done" ? (
-                      <span className="pw-intake-done"><CheckCircle2 size={17} /> Zapisano</span>
+                      <span className="pw-intake-done"><CheckCircle2 size={17} /> Gotowe</span>
+                    ) : item.status === "analyzing" ? (
+                      <span className="pw-intake-done"><Sparkles size={17} /> AI</span>
                     ) : (
                       <button type="button" className="pw-intake-remove" onClick={() => removeItem(item.id)} disabled={item.status === "uploading"}>Usuń</button>
                     )}
@@ -261,7 +306,7 @@ export function ProjectIntake({ projectId }: ProjectIntakeProps) {
             <span>{items.length ? `${items.length} plików w kolejce` : "Możesz dodać kilka plików jednocześnie"}</span>
             <button type="button" onClick={uploadAll} disabled={busy || readyCount === 0}>
               <Sparkles size={16} />
-              {busy ? "Przetwarzanie…" : `Wyślij i przypisz${readyCount ? ` (${readyCount})` : ""}`}
+              {busy ? "Upload / analiza AI…" : `Wyślij i przeanalizuj${readyCount ? ` (${readyCount})` : ""}`}
             </button>
           </div>
         </div>
