@@ -18,6 +18,11 @@ type UploadResponse = {
   headers: Record<string, string>;
 };
 
+type CompleteResponse = {
+  documentId: string;
+  versionId: string;
+};
+
 type DownloadResponse = {
   downloadUrl: string;
 };
@@ -25,23 +30,15 @@ type DownloadResponse = {
 const MAX_BROWSER_HASH_BYTES = 32 * 1024 * 1024;
 
 function formatFileSize(bytes: number) {
-  if (bytes < 1024 * 1024) {
-    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  }
-
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 async function sha256ForSmallFile(file: File) {
-  if (file.size > MAX_BROWSER_HASH_BYTES) {
-    return null;
-  }
-
+  if (file.size > MAX_BROWSER_HASH_BYTES) return null;
   const buffer = await file.arrayBuffer();
   const hash = await crypto.subtle.digest("SHA-256", buffer);
-  return Array.from(new Uint8Array(hash))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export function DocumentUpload({ projectId, documents, trashedDocuments, storageReady }: DocumentUploadProps) {
@@ -56,22 +53,13 @@ export function DocumentUpload({ projectId, documents, trashedDocuments, storage
   async function uploadFile(file: File, documentId: string | null) {
     setError(null);
     setStatus(file.size <= MAX_BROWSER_HASH_BYTES ? "Obliczanie sumy kontrolnej" : "Przygotowywanie dużego pliku");
-
     const digest = await sha256ForSmallFile(file);
-
     const mimeType = file.type || "application/octet-stream";
+
     const prepareResponse = await fetch("/api/storage/upload-url", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        projectId,
-        documentId,
-        fileName: file.name,
-        mimeType,
-        fileSize: file.size
-      })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId, documentId, fileName: file.name, mimeType, fileSize: file.size })
     });
 
     if (!prepareResponse.ok) {
@@ -81,27 +69,14 @@ export function DocumentUpload({ projectId, documents, trashedDocuments, storage
 
     const upload = (await prepareResponse.json()) as UploadResponse;
     setStatus("Wysyłanie pliku do R2");
-
-    const putResponse = await fetch(upload.uploadUrl, {
-      method: "PUT",
-      headers: upload.headers,
-      body: file
-    });
-
-    if (!putResponse.ok) {
-      throw new Error(`R2 odrzucił upload: HTTP ${putResponse.status}`);
-    }
+    const putResponse = await fetch(upload.uploadUrl, { method: "PUT", headers: upload.headers, body: file });
+    if (!putResponse.ok) throw new Error(`R2 odrzucił upload: HTTP ${putResponse.status}`);
 
     setStatus("Zapisywanie dokumentu w Supabase");
     const completeResponse = await fetch("/api/storage/complete", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        token: upload.token,
-        sha256: digest
-      })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: upload.token, sha256: digest })
     });
 
     if (!completeResponse.ok) {
@@ -109,20 +84,29 @@ export function DocumentUpload({ projectId, documents, trashedDocuments, storage
       throw new Error(payload?.error ?? "Nie udało się zapisać dokumentu.");
     }
 
-    setStatus("Dokument zapisany");
+    const completed = (await completeResponse.json()) as CompleteResponse;
+    setStatus("Dokument zapisany · ekstrakcja i analiza Brain AI");
+    const processResponse = await fetch("/api/brain/process-document", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId, documentId: completed.documentId, versionId: completed.versionId })
+    });
+
+    if (!processResponse.ok) {
+      const payload = await processResponse.json().catch(() => null);
+      setStatus("Dokument zapisany w R2 i Supabase");
+      setError(`Analiza AI nie została zakończona: ${payload?.error ?? `HTTP ${processResponse.status}`}`);
+    } else {
+      setStatus("Dokument zapisany i przeanalizowany przez Brain AI");
+    }
+
     startTransition(() => router.refresh());
   }
 
   async function handleFiles(files: FileList | null) {
-    if (!storageReady) {
-      return;
-    }
-
+    if (!storageReady) return;
     const file = files?.[0];
-
-    if (!file) {
-      return;
-    }
+    if (!file) return;
 
     try {
       setIsUploading(true);
@@ -133,9 +117,7 @@ export function DocumentUpload({ projectId, documents, trashedDocuments, storage
     } finally {
       setIsUploading(false);
       targetDocumentIdRef.current = null;
-      if (inputRef.current) {
-        inputRef.current.value = "";
-      }
+      if (inputRef.current) inputRef.current.value = "";
     }
   }
 
@@ -147,21 +129,16 @@ export function DocumentUpload({ projectId, documents, trashedDocuments, storage
   async function downloadVersion(versionId: string) {
     setError(null);
     setStatus("Przygotowywanie pobierania");
-
     try {
       const response = await fetch("/api/storage/download-url", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId, versionId })
       });
-
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
         throw new Error(payload?.error ?? "Nie udało się przygotować pobierania.");
       }
-
       const payload = (await response.json()) as DownloadResponse;
       setStatus(null);
       window.location.assign(payload.downloadUrl);
@@ -174,21 +151,16 @@ export function DocumentUpload({ projectId, documents, trashedDocuments, storage
   async function changeDocumentState(documentId: string, state: "active" | "trashed") {
     setError(null);
     setStatus(state === "trashed" ? "Przenoszenie dokumentu do kosza" : "Przywracanie dokumentu");
-
     try {
       const response = await fetch("/api/storage/document-state", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId, documentId, state })
       });
-
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
         throw new Error(payload?.error ?? "Nie udało się zmienić stanu dokumentu.");
       }
-
       setStatus(state === "trashed" ? "Dokument przeniesiony do kosza" : "Dokument przywrócony");
       startTransition(() => router.refresh());
     } catch (stateError) {
@@ -201,103 +173,48 @@ export function DocumentUpload({ projectId, documents, trashedDocuments, storage
     <div className="documents-layout">
       <div className="upload-panel">
         <input ref={inputRef} type="file" onChange={(event) => handleFiles(event.target.files)} disabled={!storageReady} />
-        <button
-          type="button"
-          className="primary-button"
-          onClick={() => openFilePicker()}
-          disabled={isPending || isUploading || !storageReady}
-        >
-          <UploadCloud size={18} aria-hidden="true" />
-          Dodaj plik
+        <button type="button" className="primary-button" onClick={() => openFilePicker()} disabled={isPending || isUploading || !storageReady}>
+          <UploadCloud size={18} aria-hidden="true" /> Dodaj plik
         </button>
-        {!storageReady ? (
-          <p className="form-message">Dokumentacja będzie dostępna po zakończeniu aktualizacji bazy.</p>
-        ) : null}
+        {!storageReady ? <p className="form-message">Dokumentacja będzie dostępna po zakończeniu aktualizacji bazy.</p> : null}
         {status ? <p className="upload-status">{status}</p> : null}
         {error ? <p className="form-message form-message--error">{error}</p> : null}
       </div>
 
       <div className="document-list">
-        {documents.length > 0 ? (
-          documents.map((document) => {
-            const version = document.document_versions?.[0];
-
-            return (
-              <article key={document.id} className="document-row">
-                <FileText size={18} aria-hidden="true" />
-                <div>
-                  <h3>{document.name}</h3>
-                  <p>
-                    {version?.mime_type ?? "plik"} / {version ? formatFileSize(version.file_size_bytes) : "bez wersji"} /{" "}
-                    {version ? `wersja ${version.version_number}` : "oczekuje"}
-                  </p>
+        {documents.length > 0 ? documents.map((document) => {
+          const version = document.document_versions?.[0];
+          return (
+            <article key={document.id} className="document-row">
+              <FileText size={18} aria-hidden="true" />
+              <div>
+                <h3>{document.name}</h3>
+                <p>{version?.mime_type ?? "plik"} / {version ? formatFileSize(version.file_size_bytes) : "bez wersji"} / {version ? `wersja ${version.version_number} · ${version.upload_status}` : "oczekuje"}</p>
+              </div>
+              {version ? (
+                <div className="document-row__actions">
+                  <button type="button" className="secondary-button" onClick={() => downloadVersion(version.id)} disabled={isUploading}><Download size={16} /> Pobierz</button>
+                  <button type="button" className="secondary-button" onClick={() => openFilePicker(document.id)} disabled={isUploading || !storageReady}><FilePlus2 size={16} /> Nowa wersja</button>
+                  <button type="button" className="secondary-button secondary-button--danger" onClick={() => changeDocumentState(document.id, "trashed")} disabled={isUploading || isPending}><Trash2 size={16} /> Do kosza</button>
                 </div>
-                {version ? (
-                  <div className="document-row__actions">
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => downloadVersion(version.id)}
-                      disabled={isUploading}
-                    >
-                      <Download size={16} aria-hidden="true" />
-                      Pobierz
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => openFilePicker(document.id)}
-                      disabled={isUploading || !storageReady}
-                    >
-                      <FilePlus2 size={16} aria-hidden="true" />
-                      Nowa wersja
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-button secondary-button--danger"
-                      onClick={() => changeDocumentState(document.id, "trashed")}
-                      disabled={isUploading || isPending}
-                    >
-                      <Trash2 size={16} aria-hidden="true" />
-                      Do kosza
-                    </button>
-                  </div>
-                ) : null}
-              </article>
-            );
-          })
-        ) : (
-          <div className="empty-state empty-state--compact">
-            <h3>Brak dokumentów</h3>
-            <p>Pierwszy PDF, ZIP albo kosztorys utworzy wpis w Supabase i obiekt w R2.</p>
-          </div>
+              ) : null}
+            </article>
+          );
+        }) : (
+          <div className="empty-state empty-state--compact"><h3>Brak dokumentów</h3><p>Pierwszy PDF, Word lub Excel utworzy wpis w Supabase, plik w R2 i uruchomi Brain AI.</p></div>
         )}
       </div>
 
       {trashedDocuments.length > 0 ? (
         <section className="trash-panel">
-          <div>
-            <p className="eyebrow">Kosz</p>
-            <p>{trashedDocuments.length} dokumentów — pliki w R2 nie zostały usunięte.</p>
-          </div>
+          <div><p className="eyebrow">Kosz</p><p>{trashedDocuments.length} dokumentów — pliki w R2 nie zostały usunięte.</p></div>
           <div className="document-list">
             {trashedDocuments.map((document) => (
               <article key={document.id} className="document-row document-row--trashed">
-                <Trash2 size={18} aria-hidden="true" />
-                <div>
-                  <h3>{document.name}</h3>
-                  <p>Przeniesiono do kosza</p>
-                </div>
+                <Trash2 size={18} />
+                <div><h3>{document.name}</h3><p>Przeniesiono do kosza</p></div>
                 <div className="document-row__actions">
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => changeDocumentState(document.id, "active")}
-                    disabled={isPending}
-                  >
-                    <RotateCcw size={16} aria-hidden="true" />
-                    Przywróć
-                  </button>
+                  <button type="button" className="secondary-button" onClick={() => changeDocumentState(document.id, "active")} disabled={isPending}><RotateCcw size={16} /> Przywróć</button>
                 </div>
               </article>
             ))}
