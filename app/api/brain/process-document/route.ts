@@ -4,7 +4,7 @@ import { processDocumentVersion } from "@/lib/ai/document-pipeline";
 import { getProjectForUser } from "@/lib/data/projects";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 type Body = {
   projectId?: string;
