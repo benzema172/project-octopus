@@ -16,16 +16,23 @@ type AssistantBody = {
   history?: AssistantMessage[];
 };
 
-type OpenAIResponse = {
-  output?: Array<{
-    type?: string;
-    content?: Array<{
-      type?: string;
-      text?: string;
-    }>;
+type GeminiResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: string;
+      }>;
+    };
+    finishReason?: string;
   }>;
+  promptFeedback?: {
+    blockReason?: string;
+    blockReasonMessage?: string;
+  };
   error?: {
+    code?: number;
     message?: string;
+    status?: string;
   };
 };
 
@@ -33,12 +40,10 @@ function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }
 
-function extractOutputText(payload: OpenAIResponse) {
-  return (payload.output ?? [])
-    .flatMap((item) => item.content ?? [])
-    .filter((content) => content.type === "output_text" && typeof content.text === "string")
-    .map((content) => content.text?.trim())
-    .filter(Boolean)
+function extractOutputText(payload: GeminiResponse) {
+  return (payload.candidates?.[0]?.content?.parts ?? [])
+    .map((part) => part.text?.trim())
+    .filter((text): text is string => Boolean(text))
     .join("\n\n");
 }
 
@@ -74,10 +79,16 @@ export async function POST(request: Request) {
     return jsonError("Nie znaleziono firmy lub nie masz do niej dostępu.", 404);
   }
 
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  const provider = (process.env.AI_PROVIDER || "gemini").trim().toLowerCase();
+
+  if (provider !== "gemini") {
+    return jsonError("OctopusAI jest skonfigurowany do pracy z Gemini. Ustaw AI_PROVIDER=gemini w Vercel.", 503);
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
 
   if (!apiKey) {
-    return jsonError("OctopusAI wymaga ustawienia OPENAI_API_KEY w Vercel.", 503);
+    return jsonError("OctopusAI wymaga ustawienia GEMINI_API_KEY w Vercel.", 503);
   }
 
   const supabase = createServiceSupabaseClient();
@@ -137,8 +148,8 @@ export async function POST(request: Request) {
       (item.role === "user" || item.role === "assistant") && typeof item.content === "string" && item.content.trim().length > 0
     )
     .map((item) => ({
-      role: item.role,
-      content: item.content.trim().slice(0, 6000)
+      role: item.role === "assistant" ? "model" : "user",
+      parts: [{ text: item.content.trim().slice(0, 6000) }]
     }));
 
   const instructions = [
@@ -149,29 +160,46 @@ export async function POST(request: Request) {
     `KONTEKST FIRMY:\n${JSON.stringify(companyContext)}`
   ].join("\n\n");
 
-  const model = process.env.OPENAI_MODEL?.trim() || "gpt-5";
-  const input = [...history, { role: "user" as const, content: message }];
+  const model = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
+  const contents = [...history, { role: "user", parts: [{ text: message }] }];
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
-  const openAIResponse = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model,
-      instructions,
-      input,
-      max_output_tokens: 1200,
-      store: false
-    }),
-    signal: AbortSignal.timeout(55_000)
-  });
+  let geminiResponse: Response;
 
-  const payload = (await openAIResponse.json().catch(() => ({}))) as OpenAIResponse;
+  try {
+    geminiResponse = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey
+      },
+      body: JSON.stringify({
+        system_instruction: {
+          parts: [{ text: instructions }]
+        },
+        contents,
+        generationConfig: {
+          maxOutputTokens: 1200
+        }
+      }),
+      signal: AbortSignal.timeout(55_000)
+    });
+  } catch (error) {
+    return jsonError(error instanceof Error ? `Nie udało się połączyć z Gemini: ${error.message}` : "Nie udało się połączyć z Gemini.", 502);
+  }
 
-  if (!openAIResponse.ok) {
-    return jsonError(payload.error?.message ?? `OpenAI API zwróciło HTTP ${openAIResponse.status}.`, 502);
+  const payload = (await geminiResponse.json().catch(() => ({}))) as GeminiResponse;
+
+  if (!geminiResponse.ok) {
+    if (geminiResponse.status === 429) {
+      return jsonError("Darmowy limit Gemini został chwilowo wykorzystany. Spróbuj ponownie później.", 429);
+    }
+
+    return jsonError(payload.error?.message ?? `Gemini API zwróciło HTTP ${geminiResponse.status}.`, 502);
+  }
+
+  if (payload.promptFeedback?.blockReason) {
+    return jsonError(payload.promptFeedback.blockReasonMessage ?? `Gemini zablokowało zapytanie: ${payload.promptFeedback.blockReason}.`, 422);
   }
 
   const answer = extractOutputText(payload);
@@ -181,7 +209,7 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json(
-    { answer, model },
+    { answer, model, provider: "gemini" },
     {
       headers: {
         "Cache-Control": "no-store"
