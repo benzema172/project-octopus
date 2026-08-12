@@ -49,7 +49,7 @@ export function BrainPanel({ status, compact = false, reviewDocuments = [] }: Br
           <div className="brain-review-queue__head">
             <div>
               <p className="eyebrow">Kolejka klasyfikacji</p>
-              <h3>Pliki, których nie warto przypisywać na siłę</h3>
+              <h3>Pliki wymagające decyzji człowieka</h3>
             </div>
             <span>{reviewDocuments.length ? <AlertCircle size={17} /> : <CheckCircle2 size={17} />}{reviewDocuments.length ? `${reviewDocuments.length} do sprawdzenia` : "Kolejka czysta"}</span>
           </div>
@@ -59,19 +59,19 @@ export function BrainPanel({ status, compact = false, reviewDocuments = [] }: Br
               {reviewDocuments.slice(0, 8).map((document) => (
                 <article key={document.id}>
                   <FileQuestion size={16} />
-                  <span><strong>{document.name}</strong><small>Wrzutnia: do weryfikacji</small></span>
+                  <span><strong>{document.name}</strong><small>Klasyfikacja: do weryfikacji</small></span>
                 </article>
               ))}
             </div>
           ) : (
-            <p>Nie ma plików oczekujących na ręczne przypisanie. Wrzutnia przekazuje dokumenty bezpośrednio do zatwierdzonych modułów.</p>
+            <p>Nie ma plików oczekujących na ręczne przypisanie. Dokumenty o wystarczającej pewności zostały sklasyfikowane przez pipeline albo zachowały kategorię wybraną przez użytkownika.</p>
           )}
         </section>
       ) : null}
 
       <div className="brain-next-stage">
         <Sparkles size={18} />
-        <p><strong>Aktualny model bezpieczeństwa:</strong> Wrzutnia klasyfikuje po nazwie i typie pliku oraz pozwala zatwierdzić miejsce. Kolejny etap Brain to ekstrakcja treści PDF/Word/Excel, ponowna klasyfikacja na podstawie zawartości i cytowanie źródeł.</p>
+        <p><strong>Aktywny pipeline:</strong> Wrzutnia → R2 → ekstrakcja PDF/Word/Excel → Gemini → klasyfikacja i fakty → źródła → Brain → moduły. Ręcznie wybrana kategoria ma pierwszeństwo; przy rozbieżności Brain tworzy ostrzeżenie zamiast nadpisywać decyzję użytkownika.</p>
       </div>
     </div>
   );
