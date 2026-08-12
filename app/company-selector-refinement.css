@@ -47,33 +47,19 @@
 }
 
 .co-pureinvest-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid rgba(138, 43, 226, 0.14);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-  color: #5b5067 !important;
-  padding: 6px 9px;
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1;
+  display: inline;
+  color: #777183 !important;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
   text-decoration: none;
-  box-shadow: 0 7px 20px rgba(69, 42, 91, 0.06);
-  transition:
-    transform 0.18s ease,
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
+  transition: color 0.18s ease;
 }
 
 .co-pureinvest-button:hover {
-  border-color: rgba(138, 43, 226, 0.3);
-  box-shadow: 0 10px 24px rgba(69, 42, 91, 0.1);
-  transform: translateY(-1px);
-}
-
-.co-pureinvest-button svg {
-  color: #7d3fd0;
+  color: #5b5067 !important;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 @media (max-width: 900px) {
