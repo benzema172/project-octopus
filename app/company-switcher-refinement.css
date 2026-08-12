@@ -1,0 +1,38 @@
+/* Active company switcher — icon-only action next to the label. */
+
+.co-company-switcher__topline {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+}
+
+.co-company-switcher__topline > small {
+  margin: 0;
+}
+
+.co-company-switcher__change {
+  display: inline-grid !important;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  place-items: center;
+  border: 1px solid #e2dce8;
+  border-radius: 8px;
+  background: rgba(255,255,255,.8);
+  color: #715d82 !important;
+  padding: 0 !important;
+  text-decoration: none !important;
+  transition: .18s ease;
+}
+
+.co-company-switcher__change:hover {
+  border-color: #d2c5dd;
+  background: #f5eef9;
+  color: #5f31aa !important;
+}
+
+.co-company-switcher__change:focus-visible {
+  outline: 2px solid rgba(138,43,226,.28);
+  outline-offset: 2px;
+}
