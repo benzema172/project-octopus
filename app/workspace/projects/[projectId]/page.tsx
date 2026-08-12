@@ -1,5 +1,15 @@
 import Link from "next/link";
-import { ArrowRight, Brain, ClipboardList, Database, FileText } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  Brain,
+  Calculator,
+  CalendarDays,
+  ClipboardCheck,
+  Database,
+  FileText,
+  PackageCheck
+} from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireCurrentUser } from "@/lib/auth";
 import { listDocumentsForProject } from "@/lib/data/documents";
@@ -9,135 +19,104 @@ import { getAiRuntimeStatus } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
-type ProjectPageProps = {
-  params: Promise<{
-    projectId: string;
-  }>;
-};
-
-const ROADMAP = [
-  {
-    number: "01",
-    title: "Karta i menu inwestycji",
-    description: "Stałe dane, strony kontraktu, terminy i osoby funkcyjne.",
-    status: "Wdrożone"
-  },
-  {
-    number: "02",
-    title: "Dokumentacja i wersje",
-    description: "Pełny upload R2, kategorie, wersjonowanie i podgląd plików.",
-    status: "Następne"
-  },
-  {
-    number: "03",
-    title: "Octopus Brain",
-    description: "Odczyt dokumentów, OCR, fakty projektu i cytowanie źródeł.",
-    status: "Plan"
-  },
-  {
-    number: "04",
-    title: "Wnioski i protokoły",
-    description: "Szablony DOCX/PDF i automatyczne uzupełnianie z karty inwestycji.",
-    status: "Plan"
-  },
-  {
-    number: "05",
-    title: "Kosztorys i kontrola",
-    description: "Przedmiar, przeroby, harmonogram, rewizje i wykrywanie rozbieżności.",
-    status: "Plan"
-  }
-];
+type ProjectPageProps = { params: Promise<{ projectId: string }> };
 
 export default async function ProjectPage({ params }: ProjectPageProps) {
   const { projectId } = await params;
   const user = await requireCurrentUser();
   const project = await getProjectForUser(user, projectId);
 
-  if (!project) {
-    notFound();
-  }
+  if (!project) notFound();
 
-  const [profile, documents] = await Promise.all([getProjectProfile(project), listDocumentsForProject(project.id)]);
+  const [profile, documents] = await Promise.all([
+    getProjectProfile(project),
+    listDocumentsForProject(project.id)
+  ]);
   const completion = getProjectProfileCompletion(profile);
   const aiStatus = getAiRuntimeStatus();
   const base = `/workspace/projects/${project.id}`;
 
+  const sources = [
+    {
+      href: `${base}/documentation`,
+      icon: FileText,
+      title: "Dokumentacja źródłowa",
+      value: `${documents.length} plików`,
+      text: "Projekty, opisy, STWiORB, umowy i rewizje — podstawowe źródło wiedzy inwestycji."
+    },
+    {
+      href: `${base}/cost-estimate`,
+      icon: Calculator,
+      title: "Kosztorys i przedmiar",
+      value: "Moduł gotowy",
+      text: "Drugie źródło rdzeniowe: zakres kontraktu, pozycje, ilości i późniejsze powiązanie z przerobem."
+    }
+  ];
+
+  const workflows = [
+    { href: `${base}/requests`, icon: PackageCheck, title: "Wnioski materiałowe", text: "Materiały i urządzenia na podstawie projektu, kosztorysu i zatwierdzonych danych." },
+    { href: `${base}/protocols`, icon: ClipboardCheck, title: "Protokoły", text: "Próby, roboty zanikowe, odbiory i dokumenty wykonawcze." },
+    { href: `${base}/schedule`, icon: CalendarDays, title: "Harmonogram", text: "Zakresy robót, terminy, zależności i stan realizacji." },
+    { href: `${base}/progress`, icon: BarChart3, title: "Przerób", text: "Postęp wykonania połączony docelowo z kosztorysem i wartością robót." }
+  ];
+
   return (
-    <div className="project-tab-content">
-      <section className="project-stat-strip" aria-label="Stan inwestycji">
-        <div>
-          <span>Kompletność danych</span>
-          <strong>{completion}%</strong>
+    <div className="project-tab-content pw-dashboard">
+      <section className="pw-status-strip" aria-label="Stan inwestycji">
+        <div><span>Dane inwestycji</span><strong>{completion}%</strong><small>kompletności karty</small></div>
+        <div><span>Dokumentacja</span><strong>{documents.length}</strong><small>plików źródłowych</small></div>
+        <div><span>Octopus Brain</span><strong>{aiStatus.ready ? "Gotowy" : "Oczekuje"}</strong><small>środowisko AI</small></div>
+        <div><span>Model pracy</span><strong>Źródła → wiedza</strong><small>bez ponownego przepisywania</small></div>
+      </section>
+
+      <section className="pw-dashboard-grid pw-dashboard-grid--sources">
+        <div className="pw-section-card pw-section-card--wide">
+          <div className="pw-section-heading">
+            <div><p className="co-kicker">Rdzeń inwestycji</p><h2>Źródła wiedzy Octopusa</h2></div>
+            <Link href={`${base}/brain`} className="pw-text-link">Otwórz Brain AI <ArrowRight size={14} /></Link>
+          </div>
+          <p className="pw-section-lead">Dokumentacja + kosztorys budują jedną bazę wiedzy. Informacje wyciągnięte raz mają zasilać wszystkie kolejne moduły.</p>
+          <div className="pw-source-grid">
+            {sources.map(({ href, icon: Icon, title, value, text }) => (
+              <Link key={href} href={href} className="pw-source-card">
+                <span className="pw-card-icon"><Icon size={20} /></span>
+                <div><strong>{title}</strong><b>{value}</b><p>{text}</p></div>
+                <ArrowRight size={16} className="pw-card-arrow" />
+              </Link>
+            ))}
+          </div>
         </div>
-        <div>
-          <span>Dokumenty</span>
-          <strong>{documents.length}</strong>
-        </div>
-        <div>
-          <span>Inwestor</span>
-          <strong>{profile.investorName || "Do uzupełnienia"}</strong>
-        </div>
-        <div>
-          <span>AI</span>
-          <strong>{aiStatus.ready ? "Gotowe" : "Oczekuje"}</strong>
+
+        <div className="pw-section-card pw-brain-card">
+          <span className="pw-brain-icon"><Brain size={24} /></span>
+          <p className="co-kicker">Octopus Brain</p>
+          <h2>Wiedza inwestycji</h2>
+          <p>Fakty, materiały, urządzenia, instalacje, wymagane próby, ryzyka i źródła informacji.</p>
+          <Link href={`${base}/brain`}>Przejdź do analizy <ArrowRight size={15} /></Link>
         </div>
       </section>
 
-      <section className="project-menu-grid" aria-label="Moduły inwestycji">
-        <Link href={`${base}/data`} className="project-menu-item">
-          <Database aria-hidden="true" />
-          <div>
-            <h2>Dane inwestycji</h2>
-            <p>Stałe dane do wszystkich dokumentów.</p>
-          </div>
-          <ArrowRight aria-hidden="true" />
-        </Link>
-        <Link href={`${base}/documentation`} className="project-menu-item">
-          <FileText aria-hidden="true" />
-          <div>
-            <h2>Dokumentacja</h2>
-            <p>Pliki, wersje i źródła projektu.</p>
-          </div>
-          <ArrowRight aria-hidden="true" />
-        </Link>
-        <Link href={`${base}/outputs`} className="project-menu-item">
-          <ClipboardList aria-hidden="true" />
-          <div>
-            <h2>Wnioski i protokoły</h2>
-            <p>Dokumenty generowane z danych inwestycji.</p>
-          </div>
-          <ArrowRight aria-hidden="true" />
-        </Link>
-        <Link href={`${base}/brain`} className="project-menu-item">
-          <Brain aria-hidden="true" />
-          <div>
-            <h2>Octopus Brain</h2>
-            <p>Analiza i wiedza o inwestycji.</p>
-          </div>
-          <ArrowRight aria-hidden="true" />
-        </Link>
-      </section>
-
-      <section className="implementation-roadmap">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Plan wdrożenia</p>
-            <h2>Kolejne funkcjonalności</h2>
-          </div>
+      <section className="pw-section-card">
+        <div className="pw-section-heading">
+          <div><p className="co-kicker">Praca operacyjna</p><h2>Od wiedzy do dokumentów i realizacji</h2></div>
         </div>
-        <div className="roadmap-list">
-          {ROADMAP.map((item) => (
-            <article key={item.number} className="roadmap-row">
-              <span className="roadmap-number">{item.number}</span>
-              <div>
-                <h3>{item.title}</h3>
-                <p>{item.description}</p>
-              </div>
-              <span className={`roadmap-status roadmap-status--${item.status === "Wdrożone" ? "done" : item.status === "Następne" ? "next" : "planned"}`}>
-                {item.status}
-              </span>
-            </article>
+        <div className="pw-workflow-grid">
+          {workflows.map(({ href, icon: Icon, title, text }) => (
+            <Link href={href} key={href} className="pw-workflow-card">
+              <span className="pw-card-icon"><Icon size={19} /></span>
+              <div><strong>{title}</strong><p>{text}</p></div>
+              <ArrowRight size={15} className="pw-card-arrow" />
+            </Link>
           ))}
+        </div>
+      </section>
+
+      <section className="pw-section-card pw-principle-card">
+        <div className="pw-principle-icon"><Database size={22} /></div>
+        <div>
+          <p className="co-kicker">Zasada Project Octopus</p>
+          <h2>Jedna informacja — wiele zastosowań</h2>
+          <p>Jeżeli system raz rozpozna materiał, urządzenie, parametr lub wymaganie z dokumentacji, ta sama zatwierdzona informacja ma być później dostępna w wniosku materiałowym, protokole, harmonogramie, przerobie i OctopusAI.</p>
         </div>
       </section>
     </div>
