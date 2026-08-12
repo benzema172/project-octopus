@@ -14,6 +14,7 @@ import {
   PackageCheck
 } from "lucide-react";
 import { usePathname } from "next/navigation";
+import { ProjectIntake } from "@/components/projects/project-intake";
 
 type ProjectNavigationProps = {
   projectId: string;
@@ -37,17 +38,20 @@ export function ProjectNavigation({ projectId }: ProjectNavigationProps) {
 
   return (
     <nav className="project-navigation project-navigation--v2" aria-label="Menu inwestycji">
-      {items.map((item) => {
-        const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
-        const Icon = item.icon;
+      <div className="project-navigation__items">
+        {items.map((item) => {
+          const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
+          const Icon = item.icon;
 
-        return (
-          <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined}>
-            <Icon size={16} aria-hidden="true" />
-            {item.label}
-          </Link>
-        );
-      })}
+          return (
+            <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined}>
+              <Icon size={16} aria-hidden="true" />
+              {item.label}
+            </Link>
+          );
+        })}
+      </div>
+      <ProjectIntake projectId={projectId} />
     </nav>
   );
 }
