@@ -1,9 +1,17 @@
+import { CheckCircle2, FileText, Inbox, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { DocumentSummary } from "@/lib/types";
 
 type FoundationItem = {
   title: string;
   description: string;
   icon: LucideIcon;
+};
+
+type FoundationMetric = {
+  label: string;
+  value: string;
+  hint: string;
 };
 
 type ProjectModuleFoundationProps = {
@@ -13,18 +21,31 @@ type ProjectModuleFoundationProps = {
   status?: string;
   items: FoundationItem[];
   principle: string;
+  metrics?: FoundationMetric[];
+  documents?: DocumentSummary[];
+  workflow?: string[];
+  intakeLabel?: string;
 };
 
 export function ProjectModuleFoundation({
   kicker,
   title,
   description,
-  status = "Fundament modułu",
+  status = "Gotowy do zasilenia",
   items,
-  principle
+  principle,
+  metrics = [],
+  documents = [],
+  workflow = [
+    "Wrzuć dokumenty przez Wrzutnię",
+    "Octopus proponuje klasyfikację i powiązania",
+    "Użytkownik zatwierdza ważne dane",
+    "Moduł wykorzystuje zatwierdzoną wiedzę"
+  ],
+  intakeLabel = "Pliki przypisane do modułu"
 }: ProjectModuleFoundationProps) {
   return (
-    <div className="project-tab-content pw-module-page">
+    <div className="project-tab-content pw-module-page pw-module-page--operational">
       <section className="pw-module-intro">
         <div>
           <p className="co-kicker">{kicker}</p>
@@ -32,6 +53,65 @@ export function ProjectModuleFoundation({
           <p>{description}</p>
         </div>
         <span>{status}</span>
+      </section>
+
+      {metrics.length > 0 ? (
+        <section className="pw-module-metrics" aria-label="Stan modułu">
+          {metrics.map((metric) => (
+            <div key={metric.label}>
+              <small>{metric.label}</small>
+              <strong>{metric.value}</strong>
+              <span>{metric.hint}</span>
+            </div>
+          ))}
+        </section>
+      ) : null}
+
+      <section className="pw-module-workbench">
+        <div className="pw-module-flow">
+          <div className="pw-module-section-title">
+            <span className="pw-card-icon"><Sparkles size={18} /></span>
+            <div><p className="co-kicker">Przepływ pracy</p><h3>Jak pracuje ten moduł</h3></div>
+          </div>
+          <ol>
+            {workflow.map((step, index) => (
+              <li key={step}>
+                <span>{index + 1}</span>
+                <strong>{step}</strong>
+                {index < workflow.length - 1 ? <i /> : null}
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <div className="pw-module-inputs">
+          <div className="pw-module-section-title">
+            <span className="pw-card-icon"><Inbox size={18} /></span>
+            <div><p className="co-kicker">Zasilanie</p><h3>{intakeLabel}</h3></div>
+          </div>
+
+          {documents.length > 0 ? (
+            <div className="pw-module-document-list">
+              {documents.slice(0, 5).map((document) => (
+                <article key={document.id}>
+                  <FileText size={16} />
+                  <span>
+                    <strong>{document.name}</strong>
+                    <small>{document.category ?? "do weryfikacji"}</small>
+                  </span>
+                  <CheckCircle2 size={15} />
+                </article>
+              ))}
+              {documents.length > 5 ? <p>+ {documents.length - 5} kolejnych plików przypisanych do tego modułu</p> : null}
+            </div>
+          ) : (
+            <div className="pw-module-empty-input">
+              <Inbox size={22} />
+              <strong>Brak przypisanych plików</strong>
+              <p>Użyj przycisku <b>WRZUTNIA</b> w górnym pasku. Octopus zaproponuje miejsce, a Ty możesz je zatwierdzić przed wysłaniem.</p>
+            </div>
+          )}
+        </div>
       </section>
 
       <section className="pw-module-feature-grid">
