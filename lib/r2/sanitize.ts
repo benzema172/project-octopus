@@ -23,7 +23,7 @@ export function inferDocumentCategory(mimeType: string, fileName: string): strin
 export function attachmentContentDisposition(fileName: string): string {
   const asciiName = sanitizeFileName(fileName).replace(/["\\]/g, "-");
   const encodedName = encodeURIComponent(fileName)
-    .replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase())}`);
+    .replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
 
   return `attachment; filename="${asciiName}"; filename*=UTF-8''${encodedName}`;
 }
