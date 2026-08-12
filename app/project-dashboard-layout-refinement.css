@@ -1,4 +1,4 @@
-/* Project workspace refinement: compact header, two primary cards and uniform vertical rhythm. */
+/* Project workspace refinement: contract-centered header, two primary cards and uniform vertical rhythm. */
 
 .project-workspace-v2 {
   gap: 12px !important;
@@ -8,51 +8,99 @@
   margin-top: 0 !important;
 }
 
-.pw-project-header--compact {
-  grid-template-columns: minmax(0, 1fr) !important;
-  align-items: start !important;
+.pw-project-header--contract {
+  display: grid !important;
+  grid-template-columns: minmax(190px, .65fr) minmax(360px, 1.55fr) minmax(320px, .9fr) !important;
+  align-items: center !important;
+  gap: 20px !important;
   min-height: 0 !important;
-  padding: 13px 18px !important;
+  padding: 12px 18px !important;
 }
 
-.pw-project-header--compact .pw-project-title-row {
-  margin-bottom: 3px !important;
+.pw-project-header__identity {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 5px;
+  min-width: 0;
 }
 
-.pw-project-header--compact h1 {
+.pw-project-header__identity .pw-project-status {
+  width: max-content;
+  padding: 5px 9px;
+}
+
+.pw-project-header__identity h1 {
   margin: 0 !important;
+  color: #17131c;
   font-size: clamp(31px, 3vw, 42px) !important;
   line-height: .98 !important;
+  letter-spacing: -.045em;
 }
 
-.pw-project-subtitle-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px 14px;
-  margin-top: 7px;
-  color: #776d7e;
-  font-size: 10px;
-  line-height: 1.35;
+.pw-project-contract {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 4px;
+  border-right: 1px solid #eee8f2;
+  border-left: 1px solid #eee8f2;
+  padding: 2px 24px;
+  text-align: center;
 }
 
-.pw-project-subtitle-line strong {
-  color: #514657;
-  font-size: 11px;
-  font-weight: 750;
+.pw-project-contract small {
+  color: #958a9c;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-transform: uppercase;
 }
 
-.pw-project-subtitle-line span {
-  position: relative;
-  color: #756b7d;
-  font-size: 10px;
-  font-weight: 700;
+.pw-project-contract strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: #302737;
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1.25;
+  text-overflow: ellipsis;
 }
 
-.pw-project-subtitle-line span::before {
-  content: "•";
-  margin-right: 14px;
-  color: #b3a8ba;
+.pw-project-contract > span {
+  border-radius: 999px;
+  background: linear-gradient(100deg, rgba(255,45,134,.08), rgba(138,43,226,.09), rgba(30,115,233,.07));
+  color: #6e42ad;
+  padding: 5px 9px;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.pw-project-meta--header {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  justify-self: stretch;
+  gap: 18px !important;
+  min-width: 0;
+}
+
+.pw-project-meta--header > div {
+  min-width: 0;
+  color: #7240bc;
+}
+
+.pw-project-meta--header > div > span {
+  min-width: 0 !important;
+}
+
+.pw-project-meta--header small {
+  font-size: 8px !important;
+}
+
+.pw-project-meta--header strong {
+  max-width: 100% !important;
+  color: #2f2736 !important;
+  font-size: 10px !important;
 }
 
 .pw-ops-grid--primary {
@@ -63,26 +111,57 @@
   width: 100%;
 }
 
+@media (max-width: 1180px) {
+  .pw-project-header--contract {
+    grid-template-columns: minmax(180px, .7fr) minmax(0, 1.3fr) !important;
+    gap: 14px !important;
+  }
+
+  .pw-project-contract {
+    border-right: 0;
+  }
+
+  .pw-project-meta--header {
+    grid-column: 1 / -1;
+    border-top: 1px solid #eee8f2;
+    padding-top: 10px;
+  }
+}
+
 @media (max-width: 860px) {
   .project-workspace-v2 {
     gap: 10px !important;
   }
 
-  .pw-project-header--compact {
+  .pw-project-header--contract {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
     padding: 12px 14px !important;
   }
 
-  .pw-project-subtitle-line {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
+  .pw-project-contract {
+    justify-items: start;
+    border: 0;
+    border-top: 1px solid #eee8f2;
+    border-bottom: 1px solid #eee8f2;
+    padding: 10px 0;
+    text-align: left;
   }
 
-  .pw-project-subtitle-line span::before {
-    display: none;
+  .pw-project-meta--header {
+    grid-column: auto;
+    border-top: 0;
+    padding-top: 0;
   }
 
   .pw-ops-grid--primary {
     grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .pw-project-meta--header {
+    grid-template-columns: 1fr;
+    gap: 8px !important;
   }
 }
