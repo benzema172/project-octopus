@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { BrainPanel } from "@/components/brain/brain-panel";
 import { requireCurrentUser } from "@/lib/auth";
 import { listDocumentsForCategories } from "@/lib/data/documents";
+import { getProjectKnowledgeSnapshot } from "@/lib/data/project-knowledge";
 import { getProjectForUser } from "@/lib/data/projects";
 import { getAiRuntimeStatus } from "@/lib/env";
 
@@ -16,15 +17,16 @@ export default async function ProjectBrainPage({ params }: ProjectBrainPageProps
   const user = await requireCurrentUser();
   const project = await getProjectForUser(user, projectId);
 
-  if (!project) {
-    notFound();
-  }
+  if (!project) notFound();
 
-  const reviewDocuments = await listDocumentsForCategories(projectId, ["do_weryfikacji"]);
+  const [reviewDocuments, knowledge] = await Promise.all([
+    listDocumentsForCategories(projectId, ["do_weryfikacji"]),
+    getProjectKnowledgeSnapshot(projectId)
+  ]);
 
   return (
     <div className="project-tab-content">
-      <BrainPanel status={getAiRuntimeStatus()} reviewDocuments={reviewDocuments} />
+      <BrainPanel status={getAiRuntimeStatus()} reviewDocuments={reviewDocuments} knowledge={knowledge} />
     </div>
   );
 }
