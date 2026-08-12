@@ -4,7 +4,7 @@ Pierwsza wersja MVP aplikacji do prowadzenia inwestycji, dokumentacji i przygoto
 
 ## Funkcje MVP
 
-- logowanie i rejestracja przez Supabase,
+- logowanie przez Supabase,
 - automatyczny workspace użytkownika,
 - lista inwestycji oparta o tabelę `projects`,
 - tworzenie nowej inwestycji,
@@ -13,6 +13,10 @@ Pierwsza wersja MVP aplikacji do prowadzenia inwestycji, dokumentacji i przygoto
 - endpoint `POST /api/storage/upload-url` generujący presigned PUT URL do prywatnego Cloudflare R2,
 - bezpośredni upload z przeglądarki do bucketa R2,
 - zapis metadanych do `documents` i `document_versions`,
+- atomowy zapis dokumentu i jego wersji w Supabase,
+- pobieranie dokumentów z prywatnego R2 przez krótkotrwały adres,
+- dodawanie kolejnych wersji dokumentu,
+- odwracalny kosz dokumentów bez kasowania obiektów w R2,
 - podstawowy ekran Octopus Brain przygotowany pod `AI_PROVIDER=gemini`.
 
 ## Zmienne środowiskowe
@@ -36,13 +40,16 @@ Sekrety są używane wyłącznie po stronie serwera.
 
 ## Supabase
 
-Migracja MVP znajduje się w:
+Migracje znajdują się w:
 
 ```text
 supabase/migrations/20260811130000_project_octopus_mvp.sql
+supabase/migrations/20260812100000_project_octopus_foundation_fix.sql
 ```
 
-Jeśli baza była już utworzona wcześniejszym skryptem Project Octopus, migracja jest idempotentna i dodaje tylko brakujące kolumny wymagane przez MVP.
+Na istniejącej bazie Project Octopus należy zastosować migrację `20260812100000_project_octopus_foundation_fix.sql` przed wdrożeniem kodu 0.2.0. Dodaje ona brakujące kolumny, mapuje starsze dane, instaluje atomową funkcję uploadu i zapisuje marker zgodności schematu. Dopóki marker nie istnieje, interfejs bezpiecznie blokuje upload.
+
+Dokładna kolejność wdrożenia i procedura wycofania są opisane w `DEPLOYMENT.md`.
 
 ## Lokalne uruchomienie
 
@@ -56,6 +63,8 @@ npm run dev
 ```bash
 npm run lint
 npm run test
+npm run test:migrations
+npm run typecheck
 npm run build
 ```
 

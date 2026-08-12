@@ -165,7 +165,7 @@ if (!completeResponse.ok) {
 const completed = await completeResponse.json();
 const { data: documentVersion, error: versionError } = await admin
   .from("document_versions")
-  .select("id,r2_object_key,sha256,upload_status")
+  .select("id,r2_object_key,r2_etag,sha256,upload_status,version_number")
   .eq("id", completed.versionId)
   .single();
 
@@ -174,7 +174,12 @@ if (versionError || !documentVersion) {
   process.exit(1);
 }
 
-if (documentVersion.upload_status !== "uploaded" || documentVersion.sha256 !== sha256) {
+if (
+  documentVersion.upload_status !== "uploaded" ||
+  documentVersion.sha256 !== sha256 ||
+  documentVersion.version_number !== 1 ||
+  !documentVersion.r2_etag
+) {
   console.error("Document version was saved, but metadata does not match the uploaded file.");
   process.exit(1);
 }

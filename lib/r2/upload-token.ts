@@ -12,6 +12,29 @@ export type UploadIntent = {
   expiresAt: number;
 };
 
+function isUploadIntent(value: unknown): value is UploadIntent {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const intent = value as Record<string, unknown>;
+
+  return (
+    typeof intent.workspaceId === "string" &&
+    typeof intent.projectId === "string" &&
+    typeof intent.documentId === "string" &&
+    typeof intent.versionId === "string" &&
+    typeof intent.objectKey === "string" &&
+    typeof intent.fileName === "string" &&
+    typeof intent.mimeType === "string" &&
+    typeof intent.fileSize === "number" &&
+    Number.isFinite(intent.fileSize) &&
+    intent.fileSize > 0 &&
+    typeof intent.expiresAt === "number" &&
+    Number.isFinite(intent.expiresAt)
+  );
+}
+
 function base64UrlEncode(input: string | Buffer): string {
   return Buffer.from(input).toString("base64url");
 }
@@ -46,7 +69,17 @@ export function verifyUploadToken(token: string, secret: string, now = Date.now(
     throw new Error("Token uploadu nie pasuje do podpisu.");
   }
 
-  const intent = JSON.parse(base64UrlDecode(payload)) as UploadIntent;
+  let intent: unknown;
+
+  try {
+    intent = JSON.parse(base64UrlDecode(payload));
+  } catch {
+    throw new Error("Token uploadu zawiera nieprawidłowe dane.");
+  }
+
+  if (!isUploadIntent(intent)) {
+    throw new Error("Token uploadu ma nieprawidłową strukturę.");
+  }
 
   if (!intent.expiresAt || intent.expiresAt < now) {
     throw new Error("Token uploadu wygasł.");

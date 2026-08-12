@@ -8,6 +8,7 @@ import { getR2Config, requireServerEnv } from "@/lib/env";
 import { createR2Client } from "@/lib/r2/client";
 import { sanitizeFileName } from "@/lib/r2/sanitize";
 import { createUploadToken, type UploadIntent } from "@/lib/r2/upload-token";
+import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,7 @@ const PRESIGNED_URL_TTL_SECONDS = 10 * 60;
 
 type UploadUrlBody = {
   projectId?: string;
+  documentId?: string;
   fileName?: string;
   mimeType?: string;
   fileSize?: number;
@@ -41,6 +43,7 @@ export async function POST(request: Request) {
   }
 
   const projectId = body.projectId;
+  const requestedDocumentId = body.documentId?.trim();
   const fileName = body.fileName?.trim();
   const mimeType = body.mimeType?.trim() || "application/octet-stream";
   const fileSize = Number(body.fileSize);
@@ -59,7 +62,28 @@ export async function POST(request: Request) {
     return jsonError("Nie znaleziono inwestycji dla tego workspace.", 404);
   }
 
-  const documentId = randomUUID();
+  let documentId: string = randomUUID();
+
+  if (requestedDocumentId) {
+    const supabase = createServiceSupabaseClient();
+    const { data: document, error: documentError } = await supabase
+      .from("documents")
+      .select("id")
+      .eq("id", requestedDocumentId)
+      .eq("project_id", project.id)
+      .maybeSingle<{ id: string }>();
+
+    if (documentError) {
+      return jsonError(`Nie udało się sprawdzić dokumentu: ${documentError.message}`, 500);
+    }
+
+    if (!document) {
+      return jsonError("Nie znaleziono dokumentu w tej inwestycji.", 404);
+    }
+
+    documentId = document.id;
+  }
+
   const versionId = randomUUID();
   const safeFileName = sanitizeFileName(fileName);
   const objectKey = `workspaces/${project.workspace_id}/projects/${project.id}/documents/${documentId}/versions/${versionId}/${safeFileName}`;

@@ -49,6 +49,8 @@ create table if not exists public.documents (
   category text,
   current_version_id uuid,
   created_by uuid references auth.users(id) on delete set null,
+  deleted_at timestamptz,
+  deleted_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -106,8 +108,8 @@ create table if not exists public.project_facts (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references public.projects(id) on delete cascade,
   fact_type text not null,
-  title text not null,
-  value text,
+  value_text text,
+  value_json jsonb not null default '{}'::jsonb,
   confidence numeric(5, 4),
   source_reference_id uuid references public.source_references(id) on delete set null,
   created_at timestamptz not null default now(),
@@ -227,6 +229,8 @@ alter table public.documents add column if not exists name text;
 alter table public.documents add column if not exists category text;
 alter table public.documents add column if not exists current_version_id uuid;
 alter table public.documents add column if not exists created_by uuid references auth.users(id) on delete set null;
+alter table public.documents add column if not exists deleted_at timestamptz;
+alter table public.documents add column if not exists deleted_by uuid references auth.users(id) on delete set null;
 alter table public.documents add column if not exists created_at timestamptz not null default now();
 alter table public.documents add column if not exists updated_at timestamptz not null default now();
 
@@ -243,6 +247,10 @@ alter table public.document_versions add column if not exists upload_status text
 alter table public.document_versions add column if not exists uploaded_by uuid references auth.users(id) on delete set null;
 alter table public.document_versions add column if not exists uploaded_at timestamptz;
 alter table public.document_versions add column if not exists created_at timestamptz not null default now();
+alter table public.document_versions add column if not exists r2_etag text;
+
+alter table public.project_facts add column if not exists value_text text;
+alter table public.project_facts add column if not exists value_json jsonb not null default '{}'::jsonb;
 
 do $$
 begin
@@ -537,7 +545,7 @@ drop policy if exists "members can read ai runs" on public.ai_runs;
 create policy "members can read ai runs"
 on public.ai_runs for select
 using (
-  project_id is null
+  (project_id is null and created_by = auth.uid())
   or exists (
     select 1
     from public.projects p

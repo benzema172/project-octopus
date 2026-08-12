@@ -77,7 +77,8 @@ export async function createProjectAction(formData: FormData) {
   });
 
   if (profileError) {
-    console.error("Nie udalo sie zapisac poczatkowej karty inwestycji:", profileError.message);
+    await supabase.from("projects").delete().eq("id", data.id).eq("workspace_id", workspace.id);
+    throw new Error(`Nie udało się utworzyć karty inwestycji: ${profileError.message}`);
   }
 
   revalidatePath("/workspace");

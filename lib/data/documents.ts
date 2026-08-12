@@ -43,6 +43,7 @@ function normalizeVersion(row: FlexibleRow, projectId: string, fallbackName: str
     file_size_bytes: numberValue(row, "file_size_bytes", "size_bytes"),
     r2_bucket: stringValue(row, "r2_bucket", "storage_bucket") ?? "",
     r2_object_key: stringValue(row, "r2_object_key", "storage_key") ?? "",
+    r2_etag: stringValue(row, "r2_etag"),
     sha256: stringValue(row, "sha256"),
     upload_status: stringValue(row, "upload_status", "status") ?? "uploaded",
     uploaded_at: stringValue(row, "uploaded_at"),
@@ -50,13 +51,14 @@ function normalizeVersion(row: FlexibleRow, projectId: string, fallbackName: str
   };
 }
 
-export async function listDocumentsForProject(projectId: string): Promise<DocumentSummary[]> {
+export async function listDocumentsForProject(projectId: string, trashed = false): Promise<DocumentSummary[]> {
   const supabase = createServiceSupabaseClient();
 
   const { data, error } = await supabase
     .from("documents")
     .select("*, document_versions(*)")
     .eq("project_id", projectId)
+    .filter("deleted_at", trashed ? "not.is" : "is", null)
     .order("updated_at", { ascending: false })
     .returns<FlexibleDocumentRow[]>();
 
@@ -65,7 +67,9 @@ export async function listDocumentsForProject(projectId: string): Promise<Docume
   }
 
   return (data ?? []).map((row) => {
-    const versions = row.document_versions ?? [];
+    const versions = [...(row.document_versions ?? [])].sort(
+      (left, right) => numberValue(right, "version_number", "version_no") - numberValue(left, "version_number", "version_no")
+    );
     const name =
       stringValue(row, "name", "file_name", "original_filename") ??
       (versions[0] ? stringValue(versions[0], "file_name", "original_filename") : null) ??
@@ -78,6 +82,7 @@ export async function listDocumentsForProject(projectId: string): Promise<Docume
       name,
       category: stringValue(row, "category", "document_type"),
       current_version_id: stringValue(row, "current_version_id"),
+      deleted_at: stringValue(row, "deleted_at"),
       created_at: stringValue(row, "created_at") ?? "",
       updated_at: stringValue(row, "updated_at", "created_at") ?? "",
       document_versions: versions.map((version) => normalizeVersion(version, projectId, name))
@@ -87,10 +92,11 @@ export async function listDocumentsForProject(projectId: string): Promise<Docume
 
 export async function isDocumentStorageSchemaReady() {
   const supabase = createServiceSupabaseClient();
-  const { error } = await supabase
-    .from("document_versions")
-    .select("project_id, version_number, file_name, file_size_bytes, r2_bucket, r2_object_key, upload_status, uploaded_by, uploaded_at")
-    .limit(0);
+  const { data, error } = await supabase
+    .from("app_schema_versions")
+    .select("version")
+    .eq("version", "20260812_foundation_fix")
+    .maybeSingle<{ version: string }>();
 
-  return !error;
+  return !error && data?.version === "20260812_foundation_fix";
 }

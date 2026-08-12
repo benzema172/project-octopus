@@ -182,17 +182,6 @@ function buildLogo() {
 
   poly(
     [
-      [centerX, centerY - 7],
-      [centerX, centerY - 10],
-      [centerX, centerY - 12]
-    ],
-    tentacleClass("top")
-  );
-  ring(centerX, centerY - 14, 2, tentacleClass("top"));
-  tentacleDefs.push({ id: "top", x: centerX, y: centerY - 14 });
-
-  poly(
-    [
       [centerX - 7, centerY - 5],
       [centerX - 10, centerY - 7],
       [centerX - 12, centerY - 9]
