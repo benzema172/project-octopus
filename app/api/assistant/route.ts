@@ -17,23 +17,9 @@ type AssistantBody = {
 };
 
 type GeminiResponse = {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{
-        text?: string;
-      }>;
-    };
-    finishReason?: string;
-  }>;
-  promptFeedback?: {
-    blockReason?: string;
-    blockReasonMessage?: string;
-  };
-  error?: {
-    code?: number;
-    message?: string;
-    status?: string;
-  };
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>;
+  promptFeedback?: { blockReason?: string; blockReasonMessage?: string };
+  error?: { code?: number; message?: string; status?: string };
 };
 
 function jsonError(message: string, status: number) {
@@ -49,13 +35,9 @@ function extractOutputText(payload: GeminiResponse) {
 
 export async function POST(request: Request) {
   const user = await getRequestUser(request);
-
-  if (!user) {
-    return jsonError("Brak aktywnej sesji.", 401);
-  }
+  if (!user) return jsonError("Brak aktywnej sesji.", 401);
 
   let body: AssistantBody;
-
   try {
     body = (await request.json()) as AssistantBody;
   } catch {
@@ -64,32 +46,17 @@ export async function POST(request: Request) {
 
   const workspaceId = body.workspaceId?.trim();
   const message = body.message?.trim();
-
-  if (!workspaceId || !message) {
-    return jsonError("Brakuje firmy albo treści pytania.", 400);
-  }
-
-  if (message.length > 6000) {
-    return jsonError("Pytanie jest zbyt długie.", 413);
-  }
+  if (!workspaceId || !message) return jsonError("Brakuje firmy albo treści pytania.", 400);
+  if (message.length > 6000) return jsonError("Pytanie jest zbyt długie.", 413);
 
   const workspace = await getWorkspaceForUser(user, workspaceId);
-
-  if (!workspace) {
-    return jsonError("Nie znaleziono firmy lub nie masz do niej dostępu.", 404);
-  }
+  if (!workspace) return jsonError("Nie znaleziono firmy lub nie masz do niej dostępu.", 404);
 
   const provider = (process.env.AI_PROVIDER || "gemini").trim().toLowerCase();
-
-  if (provider !== "gemini") {
-    return jsonError("OctopusAI jest skonfigurowany do pracy z Gemini. Ustaw AI_PROVIDER=gemini w Vercel.", 503);
-  }
+  if (provider !== "gemini") return jsonError("OctopusAI jest skonfigurowany do pracy z Gemini. Ustaw AI_PROVIDER=gemini w Vercel.", 503);
 
   const apiKey = process.env.GEMINI_API_KEY?.trim();
-
-  if (!apiKey) {
-    return jsonError("OctopusAI wymaga ustawienia GEMINI_API_KEY w Vercel.", 503);
-  }
+  if (!apiKey) return jsonError("OctopusAI wymaga ustawienia GEMINI_API_KEY w Vercel.", 503);
 
   const supabase = createServiceSupabaseClient();
   const [projectsResult, documentsResult] = await Promise.all([
@@ -108,15 +75,32 @@ export async function POST(request: Request) {
       .limit(160)
   ]);
 
-  if (projectsResult.error) {
-    return jsonError(`Nie udało się przygotować kontekstu inwestycji: ${projectsResult.error.message}`, 500);
+  if (projectsResult.error) return jsonError(`Nie udało się przygotować kontekstu inwestycji: ${projectsResult.error.message}`, 500);
+  if (documentsResult.error) return jsonError(`Nie udało się przygotować kontekstu dokumentów: ${documentsResult.error.message}`, 500);
+
+  const projects = projectsResult.data ?? [];
+  const projectIds = projects.map((project) => project.id);
+  const projectNames = new Map(projects.map((project) => [project.id, project.name]));
+
+  let facts: Array<Record<string, unknown>> = [];
+  let materials: Array<Record<string, unknown>> = [];
+  let devices: Array<Record<string, unknown>> = [];
+  let findings: Array<Record<string, unknown>> = [];
+
+  if (projectIds.length) {
+    const [factsResult, materialsResult, devicesResult, findingsResult] = await Promise.all([
+      supabase.from("project_facts").select("project_id,fact_type,value_text,confidence,updated_at").in("project_id", projectIds).order("updated_at", { ascending: false }).limit(220),
+      supabase.from("materials").select("project_id,name,installation,specification,updated_at").in("project_id", projectIds).order("updated_at", { ascending: false }).limit(160),
+      supabase.from("devices").select("project_id,name,installation,parameters,updated_at").in("project_id", projectIds).order("updated_at", { ascending: false }).limit(160),
+      supabase.from("ai_findings").select("project_id,severity,title,description,created_at").in("project_id", projectIds).order("created_at", { ascending: false }).limit(100)
+    ]);
+
+    facts = (factsResult.data ?? []) as Array<Record<string, unknown>>;
+    materials = (materialsResult.data ?? []) as Array<Record<string, unknown>>;
+    devices = (devicesResult.data ?? []) as Array<Record<string, unknown>>;
+    findings = (findingsResult.data ?? []) as Array<Record<string, unknown>>;
   }
 
-  if (documentsResult.error) {
-    return jsonError(`Nie udało się przygotować kontekstu dokumentów: ${documentsResult.error.message}`, 500);
-  }
-
-  const projectNames = new Map((projectsResult.data ?? []).map((project) => [project.id, project.name]));
   const companyContext = {
     company: {
       name: workspace.name,
@@ -128,7 +112,8 @@ export async function POST(request: Request) {
       email: workspace.email,
       phone: workspace.phone
     },
-    investments: (projectsResult.data ?? []).map((project) => ({
+    investments: projects.map((project) => ({
+      id: project.id,
       name: project.name,
       status: project.status,
       investor: project.investor_name,
@@ -139,7 +124,13 @@ export async function POST(request: Request) {
       name: document.name,
       category: document.category,
       investment: projectNames.get(document.project_id) ?? "Nieznana inwestycja"
-    }))
+    })),
+    brain: {
+      facts: facts.map((item) => ({ ...item, investment: projectNames.get(String(item.project_id)) ?? "Nieznana inwestycja" })),
+      materials: materials.map((item) => ({ ...item, investment: projectNames.get(String(item.project_id)) ?? "Nieznana inwestycja" })),
+      devices: devices.map((item) => ({ ...item, investment: projectNames.get(String(item.project_id)) ?? "Nieznana inwestycja" })),
+      findings: findings.map((item) => ({ ...item, investment: projectNames.get(String(item.project_id)) ?? "Nieznana inwestycja" }))
+    }
   };
 
   const history = (body.history ?? [])
@@ -155,9 +146,11 @@ export async function POST(request: Request) {
   const instructions = [
     "Jesteś OctopusAI — operacyjnym asystentem przedsiębiorstwa w aplikacji Project Octopus.",
     `Pracujesz wyłącznie w kontekście firmy \"${workspace.name}\" i danych przekazanych poniżej.`,
+    "Sekcja brain zawiera wiedzę wydobytą z dokumentów przez pipeline: R2 → ekstrakcja → Gemini → strukturalne fakty. Korzystaj z niej jako głównej pamięci operacyjnej firmy.",
     "Odpowiadaj po polsku, konkretnie i biznesowo. Nie wymyślaj danych. Jeśli informacji nie ma w kontekście, napisz wprost, że nie ma jej jeszcze w Project Octopus.",
+    "Jeżeli Brain zawiera ostrzeżenie lub sprzeczne dane, wskaż to. Rozróżniaj fakty od własnych rekomendacji.",
     "Możesz analizować inwestycje i dokumenty, porównywać informacje, wskazywać ryzyka i proponować następne działania, ale nie twierdź, że wykonałeś operację w aplikacji, jeśli tylko o niej rozmawiasz.",
-    `KONTEKST FIRMY:\n${JSON.stringify(companyContext)}`
+    `KONTEKST FIRMY I BRAIN:\n${JSON.stringify(companyContext)}`
   ].join("\n\n");
 
   const model = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
@@ -165,22 +158,14 @@ export async function POST(request: Request) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
   let geminiResponse: Response;
-
   try {
     geminiResponse = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey
-      },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
-        system_instruction: {
-          parts: [{ text: instructions }]
-        },
+        system_instruction: { parts: [{ text: instructions }] },
         contents,
-        generationConfig: {
-          maxOutputTokens: 1200
-        }
+        generationConfig: { maxOutputTokens: 1200 }
       }),
       signal: AbortSignal.timeout(55_000)
     });
@@ -189,12 +174,8 @@ export async function POST(request: Request) {
   }
 
   const payload = (await geminiResponse.json().catch(() => ({}))) as GeminiResponse;
-
   if (!geminiResponse.ok) {
-    if (geminiResponse.status === 429) {
-      return jsonError("Darmowy limit Gemini został chwilowo wykorzystany. Spróbuj ponownie później.", 429);
-    }
-
+    if (geminiResponse.status === 429) return jsonError("Darmowy limit Gemini został chwilowo wykorzystany. Spróbuj ponownie później.", 429);
     return jsonError(payload.error?.message ?? `Gemini API zwróciło HTTP ${geminiResponse.status}.`, 502);
   }
 
@@ -203,17 +184,7 @@ export async function POST(request: Request) {
   }
 
   const answer = extractOutputText(payload);
+  if (!answer) return jsonError("OctopusAI nie zwrócił odpowiedzi tekstowej.", 502);
 
-  if (!answer) {
-    return jsonError("OctopusAI nie zwrócił odpowiedzi tekstowej.", 502);
-  }
-
-  return NextResponse.json(
-    { answer, model, provider: "gemini" },
-    {
-      headers: {
-        "Cache-Control": "no-store"
-      }
-    }
-  );
+  return NextResponse.json({ answer, model, provider: "gemini" }, { headers: { "Cache-Control": "no-store" } });
 }
