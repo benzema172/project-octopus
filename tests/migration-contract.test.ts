@@ -52,6 +52,8 @@ describe("Supabase migration contract", () => {
     expect(operatingSystem).toContain("create table if not exists public.vehicles");
     expect(operatingSystem).toContain("create table if not exists public.templates");
     expect(operatingSystem).toContain("create table if not exists public.report_snapshots");
+    expect(operatingSystem).toContain("alter table public.progress_entries add column if not exists workspace_id");
+    expect(operatingSystem).toContain("set workspace_id = p.workspace_id");
   });
 
   it("enqueues every completed document version for idempotent processing", () => {

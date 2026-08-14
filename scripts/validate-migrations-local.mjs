@@ -35,6 +35,16 @@ try {
   await prepareDatabase(database);
 
   for (const migration of migrations) {
+    if (migration.endsWith("20260814090000_octopus_operating_system.sql")) {
+      await database.exec(`
+        create table public.progress_entries (
+          id uuid primary key default gen_random_uuid(),
+          project_id uuid references public.projects(id),
+          progress_percent numeric,
+          created_at timestamptz not null default now()
+        );
+      `);
+    }
     const sql = withoutPgcrypto(await readFile(migration, "utf8"));
     await database.exec(sql);
     console.log(`OK   ${migration}`);
@@ -65,8 +75,14 @@ try {
     select proname from pg_proc
     where pronamespace = 'public'::regnamespace and proname = 'approve_estimate_import_atomic'
   `);
+  const legacyProgressShape = await database.query(`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'progress_entries'
+      and column_name in ('workspace_id', 'project_id', 'progress_period_id', 'boq_item_id', 'value_accepted', 'evidence')
+  `);
 
-  if (marker.rows.length !== 1 || hardeningMarker.rows.length !== 1 || uploadFunction.rows.length !== 1 || claimFunction.rows.length !== 1 || searchFunction.rows.length !== 1 || estimateApprovalFunction.rows.length !== 1) {
+  if (marker.rows.length !== 1 || hardeningMarker.rows.length !== 1 || uploadFunction.rows.length !== 1 || claimFunction.rows.length !== 1 || searchFunction.rows.length !== 1 || estimateApprovalFunction.rows.length !== 1 || legacyProgressShape.rows.length !== 6) {
     throw new Error("Migration marker or atomic upload function is missing.");
   }
 

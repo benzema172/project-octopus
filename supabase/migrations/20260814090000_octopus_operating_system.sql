@@ -866,6 +866,31 @@ create table if not exists public.report_deliveries (
   created_at timestamptz not null default now()
 );
 
+-- Some early production databases already contain a smaller progress_entries table.
+-- CREATE TABLE IF NOT EXISTS does not add missing columns, so normalize that legacy
+-- shape before indexes and RLS policies start referring to workspace_id.
+alter table public.progress_entries add column if not exists workspace_id uuid references public.workspaces(id) on delete cascade;
+alter table public.progress_entries add column if not exists project_id uuid references public.projects(id) on delete cascade;
+alter table public.progress_entries add column if not exists progress_period_id uuid references public.progress_periods(id) on delete cascade;
+alter table public.progress_entries add column if not exists boq_item_id uuid references public.boq_items(id) on delete cascade;
+alter table public.progress_entries add column if not exists quantity_executed numeric(18,4) not null default 0;
+alter table public.progress_entries add column if not exists quantity_accepted numeric(18,4) not null default 0;
+alter table public.progress_entries add column if not exists value_executed numeric(16,2) not null default 0;
+alter table public.progress_entries add column if not exists value_accepted numeric(16,2) not null default 0;
+alter table public.progress_entries add column if not exists status text not null default 'draft';
+alter table public.progress_entries add column if not exists evidence jsonb not null default '[]'::jsonb;
+alter table public.progress_entries add column if not exists created_at timestamptz not null default now();
+
+update public.progress_entries pe
+set project_id = pp.project_id
+from public.progress_periods pp
+where pe.progress_period_id = pp.id and pe.project_id is null;
+
+update public.progress_entries pe
+set workspace_id = p.workspace_id
+from public.projects p
+where pe.project_id = p.id and pe.workspace_id is null;
+
 do $$
 begin
   if exists (select 1 from pg_available_extensions where name = 'vector') then
