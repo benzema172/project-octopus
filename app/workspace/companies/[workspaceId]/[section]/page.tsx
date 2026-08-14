@@ -1,10 +1,19 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CheckCircle2, FileText, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { BookOpenCheck, Brain, CheckCircle2, CircleDashed, FileText, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { updateCompanyAction } from "@/app/actions";
+import { AiInbox } from "@/components/brain/ai-inbox";
+import { KnowledgeEntryForm } from "@/components/brain/knowledge-entry-form";
+import { KnowledgeSearch } from "@/components/brain/knowledge-search";
+import { DomainLivePanel } from "@/components/dashboard/domain-live-panel";
+import { DocumentUpload } from "@/components/documents/document-upload";
+import { TemplateStudio } from "@/components/templates/template-studio";
 import { requireCurrentUser } from "@/lib/auth";
+import { isDocumentStorageSchemaReady, listDocumentsForWorkspace } from "@/lib/data/documents";
+import { listAiInbox } from "@/lib/data/operations";
 import { listProjectsForWorkspace } from "@/lib/data/projects";
 import { getWorkspaceForUser, isCompanyProfileSchemaReady } from "@/lib/data/workspace";
+import { getAiRuntimeStatus } from "@/lib/env";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +27,7 @@ type DocumentRow = {
   id: string;
   name: string;
   category: string | null;
-  project_id: string;
+  project_id: string | null;
   updated_at: string;
   projects: { name: string } | { name: string }[] | null;
 };
@@ -41,8 +50,21 @@ const MODULES: Record<string, { title: string; kicker: string; description: stri
     title: "Magazyn i sprzęt",
     description: "Struktura pod materiały, urządzenia, narzędzia oraz ich ruch pomiędzy firmą i inwestycjami.",
     features: ["Stany magazynowe", "Przyjęcia i wydania", "Rezerwacje pod inwestycje", "Sprzęt i narzędzia", "Stany minimalne", "Inwentaryzacja"]
+  },
+  fleet: {
+    kicker: "Flota",
+    title: "Flota i transport",
+    description: "Kontrola samochodów, ciężarówek, maszyn, kosztów i terminów eksploatacyjnych.",
+    features: ["Ewidencja pojazdów", "OC, badania i leasing", "Serwis i przestoje", "Szkody i dokumentacja", "Paliwo i przebiegi", "Koszt floty na inwestycję"]
   }
 };
+
+const LIVE_KINDS = {
+  finances: "finance",
+  hr: "hr",
+  warehouse: "warehouse",
+  fleet: "fleet"
+} as const;
 
 function projectName(document: DocumentRow) {
   if (Array.isArray(document.projects)) {
@@ -83,12 +105,19 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
             ))}
           </div>
         </section>
+        <DomainLivePanel kind={LIVE_KINDS[section as keyof typeof LIVE_KINDS]} workspaceId={workspace.id} />
       </main>
     );
   }
 
   if (section === "documents") {
     const supabase = createServiceSupabaseClient();
+    const [projects, documentSummaries, trashedDocuments, storageReady] = await Promise.all([
+      listProjectsForWorkspace(user, workspace.id),
+      listDocumentsForWorkspace(workspace.id),
+      listDocumentsForWorkspace(workspace.id, true),
+      isDocumentStorageSchemaReady()
+    ]);
     const { data, error } = await supabase
       .from("documents")
       .select("id, name, category, project_id, updated_at, projects(name)")
@@ -120,6 +149,21 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
           ))}
         </section>
 
+        <section className="document-principles">
+          <div><strong>1. Wrzucasz</strong><span>Plik trafia do prywatnego magazynu R2.</span></div>
+          <div><strong>2. AI rozumie</strong><span>OCR, klasyfikacja, kontekst i fakty ze źródłami.</span></div>
+          <div><strong>3. Zatwierdzasz</strong><span>Niepewne decyzje trafiają do Skrzynki AI.</span></div>
+          <div><strong>4. System wykorzystuje</strong><span>Dokument zasila właściwą firmę, inwestycję i moduł.</span></div>
+        </section>
+
+        <DocumentUpload
+          workspaceId={workspace.id}
+          projects={projects}
+          documents={documentSummaries}
+          trashedDocuments={trashedDocuments}
+          storageReady={storageReady}
+        />
+
         <section className="co-section">
           <div className="co-section-heading">
             <div>
@@ -137,7 +181,7 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
                     <small>{document.category || "Dokument"} · {projectName(document)}</small>
                   </div>
                   <time>{document.updated_at ? new Date(document.updated_at).toLocaleDateString("pl-PL") : ""}</time>
-                  <Link href={`/workspace/projects/${document.project_id}/documentation`}>Otwórz →</Link>
+                  <Link href={document.project_id ? `/workspace/projects/${document.project_id}/documentation` : `/workspace/companies/${workspace.id}/documents`}>Otwórz →</Link>
                 </article>
               ))}
             </div>
@@ -199,6 +243,76 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
             ))}
           </div>
         </section>
+        <DomainLivePanel kind="reports" workspaceId={workspace.id} />
+      </main>
+    );
+  }
+
+  if (section === "templates") {
+    return (
+      <main className="co-page">
+        <header className="co-page-heading">
+          <div><p className="co-kicker">Wzory</p><h1>Wzory i generatory dokumentów</h1><p>Kontrolowana baza firmowych wzorów do wniosków, protokołów, harmonogramów, raportów i dokumentacji odbiorowej.</p></div>
+        </header>
+        <TemplateStudio workspaceId={workspace.id} />
+      </main>
+    );
+  }
+
+  if (section === "ai-inbox") {
+    const items = await listAiInbox(workspace.id);
+    const reviewCount = items.filter((item) => item.status === "review").length;
+    const errorCount = items.filter((item) => item.status === "error").length;
+    return (
+      <main className="co-page">
+        <header className="co-page-heading"><div><p className="co-kicker">Wspólna kontrola AI</p><h1>Skrzynka AI</h1><p>Klasyfikacje, importy kosztorysów, skutki rewizji, szkice z budowy i wiedza firmy wymagające decyzji człowieka.</p></div><strong className="co-count-badge">{reviewCount} decyzji · {errorCount} błędów</strong></header>
+        <section className="co-section"><AiInbox items={items} workspaceId={workspace.id} /></section>
+      </main>
+    );
+  }
+
+  if (section === "search") {
+    return (
+      <main className="co-page">
+        <header className="co-page-heading"><div><p className="co-kicker">Wyszukiwarka hybrydowa</p><h1>Wiedza firmy ze wskazaniem źródła</h1><p>Dokumenty, pełna treść, fakty Project DNA i zatwierdzona pamięć organizacji w jednym wyszukiwaniu.</p></div></header>
+        <section className="co-section"><KnowledgeSearch workspaceId={workspace.id} /></section>
+      </main>
+    );
+  }
+
+  if (section === "brain") {
+    const ai = getAiRuntimeStatus();
+    return (
+      <main className="co-page">
+        <header className="co-page-heading"><div><p className="co-kicker">Octopus Brain</p><h1>Centrum analizy firmy</h1><p>AI rozumie kontekst dokumentów, łączy źródła z inwestycjami i proponuje działania, które człowiek może zweryfikować.</p></div><strong className="co-count-badge">{ai.ready ? "Gemini gotowy" : "AI wymaga konfiguracji"}</strong></header>
+        <section className="co-feature-grid">
+          {[
+            ["Automatyczna wrzutnia", "Klasyfikacja dokumentu, wybór inwestycji i modułu oraz kontrola pewności."],
+            ["Project DNA", "Zatwierdzone fakty kontraktowe, techniczne, materiałowe i kosztowe z pełnym źródłem."],
+            ["Radar skutków zmian", "Wpływ nowej rewizji na kosztorys, harmonogram, wnioski, materiały i protokoły."],
+            ["Generowanie kontrolowane", "Wnioski, protokoły i raporty powstają z zatwierdzonych wzorów i danych."],
+            ["Pamięć organizacji", "Lekcje z zakończonych inwestycji stają się użyteczną wiedzą firmy."],
+            ["Human in the loop", "AI proponuje, reguły walidują, a odpowiedzialna osoba zatwierdza decyzję."]
+          ].map(([title, description]) => <article className="co-feature-card" key={title}><Brain size={19} /><h2>{title}</h2><p>{description}</p></article>)}
+        </section>
+        <section className="co-section"><KnowledgeSearch workspaceId={workspace.id} /></section>
+      </main>
+    );
+  }
+
+  if (section === "knowledge") {
+    const [projects, entriesResult] = await Promise.all([
+      listProjectsForWorkspace(user, workspace.id),
+      createServiceSupabaseClient().from("knowledge_entries").select("id,entry_type,title,summary,solution,tags,status,created_at").eq("workspace_id", workspace.id).order("created_at", { ascending: false }).limit(100)
+    ]);
+    const entries = entriesResult.data ?? [];
+    return (
+      <main className="co-page">
+        <header className="co-page-heading"><div><p className="co-kicker">Pamięć organizacji</p><h1>Sprawdzone rozwiązania i lekcje z inwestycji</h1><p>Wiedza firmy jest wersjonowana, zatwierdzana i zawsze zachowuje informację o pochodzeniu.</p></div><strong className="co-count-badge">{entries.filter((item) => item.status === "approved").length} zatwierdzonych</strong></header>
+        <section className="control-dashboard-grid">
+          <article className="module-panel"><div className="module-panel__heading"><BookOpenCheck size={20} /><div><p className="eyebrow">Nowy wpis</p><h2>Wiedza do kontroli</h2></div></div><KnowledgeEntryForm workspaceId={workspace.id} projects={projects.map((project) => ({ id: project.id, name: project.name }))} /></article>
+          <article className="module-panel"><div className="module-panel__heading"><CheckCircle2 size={20} /><div><p className="eyebrow">Biblioteka</p><h2>Wpisy firmy</h2></div></div><div className="knowledge-entry-list">{entries.map((entry) => <article key={entry.id}>{entry.status === "approved" ? <CheckCircle2 size={17} /> : <CircleDashed size={17} />}<div><small>{entry.entry_type} · {entry.status}</small><strong>{entry.title}</strong><p>{entry.summary}</p><span>{Array.isArray(entry.tags) ? entry.tags.join(" · ") : ""}</span></div></article>)}{!entries.length ? <p className="empty-copy">Pamięć firmy jest jeszcze pusta.</p> : null}</div></article>
+        </section>
       </main>
     );
   }
@@ -243,6 +357,7 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
           <article><SlidersHorizontal size={21} /><div><strong>Integracje</strong><p>Miejsce pod integracje firmowe, konfigurację OctopusAI i dalsze źródła danych.</p></div></article>
           <article><CheckCircle2 size={21} /><div><strong>Plan i konfiguracja systemu</strong><p>Obszar przygotowany pod ustawienia organizacji i przyszły model SaaS.</p></div></article>
         </section>
+        <DomainLivePanel kind="settings" workspaceId={workspace.id} />
       </main>
     );
   }

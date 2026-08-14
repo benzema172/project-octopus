@@ -184,5 +184,27 @@ if (
   process.exit(1);
 }
 
+const [{ data: intake, error: intakeError }, { data: processingJob, error: processingJobError }] = await Promise.all([
+  admin.from("document_intakes").select("status,document_id").eq("document_id", completed.documentId).single(),
+  admin
+    .from("processing_jobs")
+    .select("status,document_id,document_version_id,job_type")
+    .eq("document_version_id", completed.versionId)
+    .eq("job_type", "document_pipeline")
+    .single()
+]);
+
+if (intakeError || !intake || intake.status !== "queued") {
+  console.error(`Document intake was not queued: ${intakeError?.message ?? "missing intake"}`);
+  process.exit(1);
+}
+
+if (processingJobError || !processingJob || processingJob.status !== "queued") {
+  console.error(`AI processing job was not queued: ${processingJobError?.message ?? "missing job"}`);
+  process.exit(1);
+}
+
 console.log(`E2E upload OK: ${completed.documentId}`);
 console.log(`R2 object: ${documentVersion.r2_object_key}`);
+console.log(`AI intake/job: ${intake.status}/${processingJob.status}`);
+

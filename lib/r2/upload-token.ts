@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 export type UploadIntent = {
   workspaceId: string;
-  projectId: string;
+  projectId: string | null;
   documentId: string;
   versionId: string;
   objectKey: string;
@@ -21,7 +21,7 @@ function isUploadIntent(value: unknown): value is UploadIntent {
 
   return (
     typeof intent.workspaceId === "string" &&
-    typeof intent.projectId === "string" &&
+    (typeof intent.projectId === "string" || intent.projectId === null) &&
     typeof intent.documentId === "string" &&
     typeof intent.versionId === "string" &&
     typeof intent.objectKey === "string" &&
@@ -87,3 +87,4 @@ export function verifyUploadToken(token: string, secret: string, now = Date.now(
 
   return intent;
 }
+

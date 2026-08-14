@@ -17,7 +17,10 @@ export type CompanyWorkspace = {
   role?: string;
 };
 
-export type WorkspaceSummary = Pick<CompanyWorkspace, "id" | "name">;
+export type WorkspaceSummary = {
+  id: string;
+  name: string;
+};
 
 export type ProjectSummary = {
   id: string;
@@ -86,10 +89,12 @@ export type ProjectProfile = {
 
 export type DocumentSummary = {
   id: string;
-  project_id: string;
+  project_id: string | null;
   workspace_id: string;
   name: string;
   category: string | null;
+  ai_status?: string | null;
+  ai_confidence?: number | null;
   current_version_id: string | null;
   deleted_at: string | null;
   created_at: string;
@@ -100,7 +105,7 @@ export type DocumentSummary = {
 export type DocumentVersionSummary = {
   id: string;
   document_id: string;
-  project_id: string;
+  project_id: string | null;
   version_number: number;
   file_name: string;
   mime_type: string;

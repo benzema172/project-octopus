@@ -1,5 +1,3 @@
-import { suggestDocumentClassification } from "@/lib/documents/classification";
-
 export function sanitizeFileName(fileName: string): string {
   const trimmed = fileName.trim();
   const normalized = trimmed
@@ -17,7 +15,35 @@ export function sanitizeFileName(fileName: string): string {
 }
 
 export function inferDocumentCategory(mimeType: string, fileName: string): string {
-  return suggestDocumentClassification(fileName, mimeType).category;
+  const lowerName = fileName.toLowerCase();
+
+  if (/kosztorys|przedmiar|boq|kalkulacj/.test(lowerName)) return "estimate";
+  if (/stwi?or|specyfikacj.*technic/.test(lowerName)) return "specification";
+  if (/projekt|rzut|schemat|pzt|pw[-_ ]|pb[-_ ]/.test(lowerName)) return "project";
+  if (/faktur|invoice|ksef/.test(lowerName)) return "invoice";
+  if (/protok[oó]ł|protokol|pr[oó]ba|odbior|zanikow/.test(lowerName)) return "protocol";
+  if (/wniosek|wnioski|zatwierdzenie.*materia/.test(lowerName)) return "application";
+  if (/wz[oó]r|szablon|template/.test(lowerName)) return "template";
+  if (/umowa.*prac|badani|bhp|urlop|pracownik/.test(lowerName)) return "hr";
+  if (/pojazd|samoch|flota|paliw|serwis/.test(lowerName)) return "fleet";
+
+  if (mimeType.includes("pdf") || lowerName.endsWith(".pdf")) {
+    return "pdf";
+  }
+
+  if (mimeType.includes("spreadsheet") || lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") || lowerName.endsWith(".csv")) {
+    return "estimate";
+  }
+
+  if (lowerName.endsWith(".zip") || mimeType.includes("zip")) {
+    return "package";
+  }
+
+  if (mimeType.includes("word") || lowerName.endsWith(".docx")) {
+    return "document";
+  }
+
+  return "other";
 }
 
 export function attachmentContentDisposition(fileName: string): string {
@@ -27,3 +53,4 @@ export function attachmentContentDisposition(fileName: string): string {
 
   return `attachment; filename="${asciiName}"; filename*=UTF-8''${encodedName}`;
 }
+

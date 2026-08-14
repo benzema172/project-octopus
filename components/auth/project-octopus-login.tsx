@@ -76,8 +76,6 @@ function colorAt(x: number) {
 }
 
 function buildLogo() {
-  const centerX = Math.floor(COLS / 2);
-  const centerY = Math.floor(ROWS / 2);
   const logoMap = new Map<string, { x: number; y: number; className: string }>();
   const tentacleDefs: TentacleHandle[] = [];
 
@@ -106,184 +104,108 @@ function buildLogo() {
     }
   }
 
-  function line(x1: number, y1: number, x2: number, y2: number, className = "") {
-    let currentX = Math.round(x1);
-    let currentY = Math.round(y1);
-    const endX = Math.round(x2);
-    const endY = Math.round(y2);
-    const dx = Math.abs(endX - currentX);
-    const sx = currentX < endX ? 1 : -1;
-    const dy = -Math.abs(endY - currentY);
-    const sy = currentY < endY ? 1 : -1;
-    let error = dx + dy;
+  function disc(cx: number, cy: number, radius: number, className = "") {
+    const extent = Math.ceil(radius);
 
-    while (true) {
-      addPoint(currentX, currentY, className);
-
-      if (currentX === endX && currentY === endY) {
-        break;
-      }
-
-      const doubledError = 2 * error;
-
-      if (doubledError >= dy) {
-        error += dy;
-        currentX += sx;
-      }
-
-      if (doubledError <= dx) {
-        error += dx;
-        currentY += sy;
+    for (let y = cy - extent; y <= cy + extent; y += 1) {
+      for (let x = cx - extent; x <= cx + extent; x += 1) {
+        if (Math.hypot(x - cx, y - cy) <= radius) {
+          addPoint(x, y, className);
+        }
       }
     }
   }
 
-  function poly(points: Array<[number, number]>, className = "") {
+  function thickLine(x1: number, y1: number, x2: number, y2: number, radius: number, className = "") {
+    const steps = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1), 1) * 3;
+
+    for (let step = 0; step <= steps; step += 1) {
+      const progress = step / steps;
+      disc(
+        Math.round(x1 + (x2 - x1) * progress),
+        Math.round(y1 + (y2 - y1) * progress),
+        radius,
+        className
+      );
+    }
+  }
+
+  function thickPoly(points: Array<[number, number]>, radius: number, className = "") {
     for (let index = 0; index < points.length - 1; index += 1) {
-      line(points[index][0], points[index][1], points[index + 1][0], points[index + 1][1], className);
-    }
-  }
-
-  function ring(cx: number, cy: number, radius: number, className = "") {
-    const steps = Math.max(24, Math.round(2 * Math.PI * radius * 2.2));
-
-    for (let index = 0; index < steps; index += 1) {
-      const angle = (index / steps) * Math.PI * 2;
-      addPoint(Math.round(cx + Math.cos(angle) * radius), Math.round(cy + Math.sin(angle) * radius), className);
+      thickLine(points[index][0], points[index][1], points[index + 1][0], points[index + 1][1], radius, className);
     }
   }
 
   const tentacleClass = (id: string) => `arm tentacle tentacle-${id}`;
+  const mirrorX = (x: number) => COLS - 1 - x;
 
-  ring(centerX, centerY, 7, "core");
-  ring(centerX, centerY, 4, "core");
-  ring(centerX, centerY, 1, "core");
-  addPoint(centerX, centerY, "core");
-  line(centerX, centerY + 5, centerX, centerY + 9, "core");
+  // Nowa, zwarta maska głowy. Wszystkie współrzędne nadal trafiają w tę samą
+  // siatkę 50 × 40, więc tło, animacja i kolorystyka ekranu pozostają bez zmian.
+  const headRows: Array<[number, number, number]> = [
+    [6, 22, 27],
+    [7, 21, 28],
+    [8, 19, 30],
+    [9, 19, 30],
+    [10, 17, 32],
+    [11, 17, 32],
+    [12, 16, 33],
+    [13, 16, 33],
+    [14, 15, 34],
+    [15, 15, 34],
+    [16, 15, 34],
+    [17, 15, 34],
+    [18, 15, 34],
+    [19, 15, 34],
+    [20, 15, 34],
+    [21, 15, 34],
+    [22, 15, 34],
+    [23, 16, 33],
+    [24, 17, 32],
+    [25, 18, 31]
+  ];
+  const eyeCells = new Set(["21,14", "22,14", "21,15", "22,15", "27,14", "28,14", "27,15", "28,15"]);
 
-  poly(
-    [
-      [centerX - 4, centerY - 6],
-      [centerX - 5, centerY - 7],
-      [centerX - 6, centerY - 8],
-      [centerX - 7, centerY - 8]
-    ],
-    tentacleClass("upper-left")
-  );
-  poly(
-    [
-      [centerX + 4, centerY - 6],
-      [centerX + 5, centerY - 7],
-      [centerX + 6, centerY - 8],
-      [centerX + 7, centerY - 8]
-    ],
-    tentacleClass("upper-right")
-  );
+  for (const [y, fromX, toX] of headRows) {
+    for (let x = fromX; x <= toX; x += 1) {
+      if (!eyeCells.has(`${x},${y}`)) {
+        addPoint(x, y, "core");
+      }
+    }
+  }
 
-  poly(
-    [
-      [centerX - 7, centerY - 5],
-      [centerX - 10, centerY - 7],
-      [centerX - 12, centerY - 9]
-    ],
-    tentacleClass("upper-left")
-  );
-  ring(centerX - 14, centerY - 11, 2, tentacleClass("upper-left"));
-  tentacleDefs.push({ id: "upper-left", x: centerX - 14, y: centerY - 11 });
+  const leftTentacles: Array<{ id: string; points: Array<[number, number]>; handle: [number, number] }> = [
+    {
+      id: "upper-left",
+      points: [[17, 19], [14, 19], [12, 18], [10, 16], [7, 15], [5, 15], [4, 17], [4, 19], [6, 20], [7, 19]],
+      handle: [7, 19]
+    },
+    {
+      id: "middle-left",
+      points: [[18, 22], [15, 22], [12, 24], [9, 26], [6, 26], [5, 24], [6, 22]],
+      handle: [6, 22]
+    },
+    {
+      id: "lower-left",
+      points: [[20, 24], [18, 26], [16, 29], [14, 32], [11, 34], [9, 34], [8, 32]],
+      handle: [8, 32]
+    },
+    {
+      id: "bottom-left",
+      points: [[23, 24], [23, 28], [22, 31], [20, 35], [19, 37], [20, 38]],
+      handle: [20, 38]
+    }
+  ];
 
-  poly(
-    [
-      [centerX + 7, centerY - 5],
-      [centerX + 10, centerY - 7],
-      [centerX + 12, centerY - 9]
-    ],
-    tentacleClass("upper-right")
-  );
-  ring(centerX + 14, centerY - 11, 2, tentacleClass("upper-right"));
-  tentacleDefs.push({ id: "upper-right", x: centerX + 14, y: centerY - 11 });
+  for (const tentacle of leftTentacles) {
+    thickPoly(tentacle.points, 1.5, tentacleClass(tentacle.id));
+    tentacleDefs.push({ id: tentacle.id, x: tentacle.handle[0], y: tentacle.handle[1] });
 
-  poly(
-    [
-      [centerX - 8, centerY],
-      [centerX - 12, centerY],
-      [centerX - 16, centerY]
-    ],
-    tentacleClass("middle-left")
-  );
-  ring(centerX - 18, centerY, 2, tentacleClass("middle-left"));
-  tentacleDefs.push({ id: "middle-left", x: centerX - 18, y: centerY });
-
-  poly(
-    [
-      [centerX + 8, centerY],
-      [centerX + 12, centerY],
-      [centerX + 16, centerY]
-    ],
-    tentacleClass("middle-right")
-  );
-  ring(centerX + 18, centerY, 2, tentacleClass("middle-right"));
-  tentacleDefs.push({ id: "middle-right", x: centerX + 18, y: centerY });
-
-  poly(
-    [
-      [centerX - 6, centerY + 5],
-      [centerX - 9, centerY + 7],
-      [centerX - 11, centerY + 9]
-    ],
-    tentacleClass("lower-left")
-  );
-  ring(centerX - 13, centerY + 11, 2, tentacleClass("lower-left"));
-  tentacleDefs.push({ id: "lower-left", x: centerX - 13, y: centerY + 11 });
-
-  poly(
-    [
-      [centerX + 6, centerY + 5],
-      [centerX + 9, centerY + 7],
-      [centerX + 11, centerY + 9]
-    ],
-    tentacleClass("lower-right")
-  );
-  ring(centerX + 13, centerY + 11, 2, tentacleClass("lower-right"));
-  tentacleDefs.push({ id: "lower-right", x: centerX + 13, y: centerY + 11 });
-
-  poly(
-    [
-      [centerX - 2, centerY + 6],
-      [centerX - 2, centerY + 8],
-      [centerX - 3, centerY + 10]
-    ],
-    tentacleClass("bottom-left")
-  );
-  ring(centerX - 3, centerY + 12, 2, tentacleClass("bottom-left"));
-  tentacleDefs.push({ id: "bottom-left", x: centerX - 3, y: centerY + 12 });
-
-  poly(
-    [
-      [centerX + 2, centerY + 6],
-      [centerX + 2, centerY + 8],
-      [centerX + 3, centerY + 10]
-    ],
-    tentacleClass("bottom-right")
-  );
-  ring(centerX + 3, centerY + 12, 2, tentacleClass("bottom-right"));
-  tentacleDefs.push({ id: "bottom-right", x: centerX + 3, y: centerY + 12 });
-
-  poly(
-    [
-      [centerX - 1, centerY + 5],
-      [centerX - 3, centerY + 7],
-      [centerX - 5, centerY + 9]
-    ],
-    "core"
-  );
-  poly(
-    [
-      [centerX + 1, centerY + 5],
-      [centerX + 3, centerY + 7],
-      [centerX + 5, centerY + 9]
-    ],
-    "core"
-  );
+    const rightId = tentacle.id.replace("left", "right");
+    const rightPoints = tentacle.points.map(([x, y]) => [mirrorX(x), y] as [number, number]);
+    const rightHandle: [number, number] = [mirrorX(tentacle.handle[0]), tentacle.handle[1]];
+    thickPoly(rightPoints, 1.5, tentacleClass(rightId));
+    tentacleDefs.push({ id: rightId, x: rightHandle[0], y: rightHandle[1] });
+  }
 
   const sourcePoints = Array.from(logoMap.values());
   const minX = Math.min(...sourcePoints.map((point) => point.x));
@@ -641,3 +563,4 @@ export function ProjectOctopusLogin({ configReady }: ProjectOctopusLoginProps) {
     </main>
   );
 }
+

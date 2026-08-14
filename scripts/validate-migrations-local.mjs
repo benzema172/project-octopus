@@ -3,7 +3,9 @@ import { PGlite } from "@electric-sql/pglite";
 
 const migrations = [
   "supabase/migrations/20260811130000_project_octopus_mvp.sql",
-  "supabase/migrations/20260812100000_project_octopus_foundation_fix.sql"
+  "supabase/migrations/20260812100000_project_octopus_foundation_fix.sql",
+  "supabase/migrations/20260814090000_octopus_operating_system.sql",
+  "supabase/migrations/20260814130000_octopus_execution_layer.sql"
 ];
 
 function withoutPgcrypto(sql) {
@@ -37,7 +39,7 @@ try {
   }
 
   const marker = await database.query(
-    "select version from public.app_schema_versions where version = '20260812_foundation_fix'"
+    "select version from public.app_schema_versions where version = '20260814_execution_layer'"
   );
   const uploadFunction = await database.query(`
     select proname
@@ -46,7 +48,16 @@ try {
       and proname = 'complete_document_upload'
   `);
 
-  if (marker.rows.length !== 1 || uploadFunction.rows.length !== 1) {
+  const claimFunction = await database.query(`
+    select proname from pg_proc
+    where pronamespace = 'public'::regnamespace and proname = 'claim_next_processing_job'
+  `);
+  const searchFunction = await database.query(`
+    select proname from pg_proc
+    where pronamespace = 'public'::regnamespace and proname = 'search_octopus'
+  `);
+
+  if (marker.rows.length !== 1 || uploadFunction.rows.length !== 1 || claimFunction.rows.length !== 1 || searchFunction.rows.length !== 1) {
     throw new Error("Migration marker or atomic upload function is missing.");
   }
 
@@ -111,6 +122,38 @@ try {
     documentState.rows[0]?.current_version_id !== "00000000-0000-4000-8000-000000000006"
   ) {
     throw new Error("Atomic upload function failed its versioning or replay test.");
+  }
+
+  const globalUpload = await database.query(`select * from public.complete_document_upload(
+    '00000000-0000-4000-8000-000000000014',
+    '00000000-0000-4000-8000-000000000015',
+    '00000000-0000-4000-8000-000000000002',
+    null,
+    'faktura.pdf',
+    'invoice',
+    'application/pdf',
+    256,
+    'test-bucket',
+    'company/faktura.pdf',
+    'etag',
+    null,
+    '00000000-0000-4000-8000-000000000001',
+    now()
+  )`);
+  const globalState = await database.query(`
+    select d.project_id, d.ai_status, di.status as intake_status, pj.status as job_status
+    from public.documents d
+    join public.document_intakes di on di.document_id = d.id
+    join public.processing_jobs pj on pj.document_id = d.id
+    where d.id = '00000000-0000-4000-8000-000000000014'
+  `);
+  if (globalUpload.rows[0]?.version_number !== 1 || globalState.rows[0]?.project_id !== null || globalState.rows[0]?.job_status !== "queued") {
+    throw new Error("Company-wide upload or AI pipeline enqueue failed.");
+  }
+
+  const claimed = await database.query("select id,status,attempt_count from public.claim_next_processing_job('migration-test-worker', '00000000-0000-4000-8000-000000000002')");
+  if (claimed.rows.length !== 1 || claimed.rows[0]?.status !== "running" || claimed.rows[0]?.attempt_count !== 1) {
+    throw new Error("Atomic processing-job claim failed.");
   }
 
   await prepareDatabase(legacyDatabase);
@@ -227,8 +270,9 @@ try {
     throw new Error("Compatibility migration failed to map the legacy production schema.");
   }
 
-  console.log("Fresh and legacy migrations plus atomic versioning passed local PostgreSQL tests.");
+  console.log("Fresh and legacy migrations, global documents, AI enqueue and atomic worker claim passed local PostgreSQL tests.");
 } finally {
   await database.close();
   await legacyDatabase.close();
 }
+

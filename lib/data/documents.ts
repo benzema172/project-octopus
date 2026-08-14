@@ -32,7 +32,7 @@ function numberValue(row: FlexibleRow, ...keys: string[]) {
   return 0;
 }
 
-function normalizeVersion(row: FlexibleRow, projectId: string, fallbackName: string): DocumentVersionSummary {
+function normalizeVersion(row: FlexibleRow, projectId: string | null, fallbackName: string): DocumentVersionSummary {
   return {
     id: stringValue(row, "id") ?? "",
     document_id: stringValue(row, "document_id") ?? "",
@@ -51,6 +51,34 @@ function normalizeVersion(row: FlexibleRow, projectId: string, fallbackName: str
   };
 }
 
+function normalizeDocuments(rows: FlexibleDocumentRow[], fallbackProjectId: string | null) {
+  return rows.map((row) => {
+    const projectId = stringValue(row, "project_id") ?? fallbackProjectId;
+    const versions = [...(row.document_versions ?? [])].sort(
+      (left, right) => numberValue(right, "version_number", "version_no") - numberValue(left, "version_number", "version_no")
+    );
+    const name =
+      stringValue(row, "name", "file_name", "original_filename") ??
+      (versions[0] ? stringValue(versions[0], "file_name", "original_filename") : null) ??
+      "Dokument";
+
+    return {
+      id: stringValue(row, "id") ?? "",
+      project_id: projectId,
+      workspace_id: stringValue(row, "workspace_id") ?? "",
+      name,
+      category: stringValue(row, "category", "document_type"),
+      ai_status: stringValue(row, "ai_status"),
+      ai_confidence: typeof row.ai_confidence === "number" ? row.ai_confidence : null,
+      current_version_id: stringValue(row, "current_version_id"),
+      deleted_at: stringValue(row, "deleted_at"),
+      created_at: stringValue(row, "created_at") ?? "",
+      updated_at: stringValue(row, "updated_at", "created_at") ?? "",
+      document_versions: versions.map((version) => normalizeVersion(version, projectId, name))
+    } satisfies DocumentSummary;
+  });
+}
+
 export async function listDocumentsForProject(projectId: string, trashed = false): Promise<DocumentSummary[]> {
   const supabase = createServiceSupabaseClient();
 
@@ -66,28 +94,22 @@ export async function listDocumentsForProject(projectId: string, trashed = false
     throw new Error(`Nie udało się pobrać dokumentów: ${error.message}`);
   }
 
-  return (data ?? []).map((row) => {
-    const versions = [...(row.document_versions ?? [])].sort(
-      (left, right) => numberValue(right, "version_number", "version_no") - numberValue(left, "version_number", "version_no")
-    );
-    const name =
-      stringValue(row, "name", "file_name", "original_filename") ??
-      (versions[0] ? stringValue(versions[0], "file_name", "original_filename") : null) ??
-      "Dokument";
+  return normalizeDocuments(data ?? [], projectId);
+}
 
-    return {
-      id: stringValue(row, "id") ?? "",
-      project_id: stringValue(row, "project_id") ?? projectId,
-      workspace_id: stringValue(row, "workspace_id") ?? "",
-      name,
-      category: stringValue(row, "category", "document_type"),
-      current_version_id: stringValue(row, "current_version_id"),
-      deleted_at: stringValue(row, "deleted_at"),
-      created_at: stringValue(row, "created_at") ?? "",
-      updated_at: stringValue(row, "updated_at", "created_at") ?? "",
-      document_versions: versions.map((version) => normalizeVersion(version, projectId, name))
-    };
-  });
+export async function listDocumentsForWorkspace(workspaceId: string, trashed = false): Promise<DocumentSummary[]> {
+  const supabase = createServiceSupabaseClient();
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*, document_versions(*)")
+    .eq("workspace_id", workspaceId)
+    .filter("deleted_at", trashed ? "not.is" : "is", null)
+    .order("updated_at", { ascending: false })
+    .returns<FlexibleDocumentRow[]>();
+
+  if (error) throw new Error(`Nie udało się pobrać dokumentów firmy: ${error.message}`);
+
+  return normalizeDocuments(data ?? [], null);
 }
 
 export async function safeListDocumentsForProject(projectId: string): Promise<DocumentSummary[]> {
@@ -113,8 +135,8 @@ export async function isDocumentStorageSchemaReady() {
   const { data, error } = await supabase
     .from("app_schema_versions")
     .select("version")
-    .eq("version", "20260812_foundation_fix")
+    .eq("version", "20260814_execution_layer")
     .maybeSingle<{ version: string }>();
 
-  return !error && data?.version === "20260812_foundation_fix";
+  return !error && data?.version === "20260814_execution_layer";
 }

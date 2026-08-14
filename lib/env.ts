@@ -52,10 +52,13 @@ export function getR2Config() {
 
 export function getAiRuntimeStatus() {
   const provider = getOptionalEnv("AI_PROVIDER") ?? "gemini";
+  const model = getOptionalEnv("GEMINI_MODEL") ?? "gemini-3.5-flash";
 
   return {
     provider,
+    model,
     geminiConfigured: Boolean(getOptionalEnv("GEMINI_API_KEY")),
     ready: provider === "gemini" && Boolean(getOptionalEnv("GEMINI_API_KEY"))
   };
 }
+

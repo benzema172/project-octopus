@@ -36,6 +36,7 @@ export default async function ProjectDocumentationPage({ params }: ProjectDocume
           <p>{documents.length} plików</p>
         </div>
         <DocumentUpload
+          workspaceId={project.workspace_id}
           projectId={project.id}
           documents={documents}
           trashedDocuments={trashedDocuments}

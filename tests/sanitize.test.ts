@@ -12,12 +12,19 @@ describe("sanitizeFileName", () => {
 });
 
 describe("inferDocumentCategory", () => {
-  it("recognizes PDFs", () => {
-    expect(inferDocumentCategory("application/pdf", "projekt.pdf")).toBe("pdf");
+  it("prioritizes business context over the PDF container", () => {
+    expect(inferDocumentCategory("application/pdf", "projekt.pdf")).toBe("project");
+    expect(inferDocumentCategory("application/pdf", "zalacznik.pdf")).toBe("pdf");
   });
 
   it("recognizes cost estimate spreadsheets", () => {
-    expect(inferDocumentCategory("application/octet-stream", "kosztorys.xlsx")).toBe("kosztorys");
+    expect(inferDocumentCategory("application/octet-stream", "kosztorys.xlsx")).toBe("estimate");
+  });
+
+  it("uses construction context before the generic file type", () => {
+    expect(inferDocumentCategory("application/pdf", "STWiOR instalacje sanitarne.pdf")).toBe("specification");
+    expect(inferDocumentCategory("application/pdf", "Protokół próby szczelności.pdf")).toBe("protocol");
+    expect(inferDocumentCategory("application/pdf", "Faktura zakupowa 18.pdf")).toBe("invoice");
   });
 });
 
@@ -31,3 +38,4 @@ describe("attachmentContentDisposition", () => {
     expect(header).not.toContain("\n");
   });
 });
+

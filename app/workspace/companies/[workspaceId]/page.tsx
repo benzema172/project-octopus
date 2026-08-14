@@ -1,11 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
+  Brain,
   Boxes,
+  CarFront,
   ChartNoAxesCombined,
   FileStack,
   FolderKanban,
+  Inbox,
+  LayoutTemplate,
+  LibraryBig,
+  Search,
   Settings,
+  UploadCloud,
   UsersRound,
   WalletCards
 } from "lucide-react";
@@ -44,7 +51,13 @@ export default async function CompanyDashboard({ params }: CompanyDashboardProps
     { label: "Finanse", description: "Budżety, koszty, przychody i cash flow", href: "finances", icon: WalletCards },
     { label: "Kadry", description: "Pracownicy, uprawnienia i przypisania", href: "hr", icon: UsersRound },
     { label: "Magazyn", description: "Materiały, sprzęt, stany i wydania", href: "warehouse", icon: Boxes },
+    { label: "Flota", description: "Pojazdy, terminy, serwis, paliwo i koszty", href: "fleet", icon: CarFront },
     { label: "Dokumenty", description: "Centralny widok dokumentów całej firmy", href: "documents", icon: FileStack },
+    { label: "Wzory", description: "Firmowe wzory i kontrolowane generatory dokumentów", href: "templates", icon: LayoutTemplate },
+    { label: "Octopus Brain", description: "Analiza kontekstu firmy i inwestycji", href: "brain", icon: Brain },
+    { label: "Skrzynka AI", description: "Decyzje, błędy i elementy wymagające zatwierdzenia", href: "ai-inbox", icon: Inbox },
+    { label: "Wyszukiwarka", description: "Dokumenty, fakty i wiedza ze źródłami", href: "search", icon: Search },
+    { label: "Pamięć firmy", description: "Lekcje, rozwiązania i ryzyka z realizacji", href: "knowledge", icon: LibraryBig },
     { label: "Raporty", description: "Analityka przedsiębiorstwa i inwestycji", href: "reports", icon: ChartNoAxesCombined },
     { label: "Ustawienia", description: "Dane firmy, role i konfiguracja", href: "settings", icon: Settings }
   ];
@@ -60,6 +73,7 @@ export default async function CompanyDashboard({ params }: CompanyDashboardProps
         <div className="co-company-address">
           <strong>{workspace.city || "Firma"}</strong>
           <span>{workspace.tax_id ? `NIP ${workspace.tax_id}` : "Uzupełnij dane w Ustawieniach"}</span>
+          <Link href={`/workspace/companies/${workspace.id}/documents?upload=1`} className="co-primary-button"><UploadCloud size={17} aria-hidden="true" /> Wrzutnia</Link>
         </div>
       </header>
 

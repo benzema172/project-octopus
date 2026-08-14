@@ -2,7 +2,7 @@ import { DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
-import { normalizeDocumentCategory } from "@/lib/documents/classification";
+import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { getR2Config, requireServerEnv } from "@/lib/env";
 import { createR2Client } from "@/lib/r2/client";
 import { inferDocumentCategory } from "@/lib/r2/sanitize";
@@ -14,7 +14,6 @@ export const runtime = "nodejs";
 type CompleteBody = {
   token?: string;
   sha256?: string;
-  category?: string;
 };
 
 function jsonError(message: string, status: number) {
@@ -61,10 +60,11 @@ export async function POST(request: Request) {
     return jsonError(error instanceof Error ? error.message : "Token uploadu jest nieprawidłowy.", 400);
   }
 
-  const project = await getProjectForUser(user, intent.projectId);
-
-  if (!project || project.workspace_id !== intent.workspaceId) {
-    return jsonError("Nie znaleziono inwestycji dla tego workspace.", 404);
+  const workspace = await getWorkspaceForUser(user, intent.workspaceId);
+  if (!workspace) return jsonError("Nie znaleziono firmy dokumentu.", 404);
+  if (intent.projectId) {
+    const project = await getProjectForUser(user, intent.projectId);
+    if (!project || project.workspace_id !== intent.workspaceId) return jsonError("Nie znaleziono inwestycji dla tego workspace.", 404);
   }
 
   const r2Config = getR2Config();
@@ -87,8 +87,7 @@ export async function POST(request: Request) {
   }
 
   const supabase = createServiceSupabaseClient();
-  const reviewedCategory = normalizeDocumentCategory(body.category);
-  const category = reviewedCategory ?? inferDocumentCategory(intent.mimeType, intent.fileName);
+  const category = inferDocumentCategory(intent.mimeType, intent.fileName);
   const uploadedAt = new Date().toISOString();
 
   const { data: completed, error: completeError } = await supabase
@@ -123,12 +122,34 @@ export async function POST(request: Request) {
     return jsonError(`Nie udało się atomowo zapisać dokumentu: ${completeError?.message ?? "brak danych"}`, 500);
   }
 
+  await supabase.from("document_intakes").upsert({
+    workspace_id: intent.workspaceId,
+    document_id: completed.document_id,
+    proposed_project_id: intent.projectId,
+    channel: intent.projectId ? "project_upload" : "company_upload",
+    status: "queued",
+    created_by: user.id
+  }, { onConflict: "document_id" });
+
+  await supabase.from("processing_jobs").upsert({
+    workspace_id: intent.workspaceId,
+    project_id: intent.projectId,
+    document_id: completed.document_id,
+    document_version_id: completed.version_id,
+    job_type: "document_pipeline",
+    status: "queued",
+    stage: "extract",
+    priority: 100,
+    job_key: `document-pipeline:${completed.version_id}`
+  }, { onConflict: "job_key" });
+
+  await supabase.from("documents").update({ ai_status: "queued" }).eq("id", completed.document_id);
+
   return NextResponse.json({
     ok: true,
     documentId: completed.document_id,
     versionId: completed.version_id,
     versionNumber: completed.version_number,
-    category,
     objectKey: intent.objectKey
   }, {
     headers: {

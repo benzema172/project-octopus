@@ -1,66 +1,27 @@
-# Project Octopus - plan wdrozenia
+# Project Octopus — roadmap po 0.4.0
 
-## Etap 1 - fundament inwestycji
+## Zrealizowane w kodzie
 
-Stan: wdrozone.
+- pełny model i widoki procesu dokument → BOQ/WBS → odbiór,
+- kolejka AI, retry/dead-letter, Skrzynka AI i akceptacje,
+- wyszukiwarka ze źródłami oraz pamięć organizacji,
+- radar rewizji, kompletność dowodowa, forecast i paczka zamknięcia,
+- mobilne zdarzenia z budowy,
+- Wzory oraz kontrolowany generator szkicu,
+- staging KSeF, role domenowe, integracje, alerty i dane operacyjne wszystkich modułów.
 
-- menu i pulpit konkretnej inwestycji,
-- edytowalna karta stalych danych,
-- strony kontraktu, terminy, adresy i osoby funkcyjne,
-- centralny rekord danych gotowy dla przyszlych generatorow.
+## Następny etap produkcyjny
 
-Kryterium odbioru: dane mozna zapisac, ponownie otworzyc i edytowac bez utraty wartosci.
+1. Zastosować migrację i uruchomić test E2E na środowisku Supabase/R2/Gemini.
+2. Podłączyć harmonogram wywołujący worker i monitoring jego kosztu/błędów.
+3. Przeprowadzić testy na rzeczywistych: projekcie, STWiOR, kosztorysie XLSX, wzorze wniosku i protokole.
+4. Dodać edycję wierszy kosztorysu przed zatwierdzeniem oraz graficzny Gantt.
+5. Rozszerzyć generator o wierne wypełnianie DOCX oraz serwerowy eksport PDF.
+6. Podłączyć autoryzowany KSeF inbound na środowisku testowym, następnie produkcyjnym.
+7. Podłączyć wybrane systemy: bank/księgowość, karty paliwowe/GPS lub kadry-płace — każdą integrację jako osobny zakres.
+8. Wykonać test uprawnień, retencji, odtwarzania backupu i wydajności większych inwestycji.
 
-## Etap 2 - dokumentacja
+## Kryterium gotowości operacyjnej
 
-Stan: nastepny.
+Kierownik wybiera pozycję kosztorysu i widzi dokument źródłowy, WBS, wymagania, materiały, terminy, dokumenty formalne, wykonanie, dowody i koszt. Żadna sugestia AI nie zmienia zatwierdzonego zakresu bez zapisanej decyzji człowieka.
 
-- uzgodnienie i migracja produkcyjnego schematu `documents` oraz `document_versions`,
-- bezposredni upload do prywatnego Cloudflare R2,
-- kategorie i drzewo dokumentacji,
-- wersjonowanie oraz oznaczanie aktualnej rewizji,
-- pobieranie pliku przez krotko wazny adres podpisany.
-
-Kryterium odbioru: PDF testowy trafia do R2, metadane trafiaja do Supabase, a plik jest widoczny po ponownym otwarciu inwestycji.
-
-## Etap 3 - Octopus Brain
-
-- kolejka przetwarzania plikow,
-- ekstrakcja PDF, DOCX i XLSX oraz OCR skanow,
-- podzial na strony i fragmenty,
-- indeks semantyczny,
-- fakty projektu z odniesieniem do dokumentu, strony i cytatu,
-- pytania do dokumentacji z odpowiedziami opartymi na zrodlach.
-
-Kryterium odbioru: odpowiedz AI zawsze pokazuje dokument i miejsce, z ktorego pochodzi informacja.
-
-## Etap 4 - generatory dokumentow
-
-- biblioteka szablonow DOCX,
-- wnioski materialowe,
-- protokoly prob, odbiorow i robot zanikowych,
-- RFI, pisma i notatki,
-- automatyczne podstawianie danych z karty inwestycji,
-- eksport DOCX oraz PDF.
-
-Kryterium odbioru: jeden zatwierdzony szablon generuje kompletny dokument bez ponownego wpisywania stalych danych.
-
-## Etap 5 - kosztorys, harmonogram i kontrola
-
-- import przedmiaru i kosztorysu,
-- postep i przeroby miesieczne,
-- harmonogram z zaleznosciami,
-- porownywanie rewizji dokumentacji,
-- kontrole projekt - STWiOR - kosztorys,
-- lista brakow i czynnosci do wykonania.
-
-Kryterium odbioru: system wykrywa rozbieznosci i prowadzi uzytkownika do dokumentu zrodlowego.
-
-## Etap 6 - praca zespolowa i produkcja
-
-- role i dostep per inwestycja,
-- historia zmian i audyt,
-- powiadomienia i zadania,
-- kopie zapasowe i monitoring,
-- polityka retencji dokumentow,
-- testy bezpieczenstwa i przygotowanie planu produkcyjnego.

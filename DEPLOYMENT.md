@@ -1,40 +1,30 @@
-# Wdrożenie Project Octopus 0.3.1
-
-## Zakres aktualizacji
-
-- ekran logowania pozostaje bez zmian,
-- po zalogowaniu pojawia się wybór firm w formie kafli,
-- dodawanie firmy z pełnym profilem organizacji,
-- jasny panel firmy w kolorystyce logo OCTOPUS,
-- stały sidebar: Dashboard, Inwestycje, Finanse, Kadry, Magazyn, Dokumenty, Raporty, Ustawienia,
-- centralny moduł Dokumenty,
-- Ustawienia firmy,
-- Raporty i analityka,
-- pływający OctopusAI działający w kontekście wybranej firmy przez Gemini API,
-- brak zależności OctopusAI od płatnego OpenAI API.
+# Wdrożenie Project Octopus 0.4.0
 
 ## Kolejność
 
-1. Wykonaj kopię zapasową bazy Supabase.
-2. Jeżeli nie był jeszcze wykonywany, uruchom `supabase/migrations/20260812100000_project_octopus_foundation_fix.sql`.
-3. Uruchom `supabase/migrations/20260812120000_company_workspace_shell.sql`.
-4. W Vercel ustaw `AI_PROVIDER=gemini` oraz `GEMINI_API_KEY` z Google AI Studio.
-5. Opcjonalnie ustaw `GEMINI_MODEL`; domyślnie aplikacja używa `gemini-3.5-flash`.
-6. Nie jest potrzebny `OPENAI_API_KEY` ani saldo OpenAI API.
-7. Zachowaj wszystkie dotychczasowe zmienne Supabase i Cloudflare R2.
-8. Wdróż kod.
-9. Sprawdź ręcznie: logowanie, wybór firmy, dodanie firmy, wejście do panelu firmy, wszystkie pozycje sidebaru, utworzenie inwestycji, centralne Dokumenty, edycję Ustawień i OctopusAI.
+1. Wykonaj backup Supabase oraz zapisz poprzednie wdrożenie Vercel.
+2. Uruchom kolejno `supabase/migrations/20260814090000_octopus_operating_system.sql` oraz `supabase/migrations/20260814130000_octopus_execution_layer.sql`.
+3. Sprawdź marker `20260814_execution_layer` poleceniem `npm run check:schema`.
+4. Dodaj `CRON_SECRET` do zmiennych środowiskowych Vercel.
+5. Wdróż kod 0.4.0.
+6. Uruchom `npm run test:e2e-upload`.
+7. Wywołaj `POST /api/brain/worker?limit=1` z nagłówkiem `Authorization: Bearer <CRON_SECRET>` i sprawdź przejście dokumentu do Skrzynki AI.
+8. Skonfiguruj harmonogram wywołujący worker. Przy małym ruchu wystarczy krótki interwał i limit 1–5 zadań.
+9. Sprawdź ręcznie: upload PDF/DOCX/XLSX, akceptację dokumentu, import kosztorysu, utworzenie BOQ/WBS, wyszukiwarkę, radar rewizji, forecast, zdarzenie mobilne, Wzory i checklistę zamknięcia.
 
-## OctopusAI i darmowy poziom Gemini
+## KSeF i inne integracje
 
-OctopusAI wysyła do Gemini wyłącznie tekstowy kontekst aktywnej firmy przygotowany po stronie serwera: dane firmy, listę inwestycji i metadane dokumentów. Klucz Gemini pozostaje zmienną serwerową i nie trafia do przeglądarki.
+Migracja tworzy bezpieczny staging KSeF oraz rejestr synchronizacji. Uruchomienie prawdziwego pobierania wymaga osobnego sekretu/certyfikatu i konfiguracji firmy. Najpierw aktywuj wyłącznie faktury zakupowe na środowisku testowym; sprzedaż i UPO pozostaw wyłączone do zakończenia testów.
 
-Aplikacja nie włącza płatnych narzędzi ani automatycznego Google Search. Po wykorzystaniu limitu darmowego poziomu użytkownik otrzyma czytelny komunikat i może spróbować ponownie później.
+## Wycofanie
 
-## Bezpieczne zachowanie przed migracją
+W razie problemu przywróć poprzednie wdrożenie aplikacji. Nie usuwaj tabel 0.4.0. Są rozszerzeniem modelu 0.3.0. Zadania kolejki można zatrzymać przez usunięcie harmonogramu bez utraty dokumentów.
 
-Ekran wyboru firmy potrafi odczytać istniejące workspace'y również przed nową migracją. Dodawanie nowej firmy oraz edycja pełnego profilu są wtedy zablokowane, aby nie utracić wpisywanych danych.
+## Kontrola po wdrożeniu
 
-## Wycofanie kodu
-
-W razie problemu przywróć poprzednie wdrożenie Vercel. Nowe kolumny w `workspaces` są zgodne wstecznie i nie trzeba ich usuwać.
+- odsetek dokumentów w `error/dead_letter`,
+- czas oczekiwania i liczba ponowień,
+- koszt i liczba analiz Gemini,
+- liczba decyzji oczekujących,
+- kompletność źródeł oraz udział faktów zatwierdzonych,
+- brak dostępu technicznego użytkownika do danych HR/Finanse bez roli domenowej.

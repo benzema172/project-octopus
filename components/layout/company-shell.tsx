@@ -4,12 +4,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ArrowLeftRight,
+  Brain,
   Boxes,
+  CarFront,
   ChartNoAxesCombined,
   FileStack,
   FolderKanban,
+  Inbox,
   LayoutDashboard,
+  LayoutTemplate,
+  LibraryBig,
   LogOut,
+  Search,
   Settings,
   UsersRound,
   WalletCards
@@ -32,7 +38,13 @@ export function CompanyShell({ workspaceId, companyName, userEmail, children }: 
     { href: `${base}/finances`, label: "Finanse", icon: WalletCards },
     { href: `${base}/hr`, label: "Kadry", icon: UsersRound },
     { href: `${base}/warehouse`, label: "Magazyn", icon: Boxes },
+    { href: `${base}/fleet`, label: "Flota", icon: CarFront },
     { href: `${base}/documents`, label: "Dokumenty", icon: FileStack },
+    { href: `${base}/templates`, label: "Wzory", icon: LayoutTemplate },
+    { href: `${base}/brain`, label: "Octopus Brain", icon: Brain },
+    { href: `${base}/ai-inbox`, label: "Skrzynka AI", icon: Inbox },
+    { href: `${base}/search`, label: "Wyszukiwarka", icon: Search },
+    { href: `${base}/knowledge`, label: "Pamięć firmy", icon: LibraryBig },
     { href: `${base}/reports`, label: "Raporty", icon: ChartNoAxesCombined },
     { href: `${base}/settings`, label: "Ustawienia", icon: Settings }
   ];

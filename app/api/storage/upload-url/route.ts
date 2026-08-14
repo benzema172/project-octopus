@@ -4,6 +4,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
+import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
 import { getR2Config, requireServerEnv } from "@/lib/env";
 import { createR2Client } from "@/lib/r2/client";
 import { sanitizeFileName } from "@/lib/r2/sanitize";
@@ -16,6 +17,7 @@ const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 const PRESIGNED_URL_TTL_SECONDS = 10 * 60;
 
 type UploadUrlBody = {
+  workspaceId?: string;
   projectId?: string;
   documentId?: string;
   fileName?: string;
@@ -42,25 +44,28 @@ export async function POST(request: Request) {
     return jsonError("Nieprawidłowe dane uploadu.", 400);
   }
 
-  const projectId = body.projectId;
+  let projectId = body.projectId?.trim() || null;
   const requestedDocumentId = body.documentId?.trim();
   const fileName = body.fileName?.trim();
   const mimeType = body.mimeType?.trim() || "application/octet-stream";
   const fileSize = Number(body.fileSize);
 
-  if (!projectId || !fileName || !Number.isFinite(fileSize) || fileSize <= 0) {
-    return jsonError("Brakuje danych pliku albo inwestycji.", 400);
+  if (!fileName || !Number.isFinite(fileSize) || fileSize <= 0) {
+    return jsonError("Brakuje prawidłowych danych pliku.", 400);
   }
 
   if (fileSize > MAX_UPLOAD_BYTES) {
     return jsonError("MVP obsługuje pojedynczy upload do 1 GB.", 413);
   }
 
-  const project = await getProjectForUser(user, projectId);
-
-  if (!project) {
-    return jsonError("Nie znaleziono inwestycji dla tego workspace.", 404);
-  }
+  const project = projectId ? await getProjectForUser(user, projectId) : null;
+  if (projectId && !project) return jsonError("Nie znaleziono inwestycji dla tego workspace.", 404);
+  const requestedWorkspaceId = body.workspaceId?.trim() || project?.workspace_id;
+  const workspace = requestedWorkspaceId
+    ? await getWorkspaceForUser(user, requestedWorkspaceId)
+    : await ensureWorkspaceForUser(user);
+  if (!workspace) return jsonError("Brak dostępu do firmy.", 403);
+  if (project && project.workspace_id !== workspace.id) return jsonError("Inwestycja nie należy do wskazanej firmy.", 422);
 
   let documentId: string = randomUUID();
 
@@ -68,25 +73,27 @@ export async function POST(request: Request) {
     const supabase = createServiceSupabaseClient();
     const { data: document, error: documentError } = await supabase
       .from("documents")
-      .select("id")
+      .select("id,project_id")
       .eq("id", requestedDocumentId)
-      .eq("project_id", project.id)
-      .maybeSingle<{ id: string }>();
+      .eq("workspace_id", workspace.id)
+      .maybeSingle<{ id: string; project_id: string | null }>();
 
     if (documentError) {
       return jsonError(`Nie udało się sprawdzić dokumentu: ${documentError.message}`, 500);
     }
 
     if (!document) {
-      return jsonError("Nie znaleziono dokumentu w tej inwestycji.", 404);
+      return jsonError("Nie znaleziono dokumentu w tym workspace.", 404);
     }
 
     documentId = document.id;
+    projectId = document.project_id;
   }
 
   const versionId = randomUUID();
   const safeFileName = sanitizeFileName(fileName);
-  const objectKey = `workspaces/${project.workspace_id}/projects/${project.id}/documents/${documentId}/versions/${versionId}/${safeFileName}`;
+  const contextPath = projectId ? `projects/${projectId}` : "company";
+  const objectKey = `workspaces/${workspace.id}/${contextPath}/documents/${documentId}/versions/${versionId}/${safeFileName}`;
   const r2Config = getR2Config();
   const r2 = createR2Client();
 
@@ -101,8 +108,8 @@ export async function POST(request: Request) {
   });
 
   const intent: UploadIntent = {
-    workspaceId: project.workspace_id,
-    projectId: project.id,
+    workspaceId: workspace.id,
+    projectId,
     documentId,
     versionId,
     objectKey,

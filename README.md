@@ -1,27 +1,54 @@
-# Project Octopus
+# Project Octopus 0.4.0
 
-Pierwsza wersja MVP aplikacji do prowadzenia inwestycji, dokumentacji i przygotowania pod Octopus Brain.
+System operacyjny firmy wykonawczej, w którym dokument źródłowy zasila Project DNA, kosztorys/BOQ, WBS, harmonogram, materiały, protokoły, przerób, finanse i raportowanie.
 
-## Funkcje MVP
+## Zasady produktu
 
-- logowanie przez Supabase,
-- automatyczny workspace użytkownika,
-- lista inwestycji oparta o tabelę `projects`,
-- tworzenie nowej inwestycji,
-- widok konkretnej inwestycji,
-- sekcja Dokumentacja,
-- endpoint `POST /api/storage/upload-url` generujący presigned PUT URL do prywatnego Cloudflare R2,
-- bezpośredni upload z przeglądarki do bucketa R2,
-- zapis metadanych do `documents` i `document_versions`,
-- atomowy zapis dokumentu i jego wersji w Supabase,
-- pobieranie dokumentów z prywatnego R2 przez krótkotrwały adres,
-- dodawanie kolejnych wersji dokumentu,
-- odwracalny kosz dokumentów bez kasowania obiektów w R2,
-- podstawowy ekran Octopus Brain przygotowany pod `AI_PROVIDER=gemini`.
+- jeden fizyczny dokument może mieć wiele powiązań bez kopiowania pliku,
+- kosztorys i WBS są kręgosłupem inwestycji,
+- każdy fakt AI zachowuje dokument, wersję, lokalizator i cytowany fragment,
+- AI proponuje, reguły walidują, a człowiek zatwierdza operacje formalne, finansowe, kadrowe i magazynowe,
+- liczby finansowe pochodzą wyłącznie z rekordów źródłowych i jawnych założeń forecastu,
+- dane HR, finansowe i techniczne są rozdzielone rolami domenowymi.
+
+## Wersja 0.4.0
+
+### Dokumenty i AI
+
+- jedna Wrzutnia na poziomie firmy i inwestycji,
+- upload do prywatnego R2, wersjonowanie, kosz i przywracanie,
+- trwała kolejka z atomowym claim, retry, dead-letter i ręcznym ponowieniem,
+- przetwarzanie PDF/obrazu, DOCX, XLSX, ZIP i tekstu,
+- Gemini Files API dla PDF/obrazów większych niż limit inline, do 50 MB na pojedynczy plik,
+- Skrzynka AI: Nowe / Przetwarzane / Wymaga decyzji / Błąd / Gotowe / Odrzucone,
+- zatwierdzanie dokumentów, faktów, kosztorysów, wzorów, zmian i zdarzeń budowy,
+- wyszukiwarka pełnotekstowa dokumentów, faktów i zatwierdzonej wiedzy firmy,
+- radar skutków nowej rewizji dla zakresu, BOQ, wniosków i protokołów.
+
+### Pion „Kosztorys do odbioru”
+
+- rozpoznawanie pozycji kosztorysu przez AI,
+- import roboczy z kontrolą pozycji i błędów,
+- zatwierdzenie tworzące wersję BOQ, WBS i szkic harmonogramu,
+- matryca wniosków materiałowych oraz wymaganych protokołów,
+- wymagania dowodowe dla protokołów i odbiorów,
+- łańcuch materiału od wniosku do zużycia na WBS,
+- okresy przerobowe rozdzielające wykonanie, odbiór, fakturę i płatność,
+- Kontrola 360°, forecast EAC/marży/terminu i paczka zamknięcia inwestycji.
+
+### Firma
+
+- Wzory: automatyczna rejestracja, pola, wersje, kwarantanna, zatwierdzanie i kontrolowany szkic dokumentu,
+- Pamięć firmy: lekcje, rozwiązania, wydajności i ryzyka wymagające zatwierdzenia,
+- Finanse: faktury, zobowiązania, alokacje, forecast i staging KSeF inbound,
+- Kadry: zatrudnienie, badania, kwalifikacje, urlopy, czas i przypisania,
+- Magazyn: PZ/WZ/RW/ZW/MM, rezerwacje, narzędzia i materiałowy ślad inwestycji,
+- Flota: pojazdy, terminy, paliwo, przejazdy, serwis, szkody i alokacje,
+- Raporty: definicje, uruchomienia, snapshoty, alerty i dystrybucja,
+- role domenowe: odczyt / zapis / zatwierdzanie / administracja, opcjonalnie dla jednej inwestycji,
+- mobilne zdarzenia z budowy z lokalizacją i kontrolą kierownika.
 
 ## Zmienne środowiskowe
-
-Używane są wyłącznie nazwy zmiennych ustawione wcześniej w Vercel:
 
 ```text
 NEXT_PUBLIC_SUPABASE_URL
@@ -32,35 +59,29 @@ R2_BUCKET_NAME
 R2_ACCESS_KEY_ID
 R2_SECRET_ACCESS_KEY
 R2_ENDPOINT
-AI_PROVIDER
+AI_PROVIDER=gemini
+GEMINI_MODEL=gemini-3.5-flash
 GEMINI_API_KEY
+CRON_SECRET
 ```
 
-Sekrety są używane wyłącznie po stronie serwera.
+`CRON_SECRET` chroni automatyczne wywołanie `/api/brain/worker`. Sekrety nie są zapisywane w tabelach biznesowych.
 
-## Supabase
+## Migracje
 
-Migracje znajdują się w:
+Na aktualnej bazie produkcyjnej zastosuj kolejno:
 
 ```text
-supabase/migrations/20260811130000_project_octopus_mvp.sql
-supabase/migrations/20260812100000_project_octopus_foundation_fix.sql
+supabase/migrations/20260814090000_octopus_operating_system.sql
+supabase/migrations/20260814130000_octopus_execution_layer.sql
 ```
 
-Na istniejącej bazie Project Octopus należy zastosować migrację `20260812100000_project_octopus_foundation_fix.sql` przed wdrożeniem kodu 0.2.0. Dodaje ona brakujące kolumny, mapuje starsze dane, instaluje atomową funkcję uploadu i zapisuje marker zgodności schematu. Dopóki marker nie istnieje, interfejs bezpiecznie blokuje upload.
+Na pustej bazie uruchom wszystkie migracje chronologicznie. Interfejs uploadu wymaga markera `20260814_execution_layer`.
 
-Dokładna kolejność wdrożenia i procedura wycofania są opisane w `DEPLOYMENT.md`.
-
-## Lokalne uruchomienie
+## Walidacja
 
 ```bash
 npm install
-npm run dev
-```
-
-## Weryfikacja
-
-```bash
 npm run lint
 npm run test
 npm run test:migrations
@@ -68,9 +89,11 @@ npm run typecheck
 npm run build
 ```
 
-Opcjonalnie, po ustawieniu prawdziwych zmiennych środowiskowych:
+Po ustawieniu środowiska:
 
 ```bash
 npm run check:schema
 npm run test:e2e-upload
 ```
+
+Szczegóły wdrożenia znajdują się w `DEPLOYMENT.md`, a zakres wykonania i granice integracji w `IMPLEMENTATION_0.4.0.md`.

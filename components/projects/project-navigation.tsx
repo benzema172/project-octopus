@@ -8,10 +8,13 @@ import {
   Calculator,
   CalendarDays,
   ClipboardCheck,
+  Construction,
   Database,
   FileText,
+  Gauge,
   LayoutDashboard,
-  PackageCheck
+  PackageCheck,
+  ShieldCheck
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { ProjectIntake } from "@/components/projects/project-intake";
@@ -25,6 +28,7 @@ export function ProjectNavigation({ projectId }: ProjectNavigationProps) {
   const base = `/workspace/projects/${projectId}`;
   const items = [
     { href: base, label: "Dashboard", icon: LayoutDashboard, exact: true },
+    { href: `${base}/control`, label: "Kontrola 360", icon: Gauge },
     { href: `${base}/data`, label: "Dane", icon: Database },
     { href: `${base}/documentation`, label: "Dokumentacja", icon: FileText },
     { href: `${base}/cost-estimate`, label: "Kosztorys", icon: Calculator },
@@ -33,6 +37,8 @@ export function ProjectNavigation({ projectId }: ProjectNavigationProps) {
     { href: `${base}/protocols`, label: "Protokoły", icon: ClipboardCheck },
     { href: `${base}/schedule`, label: "Harmonogram", icon: CalendarDays },
     { href: `${base}/progress`, label: "Przerób", icon: BarChart3 },
+    { href: `${base}/site`, label: "Budowa", icon: Construction },
+    { href: `${base}/closeout`, label: "Zamknięcie", icon: ShieldCheck },
     { href: `${base}/outputs`, label: "Wyniki", icon: Archive }
   ];
 

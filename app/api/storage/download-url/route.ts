@@ -3,6 +3,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
+import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
 import { getR2Config } from "@/lib/env";
 import { createR2Client } from "@/lib/r2/client";
 import { attachmentContentDisposition } from "@/lib/r2/sanitize";
@@ -13,6 +14,7 @@ export const runtime = "nodejs";
 const DOWNLOAD_URL_TTL_SECONDS = 5 * 60;
 
 type DownloadUrlBody = {
+  workspaceId?: string;
   projectId?: string;
   versionId?: string;
 };
@@ -44,22 +46,23 @@ export async function POST(request: Request) {
     return jsonError("Nieprawidłowe dane pobierania.", 400);
   }
 
-  if (!body.projectId || !body.versionId) {
-    return jsonError("Brakuje identyfikatora inwestycji lub wersji.", 400);
+  if (!body.versionId) {
+    return jsonError("Brakuje identyfikatora wersji.", 400);
   }
 
-  const project = await getProjectForUser(user, body.projectId);
-
-  if (!project) {
-    return jsonError("Nie znaleziono inwestycji dla tego workspace.", 404);
-  }
+  const project = body.projectId ? await getProjectForUser(user, body.projectId) : null;
+  if (body.projectId && !project) return jsonError("Nie znaleziono inwestycji dla tego workspace.", 404);
+  const requestedWorkspaceId = body.workspaceId?.trim() || project?.workspace_id;
+  const workspace = requestedWorkspaceId ? await getWorkspaceForUser(user, requestedWorkspaceId) : await ensureWorkspaceForUser(user);
+  if (!workspace) return jsonError("Brak dostępu do firmy.", 403);
+  if (project && project.workspace_id !== workspace.id) return jsonError("Inwestycja nie należy do wskazanej firmy.", 422);
 
   const supabase = createServiceSupabaseClient();
   const { data: version, error } = await supabase
     .from("document_versions")
-    .select("id,file_name,mime_type,r2_bucket,r2_object_key")
+    .select("id,file_name,mime_type,r2_bucket,r2_object_key,documents!inner(workspace_id)")
     .eq("id", body.versionId)
-    .eq("project_id", project.id)
+    .eq("documents.workspace_id", workspace.id)
     .maybeSingle<VersionRow>();
 
   if (error) {
@@ -67,7 +70,7 @@ export async function POST(request: Request) {
   }
 
   if (!version) {
-    return jsonError("Nie znaleziono wersji dokumentu w tej inwestycji.", 404);
+    return jsonError("Nie znaleziono wersji dokumentu w tym workspace.", 404);
   }
 
   const r2Config = getR2Config();
