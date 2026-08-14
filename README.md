@@ -1,4 +1,4 @@
-# Project Octopus 0.4.1
+# Project Octopus 0.5.0
 
 System operacyjny firmy wykonawczej, w którym dokument źródłowy zasila Project DNA, kosztorys/BOQ, WBS, harmonogram, materiały, protokoły, przerób, finanse i raportowanie.
 
@@ -11,7 +11,19 @@ System operacyjny firmy wykonawczej, w którym dokument źródłowy zasila Proje
 - liczby finansowe pochodzą wyłącznie z rekordów źródłowych i jawnych założeń forecastu,
 - dane HR, finansowe i techniczne są rozdzielone rolami domenowymi.
 
-## Wersja 0.4.1
+## Wersja 0.5.0
+
+### Operacyjne centrum przedsiębiorstwa
+
+- Finanse: działające formularze kontrahentów, faktur, płatności i zobowiązań oraz bieżące KPI,
+- Kadry: dodawanie pracowników wraz z zatrudnieniem i kosztami, czas pracy, urlopy i kwalifikacje,
+- Magazyn: magazyny, kartoteki oraz zatwierdzane ruchy PZ/WZ/RW/ZW/MM z wyliczaniem stanów,
+- Flota: pojazdy, tankowania, serwis i terminy dokumentów wraz z kosztami,
+- Raporty: definicje raportów i generowanie zamkniętych snapshotów danych firmy,
+- Centrum AI: jedna przestrzeń łącząca Wzory, Pamięć firmy i Octopus Brain,
+- Dokumenty: stabilna biblioteka centralna, ręczny kontekst uploadu i klasyfikacja AI.
+
+## Fundament wersji 0.4.1
 
 ### Dokumenty i AI
 

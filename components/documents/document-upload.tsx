@@ -23,6 +23,7 @@ type DocumentUploadProps = {
   documents: DocumentSummary[];
   trashedDocuments: DocumentSummary[];
   storageReady: boolean;
+  defaultCategory?: string;
 };
 
 type UploadResponse = { uploadUrl: string; token: string; headers: Record<string, string> };
@@ -66,7 +67,7 @@ async function sha256ForSmallFile(file: File) {
   return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export function DocumentUpload({ workspaceId, projectId, projects = [], documents, trashedDocuments, storageReady }: DocumentUploadProps) {
+export function DocumentUpload({ workspaceId, projectId, projects = [], documents, trashedDocuments, storageReady, defaultCategory = "" }: DocumentUploadProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const targetDocumentIdRef = useRef<string | null>(null);
@@ -74,6 +75,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
   const [selectedProjectId, setSelectedProjectId] = useState(projectId ?? "");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
+  const [uploadCategory, setUploadCategory] = useState(defaultCategory);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -102,7 +104,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
     const prepareResponse = await fetch("/api/storage/upload-url", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ workspaceId, projectId: contextProjectId, documentId, fileName: file.name, mimeType, fileSize: file.size })
+      body: JSON.stringify({ workspaceId, projectId: contextProjectId, documentId, fileName: file.name, mimeType, fileSize: file.size, category: uploadCategory || undefined })
     });
     if (!prepareResponse.ok) {
       const payload = await prepareResponse.json().catch(() => null);
@@ -117,7 +119,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
     const completeResponse = await fetch("/api/storage/complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: upload.token, sha256: digest })
+      body: JSON.stringify({ token: upload.token, sha256: digest, category: uploadCategory || undefined })
     });
     if (!completeResponse.ok) {
       const payload = await completeResponse.json().catch(() => null);
@@ -255,6 +257,22 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
               </select>
             </label>
           ) : null}
+          <label className="upload-context">
+            <span>Rodzaj źródła</span>
+            <select value={uploadCategory} onChange={(event) => setUploadCategory(event.target.value)}>
+              <option value="">AI rozpozna automatycznie</option>
+              <option value="project">Projekt / dokumentacja techniczna</option>
+              <option value="specification">STWiOR / specyfikacja</option>
+              <option value="estimate">Kosztorys</option>
+              <option value="invoice">Faktura</option>
+              <option value="protocol">Protokół</option>
+              <option value="application">Wniosek materiałowy</option>
+              <option value="template">Wzór i wiedza dla AI</option>
+              <option value="hr">Dokument kadrowy</option>
+              <option value="fleet">Dokument floty</option>
+              <option value="other">Inny dokument</option>
+            </select>
+          </label>
           <button
             type="button"
             className={`upload-dropzone ${isDragging ? "upload-dropzone--active" : ""}`}
@@ -267,7 +285,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
           >
             <UploadCloud size={30} aria-hidden="true" />
             <strong>{isUploading ? "Przetwarzanie pliku" : "Przeciągnij plik lub wybierz z dysku"}</strong>
-            <span>PDF, Word, Excel, obrazy, XML i ZIP · do 1 GB</span>
+            <span>PDF, Word, Excel, obrazy, XML i ZIP · do {MAX_SUPPORTED_UPLOAD_BYTES / 1024 / 1024} MB</span>
           </button>
           <div className="upload-pipeline">
             <span>R2</span><span>Ekstrakcja</span><span>Gemini</span><span>Klasyfikacja</span><span>Moduły</span>

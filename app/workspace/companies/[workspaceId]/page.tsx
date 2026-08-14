@@ -1,15 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  Brain,
+  BrainCircuit,
   Boxes,
   CarFront,
   ChartNoAxesCombined,
   FileStack,
   FolderKanban,
   Inbox,
-  LayoutTemplate,
-  LibraryBig,
   Search,
   Settings,
   UploadCloud,
@@ -63,16 +61,16 @@ export default async function CompanyDashboard({ params }: CompanyDashboardProps
     { label: "Magazyn", description: "Materiały, sprzęt, stany i wydania", href: "warehouse", icon: Boxes, domain: "warehouse" as Domain },
     { label: "Flota", description: "Pojazdy, terminy, serwis, paliwo i koszty", href: "fleet", icon: CarFront, domain: "fleet" as Domain },
     { label: "Dokumenty", description: "Centralny widok dokumentów całej firmy", href: "documents", icon: FileStack, domain: "investments" as Domain },
-    { label: "Wzory", description: "Firmowe wzory i kontrolowane generatory dokumentów", href: "templates", icon: LayoutTemplate, domain: "templates" as Domain },
-    { label: "Octopus Brain", description: "Analiza kontekstu firmy i inwestycji", href: "brain", icon: Brain, domain: "investments" as Domain },
+    { label: "Centrum AI", description: "Wzory, wiedza firmy i analiza Octopus Brain w jednym miejscu", href: "ai-center", icon: BrainCircuit, domain: "investments" as Domain, accessDomains: ["investments", "templates", "reports"] as Domain[] },
     { label: "Skrzynka AI", description: "Decyzje, błędy i elementy wymagające zatwierdzenia", href: "ai-inbox", icon: Inbox, domain: "investments" as Domain },
     { label: "Wyszukiwarka", description: "Dokumenty, fakty i wiedza ze źródłami", href: "search", icon: Search, domain: "investments" as Domain },
-    { label: "Pamięć firmy", description: "Lekcje, rozwiązania i ryzyka z realizacji", href: "knowledge", icon: LibraryBig, domain: "reports" as Domain },
     { label: "Raporty", description: "Analityka przedsiębiorstwa i inwestycji", href: "reports", icon: ChartNoAxesCombined, domain: "reports" as Domain },
     { label: "Ustawienia", description: "Dane firmy, role i konfiguracja", href: "settings", icon: Settings, domain: "settings" as Domain }
-  ].filter((module) => module.domain === "investments"
-    ? domainAccessPolicyHasAnyScope(accessPolicy, { domain: module.domain, level: "read" })
-    : domainAccessPolicyAllows(accessPolicy, { domain: module.domain, level: "read", projectId: null }));
+  ].filter((module) => module.accessDomains
+    ? module.accessDomains.some((domain) => domainAccessPolicyHasAnyScope(accessPolicy, { domain, level: "read" }))
+    : module.domain === "investments"
+      ? domainAccessPolicyHasAnyScope(accessPolicy, { domain: module.domain, level: "read" })
+      : domainAccessPolicyAllows(accessPolicy, { domain: module.domain, level: "read", projectId: null }));
   const aiReady = getAiRuntimeStatus().ready;
   const canUploadCompany = domainAccessPolicyAllows(accessPolicy, { domain: "investments", level: "write", projectId: null });
 

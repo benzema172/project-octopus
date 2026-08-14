@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ArrowLeftRight,
-  Brain,
+  BrainCircuit,
   Boxes,
   CarFront,
   ChartNoAxesCombined,
@@ -12,8 +12,6 @@ import {
   FolderKanban,
   Inbox,
   LayoutDashboard,
-  LayoutTemplate,
-  LibraryBig,
   LogOut,
   Search,
   Settings,
@@ -42,14 +40,12 @@ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomai
     { href: `${base}/warehouse`, label: "Magazyn", icon: Boxes, domain: "warehouse" as const },
     { href: `${base}/fleet`, label: "Flota", icon: CarFront, domain: "fleet" as const },
     { href: `${base}/documents`, label: "Dokumenty", icon: FileStack, domain: "investments" as const },
-    { href: `${base}/templates`, label: "Wzory", icon: LayoutTemplate, domain: "templates" as const },
-    { href: `${base}/brain`, label: "Octopus Brain", icon: Brain, domain: "investments" as const },
+    { href: `${base}/ai-center`, label: "Centrum AI", icon: BrainCircuit, domains: ["investments", "templates", "reports"] as Domain[] },
     { href: `${base}/ai-inbox`, label: "Skrzynka AI", icon: Inbox, domain: "investments" as const },
     { href: `${base}/search`, label: "Wyszukiwarka", icon: Search, domain: "investments" as const },
-    { href: `${base}/knowledge`, label: "Pamięć firmy", icon: LibraryBig, domain: "reports" as const },
     { href: `${base}/reports`, label: "Raporty", icon: ChartNoAxesCombined, domain: "reports" as const },
     { href: `${base}/settings`, label: "Ustawienia", icon: Settings, domain: "settings" as const }
-  ].filter((item) => !item.domain || allowedDomains.includes(item.domain));
+  ].filter((item) => (!item.domain || allowedDomains.includes(item.domain)) && (!item.domains || item.domains.some((domain) => allowedDomains.includes(domain))));
 
   return (
     <div className="co-shell">

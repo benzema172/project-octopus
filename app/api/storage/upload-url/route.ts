@@ -11,6 +11,7 @@ import { MAX_SUPPORTED_UPLOAD_BYTES, sanitizeFileName, validateUploadFile } from
 import { createUploadToken, type UploadIntent } from "@/lib/r2/upload-token";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
+import { normalizeDocumentCategory } from "@/lib/documents/classification";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,7 @@ type UploadUrlBody = {
   fileName?: string;
   mimeType?: string;
   fileSize?: number;
+  category?: string;
 };
 
 function jsonError(message: string, status: number) {
@@ -49,6 +51,8 @@ export async function POST(request: Request) {
   const fileName = body.fileName?.trim();
   const mimeType = body.mimeType?.trim() || "application/octet-stream";
   const fileSize = Number(body.fileSize);
+  const requestedCategory = normalizeDocumentCategory(body.category);
+  if (body.category && !requestedCategory) return jsonError("Nieprawidłowa kategoria dokumentu.", 400);
 
   if (!fileName || !Number.isFinite(fileSize) || fileSize <= 0) {
     return jsonError("Brakuje prawidłowych danych pliku.", 400);
@@ -93,7 +97,7 @@ export async function POST(request: Request) {
     existingDocumentCategory = document.category;
   }
 
-  const uploadDomain = existingDocumentCategory ? domainForDocumentCategory(existingDocumentCategory) : "investments";
+  const uploadDomain = domainForDocumentCategory(existingDocumentCategory ?? requestedCategory);
   if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: uploadDomain, level: "write", projectId })) {
     return jsonError("Brak uprawnienia do dodawania dokumentów w tej domenie.", 403);
   }

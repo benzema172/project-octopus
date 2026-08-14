@@ -9,6 +9,7 @@ import { createR2Client } from "@/lib/r2/client";
 import { inferDocumentCategory } from "@/lib/r2/sanitize";
 import { verifyUploadToken } from "@/lib/r2/upload-token";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
 
 export const runtime = "nodejs";
 
@@ -92,6 +93,16 @@ export async function POST(request: Request) {
   const requestedCategory = normalizeDocumentCategory(body.category);
   if (body.category && !requestedCategory) return jsonError("Nieprawidłowa ręczna kategoria dokumentu.", 400);
   const category = requestedCategory ?? inferDocumentCategory(intent.mimeType, intent.fileName);
+  if (!await hasDomainAccess({
+    workspaceId: intent.workspaceId,
+    userId: user.id,
+    domain: domainForDocumentCategory(category),
+    level: "write",
+    projectId: intent.projectId
+  })) {
+    await r2.send(new DeleteObjectCommand({ Bucket: r2Config.bucketName, Key: intent.objectKey })).catch(() => undefined);
+    return jsonError("Brak uprawnienia do zapisania dokumentu w wybranej kategorii.", 403);
+  }
   const uploadedAt = new Date().toISOString();
 
   const { data: completed, error: completeError } = await supabase

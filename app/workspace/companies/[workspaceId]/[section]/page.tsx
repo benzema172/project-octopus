@@ -1,17 +1,25 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { BookOpenCheck, Brain, CheckCircle2, CircleDashed, FileText, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { notFound, redirect } from "next/navigation";
+import { BookOpenCheck, CheckCircle2, CircleDashed, FileText, ShieldCheck, SlidersHorizontal, Sparkles } from "lucide-react";
 import { updateCompanyAction } from "@/app/actions";
 import { AiInbox } from "@/components/brain/ai-inbox";
 import { KnowledgeEntryForm } from "@/components/brain/knowledge-entry-form";
 import { KnowledgeSearch } from "@/components/brain/knowledge-search";
+import { CompanyOperationsWorkspace } from "@/components/company/company-operations-workspace";
 import { DomainLivePanel } from "@/components/dashboard/domain-live-panel";
 import { DocumentUpload } from "@/components/documents/document-upload";
 import { TemplateStudio } from "@/components/templates/template-studio";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { requireCurrentUser } from "@/lib/auth";
-import { domainAccessPolicyAllows, domainForDocumentCategory, hasDomainAccess, loadDomainAccessPolicy, type Domain } from "@/lib/authorization";
+import { domainAccessPolicyAllows, domainAccessPolicyHasAnyScope, domainForDocumentCategory, hasDomainAccess, loadDomainAccessPolicy, type Domain } from "@/lib/authorization";
 import { isDocumentStorageSchemaReady, listDocumentsForWorkspace } from "@/lib/data/documents";
+import {
+  getFinanceWorkspaceData,
+  getFleetWorkspaceData,
+  getHrWorkspaceData,
+  getReportsWorkspaceData,
+  getWarehouseWorkspaceData
+} from "@/lib/data/company-operations";
 import { listAiInbox } from "@/lib/data/operations";
 import { listProjectsForWorkspace } from "@/lib/data/projects";
 import { getWorkspaceForUser, isCompanyProfileSchemaReady } from "@/lib/data/workspace";
@@ -25,48 +33,40 @@ type CompanySectionPageProps = {
   searchParams: Promise<{ saved?: string }>;
 };
 
-type DocumentRow = {
-  id: string;
-  name: string;
-  category: string | null;
-  project_id: string | null;
-  updated_at: string;
-  projects: { name: string } | { name: string }[] | null;
-};
-
-const MODULES: Record<string, { title: string; kicker: string; description: string; features: string[] }> = {
+const OPERATIONAL_MODULES = {
   finances: {
+    domain: "finance" as const,
     kicker: "Finanse",
     title: "Finanse przedsiębiorstwa",
-    description: "Warstwa przygotowana pod pełne rozliczenie firmy i poszczególnych inwestycji.",
-    features: ["Budżety inwestycji", "Koszty i przychody", "Cash flow", "Należności i zobowiązania", "Kosztorys vs koszty rzeczywiste", "Rentowność realizacji"]
+    description: "Faktury, rozrachunki, płatności i zobowiązania spięte z inwestycjami oraz cash flow firmy.",
+    load: getFinanceWorkspaceData,
+    kind: "finance" as const
   },
   hr: {
+    domain: "hr" as const,
     kicker: "Kadry",
     title: "Kadry i zasoby ludzkie",
-    description: "Jedno miejsce do obsługi zespołu i przypisywania ludzi do realizacji.",
-    features: ["Lista pracowników", "Role i uprawnienia", "Badania, szkolenia i uprawnienia", "Czas pracy", "Przypisanie do inwestycji", "Sprzęt powierzony"]
+    description: "Kartoteka pracowników, warunki zatrudnienia, koszty, czas pracy, urlopy i uprawnienia.",
+    load: getHrWorkspaceData,
+    kind: "hr" as const
   },
   warehouse: {
+    domain: "warehouse" as const,
     kicker: "Magazyn",
     title: "Magazyn i sprzęt",
-    description: "Struktura pod materiały, urządzenia, narzędzia oraz ich ruch pomiędzy firmą i inwestycjami.",
-    features: ["Stany magazynowe", "Przyjęcia i wydania", "Rezerwacje pod inwestycje", "Sprzęt i narzędzia", "Stany minimalne", "Inwentaryzacja"]
+    description: "Kartoteki, rzeczywiste stany oraz ruchy PZ, WZ, RW, ZW i MM powiązane z inwestycjami.",
+    load: getWarehouseWorkspaceData,
+    kind: "warehouse" as const
   },
   fleet: {
+    domain: "fleet" as const,
     kicker: "Flota",
     title: "Flota i transport",
-    description: "Kontrola samochodów, ciężarówek, maszyn, kosztów i terminów eksploatacyjnych.",
-    features: ["Ewidencja pojazdów", "OC, badania i leasing", "Serwis i przestoje", "Szkody i dokumentacja", "Paliwo i przebiegi", "Koszt floty na inwestycję"]
+    description: "Pojazdy i maszyny, paliwo, serwis, przebiegi, dokumenty, terminy i koszty realizacji.",
+    load: getFleetWorkspaceData,
+    kind: "fleet" as const
   }
 };
-
-const LIVE_KINDS = {
-  finances: "finance",
-  hr: "hr",
-  warehouse: "warehouse",
-  fleet: "fleet"
-} as const;
 
 const SECTION_ACCESS: Partial<Record<string, { domain: Domain; label: string }>> = {
   investments: { domain: "investments", label: "Inwestycje" },
@@ -75,21 +75,11 @@ const SECTION_ACCESS: Partial<Record<string, { domain: Domain; label: string }>>
   warehouse: { domain: "warehouse", label: "Magazyn" },
   fleet: { domain: "fleet", label: "Flota" },
   documents: { domain: "investments", label: "Dokumenty" },
-  templates: { domain: "templates", label: "Wzory" },
-  brain: { domain: "investments", label: "Octopus Brain" },
   "ai-inbox": { domain: "investments", label: "Skrzynka AI" },
   search: { domain: "investments", label: "Wyszukiwarka" },
-  knowledge: { domain: "reports", label: "Pamięć firmy" },
   reports: { domain: "reports", label: "Raporty" },
   settings: { domain: "settings", label: "Ustawienia" }
 };
-
-function projectName(document: DocumentRow) {
-  if (Array.isArray(document.projects)) {
-    return document.projects[0]?.name ?? "Inwestycja";
-  }
-  return document.projects?.name ?? "Inwestycja";
-}
 
 export default async function CompanySectionPage({ params, searchParams }: CompanySectionPageProps) {
   const { workspaceId, section } = await params;
@@ -99,6 +89,11 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
 
   if (!workspace) {
     notFound();
+  }
+  const referenceDate = new Date().toISOString();
+
+  if (["templates", "brain", "knowledge"].includes(section)) {
+    redirect(`/workspace/companies/${workspace.id}/ai-center`);
   }
 
   const requiredAccess = SECTION_ACCESS[section];
@@ -111,8 +106,12 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
     return <DomainAccessDenied workspaceId={workspace.id} area={requiredAccess.label} />;
   }
 
-  if (MODULES[section]) {
-    const moduleConfig = MODULES[section];
+  if (section in OPERATIONAL_MODULES) {
+    const moduleConfig = OPERATIONAL_MODULES[section as keyof typeof OPERATIONAL_MODULES];
+    const [data, canWrite] = await Promise.all([
+      moduleConfig.load(workspace.id),
+      hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: moduleConfig.domain, level: "write" })
+    ]);
     return (
       <main className="co-page">
         <header className="co-page-heading">
@@ -122,24 +121,12 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
             <p>{moduleConfig.description}</p>
           </div>
         </header>
-        <section className="co-section">
-          <div className="co-feature-grid">
-            {moduleConfig.features.map((feature, index) => (
-              <article className="co-feature-card" key={feature}>
-                <span>{String(index + 1).padStart(2, "0")}</span>
-                <h2>{feature}</h2>
-                <p>Zakres funkcjonalny modułu {moduleConfig.kicker.toLowerCase()}; bieżące dane i stan uruchomienia są widoczne poniżej.</p>
-              </article>
-            ))}
-          </div>
-        </section>
-        <DomainLivePanel kind={LIVE_KINDS[section as keyof typeof LIVE_KINDS]} workspaceId={workspace.id} />
+        <CompanyOperationsWorkspace workspaceId={workspace.id} kind={moduleConfig.kind} data={data} canWrite={canWrite} referenceDate={referenceDate} />
       </main>
     );
   }
 
   if (section === "documents") {
-    const supabase = createServiceSupabaseClient();
     const [projects, allDocumentSummaries, allTrashedDocuments, storageReady, accessPolicy] = await Promise.all([
       listProjectsForWorkspace(user, workspace.id),
       listDocumentsForWorkspace(workspace.id),
@@ -147,25 +134,13 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
       isDocumentStorageSchemaReady(),
       loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id })
     ]);
-    const { data, error } = await supabase
-      .from("documents")
-      .select("id, name, category, project_id, updated_at, projects(name)")
-      .eq("workspace_id", workspace.id)
-      .is("deleted_at", null)
-      .order("updated_at", { ascending: false })
-      .limit(100)
-      .returns<DocumentRow[]>();
-
-    if (error) {
-      throw new Error(`Nie udało się pobrać dokumentów firmy: ${error.message}`);
-    }
-
     const canReadDocument = (document: { category: string | null; project_id: string | null }) => domainAccessPolicyAllows(accessPolicy, {
       domain: domainForDocumentCategory(document.category), level: "read", projectId: document.project_id
     });
-    const documents = (data ?? []).filter(canReadDocument);
     const documentSummaries = allDocumentSummaries.filter(canReadDocument);
+    const documents = documentSummaries.slice(0, 100);
     const trashedDocuments = allTrashedDocuments.filter(canReadDocument);
+    const projectNames = new Map(projects.map((project) => [project.id, project.name]));
     return (
       <main className="co-page">
         <header className="co-page-heading">
@@ -212,7 +187,7 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
                   <span className="co-document-icon"><FileText size={18} aria-hidden="true" /></span>
                   <div>
                     <strong>{document.name}</strong>
-                    <small>{document.category || "Dokument"} · {projectName(document)}</small>
+                    <small>{document.category || "Dokument"} · {document.project_id ? projectNames.get(document.project_id) ?? "Inwestycja" : "Dokument firmowy"}</small>
                   </div>
                   <time>{document.updated_at ? new Date(document.updated_at).toLocaleDateString("pl-PL") : ""}</time>
                   <Link href={document.project_id ? `/workspace/projects/${document.project_id}/documentation` : `/workspace/companies/${workspace.id}/documents`}>Otwórz →</Link>
@@ -231,23 +206,10 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
   }
 
   if (section === "reports") {
-    const [projects, accessPolicy] = await Promise.all([
-      listProjectsForWorkspace(user, workspace.id),
-      loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id })
+    const [data, canWrite] = await Promise.all([
+      getReportsWorkspaceData(workspace.id),
+      hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "reports", level: "write" })
     ]);
-    const supabase = createServiceSupabaseClient();
-    const { data: reportDocuments } = await supabase
-      .from("documents")
-      .select("id,category,project_id")
-      .eq("workspace_id", workspace.id)
-      .is("deleted_at", null);
-    const documentCount = (reportDocuments ?? []).filter((document) => domainAccessPolicyAllows(accessPolicy, {
-      domain: domainForDocumentCategory(document.category), level: "read", projectId: document.project_id
-    })).length;
-    const statuses = projects.reduce<Record<string, number>>((result, project) => {
-      result[project.status] = (result[project.status] ?? 0) + 1;
-      return result;
-    }, {});
 
     return (
       <main className="co-page">
@@ -255,46 +217,56 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
           <div>
             <p className="co-kicker">Raporty</p>
             <h1>Raporty i analityka</h1>
-            <p>Przekrojowy obraz firmy z danych zgromadzonych w Project Octopus.</p>
+            <p>Definicje cyklicznych raportów i zamknięte snapshoty danych finansowych, operacyjnych oraz zasobowych.</p>
           </div>
         </header>
-        <section className="co-metric-grid">
-          <article className="co-metric-card"><span>Inwestycje</span><strong>{projects.length}</strong><small>łącznie</small></article>
-          <article className="co-metric-card"><span>Aktywne</span><strong>{statuses.active ?? 0}</strong><small>w realizacji</small></article>
-          <article className="co-metric-card"><span>Zakończone</span><strong>{statuses.completed ?? 0}</strong><small>zamknięte</small></article>
-          <article className="co-metric-card"><span>Dokumenty</span><strong>{documentCount}</strong><small>dostępne dla tej roli</small></article>
-        </section>
-        <section className="co-section">
-          <div className="co-section-heading"><div><p className="co-kicker">Analityka</p><h2>Przekroje przygotowane do rozwoju</h2></div></div>
-          <div className="co-feature-grid co-feature-grid--reports">
-            {[
-              ["Raport zarządczy", "Firma, inwestycje i kluczowe odchylenia w jednym podsumowaniu."],
-              ["Raport inwestycji", "Postęp, dokumentacja, budżet i ryzyka konkretnej realizacji."],
-              ["Raport finansowy", "Przychody, koszty, rentowność i cash flow po uruchomieniu danych finansowych."],
-              ["Raport kadrowy", "Obsada, uprawnienia i obciążenie zespołu po uruchomieniu modułu Kadry."],
-              ["Raport magazynowy", "Stany, ruchy i zapotrzebowanie materiałowe po uruchomieniu modułu Magazyn."],
-              ["Analiza OctopusAI", "Interpretacja danych firmy i wskazanie tematów wymagających uwagi."]
-            ].map(([title, description]) => (
-              <article className="co-feature-card" key={title}>
-                <CheckCircle2 size={19} aria-hidden="true" />
-                <h2>{title}</h2>
-                <p>{description}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-        <DomainLivePanel kind="reports" workspaceId={workspace.id} />
+        <CompanyOperationsWorkspace workspaceId={workspace.id} kind="reports" data={data} canWrite={canWrite} referenceDate={referenceDate} />
       </main>
     );
   }
 
-  if (section === "templates") {
+  if (section === "ai-center") {
+    const [projects, allDocuments, allTrashedDocuments, storageReady, accessPolicy, entriesResult] = await Promise.all([
+      listProjectsForWorkspace(user, workspace.id),
+      listDocumentsForWorkspace(workspace.id),
+      listDocumentsForWorkspace(workspace.id, true),
+      isDocumentStorageSchemaReady(),
+      loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id }),
+      createServiceSupabaseClient().from("knowledge_entries").select("id,entry_type,title,summary,solution,tags,status,created_at").eq("workspace_id", workspace.id).order("created_at", { ascending: false }).limit(100)
+    ]);
+    const canReadAiCenter = (["investments", "templates", "reports"] as Domain[]).some((domain) =>
+      domainAccessPolicyHasAnyScope(accessPolicy, { domain, level: "read" })
+    );
+    if (!canReadAiCenter) return <DomainAccessDenied workspaceId={workspace.id} area="Centrum AI" />;
+    const canReadDocument = (document: { category: string | null; project_id: string | null }) => domainAccessPolicyAllows(accessPolicy, {
+      domain: domainForDocumentCategory(document.category), level: "read", projectId: document.project_id
+    });
+    const documents = allDocuments.filter(canReadDocument);
+    const trashedDocuments = allTrashedDocuments.filter(canReadDocument);
+    const entries = entriesResult.data ?? [];
+    const ai = getAiRuntimeStatus();
     return (
       <main className="co-page">
         <header className="co-page-heading">
-          <div><p className="co-kicker">Wzory</p><h1>Wzory i generatory dokumentów</h1><p>Kontrolowana baza firmowych wzorów do wniosków, protokołów, harmonogramów, raportów i dokumentacji odbiorowej.</p></div>
+          <div><p className="co-kicker">Centrum AI</p><h1>Wzory, wiedza firmy i Octopus Brain</h1><p>Jedna kontrolowana baza materiałów, z których AI korzysta w każdej inwestycji do analizy, wyszukiwania i generowania dokumentów.</p></div>
+          <strong className="co-count-badge">{ai.ready ? "AI aktywne" : "AI wymaga konfiguracji"}</strong>
         </header>
+        <section className="ai-center-flow" aria-label="Obieg wiedzy AI">
+          <article><Sparkles size={18} /><strong>1. Dodaj źródło</strong><span>Wzór, instrukcję, lekcję lub dokument referencyjny.</span></article>
+          <article><Sparkles size={18} /><strong>2. AI analizuje</strong><span>Rozpoznaje kontekst, typ i możliwe zastosowania.</span></article>
+          <article><CheckCircle2 size={18} /><strong>3. Człowiek zatwierdza</strong><span>Niepewne decyzje trafiają do Skrzynki AI.</span></article>
+          <article><BookOpenCheck size={18} /><strong>4. Firma wykorzystuje</strong><span>Wiedza i wzory są dostępne w każdej inwestycji.</span></article>
+        </section>
+        <section className="co-section">
+          <div className="co-section-heading"><div><p className="co-kicker">Materiały dla AI</p><h2>Wrzutnia i biblioteka źródeł</h2></div><strong>{documents.length} dokumentów</strong></div>
+          <DocumentUpload workspaceId={workspace.id} projects={projects} documents={documents} trashedDocuments={trashedDocuments} storageReady={storageReady} defaultCategory="template" />
+        </section>
         <TemplateStudio workspaceId={workspace.id} />
+        <section className="control-dashboard-grid ai-center-knowledge">
+          <article className="module-panel"><div className="module-panel__heading"><BookOpenCheck size={20} /><div><p className="eyebrow">Pamięć firmy</p><h2>Dodaj sprawdzoną wiedzę</h2></div></div><KnowledgeEntryForm workspaceId={workspace.id} projects={projects.map((project) => ({ id: project.id, name: project.name }))} /></article>
+          <article className="module-panel"><div className="module-panel__heading"><CheckCircle2 size={20} /><div><p className="eyebrow">Biblioteka wiedzy</p><h2>{entries.filter((item) => item.status === "approved").length} zatwierdzonych</h2></div></div><div className="knowledge-entry-list">{entries.map((entry) => <article key={entry.id}>{entry.status === "approved" ? <CheckCircle2 size={17} /> : <CircleDashed size={17} />}<div><small>{entry.entry_type} · {entry.status}</small><strong>{entry.title}</strong><p>{entry.summary}</p><span>{Array.isArray(entry.tags) ? entry.tags.join(" · ") : ""}</span></div></article>)}{!entries.length ? <p className="empty-copy">Dodaj pierwszy wpis z wiedzą firmy.</p> : null}</div></article>
+        </section>
+        <section className="co-section"><div className="co-section-heading"><div><p className="co-kicker">Octopus Brain</p><h2>Przeszukaj całą zatwierdzoną wiedzę</h2></div></div><KnowledgeSearch workspaceId={workspace.id} /></section>
       </main>
     );
   }
@@ -329,43 +301,6 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
       <main className="co-page">
         <header className="co-page-heading"><div><p className="co-kicker">Wyszukiwarka hybrydowa</p><h1>Wiedza firmy ze wskazaniem źródła</h1><p>Dokumenty, pełna treść, fakty Project DNA i zatwierdzona pamięć organizacji w jednym wyszukiwaniu.</p></div></header>
         <section className="co-section"><KnowledgeSearch workspaceId={workspace.id} /></section>
-      </main>
-    );
-  }
-
-  if (section === "brain") {
-    const ai = getAiRuntimeStatus();
-    return (
-      <main className="co-page">
-        <header className="co-page-heading"><div><p className="co-kicker">Octopus Brain</p><h1>Centrum analizy firmy</h1><p>AI rozumie kontekst dokumentów, łączy źródła z inwestycjami i proponuje działania, które człowiek może zweryfikować.</p></div><strong className="co-count-badge">{ai.ready ? "Gemini gotowy" : "AI wymaga konfiguracji"}</strong></header>
-        <section className="co-feature-grid">
-          {[
-            ["Automatyczna wrzutnia", "Klasyfikacja dokumentu, wybór inwestycji i modułu oraz kontrola pewności."],
-            ["Project DNA", "Zatwierdzone fakty kontraktowe, techniczne, materiałowe i kosztowe z pełnym źródłem."],
-            ["Radar skutków zmian", "Wpływ nowej rewizji na kosztorys, harmonogram, wnioski, materiały i protokoły."],
-            ["Generowanie kontrolowane", "Wnioski, protokoły i raporty powstają z zatwierdzonych wzorów i danych."],
-            ["Pamięć organizacji", "Lekcje z zakończonych inwestycji stają się użyteczną wiedzą firmy."],
-            ["Human in the loop", "AI proponuje, reguły walidują, a odpowiedzialna osoba zatwierdza decyzję."]
-          ].map(([title, description]) => <article className="co-feature-card" key={title}><Brain size={19} /><h2>{title}</h2><p>{description}</p></article>)}
-        </section>
-        <section className="co-section"><KnowledgeSearch workspaceId={workspace.id} /></section>
-      </main>
-    );
-  }
-
-  if (section === "knowledge") {
-    const [projects, entriesResult] = await Promise.all([
-      listProjectsForWorkspace(user, workspace.id),
-      createServiceSupabaseClient().from("knowledge_entries").select("id,entry_type,title,summary,solution,tags,status,created_at").eq("workspace_id", workspace.id).order("created_at", { ascending: false }).limit(100)
-    ]);
-    const entries = entriesResult.data ?? [];
-    return (
-      <main className="co-page">
-        <header className="co-page-heading"><div><p className="co-kicker">Pamięć organizacji</p><h1>Sprawdzone rozwiązania i lekcje z inwestycji</h1><p>Wiedza firmy jest wersjonowana, zatwierdzana i zawsze zachowuje informację o pochodzeniu.</p></div><strong className="co-count-badge">{entries.filter((item) => item.status === "approved").length} zatwierdzonych</strong></header>
-        <section className="control-dashboard-grid">
-          <article className="module-panel"><div className="module-panel__heading"><BookOpenCheck size={20} /><div><p className="eyebrow">Nowy wpis</p><h2>Wiedza do kontroli</h2></div></div><KnowledgeEntryForm workspaceId={workspace.id} projects={projects.map((project) => ({ id: project.id, name: project.name }))} /></article>
-          <article className="module-panel"><div className="module-panel__heading"><CheckCircle2 size={20} /><div><p className="eyebrow">Biblioteka</p><h2>Wpisy firmy</h2></div></div><div className="knowledge-entry-list">{entries.map((entry) => <article key={entry.id}>{entry.status === "approved" ? <CheckCircle2 size={17} /> : <CircleDashed size={17} />}<div><small>{entry.entry_type} · {entry.status}</small><strong>{entry.title}</strong><p>{entry.summary}</p><span>{Array.isArray(entry.tags) ? entry.tags.join(" · ") : ""}</span></div></article>)}{!entries.length ? <p className="empty-copy">Pamięć firmy jest jeszcze pusta.</p> : null}</div></article>
-        </section>
       </main>
     );
   }
