@@ -915,9 +915,9 @@ create index if not exists vehicle_documents_due_idx on public.vehicle_documents
 
 do $$
 declare
-  table_name text;
+  v_table_name text;
 begin
-  foreach table_name in array array[
+  foreach v_table_name in array array[
     'entity_links','document_intakes','processing_jobs','document_classifications','document_extractions',
     'approvals','tasks','audit_events','boq_versions','wbs_nodes','project_requirements','protocol_requirements',
     'schedule_baselines','progress_periods','progress_entries','change_orders','legal_entities','counterparties',
@@ -928,11 +928,48 @@ begin
     'damage_cases','vehicle_allocations','templates','template_versions','template_fields','template_rules',
     'generation_runs','generated_documents','report_definitions','report_runs','report_snapshots','report_deliveries'
   ] loop
-    execute format('alter table public.%I enable row level security', table_name);
-    execute format('drop policy if exists "workspace members can read" on public.%I', table_name);
+    -- A few pre-0.3 production tables share these names but do not contain the
+    -- workspace discriminator introduced by the operating-system model.
+    -- Normalize every table in the RLS set instead of relying on CREATE TABLE
+    -- IF NOT EXISTS, which intentionally leaves an older table shape unchanged.
+    if not exists (
+      select 1 from information_schema.columns c
+      where c.table_schema = 'public'
+        and c.table_name = v_table_name
+        and c.column_name = 'workspace_id'
+    ) then
+      execute format(
+        'alter table public.%I add column workspace_id uuid references public.workspaces(id) on delete cascade',
+        v_table_name
+      );
+    end if;
+
+    if exists (
+      select 1 from information_schema.columns c
+      where c.table_schema = 'public'
+        and c.table_name = v_table_name
+        and c.column_name = 'project_id'
+    ) then
+      execute format(
+        'update public.%I target set workspace_id = p.workspace_id from public.projects p where target.project_id = p.id and target.workspace_id is null',
+        v_table_name
+      );
+    end if;
+
+    if v_table_name = 'generated_documents' and exists (
+      select 1 from information_schema.columns c
+      where c.table_schema = 'public'
+        and c.table_name = 'generated_documents'
+        and c.column_name = 'generation_run_id'
+    ) then
+      execute 'update public.generated_documents target set workspace_id = parent.workspace_id from public.generation_runs parent where target.generation_run_id = parent.id and target.workspace_id is null';
+    end if;
+
+    execute format('alter table public.%I enable row level security', v_table_name);
+    execute format('drop policy if exists "workspace members can read" on public.%I', v_table_name);
     execute format(
       'create policy "workspace members can read" on public.%I for select using (public.is_workspace_member(workspace_id))',
-      table_name
+      v_table_name
     );
   end loop;
 end;

@@ -43,6 +43,11 @@ try {
           progress_percent numeric,
           created_at timestamptz not null default now()
         );
+        create table public.generated_documents (
+          id uuid primary key default gen_random_uuid(),
+          file_name text,
+          created_at timestamptz not null default now()
+        );
       `);
     }
     const sql = withoutPgcrypto(await readFile(migration, "utf8"));
@@ -81,8 +86,14 @@ try {
     where table_schema = 'public' and table_name = 'progress_entries'
       and column_name in ('workspace_id', 'project_id', 'progress_period_id', 'boq_item_id', 'value_accepted', 'evidence')
   `);
+  const legacyGeneratedDocumentShape = await database.query(`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'generated_documents'
+      and column_name = 'workspace_id'
+  `);
 
-  if (marker.rows.length !== 1 || hardeningMarker.rows.length !== 1 || uploadFunction.rows.length !== 1 || claimFunction.rows.length !== 1 || searchFunction.rows.length !== 1 || estimateApprovalFunction.rows.length !== 1 || legacyProgressShape.rows.length !== 6) {
+  if (marker.rows.length !== 1 || hardeningMarker.rows.length !== 1 || uploadFunction.rows.length !== 1 || claimFunction.rows.length !== 1 || searchFunction.rows.length !== 1 || estimateApprovalFunction.rows.length !== 1 || legacyProgressShape.rows.length !== 6 || legacyGeneratedDocumentShape.rows.length !== 1) {
     throw new Error("Migration marker or atomic upload function is missing.");
   }
 
