@@ -13,6 +13,31 @@ export type DocumentAnalysis = {
   requiredProtocols: string[];
   requiredApplications: string[];
   searchPassages: string[];
+  businessDocument: {
+    documentType: string;
+    documentNumber: string;
+    direction: string;
+    issueDate: string;
+    dueDate: string;
+    supplierName: string;
+    supplierTaxId: string;
+    buyerName: string;
+    buyerTaxId: string;
+    currency: string;
+    netAmount: number;
+    taxAmount: number;
+    grossAmount: number;
+    lines: Array<{
+      sku: string;
+      description: string;
+      quantity: number;
+      unit: string;
+      unitPrice: number;
+      netAmount: number;
+      grossAmount: number;
+      confidence: number;
+    }>;
+  };
   boqItems: Array<{
     itemNumber: string;
     description: string;
@@ -40,6 +65,27 @@ const RESPONSE_SCHEMA = {
     requiredProtocols: { type: "ARRAY", items: { type: "STRING" } },
     requiredApplications: { type: "ARRAY", items: { type: "STRING" } },
     searchPassages: { type: "ARRAY", items: { type: "STRING" } },
+    businessDocument: {
+      type: "OBJECT",
+      properties: {
+        documentType: { type: "STRING" }, documentNumber: { type: "STRING" }, direction: { type: "STRING" },
+        issueDate: { type: "STRING" }, dueDate: { type: "STRING" }, supplierName: { type: "STRING" },
+        supplierTaxId: { type: "STRING" }, buyerName: { type: "STRING" }, buyerTaxId: { type: "STRING" },
+        currency: { type: "STRING" }, netAmount: { type: "NUMBER" }, taxAmount: { type: "NUMBER" }, grossAmount: { type: "NUMBER" },
+        lines: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              sku: { type: "STRING" }, description: { type: "STRING" }, quantity: { type: "NUMBER" }, unit: { type: "STRING" },
+              unitPrice: { type: "NUMBER" }, netAmount: { type: "NUMBER" }, grossAmount: { type: "NUMBER" }, confidence: { type: "NUMBER" }
+            },
+            required: ["sku", "description", "quantity", "unit", "unitPrice", "netAmount", "grossAmount", "confidence"]
+          }
+        }
+      },
+      required: ["documentType", "documentNumber", "direction", "issueDate", "dueDate", "supplierName", "supplierTaxId", "buyerName", "buyerTaxId", "currency", "netAmount", "taxAmount", "grossAmount", "lines"]
+    },
     boqItems: {
       type: "ARRAY",
       items: {
@@ -65,10 +111,10 @@ const RESPONSE_SCHEMA = {
     },
     warnings: { type: "ARRAY", items: { type: "STRING" } }
   },
-  required: ["category", "subcategory", "confidence", "summary", "projectHint", "installations", "workStages", "requiredProtocols", "requiredApplications", "searchPassages", "boqItems", "facts", "warnings"]
+  required: ["category", "subcategory", "confidence", "summary", "projectHint", "installations", "workStages", "requiredProtocols", "requiredApplications", "searchPassages", "businessDocument", "boqItems", "facts", "warnings"]
 };
 
-type AnalyzeInput = { fileName: string; mimeType: string; extractedText?: string; inlineData?: string; fileUri?: string };
+type AnalyzeInput = { fileName: string; mimeType: string; extractedText?: string; inlineData?: string; fileUri?: string; projectCatalog?: string[] };
 
 type GeminiFile = {
   name: string;
@@ -93,6 +139,26 @@ function normalizeAnalysis(value: unknown): DocumentAnalysis {
     requiredProtocols: Array.isArray(source.requiredProtocols) ? source.requiredProtocols.map(String) : [],
     requiredApplications: Array.isArray(source.requiredApplications) ? source.requiredApplications.map(String) : [],
     searchPassages: Array.isArray(source.searchPassages) ? source.searchPassages.slice(0, 250).map(String) : [],
+    businessDocument: {
+      documentType: String(source.businessDocument?.documentType ?? ""),
+      documentNumber: String(source.businessDocument?.documentNumber ?? ""),
+      direction: String(source.businessDocument?.direction ?? "purchase"),
+      issueDate: String(source.businessDocument?.issueDate ?? ""),
+      dueDate: String(source.businessDocument?.dueDate ?? ""),
+      supplierName: String(source.businessDocument?.supplierName ?? ""),
+      supplierTaxId: String(source.businessDocument?.supplierTaxId ?? ""),
+      buyerName: String(source.businessDocument?.buyerName ?? ""),
+      buyerTaxId: String(source.businessDocument?.buyerTaxId ?? ""),
+      currency: String(source.businessDocument?.currency ?? "PLN"),
+      netAmount: Number(source.businessDocument?.netAmount) || 0,
+      taxAmount: Number(source.businessDocument?.taxAmount) || 0,
+      grossAmount: Number(source.businessDocument?.grossAmount) || 0,
+      lines: Array.isArray(source.businessDocument?.lines) ? source.businessDocument.lines.slice(0, 500).map((line) => ({
+        sku: String(line.sku ?? ""), description: String(line.description ?? ""), quantity: Number(line.quantity) || 0,
+        unit: String(line.unit ?? "szt."), unitPrice: Number(line.unitPrice) || 0, netAmount: Number(line.netAmount) || 0,
+        grossAmount: Number(line.grossAmount) || 0, confidence: Math.max(0, Math.min(1, Number(line.confidence) || 0))
+      })) : []
+    },
     boqItems: Array.isArray(source.boqItems)
       ? source.boqItems.slice(0, 500).map((item) => ({
           itemNumber: String(item.itemNumber ?? ""),
@@ -113,8 +179,17 @@ function normalizeAnalysis(value: unknown): DocumentAnalysis {
 export async function analyzeDocumentWithGemini(input: AnalyzeInput) {
   const apiKey = requireServerEnv("GEMINI_API_KEY");
   const model = getOptionalEnv("GEMINI_MODEL") ?? "gemini-3.5-flash";
+  const projectCatalog = input.projectCatalog?.length ? input.projectCatalog.join("\n") : "Brak zdefiniowanych inwestycji — użyj OGÓLNE.";
   const prompt = `Jesteś silnikiem analizy dokumentów w polskiej firmie wykonującej instalacje sanitarne, wentylację, klimatyzację i roboty budowlane.\n
-Przeanalizuj dokument ${input.fileName}. Rozpoznaj jego rzeczywisty kontekst, nie tylko rozszerzenie. Kosztorys traktuj jako źródło pozycji BOQ i etapów WBS. Jeżeli to kosztorys lub przedmiar, wypełnij boqItems rzeczywistymi wierszami tabeli; nie łącz pozycji i zachowaj numer, ilość, jednostkę oraz ceny. Jeżeli dokument nie jest kosztorysem, zwróć pustą tablicę boqItems. Dla dokumentacji wskaż instalacje, etapy, wymagane wnioski materiałowe i protokoły. Dla faktury wskaż dane do przypisania kosztu. W searchPassages zwróć ważne, możliwe do wyszukania fragmenty i nagłówki dokumentu, zachowując istotne oznaczenia techniczne. Nie wymyślaj brakujących parametrów. Każdy fakt musi mieć lokalizator i krótki cytat ze źródła. Zwróć wyłącznie JSON zgodny ze schematem.`;
+Przeanalizuj dokument ${input.fileName}. Rozpoznaj jego rzeczywisty kontekst, nie tylko rozszerzenie. Kosztorys traktuj jako źródło pozycji BOQ i etapów WBS. Jeżeli to kosztorys lub przedmiar, wypełnij boqItems rzeczywistymi wierszami tabeli; nie łącz pozycji i zachowaj numer, ilość, jednostkę oraz ceny. Jeżeli dokument nie jest kosztorysem, zwróć pustą tablicę boqItems. Dla dokumentacji wskaż instalacje, etapy, wymagane wnioski materiałowe i protokoły.
+
+Dla faktury, WZ, PZ lub dokumentu dostawy dokładnie wypełnij businessDocument: numer, daty, strony, NIP-y, kwoty oraz każdą pozycję materiałową. documentType ustaw na invoice, WZ, PZ albo delivery. direction ustaw na purchase lub sale. Jeżeli dokument nie jest dokumentem handlowym/magazynowym, zwróć puste pola i pustą tablicę lines. Nie utożsamiaj zakupu materiału z wykonaniem robót.
+
+Spróbuj dopasować dokument do jednej inwestycji z katalogu poniżej. W projectHint zwróć dokładnie pełny wiersz najlepszego dopasowania albo OGÓLNE, gdy dokument dotyczy całej firmy lub brak wiarygodnych wskazówek. Nie zgaduj.
+KATALOG INWESTYCJI:
+${projectCatalog}
+
+W searchPassages zwróć ważne, możliwe do wyszukania fragmenty i nagłówki dokumentu, zachowując istotne oznaczenia techniczne. Nie wymyślaj brakujących parametrów. Każdy fakt musi mieć lokalizator i krótki cytat ze źródła. Zwróć wyłącznie JSON zgodny ze schematem.`;
   const parts: Array<Record<string, unknown>> = [{ text: prompt }];
   if (input.inlineData) parts.push({ inlineData: { mimeType: input.mimeType, data: input.inlineData } });
   if (input.fileUri) parts.push({ fileData: { mimeType: input.mimeType, fileUri: input.fileUri } });
@@ -197,14 +272,15 @@ async function deleteGeminiFile(name: string) {
   }).catch(() => undefined);
 }
 
-export async function analyzeFileWithGemini(input: { fileName: string; mimeType: string; bytes: Buffer }) {
+export async function analyzeFileWithGemini(input: { fileName: string; mimeType: string; bytes: Buffer; projectCatalog?: string[] }) {
   const uploaded = await uploadGeminiFile(input);
   try {
     const activeFile = await waitForGeminiFile(uploaded);
     return await analyzeDocumentWithGemini({
       fileName: input.fileName,
       mimeType: activeFile.mimeType ?? input.mimeType,
-      fileUri: activeFile.uri
+      fileUri: activeFile.uri,
+      projectCatalog: input.projectCatalog
     });
   } finally {
     await deleteGeminiFile(uploaded.name);

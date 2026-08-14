@@ -7,6 +7,7 @@ import { extractDocxText, extractXlsxText, listZipContents } from "@/lib/ai/offi
 import { getR2Config } from "@/lib/env";
 import { createR2Client } from "@/lib/r2/client";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { matchProjectHint, projectCatalogLine, type ProjectMatchCandidate } from "@/lib/ai/project-matcher";
 
 const MAX_PIPELINE_BYTES = 50 * 1024 * 1024;
 const MAX_INLINE_BYTES = 18 * 1024 * 1024;
@@ -83,10 +84,21 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
     const bytes = Buffer.from(await object.Body.transformToByteArray());
     const useFilesApi = (version.mime_type === "application/pdf" || version.mime_type.startsWith("image/")) && bytes.length > MAX_INLINE_BYTES;
     const prepared = useFilesApi ? {} : prepareInput(version.file_name, version.mime_type, bytes);
+    const { data: projectRows } = await supabase.from("projects")
+      .select("id,name,investor_name,location")
+      .eq("workspace_id", input.workspaceId)
+      .eq("status", "active")
+      .returns<Array<{ id: string; name: string; investor_name: string | null; location: string | null }>>();
+    const projectCandidates: ProjectMatchCandidate[] = (projectRows ?? []).map((project) => ({
+      id: project.id, name: project.name, investorName: project.investor_name, location: project.location
+    }));
+    const projectCatalog = projectCandidates.map(projectCatalogLine);
     await supabase.from("processing_jobs").update({ stage: "analyze" }).eq("job_key", jobKey);
     const { analysis, model } = useFilesApi
-      ? await analyzeFileWithGemini({ fileName: version.file_name, mimeType: version.mime_type, bytes })
-      : await analyzeDocumentWithGemini({ fileName: version.file_name, mimeType: version.mime_type, ...prepared });
+      ? await analyzeFileWithGemini({ fileName: version.file_name, mimeType: version.mime_type, bytes, projectCatalog })
+      : await analyzeDocumentWithGemini({ fileName: version.file_name, mimeType: version.mime_type, ...prepared, projectCatalog });
+    const projectMatch = version.project_id ? null : matchProjectHint(analysis.projectHint, projectCandidates);
+    const proposedProjectId = version.project_id ?? projectMatch?.project.id ?? null;
 
     await supabase.from("document_classifications").delete().eq("document_version_id", version.id).eq("status", "proposed");
     const { error: classificationError } = await supabase.from("document_classifications").insert({
@@ -95,7 +107,7 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
       document_version_id: version.id,
       category: analysis.category,
       subcategory: analysis.subcategory || null,
-      proposed_project_id: version.project_id,
+      proposed_project_id: proposedProjectId,
       confidence: analysis.confidence,
       rationale: analysis.summary,
       schema_version: "document-analysis-v1",
@@ -106,7 +118,7 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
 
     const { error: extractionError } = await supabase.from("document_extractions").upsert({
       workspace_id: input.workspaceId,
-      project_id: version.project_id,
+      project_id: proposedProjectId,
       document_id: version.document_id,
       document_version_id: version.id,
       extraction_type: "document_context",
@@ -150,7 +162,7 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
           if (impacts.length > 0) {
             await supabase.from("document_change_impacts").insert(impacts.map((impact) => ({
               workspace_id: input.workspaceId,
-              project_id: version.project_id,
+              project_id: proposedProjectId,
               document_id: version.document_id,
               from_version_id: previousVersion.id,
               to_version_id: version.id,
@@ -167,7 +179,7 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
       : [analysis.summary, ...analysis.searchPassages, ...analysis.workStages, ...analysis.installations, ...analysis.facts.map((fact) => `${fact.label}: ${fact.value} ${fact.unit}`)].join("\n");
     const { error: textError } = await supabase.from("document_texts").upsert({
       workspace_id: input.workspaceId,
-      project_id: version.project_id,
+      project_id: proposedProjectId,
       document_id: version.document_id,
       document_version_id: version.id,
       extracted_text: searchableText.slice(0, 4_000_000),
@@ -178,7 +190,7 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
     }, { onConflict: "document_version_id" });
     if (textError) throw new Error(`Nie udało się zapisać tekstu wyszukiwarki: ${textError.message}`);
 
-    if (version.project_id) {
+    if (proposedProjectId) {
       const { data: previousReferences } = await supabase
         .from("source_references")
         .select("id")
@@ -193,7 +205,7 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
 
       const references = analysis.facts.map((fact) => ({
         id: randomUUID(),
-        project_id: version.project_id as string,
+        project_id: proposedProjectId,
         document_id: version.document_id,
         document_version_id: version.id,
         section_label: fact.locator || null,
@@ -204,7 +216,7 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
         const { error: referencesError } = await supabase.from("source_references").insert(references);
         if (referencesError) throw new Error(`Nie udało się zapisać źródeł: ${referencesError.message}`);
         const { error: factsError } = await supabase.from("project_facts").insert(analysis.facts.map((fact, index) => ({
-          project_id: version.project_id,
+          project_id: proposedProjectId,
           fact_type: fact.type || fact.label,
           value_text: fact.value,
           value_json: { label: fact.label, unit: fact.unit },
@@ -216,7 +228,7 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
       }
 
       await supabase.from("project_requirements").delete()
-        .eq("project_id", version.project_id)
+        .eq("project_id", proposedProjectId)
         .eq("source_document_id", version.document_id)
         .eq("status", "proposed");
       const requirements = [
@@ -226,7 +238,7 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
       if (requirements.length > 0) {
         await supabase.from("project_requirements").insert(requirements.map((requirement) => ({
           workspace_id: input.workspaceId,
-          project_id: version.project_id,
+          project_id: proposedProjectId,
           ...requirement,
           source_document_id: version.document_id,
           source_locator: { document_version_id: version.id },
@@ -239,7 +251,7 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
         const firstReferenceId = references[0]?.id ?? null;
         const { data: protocolRows } = await supabase.from("protocol_requirements").insert(analysis.requiredProtocols.map((title) => ({
           workspace_id: input.workspaceId,
-          project_id: version.project_id,
+          project_id: proposedProjectId,
           protocol_type: title.toLowerCase().replaceAll(" ", "_").slice(0, 80),
           title,
           status: "required",
@@ -250,7 +262,7 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
         if (protocolRows && protocolRows.length > 0) {
           await supabase.from("evidence_requirements").insert(protocolRows.map((protocol) => ({
             workspace_id: input.workspaceId,
-            project_id: version.project_id,
+            project_id: proposedProjectId,
             evidence_type: "protocol",
             title: protocol.title,
             status: "missing",
@@ -262,7 +274,7 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
       if (analysis.category === "estimate" && analysis.boqItems.length > 0) {
         const { data: estimateImport, error: estimateError } = await supabase.from("estimate_imports").upsert({
           workspace_id: input.workspaceId,
-          project_id: version.project_id,
+          project_id: proposedProjectId,
           document_id: version.document_id,
           document_version_id: version.id,
           status: "review",
@@ -337,17 +349,17 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
     }
 
     await supabase.from("documents").update({ category: analysis.category, ai_status: "review", ai_confidence: analysis.confidence, review_status: "pending" }).eq("id", version.document_id);
-    await supabase.from("document_intakes").update({ status: "review", suggested_category: analysis.category, confidence: analysis.confidence }).eq("document_id", version.document_id);
+    await supabase.from("document_intakes").update({ status: "review", suggested_category: analysis.category, proposed_project_id: proposedProjectId, confidence: analysis.confidence }).eq("document_id", version.document_id);
     await supabase.from("processing_jobs").update({ status: "succeeded", stage: "complete", model_name: model, finished_at: new Date().toISOString(), error_code: null, error_message: null }).eq("job_key", jobKey);
     await supabase.from("audit_events").insert({
       workspace_id: input.workspaceId,
-      project_id: version.project_id,
+      project_id: proposedProjectId,
       actor_id: input.userId ?? null,
       actor_type: "ai",
       event_type: "document.analyzed",
       entity_type: "document",
       entity_id: version.document_id,
-      after_value: { category: analysis.category, confidence: analysis.confidence, model }
+      after_value: { category: analysis.category, confidence: analysis.confidence, proposedProjectId, projectMatchScore: projectMatch?.score ?? null, model }
     });
     return analysis;
   } catch (error) {

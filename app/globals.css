@@ -2623,3 +2623,93 @@ button:disabled {
   .fleet-register article { grid-template-columns: auto 1fr; }
   .fleet-register article > .status-chip, .fleet-register article > small { grid-column: 2; }
 }
+
+/* Project Octopus 0.5.1 — expandable operational registers and AI intake */
+.ops-search {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: 13px;
+  background: #fff;
+  color: var(--green);
+}
+.ops-search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; }
+.ops-search span { color: var(--quiet); font-size: 0.72rem; }
+.ops-metric-card { min-width: 0; border: 1px solid var(--line); border-radius: 14px; background: #fff; overflow: hidden; }
+.ops-metric-card > summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
+  gap: 3px 10px;
+  min-height: 112px;
+  padding: 15px;
+  cursor: pointer;
+  list-style: none;
+}
+.ops-metric-card > summary::-webkit-details-marker, .ops-panel__summary::-webkit-details-marker, .ops-import-row > summary::-webkit-details-marker, .fleet-register__row > summary::-webkit-details-marker { display: none; }
+.ops-metric-card__icon { grid-row: 1 / 4; display: grid; width: 38px; height: 38px; place-items: center; border-radius: 10px; background: #edf8f4; color: var(--green); }
+.ops-metric-card__icon svg { width: 19px; height: 19px; }
+.ops-metric-card > summary > span:not(.ops-metric-card__icon), .ops-metric-card > summary > small { color: var(--muted); font-size: 0.75rem; }
+.ops-metric-card > summary > strong { overflow: hidden; font-size: clamp(1rem, 1.55vw, 1.38rem); text-overflow: ellipsis; }
+.ops-metric-card > summary > svg { grid-column: 3; grid-row: 1 / 4; align-self: center; color: var(--quiet); transition: transform 0.18s ease; }
+.ops-metric-card[open] > summary > svg, .ops-disclosure[open] > summary > svg, .ops-import-row[open] > summary > svg, .fleet-register__row[open] > summary > svg { transform: rotate(180deg); }
+.ops-metric-card__details { max-height: 310px; overflow: auto; padding: 0 12px 12px; border-top: 1px solid var(--line); }
+.ops-panel.ops-disclosure { padding: 0; overflow: hidden; }
+.ops-panel__summary { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; min-height: 62px; padding: 14px 17px; cursor: pointer; list-style: none; }
+.ops-panel__summary h2, .ops-panel__summary p { margin: 0; }
+.ops-panel__summary > span { color: var(--muted); font-size: 0.77rem; }
+.ops-panel__summary > svg { color: var(--quiet); transition: transform 0.18s ease; }
+.ops-panel__content { padding: 0 17px 17px; border-top: 1px solid var(--line); }
+.ops-auto-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ops-simple-list { display: grid; gap: 0; }
+.ops-simple-list > div { display: grid; grid-template-columns: minmax(76px, 0.6fr) minmax(110px, 1.3fr) minmax(120px, 1fr); gap: 8px; align-items: center; padding: 9px 2px; border-bottom: 1px solid var(--line); font-size: 0.75rem; }
+.ops-simple-list > div:last-child { border-bottom: 0; }
+.ops-simple-list span, .ops-simple-list small { color: var(--muted); }
+.ops-simple-list strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ops-simple-list__empty { grid-column: 1 / -1; margin: 12px 0 0; color: var(--muted); font-size: 0.8rem; }
+.ops-split-lists { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.ops-ai-intake-lead { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 0; }
+.ops-ai-intake-lead > div { display: flex; align-items: center; gap: 9px; color: var(--green); }
+.ops-ai-intake-lead p { margin: 0; color: var(--muted); font-size: 0.8rem; }
+.ops-import-list { display: grid; gap: 8px; }
+.ops-import-row { border: 1px solid var(--line); border-radius: 11px; background: var(--panel-2); overflow: hidden; }
+.ops-import-row > summary { display: grid; grid-template-columns: auto minmax(0, 1.4fr) minmax(140px, 0.8fr) auto auto; gap: 10px; align-items: center; padding: 11px; cursor: pointer; list-style: none; }
+.ops-import-row > summary strong, .ops-import-row > summary small { display: block; }
+.ops-import-row > summary small, .ops-import-row > summary > span { margin-top: 2px; color: var(--muted); font-size: 0.72rem; }
+.ops-import-row__icon { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 9px; background: #fff; color: var(--green); }
+.ops-import-row__body { padding: 13px; border-top: 1px solid var(--line); background: #fff; }
+.ops-import-row__body dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin: 0 0 10px; }
+.ops-import-row__body dl div { padding: 8px; border-radius: 8px; background: var(--panel-2); }
+.ops-import-row__body dt { color: var(--quiet); font-size: 0.65rem; }
+.ops-import-row__body dd { margin: 3px 0 0; font-size: 0.8rem; font-weight: 750; }
+.ops-import-action { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 9px; align-items: end; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.ops-import-action label { display: grid; gap: 5px; color: var(--muted); font-size: 0.72rem; font-weight: 700; }
+.ops-import-action select { width: 100%; border: 1px solid var(--line-strong); border-radius: 9px; padding: 9px; background: #fff; color: var(--text); }
+.ops-import-action p { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 0.78rem; }
+.fleet-register__row { border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); overflow: hidden; }
+.fleet-register__row > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 12px; cursor: pointer; list-style: none; }
+.fleet-register__row > summary strong, .fleet-register__row > summary small { display: block; }
+.fleet-register__row > summary small { color: var(--muted); }
+.fleet-register__details { padding: 0 13px 13px 61px; border-top: 1px solid var(--line); }
+.fleet-register__details p { color: var(--muted); font-size: 0.78rem; }
+
+@media (max-width: 900px) {
+  .ops-import-row > summary { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .ops-import-row > summary > span { grid-column: 2; }
+  .ops-import-row > summary > b { grid-column: 3; grid-row: 1; }
+  .ops-import-row > summary > svg { grid-column: 3; grid-row: 2; }
+  .ops-import-action { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  .ops-search { grid-template-columns: auto minmax(0, 1fr); }
+  .ops-search span { display: none; }
+  .ops-auto-form-grid, .ops-split-lists, .ops-import-row__body dl { grid-template-columns: 1fr; }
+  .ops-simple-list > div { grid-template-columns: 0.7fr 1.3fr; }
+  .ops-simple-list > div small { grid-column: 1 / -1; }
+  .ops-ai-intake-lead { align-items: stretch; flex-direction: column; }
+  .fleet-register__details { padding-left: 13px; }
+}

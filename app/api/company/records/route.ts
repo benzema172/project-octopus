@@ -18,6 +18,7 @@ const ENTITY_DOMAINS: Record<string, Domain> = {
   invoice: "finance",
   payment: "finance",
   commitment: "finance",
+  ai_invoice_import: "finance",
   employee: "hr",
   qualification: "hr",
   leave_request: "hr",
@@ -25,6 +26,8 @@ const ENTITY_DOMAINS: Record<string, Domain> = {
   warehouse: "warehouse",
   stock_item: "warehouse",
   stock_movement: "warehouse",
+  ai_warehouse_import: "warehouse",
+  stock_movement_approve: "warehouse",
   vehicle: "fleet",
   fuel_entry: "fleet",
   service_order: "fleet",
@@ -60,6 +63,35 @@ async function requireOwnedId(table: string, id: unknown, workspaceId: string, l
     .maybeSingle<{ id: string }>();
   if (error || !data) throw new Error(`${label} nie należy do aktywnej firmy.`);
   return normalized;
+}
+
+async function loadAiBusinessDocument(workspaceId: string, documentIdValue: unknown) {
+  const documentId = await requireOwnedId("documents", documentIdValue, workspaceId, "Dokument źródłowy");
+  const { data, error } = await createServiceSupabaseClient()
+    .from("document_extractions")
+    .select("id,project_id,payload,confidence,status")
+    .eq("workspace_id", workspaceId)
+    .eq("document_id", documentId)
+    .eq("extraction_type", "document_context")
+    .neq("status", "rejected")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string; project_id: string | null; payload: Record<string, unknown>; confidence: number | null; status: string }>();
+  if (error || !data) throw new Error("Dokument nie ma gotowego odczytu AI.");
+  const business = data.payload?.businessDocument;
+  if (!business || typeof business !== "object") throw new Error("AI nie odczytało danych handlowych dokumentu.");
+  return { documentId, extraction: data, business: business as Record<string, unknown> };
+}
+
+async function assignSourceDocumentToProject(documentId: string, projectId: string | null) {
+  if (!projectId) return;
+  const supabase = createServiceSupabaseClient();
+  await Promise.all([
+    supabase.from("documents").update({ project_id: projectId }).eq("id", documentId),
+    supabase.from("document_versions").update({ project_id: projectId }).eq("document_id", documentId),
+    supabase.from("document_extractions").update({ project_id: projectId }).eq("document_id", documentId),
+    supabase.from("document_intakes").update({ proposed_project_id: projectId }).eq("document_id", documentId)
+  ]);
 }
 
 async function createReportSnapshot(workspaceId: string, userId: string, payload: Record<string, unknown>) {
@@ -161,6 +193,68 @@ export async function POST(request: Request) {
       const projectId = p.projectId ? await requireOwnedId("projects", p.projectId, workspace.id, "Inwestycja") : null;
       const { data, error } = await supabase.from("commitments").insert({ workspace_id: workspace.id, project_id: projectId, source_type: "manual", description: text(p.description, "opis", true), amount: amount(p.amount, "wartość", true), expected_date: date(p.expectedDate), status: "open" }).select("id").single<{ id: string }>();
       if (error) throw error; id = data.id;
+    } else if (body.entity === "ai_invoice_import") {
+      const source = await loadAiBusinessDocument(workspace.id, p.documentId);
+      const { data: existing } = await supabase.from("invoices").select("id").eq("workspace_id", workspace.id).eq("document_id", source.documentId).maybeSingle<{ id: string }>();
+      if (existing) throw new Error("Ta faktura została już zaczytana do Finansów.");
+      const projectId = p.projectId ? await requireOwnedId("projects", p.projectId, workspace.id, "Inwestycja") : null;
+      const invoiceNumber = text(source.business.documentNumber, "numer faktury", true)!;
+      const direction = text(source.business.direction, "rodzaj") === "sale" ? "sale" : "purchase";
+      const counterpartyName = direction === "sale"
+        ? text(source.business.buyerName, "nabywca")
+        : text(source.business.supplierName, "dostawca");
+      const counterpartyTaxId = direction === "sale"
+        ? text(source.business.buyerTaxId, "NIP nabywcy")
+        : text(source.business.supplierTaxId, "NIP dostawcy");
+      let counterpartyId: string | null = null;
+      if (counterpartyTaxId) {
+        const { data: counterparty } = await supabase.from("counterparties").select("id").eq("workspace_id", workspace.id).eq("tax_id", counterpartyTaxId).limit(1).maybeSingle<{ id: string }>();
+        counterpartyId = counterparty?.id ?? null;
+      }
+      if (!counterpartyId && counterpartyName) {
+        const { data: counterparty } = await supabase.from("counterparties").select("id").eq("workspace_id", workspace.id).ilike("name", counterpartyName).limit(1).maybeSingle<{ id: string }>();
+        counterpartyId = counterparty?.id ?? null;
+      }
+      if (!counterpartyId && counterpartyName) {
+        const { data: counterparty, error: counterpartyError } = await supabase.from("counterparties").insert({
+          workspace_id: workspace.id,
+          name: counterpartyName,
+          tax_id: counterpartyTaxId,
+          role: direction === "sale" ? "customer" : "supplier"
+        }).select("id").single<{ id: string }>();
+        if (counterpartyError || !counterparty) throw counterpartyError ?? new Error("Nie utworzono kontrahenta.");
+        counterpartyId = counterparty.id;
+      }
+      const netAmount = amount(source.business.netAmount, "wartość netto");
+      const taxAmount = amount(source.business.taxAmount, "VAT");
+      const grossAmount = amount(source.business.grossAmount, "wartość brutto", true);
+      const { data: invoice, error: invoiceError } = await supabase.from("invoices").insert({
+        workspace_id: workspace.id, counterparty_id: counterpartyId, document_id: source.documentId,
+        invoice_number: invoiceNumber, direction, issue_date: date(source.business.issueDate), due_date: date(source.business.dueDate),
+        currency: text(source.business.currency, "waluta") ?? "PLN", net_amount: netAmount, tax_amount: taxAmount,
+        gross_amount: grossAmount, status: direction === "sale" ? "issued" : "received"
+      }).select("id").single<{ id: string }>();
+      if (invoiceError || !invoice) throw invoiceError ?? new Error("Nie utworzono faktury.");
+      const lines = Array.isArray(source.business.lines) ? source.business.lines.filter((line) => line && typeof line === "object") as Array<Record<string, unknown>> : [];
+      if (lines.length) {
+        const { error: linesError } = await supabase.from("invoice_lines").insert(lines.map((line, index) => ({
+          workspace_id: workspace.id, invoice_id: invoice.id, line_number: index + 1,
+          description: text(line.description, "opis pozycji") ?? `Pozycja ${index + 1}`,
+          quantity: amount(line.quantity, "ilość") || null, unit: text(line.unit, "jednostka"),
+          unit_price: amount(line.unitPrice, "cena jednostkowa") || null,
+          net_amount: amount(line.netAmount, "netto"), gross_amount: amount(line.grossAmount, "brutto")
+        })));
+        if (linesError) { await supabase.from("invoices").delete().eq("id", invoice.id); throw linesError; }
+      }
+      if (projectId) {
+        const { error: allocationError } = await supabase.from("financial_allocations").insert({
+          workspace_id: workspace.id, project_id: projectId, source_type: "invoice", source_id: invoice.id,
+          amount: netAmount || grossAmount, allocation_percent: 100, status: "approved"
+        });
+        if (allocationError) { await supabase.from("invoices").delete().eq("id", invoice.id); throw allocationError; }
+      }
+      await assignSourceDocumentToProject(source.documentId, projectId);
+      id = invoice.id;
     } else if (body.entity === "employee") {
       const { data, error } = await supabase.from("employees").insert({ workspace_id: workspace.id, employee_number: text(p.employeeNumber, "numer pracownika"), first_name: text(p.firstName, "imię", true), last_name: text(p.lastName, "nazwisko", true), email: text(p.email, "e-mail"), phone: text(p.phone, "telefon"), hired_at: date(p.hiredAt), status: "active" }).select("id").single<{ id: string }>();
       if (error) throw error;
@@ -198,6 +292,65 @@ export async function POST(request: Request) {
       const { error: lineError } = await supabase.from("stock_movement_lines").insert({ workspace_id: workspace.id, movement_id: movement.id, stock_item_id: stockItemId, quantity: amount(p.quantity, "ilość", true), unit_cost: amount(p.unitCost, "koszt jednostkowy") || null });
       if (lineError) { await supabase.from("stock_movements").delete().eq("id", movement.id); throw lineError; }
       id = movement.id;
+    } else if (body.entity === "ai_warehouse_import") {
+      const source = await loadAiBusinessDocument(workspace.id, p.documentId);
+      const { data: existing } = await supabase.from("stock_movements").select("id").eq("workspace_id", workspace.id).eq("source_document_id", source.documentId).maybeSingle<{ id: string }>();
+      if (existing) throw new Error("Ten dokument został już zaczytany do Magazynu.");
+      const projectId = p.projectId ? await requireOwnedId("projects", p.projectId, workspace.id, "Inwestycja") : null;
+      let warehouseId = p.warehouseId ? await requireOwnedId("warehouses", p.warehouseId, workspace.id, "Magazyn") : null;
+      if (!warehouseId) {
+        const { data: warehouse } = await supabase.from("warehouses").select("id").eq("workspace_id", workspace.id).eq("active", true).order("created_at").limit(1).maybeSingle<{ id: string }>();
+        warehouseId = warehouse?.id ?? null;
+      }
+      if (!warehouseId) {
+        const { data: warehouse, error: warehouseError } = await supabase.from("warehouses").insert({ workspace_id: workspace.id, name: "Magazyn główny", warehouse_type: "central" }).select("id").single<{ id: string }>();
+        if (warehouseError || !warehouse) throw warehouseError ?? new Error("Nie utworzono magazynu głównego.");
+        warehouseId = warehouse.id;
+      }
+      const lines = Array.isArray(source.business.lines) ? source.business.lines.filter((line) => line && typeof line === "object") as Array<Record<string, unknown>> : [];
+      if (!lines.length) throw new Error("AI nie odczytało pozycji materiałowych. Sprawdź dokument lub dodaj ruch ręcznie.");
+      const { data: movement, error: movementError } = await supabase.from("stock_movements").insert({
+        workspace_id: workspace.id, project_id: projectId, warehouse_id: warehouseId, movement_type: "PZ",
+        document_number: text(source.business.documentNumber, "numer dokumentu"), movement_date: date(source.business.issueDate) ?? new Date().toISOString().slice(0, 10),
+        status: "draft", source_document_id: source.documentId
+      }).select("id").single<{ id: string }>();
+      if (movementError || !movement) throw movementError ?? new Error("Nie utworzono szkicu PZ.");
+      const movementLines: Array<Record<string, unknown>> = [];
+      for (const line of lines) {
+        const sku = text(line.sku, "SKU");
+        const description = text(line.description, "opis materiału") ?? "Materiał z dokumentu";
+        let itemId: string | null = null;
+        if (sku) {
+          const { data: item } = await supabase.from("stock_items").select("id").eq("workspace_id", workspace.id).eq("sku", sku).limit(1).maybeSingle<{ id: string }>();
+          itemId = item?.id ?? null;
+        }
+        if (!itemId) {
+          const { data: item } = await supabase.from("stock_items").select("id").eq("workspace_id", workspace.id).ilike("name", description).limit(1).maybeSingle<{ id: string }>();
+          itemId = item?.id ?? null;
+        }
+        if (!itemId) {
+          const { data: item, error: itemError } = await supabase.from("stock_items").insert({
+            workspace_id: workspace.id, sku, name: description, item_type: "material", unit: text(line.unit, "jednostka") ?? "szt."
+          }).select("id").single<{ id: string }>();
+          if (itemError || !item) { await supabase.from("stock_movements").delete().eq("id", movement.id); throw itemError ?? new Error("Nie utworzono kartoteki materiału."); }
+          itemId = item.id;
+        }
+        movementLines.push({
+          workspace_id: workspace.id, movement_id: movement.id, stock_item_id: itemId,
+          quantity: amount(line.quantity, "ilość", true), unit_cost: amount(line.unitPrice, "koszt jednostkowy") || null
+        });
+      }
+      const { error: lineError } = await supabase.from("stock_movement_lines").insert(movementLines);
+      if (lineError) { await supabase.from("stock_movements").delete().eq("id", movement.id); throw lineError; }
+      await assignSourceDocumentToProject(source.documentId, projectId);
+      id = movement.id;
+    } else if (body.entity === "stock_movement_approve") {
+      const movementId = await requireOwnedId("stock_movements", p.movementId, workspace.id, "Ruch magazynowy");
+      const { count } = await supabase.from("stock_movement_lines").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).eq("movement_id", movementId);
+      if (!count) throw new Error("Nie można zatwierdzić ruchu bez pozycji.");
+      const { error } = await supabase.from("stock_movements").update({ status: "approved", approved_by: user.id, approved_at: new Date().toISOString() }).eq("id", movementId).eq("workspace_id", workspace.id);
+      if (error) throw error;
+      id = movementId;
     } else if (body.entity === "vehicle") {
       const { data, error } = await supabase.from("vehicles").insert({ workspace_id: workspace.id, registration_number: text(p.registrationNumber, "numer rejestracyjny", true)?.toUpperCase(), vin: text(p.vin, "VIN"), vehicle_type: text(p.vehicleType, "typ pojazdu", true), make: text(p.make, "marka"), model: text(p.model, "model"), production_year: amount(p.productionYear, "rok produkcji") || null, ownership_type: text(p.ownershipType, "forma własności"), current_mileage: amount(p.currentMileage, "przebieg") || null, status: "active" }).select("id").single<{ id: string }>();
       if (error) throw error; id = data.id;

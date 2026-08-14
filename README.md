@@ -1,4 +1,4 @@
-# Project Octopus 0.5.0
+# Project Octopus 0.5.1
 
 System operacyjny firmy wykonawczej, w którym dokument źródłowy zasila Project DNA, kosztorys/BOQ, WBS, harmonogram, materiały, protokoły, przerób, finanse i raportowanie.
 
@@ -10,6 +10,17 @@ System operacyjny firmy wykonawczej, w którym dokument źródłowy zasila Proje
 - AI proponuje, reguły walidują, a człowiek zatwierdza operacje formalne, finansowe, kadrowe i magazynowe,
 - liczby finansowe pochodzą wyłącznie z rekordów źródłowych i jawnych założeń forecastu,
 - dane HR, finansowe i techniczne są rozdzielone rolami domenowymi.
+
+## Wersja 0.5.1
+
+### Automatyczna dekretacja i rejestry rozwijane
+
+- Gemini odczytuje z faktur, WZ/PZ i dokumentów dostaw numery, daty, NIP-y, kwoty oraz pozycje materiałowe,
+- AI porównuje wskazówki z dokumentu z katalogiem aktywnych inwestycji; brak pewnego dopasowania pozostawia dokument w rozrachunku ogólnym firmy,
+- Finanse zaczytują fakturę wraz z kontrahentem, pozycjami i alokacją na inwestycję,
+- Magazyn tworzy kontrolowany szkic PZ z faktury/WZ; stan zmienia się dopiero po zatwierdzeniu,
+- wszystkie kafle Finansów, Kadr, Magazynu, Floty i Raportów są rozwijane do prostych list,
+- każda z tych sekcji ma wyszukiwarkę filtrującą rekordy, statusy, dokumenty i przypisania.
 
 ## Wersja 0.5.0
 

@@ -90,11 +90,11 @@ export async function POST(request: Request) {
       const nextStatus = approved ? "approved" : "rejected";
       const { data: latestClassification } = await supabase
         .from("document_classifications")
-        .select("id,category")
+        .select("id,category,proposed_project_id")
         .eq("document_id", document.id)
         .order("created_at", { ascending: false })
         .limit(1)
-        .maybeSingle<{ id: string; category: string }>();
+        .maybeSingle<{ id: string; category: string; proposed_project_id: string | null }>();
       if (latestClassification) {
         await supabase.from("document_classifications").update({
           status: nextStatus,
@@ -107,12 +107,17 @@ export async function POST(request: Request) {
         supabase.from("document_intakes").update({ status: approved ? "ready" : "rejected", decided_by: user.id, decided_at: new Date().toISOString(), decision_note: body.note ?? null }).eq("document_id", document.id),
         supabase.from("documents").update({
           category: approved ? latestClassification?.category : undefined,
+          project_id: approved ? latestClassification?.proposed_project_id ?? document.project_id : undefined,
           review_status: nextStatus,
           ai_status: approved ? "ready" : "rejected",
           approved_by: approved ? user.id : null,
           approved_at: approved ? new Date().toISOString() : null
         }).eq("id", document.id)
       ]);
+      if (approved && latestClassification?.proposed_project_id) {
+        await supabase.from("document_versions").update({ project_id: latestClassification.proposed_project_id }).eq("document_id", document.id);
+        projectId = latestClassification.proposed_project_id;
+      }
       const { data: refs } = await supabase.from("source_references").select("id").eq("document_id", document.id).returns<Array<{ id: string }>>();
       const refIds = (refs ?? []).map((reference) => reference.id);
       if (refIds.length > 0) {
