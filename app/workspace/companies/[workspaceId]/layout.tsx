@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { CompanyShell } from "@/components/layout/company-shell";
 import { requireCurrentUser } from "@/lib/auth";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
+import { domainAccessPolicyAllows, loadDomainAccessPolicy, type Domain } from "@/lib/authorization";
 
 export const dynamic = "force-dynamic";
 
@@ -18,12 +19,16 @@ export default async function CompanyLayout({ children, params }: CompanyLayoutP
   if (!workspace) {
     notFound();
   }
+  const policy = await loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id });
+  const domains: Domain[] = ["investments", "finance", "hr", "warehouse", "fleet", "templates", "reports", "settings"];
+  const allowedDomains = domains.filter((domain) => domainAccessPolicyAllows(policy, { domain, level: "read", projectId: null }));
 
   return (
     <CompanyShell
       workspaceId={workspace.id}
       companyName={workspace.name}
       userEmail={user.email ?? "Project Octopus"}
+      allowedDomains={allowedDomains}
     >
       {children}
     </CompanyShell>

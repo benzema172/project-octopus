@@ -3,6 +3,8 @@ import { DocumentUpload } from "@/components/documents/document-upload";
 import { requireCurrentUser } from "@/lib/auth";
 import { isDocumentStorageSchemaReady, listDocumentsForProject } from "@/lib/data/documents";
 import { getProjectForUser } from "@/lib/data/projects";
+import { DomainAccessDenied } from "@/components/access/domain-access-denied";
+import { hasDomainAccess } from "@/lib/authorization";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,9 @@ export default async function ProjectDocumentationPage({ params }: ProjectDocume
 
   if (!project) {
     notFound();
+  }
+  if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id })) {
+    return <DomainAccessDenied workspaceId={project.workspace_id} area="Dokumentacja inwestycji" />;
   }
 
   const [documents, trashedDocuments, storageSchemaReady] = await Promise.all([

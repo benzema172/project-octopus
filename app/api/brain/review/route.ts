@@ -16,116 +16,26 @@ type ReviewBody = {
 
 async function approveEstimateImport(input: { workspaceId: string; importId: string; userId: string }) {
   const supabase = createServiceSupabaseClient();
-  const { data: estimateImport, error: importError } = await supabase
-    .from("estimate_imports")
-    .select("id,workspace_id,project_id,document_id,document_version_id,status")
-    .eq("id", input.importId)
-    .eq("workspace_id", input.workspaceId)
-    .maybeSingle<{
-      id: string; workspace_id: string; project_id: string; document_id: string | null; document_version_id: string | null; status: string;
-    }>();
-  if (importError || !estimateImport) throw new Error("Nie znaleziono importu kosztorysu.");
-  if (estimateImport.status === "approved") return { projectId: estimateImport.project_id, alreadyApproved: true };
+  const { data, error } = await supabase.rpc("approve_estimate_import_atomic", {
+    p_workspace_id: input.workspaceId,
+    p_import_id: input.importId,
+    p_approved_by: input.userId
+  }).single<{
+    result_project_id: string;
+    result_boq_version_id: string | null;
+    result_rows: number;
+    result_wbs_nodes: number;
+    result_already_approved: boolean;
+  }>();
 
-  const { data: rows, error: rowsError } = await supabase
-    .from("estimate_import_rows")
-    .select("id,item_number,description,quantity,unit,unit_price,total_price,proposed_wbs_code,confidence,status")
-    .eq("estimate_import_id", estimateImport.id)
-    .neq("status", "rejected")
-    .order("source_row")
-    .returns<Array<{
-      id: string; item_number: string | null; description: string | null; quantity: number | null; unit: string | null;
-      unit_price: number | null; total_price: number | null; proposed_wbs_code: string | null; confidence: number | null; status: string;
-    }>>();
-  if (rowsError || !rows?.length) throw new Error("Import nie zawiera pozycji możliwych do zatwierdzenia.");
-
-  const { data: latestVersion } = await supabase
-    .from("boq_versions")
-    .select("version_number")
-    .eq("project_id", estimateImport.project_id)
-    .order("version_number", { ascending: false })
-    .limit(1)
-    .maybeSingle<{ version_number: number }>();
-  const versionNumber = (latestVersion?.version_number ?? 0) + 1;
-  const netValue = rows.reduce((sum, row) => sum + Number(row.total_price ?? 0), 0);
-  const { data: boqVersion, error: versionError } = await supabase.from("boq_versions").insert({
-    workspace_id: input.workspaceId,
-    project_id: estimateImport.project_id,
-    document_version_id: estimateImport.document_version_id,
-    version_number: versionNumber,
-    name: `Kosztorys bazowy v${versionNumber}`,
-    status: "approved",
-    currency: "PLN",
-    net_value: netValue,
-    approved_by: input.userId,
-    approved_at: new Date().toISOString()
-  }).select("id").single<{ id: string }>();
-  if (versionError || !boqVersion) throw new Error(`Nie udało się utworzyć wersji BOQ: ${versionError?.message ?? "brak danych"}`);
-
-  const wbsCodes = [...new Set(rows.map((row) => row.proposed_wbs_code?.trim() || "00"))];
-  const { data: wbsNodes, error: wbsError } = await supabase.from("wbs_nodes").upsert(wbsCodes.map((code, index) => ({
-    workspace_id: input.workspaceId,
-    project_id: estimateImport.project_id,
-    code,
-    name: code === "00" ? "Zakres nierozdzielony" : `Pakiet ${code}`,
-    sort_order: index,
-    status: "active"
-  })), { onConflict: "project_id,code" }).select("id,code").returns<Array<{ id: string; code: string }>>();
-  if (wbsError || !wbsNodes) throw new Error(`Nie udało się utworzyć WBS: ${wbsError?.message ?? "brak danych"}`);
-  const wbsByCode = new Map(wbsNodes.map((node) => [node.code, node.id]));
-
-  const { error: boqError } = await supabase.from("boq_items").insert(rows.map((row, index) => ({
-    project_id: estimateImport.project_id,
-    boq_version_id: boqVersion.id,
-    wbs_node_id: wbsByCode.get(row.proposed_wbs_code?.trim() || "00") ?? null,
-    item_number: row.item_number || String(index + 1),
-    description: row.description || "Pozycja wymagająca uzupełnienia",
-    quantity: row.quantity,
-    unit: row.unit,
-    unit_price: row.unit_price,
-    total_price: row.total_price,
-    source_document_id: estimateImport.document_id,
-    cost_code: row.proposed_wbs_code || "00"
-  })));
-  if (boqError) throw new Error(`Nie udało się zapisać BOQ: ${boqError.message}`);
-
-  const { data: latestBaseline } = await supabase
-    .from("schedule_baselines")
-    .select("version_number")
-    .eq("project_id", estimateImport.project_id)
-    .order("version_number", { ascending: false })
-    .limit(1)
-    .maybeSingle<{ version_number: number }>();
-  const { data: baseline } = await supabase.from("schedule_baselines").insert({
-    workspace_id: input.workspaceId,
-    project_id: estimateImport.project_id,
-    version_number: (latestBaseline?.version_number ?? 0) + 1,
-    name: `Szkic harmonogramu z BOQ v${versionNumber}`,
-    status: "draft"
-  }).select("id").single<{ id: string }>();
-  if (baseline && wbsNodes.length > 0) {
-    await supabase.from("schedule_activities").insert(wbsNodes.map((node) => ({
-      workspace_id: input.workspaceId,
-      project_id: estimateImport.project_id,
-      schedule_baseline_id: baseline.id,
-      wbs_node_id: node.id,
-      code: node.code,
-      title: `Realizacja pakietu ${node.code}`,
-      status: "planned"
-    })));
-  }
-
-  await Promise.all([
-    supabase.from("estimate_import_rows").update({ status: "accepted" }).eq("estimate_import_id", estimateImport.id).neq("status", "rejected"),
-    supabase.from("estimate_imports").update({
-      status: "approved",
-      accepted_rows: rows.length,
-      approved_by: input.userId,
-      approved_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }).eq("id", estimateImport.id)
-  ]);
-  return { projectId: estimateImport.project_id, boqVersionId: boqVersion.id, rows: rows.length, wbsNodes: wbsNodes.length };
+  if (error || !data) throw new Error(`Nie udało się atomowo zatwierdzić kosztorysu: ${error?.message ?? "brak danych"}`);
+  return {
+    projectId: data.result_project_id,
+    boqVersionId: data.result_boq_version_id,
+    rows: data.result_rows,
+    wbsNodes: data.result_wbs_nodes,
+    alreadyApproved: data.result_already_approved
+  };
 }
 
 export async function POST(request: Request) {
@@ -141,7 +51,22 @@ export async function POST(request: Request) {
 
   if (body.entityType !== "document") {
     const domain = body.entityType === "template_version" ? "templates" : body.entityType === "knowledge_entry" ? "reports" : "investments";
-    const allowed = await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain, level: "approve" });
+    let scopedProjectId: string | null = null;
+    if (body.entityType === "estimate_import") {
+      const { data } = await supabase.from("estimate_imports").select("project_id").eq("id", body.entityId).eq("workspace_id", workspace.id).maybeSingle<{ project_id: string }>();
+      if (!data) return NextResponse.json({ error: "Nie znaleziono importu kosztorysu w aktywnej firmie." }, { status: 404 });
+      scopedProjectId = data.project_id;
+    } else if (body.entityType === "change_impact" || body.entityType === "site_event") {
+      const table = body.entityType === "change_impact" ? "document_change_impacts" : "site_events";
+      const { data } = await supabase.from(table).select("project_id").eq("id", body.entityId).eq("workspace_id", workspace.id).maybeSingle<{ project_id: string | null }>();
+      if (!data) return NextResponse.json({ error: "Nie znaleziono elementu w aktywnej firmie." }, { status: 404 });
+      scopedProjectId = data.project_id;
+    } else if (body.entityType === "knowledge_entry") {
+      const { data } = await supabase.from("knowledge_entries").select("source_project_id").eq("id", body.entityId).eq("workspace_id", workspace.id).maybeSingle<{ source_project_id: string | null }>();
+      if (!data) return NextResponse.json({ error: "Nie znaleziono wpisu wiedzy w aktywnej firmie." }, { status: 404 });
+      scopedProjectId = data.source_project_id;
+    }
+    const allowed = await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain, level: "approve", projectId: scopedProjectId });
     if (!allowed) return NextResponse.json({ error: "Brak uprawnienia do zatwierdzania w tej domenie." }, { status: 403 });
   }
 

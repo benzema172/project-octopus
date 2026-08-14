@@ -12,6 +12,7 @@ import {
   isCompanyProfileSchemaReady
 } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { hasDomainAccess } from "@/lib/authorization";
 
 function textField(formData: FormData, key: string, max = 500) {
   return String(formData.get(key) ?? "").trim().slice(0, max);
@@ -125,6 +126,9 @@ export async function createProjectAction(formData: FormData) {
   if (!workspace) {
     throw new Error("Nie znaleziono firmy lub nie masz do niej dostępu.");
   }
+  if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "investments", level: "write" })) {
+    throw new Error("Nie masz uprawnienia do tworzenia inwestycji w tej firmie.");
+  }
 
   const supabase = createServiceSupabaseClient();
   const name = textField(formData, "name", 240);
@@ -207,6 +211,9 @@ export async function updateProjectProfileAction(projectId: string, formData: Fo
 
   if (!project) {
     throw new Error("Nie znaleziono inwestycji lub nie masz do niej dostępu.");
+  }
+  if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "write", projectId: project.id })) {
+    throw new Error("Nie masz uprawnienia do edycji danych tej inwestycji.");
   }
 
   const profile = { ...EMPTY_PROJECT_PROFILE };

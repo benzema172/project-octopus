@@ -3,8 +3,9 @@ import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { processDocumentVersion } from "@/lib/ai/process-document";
 import { getAiRuntimeStatus, getOptionalEnv } from "@/lib/env";
-import { ensureWorkspaceForUser } from "@/lib/data/workspace";
+import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { hasDomainAccess } from "@/lib/authorization";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -28,7 +29,12 @@ export async function POST(request: Request) {
   const limit = Math.max(1, Math.min(5, Number(url.searchParams.get("limit")) || 1));
   const workerName = `octopus-${randomUUID()}`;
   const supabase = createServiceSupabaseClient();
-  const userWorkspace = user ? await ensureWorkspaceForUser(user) : null;
+  const requestedWorkspaceId = url.searchParams.get("workspaceId")?.trim();
+  const userWorkspace = user && requestedWorkspaceId ? await getWorkspaceForUser(user, requestedWorkspaceId) : null;
+  if (user && !requestedWorkspaceId) return NextResponse.json({ error: "Ręczne uruchomienie workera wymaga identyfikatora firmy." }, { status: 400 });
+  if (user && (!userWorkspace || !await hasDomainAccess({ workspaceId: userWorkspace.id, userId: user.id, domain: "settings", level: "admin" }))) {
+    return NextResponse.json({ error: "Tylko administrator firmy może ręcznie uruchomić worker." }, { status: 403 });
+  }
   const results: Array<{ jobId: string; versionId: string | null; status: "succeeded" | "failed"; error?: string }> = [];
 
   for (let index = 0; index < limit; index += 1) {

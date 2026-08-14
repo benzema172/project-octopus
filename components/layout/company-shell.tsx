@@ -21,33 +21,35 @@ import {
   WalletCards
 } from "lucide-react";
 import { OctopusAssistant } from "@/components/ai/octopus-assistant";
+import type { Domain } from "@/lib/authorization";
 
 type CompanyShellProps = {
   workspaceId: string;
   companyName: string;
   userEmail: string;
+  allowedDomains: Domain[];
   children: React.ReactNode;
 };
 
-export function CompanyShell({ workspaceId, companyName, userEmail, children }: CompanyShellProps) {
+export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomains, children }: CompanyShellProps) {
   const pathname = usePathname();
   const base = `/workspace/companies/${workspaceId}`;
   const items = [
     { href: base, label: "Dashboard", icon: LayoutDashboard, exact: true },
-    { href: `${base}/investments`, label: "Inwestycje", icon: FolderKanban, projectRoutes: true },
-    { href: `${base}/finances`, label: "Finanse", icon: WalletCards },
-    { href: `${base}/hr`, label: "Kadry", icon: UsersRound },
-    { href: `${base}/warehouse`, label: "Magazyn", icon: Boxes },
-    { href: `${base}/fleet`, label: "Flota", icon: CarFront },
-    { href: `${base}/documents`, label: "Dokumenty", icon: FileStack },
-    { href: `${base}/templates`, label: "Wzory", icon: LayoutTemplate },
-    { href: `${base}/brain`, label: "Octopus Brain", icon: Brain },
-    { href: `${base}/ai-inbox`, label: "Skrzynka AI", icon: Inbox },
-    { href: `${base}/search`, label: "Wyszukiwarka", icon: Search },
-    { href: `${base}/knowledge`, label: "Pamięć firmy", icon: LibraryBig },
-    { href: `${base}/reports`, label: "Raporty", icon: ChartNoAxesCombined },
-    { href: `${base}/settings`, label: "Ustawienia", icon: Settings }
-  ];
+    { href: `${base}/investments`, label: "Inwestycje", icon: FolderKanban, projectRoutes: true, domain: "investments" as const },
+    { href: `${base}/finances`, label: "Finanse", icon: WalletCards, domain: "finance" as const },
+    { href: `${base}/hr`, label: "Kadry", icon: UsersRound, domain: "hr" as const },
+    { href: `${base}/warehouse`, label: "Magazyn", icon: Boxes, domain: "warehouse" as const },
+    { href: `${base}/fleet`, label: "Flota", icon: CarFront, domain: "fleet" as const },
+    { href: `${base}/documents`, label: "Dokumenty", icon: FileStack, domain: "investments" as const },
+    { href: `${base}/templates`, label: "Wzory", icon: LayoutTemplate, domain: "templates" as const },
+    { href: `${base}/brain`, label: "Octopus Brain", icon: Brain, domain: "investments" as const },
+    { href: `${base}/ai-inbox`, label: "Skrzynka AI", icon: Inbox, domain: "investments" as const },
+    { href: `${base}/search`, label: "Wyszukiwarka", icon: Search, domain: "investments" as const },
+    { href: `${base}/knowledge`, label: "Pamięć firmy", icon: LibraryBig, domain: "reports" as const },
+    { href: `${base}/reports`, label: "Raporty", icon: ChartNoAxesCombined, domain: "reports" as const },
+    { href: `${base}/settings`, label: "Ustawienia", icon: Settings, domain: "settings" as const }
+  ].filter((item) => !item.domain || allowedDomains.includes(item.domain));
 
   return (
     <div className="co-shell">

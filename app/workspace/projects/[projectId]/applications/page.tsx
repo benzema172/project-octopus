@@ -1,8 +1,6 @@
-import { ProjectModulePage } from "@/components/projects/project-module-page";
-import { ProjectLiveRecords } from "@/components/projects/project-live-records";
-import { PROJECT_MODULES } from "@/lib/product/project-modules";
+import { redirect } from "next/navigation";
 
-export default async function ApplicationsPage({ params }: { params: Promise<{ projectId: string }> }) {
+export default async function LegacyApplicationsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
-  return <ProjectModulePage projectId={projectId} module={PROJECT_MODULES.applications}><ProjectLiveRecords projectId={projectId} kind="applications" /></ProjectModulePage>;
+  redirect(`/workspace/projects/${projectId}/requests`);
 }

@@ -4,6 +4,8 @@ import { requireCurrentUser } from "@/lib/auth";
 import { RoleGrantForm } from "@/components/settings/role-grant-form";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { isExecutionLayerSchemaReady } from "@/lib/data/operations";
+import { ExecutionLayerNotice } from "@/components/system/execution-layer-notice";
 
 type Kind = "finance" | "hr" | "warehouse" | "fleet" | "reports" | "settings";
 
@@ -19,6 +21,7 @@ export async function DomainLivePanel({ kind, workspaceId }: { kind: Kind; works
   const user = await requireCurrentUser();
   const workspace = workspaceId ? await getWorkspaceForUser(user, workspaceId) : await ensureWorkspaceForUser(user);
   if (!workspace) return null;
+  if (!await isExecutionLayerSchemaReady()) return <ExecutionLayerNotice />;
   const supabase = createServiceSupabaseClient();
   const today = new Date();
   const in30Days = new Date(today.getTime() + 30 * 86_400_000).toISOString().slice(0, 10);

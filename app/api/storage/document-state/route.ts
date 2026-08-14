@@ -3,6 +3,7 @@ import { getRequestUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
 
 export const runtime = "nodejs";
 
@@ -45,6 +46,17 @@ export async function POST(request: Request) {
 
   const trashed = body.state === "trashed";
   const supabase = createServiceSupabaseClient();
+  const { data: sourceDocument } = await supabase
+    .from("documents")
+    .select("id,project_id,category")
+    .eq("id", body.documentId)
+    .eq("workspace_id", workspace.id)
+    .maybeSingle<{ id: string; project_id: string | null; category: string | null }>();
+  if (!sourceDocument) return jsonError("Nie znaleziono dokumentu w tym workspace.", 404);
+  if (project && sourceDocument.project_id !== project.id) return jsonError("Dokument nie należy do wskazanej inwestycji.", 422);
+  if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: domainForDocumentCategory(sourceDocument.category), level: "write", projectId: sourceDocument.project_id })) {
+    return jsonError("Brak uprawnienia do zmiany tego dokumentu.", 403);
+  }
   const { data, error } = await supabase
     .from("documents")
     .update({
@@ -60,9 +72,7 @@ export async function POST(request: Request) {
     return jsonError(`Nie udało się zmienić stanu dokumentu: ${error.message}`, 500);
   }
 
-  if (!data) {
-    return jsonError("Nie znaleziono dokumentu w tym workspace.", 404);
-  }
+  if (!data) return jsonError("Nie udało się zmienić dokumentu.", 409);
 
   return NextResponse.json(
     { ok: true, state: body.state },

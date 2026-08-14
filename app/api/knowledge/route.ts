@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
-import { userHasProjectAccess } from "@/lib/data/projects";
+import { getProjectForUser } from "@/lib/data/projects";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -17,7 +17,10 @@ export async function POST(request: Request) {
   if (!workspace) return NextResponse.json({ error: "Brak dostępu do firmy." }, { status: 403 });
   if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "reports", level: "write" })) return NextResponse.json({ error: "Brak uprawnienia do pamięci organizacji." }, { status: 403 });
   if (!body.title?.trim() || !body.summary?.trim()) return NextResponse.json({ error: "Uzupełnij tytuł i podsumowanie." }, { status: 400 });
-  if (body.sourceProjectId && !await userHasProjectAccess(user, body.sourceProjectId)) return NextResponse.json({ error: "Brak dostępu do inwestycji źródłowej." }, { status: 403 });
+  const sourceProject = body.sourceProjectId ? await getProjectForUser(user, body.sourceProjectId) : null;
+  if (body.sourceProjectId && (!sourceProject || sourceProject.workspace_id !== workspace.id)) {
+    return NextResponse.json({ error: "Inwestycja źródłowa nie należy do wskazanej firmy." }, { status: 403 });
+  }
   const { data, error } = await createServiceSupabaseClient().from("knowledge_entries").insert({
     workspace_id: workspace.id,
     source_project_id: body.sourceProjectId || null,

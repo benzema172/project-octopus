@@ -1,7 +1,5 @@
-import { OperationalModule } from "@/components/dashboard/operational-module";
-import { DomainLivePanel } from "@/components/dashboard/domain-live-panel";
-import { WORKSPACE_MODULES } from "@/lib/product/modules";
+import { redirectToCurrentCompany } from "@/lib/navigation/company-redirect";
 
-export default function FleetPage() {
-  return <OperationalModule module={WORKSPACE_MODULES.fleet}><DomainLivePanel kind="fleet" /></OperationalModule>;
+export default async function LegacyFleetPage() {
+  return redirectToCurrentCompany("fleet");
 }

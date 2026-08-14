@@ -143,6 +143,7 @@ export async function listAiInbox(workspaceId: string): Promise<AiInboxItem[]> {
 }
 
 export type ProjectExecutionSnapshot = {
+  schemaReady: boolean;
   boqItems: number;
   wbsNodes: number;
   requirements: number;
@@ -164,7 +165,31 @@ export type ProjectExecutionSnapshot = {
   };
 };
 
-export async function getProjectExecutionSnapshot(workspaceId: string, projectId: string): Promise<ProjectExecutionSnapshot> {
+export async function isExecutionLayerSchemaReady() {
+  const supabase = createServiceSupabaseClient();
+  const { data, error } = await supabase
+    .from("app_schema_versions")
+    .select("version")
+    .eq("version", "20260814_domain_access_hardening")
+    .maybeSingle<{ version: string }>();
+
+  return !error && data?.version === "20260814_domain_access_hardening";
+}
+
+export async function getProjectExecutionSnapshot(
+  workspaceId: string,
+  projectId: string,
+  options: { includeFinance?: boolean; includeWarehouse?: boolean } = {}
+): Promise<ProjectExecutionSnapshot> {
+  if (!await isExecutionLayerSchemaReady()) {
+    return {
+      schemaReady: false,
+      boqItems: 0, wbsNodes: 0, requirements: 0, protocolsRequired: 0, protocolsClosed: 0,
+      scheduleActivities: 0, progressEntries: 0, evidenceRequired: 0, evidenceComplete: 0,
+      changeImpacts: 0, materialEvents: 0, siteEvents: 0, closeoutRequired: 0, closeoutComplete: 0,
+      latestForecast: null
+    };
+  }
   const supabase = createServiceSupabaseClient();
   const count = (table: string, status?: string) => {
     let query = supabase.from(table).select("id", { count: "exact", head: true }).eq("project_id", projectId);
@@ -175,11 +200,16 @@ export async function getProjectExecutionSnapshot(workspaceId: string, projectId
     count("boq_items"), count("wbs_nodes"), count("project_requirements"), count("protocol_requirements"),
     count("protocols", "closed"), count("schedule_activities"), count("progress_entries"),
     count("evidence_requirements"), count("evidence_requirements", "accepted"),
-    count("document_change_impacts", "proposed"), count("material_chain_events"), count("site_events"),
+    count("document_change_impacts", "proposed"),
+    options.includeWarehouse ? count("material_chain_events") : Promise.resolve({ count: null }),
+    count("site_events"),
     count("closeout_requirements"), count("closeout_requirements", "complete"),
-    supabase.from("forecast_snapshots").select("forecast_finish_date,estimate_at_completion,forecast_margin").eq("workspace_id", workspaceId).eq("project_id", projectId).order("forecast_date", { ascending: false }).limit(1).maybeSingle()
+    options.includeFinance
+      ? supabase.from("forecast_snapshots").select("forecast_finish_date,estimate_at_completion,forecast_margin").eq("workspace_id", workspaceId).eq("project_id", projectId).order("forecast_date", { ascending: false }).limit(1).maybeSingle()
+      : Promise.resolve({ data: null })
   ]);
   return {
+    schemaReady: true,
     boqItems: boq.count ?? 0, wbsNodes: wbs.count ?? 0, requirements: requirements.count ?? 0,
     protocolsRequired: protocolRequired.count ?? 0, protocolsClosed: protocolClosed.count ?? 0,
     scheduleActivities: schedule.count ?? 0, progressEntries: progress.count ?? 0,

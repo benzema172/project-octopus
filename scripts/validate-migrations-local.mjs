@@ -5,7 +5,9 @@ const migrations = [
   "supabase/migrations/20260811130000_project_octopus_mvp.sql",
   "supabase/migrations/20260812100000_project_octopus_foundation_fix.sql",
   "supabase/migrations/20260814090000_octopus_operating_system.sql",
-  "supabase/migrations/20260814130000_octopus_execution_layer.sql"
+  "supabase/migrations/20260814130000_octopus_execution_layer.sql",
+  "supabase/migrations/20260814170000_atomic_estimate_approval.sql",
+  "supabase/migrations/20260814180000_domain_access_hardening.sql"
 ];
 
 function withoutPgcrypto(sql) {
@@ -41,6 +43,9 @@ try {
   const marker = await database.query(
     "select version from public.app_schema_versions where version = '20260814_execution_layer'"
   );
+  const hardeningMarker = await database.query(
+    "select version from public.app_schema_versions where version = '20260814_domain_access_hardening'"
+  );
   const uploadFunction = await database.query(`
     select proname
     from pg_proc
@@ -56,8 +61,12 @@ try {
     select proname from pg_proc
     where pronamespace = 'public'::regnamespace and proname = 'search_octopus'
   `);
+  const estimateApprovalFunction = await database.query(`
+    select proname from pg_proc
+    where pronamespace = 'public'::regnamespace and proname = 'approve_estimate_import_atomic'
+  `);
 
-  if (marker.rows.length !== 1 || uploadFunction.rows.length !== 1 || claimFunction.rows.length !== 1 || searchFunction.rows.length !== 1) {
+  if (marker.rows.length !== 1 || hardeningMarker.rows.length !== 1 || uploadFunction.rows.length !== 1 || claimFunction.rows.length !== 1 || searchFunction.rows.length !== 1 || estimateApprovalFunction.rows.length !== 1) {
     throw new Error("Migration marker or atomic upload function is missing.");
   }
 
@@ -155,6 +164,94 @@ try {
   if (claimed.rows.length !== 1 || claimed.rows[0]?.status !== "running" || claimed.rows[0]?.attempt_count !== 1) {
     throw new Error("Atomic processing-job claim failed.");
   }
+
+  await database.exec(`
+    insert into public.estimate_imports (
+      id, workspace_id, project_id, document_id, document_version_id, status, detected_rows, created_by
+    ) values (
+      '00000000-0000-4000-8000-000000000021',
+      '00000000-0000-4000-8000-000000000002',
+      '00000000-0000-4000-8000-000000000003',
+      '00000000-0000-4000-8000-000000000004',
+      '00000000-0000-4000-8000-000000000005',
+      'review', 2, '00000000-0000-4000-8000-000000000001'
+    );
+    insert into public.estimate_import_rows (
+      id, workspace_id, estimate_import_id, source_row, item_number, description,
+      quantity, unit, unit_price, total_price, proposed_wbs_code, status
+    ) values
+      (
+        '00000000-0000-4000-8000-000000000022',
+        '00000000-0000-4000-8000-000000000002',
+        '00000000-0000-4000-8000-000000000021',
+        1, '1.1', 'Instalacja kanalizacji', 10, 'm', 100, 1000, '01', 'proposed'
+      ),
+      (
+        '00000000-0000-4000-8000-000000000023',
+        '00000000-0000-4000-8000-000000000002',
+        '00000000-0000-4000-8000-000000000021',
+        2, '1.2', 'Próba szczelności', 1, 'kpl', 500, 500, '02', 'proposed'
+      );
+  `);
+
+  const approveEstimate = () => database.query(`select * from public.approve_estimate_import_atomic(
+    '00000000-0000-4000-8000-000000000002',
+    '00000000-0000-4000-8000-000000000021',
+    '00000000-0000-4000-8000-000000000001'
+  )`);
+  const approvedEstimate = await approveEstimate();
+  const approvedEstimateReplay = await approveEstimate();
+  const estimateState = await database.query(`
+    select
+      (select count(*)::integer from public.boq_versions where project_id = '00000000-0000-4000-8000-000000000003') as boq_versions,
+      (select count(*)::integer from public.boq_items where project_id = '00000000-0000-4000-8000-000000000003') as boq_items,
+      (select count(*)::integer from public.schedule_baselines where project_id = '00000000-0000-4000-8000-000000000003') as baselines,
+      (select count(*)::integer from public.schedule_activities where project_id = '00000000-0000-4000-8000-000000000003') as activities,
+      (select status from public.estimate_imports where id = '00000000-0000-4000-8000-000000000021') as import_status
+  `);
+  if (
+    approvedEstimate.rows[0]?.result_rows !== 2 ||
+    approvedEstimate.rows[0]?.result_wbs_nodes !== 2 ||
+    approvedEstimateReplay.rows[0]?.result_already_approved !== true ||
+    estimateState.rows[0]?.boq_versions !== 1 ||
+    estimateState.rows[0]?.boq_items !== 2 ||
+    estimateState.rows[0]?.baselines !== 1 ||
+    estimateState.rows[0]?.activities !== 2 ||
+    estimateState.rows[0]?.import_status !== "approved"
+  ) {
+    throw new Error("Atomic estimate approval failed its transaction or replay test.");
+  }
+
+  await database.exec(`
+    create or replace function auth.uid() returns uuid language sql stable
+    as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+    insert into auth.users (id) values ('00000000-0000-4000-8000-000000000031');
+    insert into public.workspace_members (workspace_id, user_id, role)
+    values ('00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000031', 'member');
+    insert into public.domain_role_grants (workspace_id, user_id, domain, access_level, project_id, granted_by)
+    values
+      ('00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000031', 'finance', 'read', null, '00000000-0000-4000-8000-000000000001'),
+      ('00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000031', 'investments', 'read', '00000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000001');
+    select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000031', false);
+  `);
+  const domainAccessState = await database.query(`
+    select
+      public.has_domain_access('00000000-0000-4000-8000-000000000002', 'finance', 'read', null) as finance_read,
+      public.has_domain_access('00000000-0000-4000-8000-000000000002', 'finance', 'write', null) as finance_write,
+      public.has_domain_access('00000000-0000-4000-8000-000000000002', 'hr', 'read', null) as hr_read,
+      public.has_domain_access('00000000-0000-4000-8000-000000000002', 'investments', 'read', '00000000-0000-4000-8000-000000000003') as project_read,
+      public.has_domain_access('00000000-0000-4000-8000-000000000002', 'investments', 'read', null) as company_investments_read
+  `);
+  if (
+    domainAccessState.rows[0]?.finance_read !== true ||
+    domainAccessState.rows[0]?.finance_write !== false ||
+    domainAccessState.rows[0]?.hr_read !== false ||
+    domainAccessState.rows[0]?.project_read !== true ||
+    domainAccessState.rows[0]?.company_investments_read !== false
+  ) {
+    throw new Error("Domain access policy failed its level or project-scope test.");
+  }
+  await database.exec("select set_config('request.jwt.claim.sub', '', false)");
 
   await prepareDatabase(legacyDatabase);
   await legacyDatabase.exec(`
@@ -270,9 +367,8 @@ try {
     throw new Error("Compatibility migration failed to map the legacy production schema.");
   }
 
-  console.log("Fresh and legacy migrations, global documents, AI enqueue and atomic worker claim passed local PostgreSQL tests.");
+  console.log("Fresh and legacy migrations, global documents, AI enqueue, atomic approvals and domain access passed local PostgreSQL tests.");
 } finally {
   await database.close();
   await legacyDatabase.close();
 }
-

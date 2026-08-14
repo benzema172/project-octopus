@@ -8,6 +8,7 @@ import { getR2Config } from "@/lib/env";
 import { createR2Client } from "@/lib/r2/client";
 import { attachmentContentDisposition } from "@/lib/r2/sanitize";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,7 @@ type VersionRow = {
   mime_type: string;
   r2_bucket: string;
   r2_object_key: string;
+  documents: { workspace_id: string; project_id: string | null; category: string | null } | Array<{ workspace_id: string; project_id: string | null; category: string | null }>;
 };
 
 function jsonError(message: string, status: number) {
@@ -60,7 +62,7 @@ export async function POST(request: Request) {
   const supabase = createServiceSupabaseClient();
   const { data: version, error } = await supabase
     .from("document_versions")
-    .select("id,file_name,mime_type,r2_bucket,r2_object_key,documents!inner(workspace_id)")
+    .select("id,file_name,mime_type,r2_bucket,r2_object_key,documents!inner(workspace_id,project_id,category)")
     .eq("id", body.versionId)
     .eq("documents.workspace_id", workspace.id)
     .maybeSingle<VersionRow>();
@@ -72,6 +74,15 @@ export async function POST(request: Request) {
   if (!version) {
     return jsonError("Nie znaleziono wersji dokumentu w tym workspace.", 404);
   }
+  const sourceDocument = Array.isArray(version.documents) ? version.documents[0] : version.documents;
+  if (!sourceDocument || (project && sourceDocument.project_id !== project.id)) return jsonError("Dokument nie należy do wskazanego kontekstu.", 422);
+  if (!await hasDomainAccess({
+    workspaceId: workspace.id,
+    userId: user.id,
+    domain: domainForDocumentCategory(sourceDocument.category),
+    level: "read",
+    projectId: sourceDocument.project_id
+  })) return jsonError("Brak uprawnienia do pobrania tego dokumentu.", 403);
 
   const r2Config = getR2Config();
 

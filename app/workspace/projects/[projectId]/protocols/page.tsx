@@ -4,6 +4,8 @@ import { ProjectModuleFoundation } from "@/components/projects/project-module-fo
 import { requireCurrentUser } from "@/lib/auth";
 import { listDocumentsForCategories } from "@/lib/data/documents";
 import { getProjectForUser } from "@/lib/data/projects";
+import { DomainAccessDenied } from "@/components/access/domain-access-denied";
+import { hasDomainAccess } from "@/lib/authorization";
 
 export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ projectId: string }> };
@@ -11,7 +13,9 @@ type Props = { params: Promise<{ projectId: string }> };
 export default async function ProtocolsPage({ params }: Props) {
   const { projectId } = await params;
   const user = await requireCurrentUser();
-  if (!(await getProjectForUser(user, projectId))) notFound();
+  const project = await getProjectForUser(user, projectId);
+  if (!project) notFound();
+  if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id })) return <DomainAccessDenied workspaceId={project.workspace_id} area="Protokoły" />;
   const documents = await listDocumentsForCategories(projectId, ["protokol"]);
 
   return <ProjectModuleFoundation

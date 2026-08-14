@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, FileText, Sparkles, UploadCloud, X } from "lucide-react";
 import { DOCUMENT_DESTINATIONS, suggestDocumentClassification, type DocumentCategory } from "@/lib/documents/classification";
+import { SUPPORTED_UPLOAD_ACCEPT, validateUploadFile } from "@/lib/r2/sanitize";
 
 type Status = "ready" | "uploading" | "analysing" | "done" | "warning" | "error";
 type Item = {
@@ -21,10 +22,9 @@ type UploadResponse = { uploadUrl: string; token: string; headers: Record<string
 type CompleteResponse = { documentId: string; versionId: string };
 type ProcessResponse = { category?: DocumentCategory; confidence?: number; counts?: Record<string, number>; error?: string };
 
-const ACCEPT = ".pdf,.doc,.docx,.xls,.xlsx,.csv";
 const MAX_HASH = 32 * 1024 * 1024;
 
-function accepted(file: File) { return /\.(pdf|docx?|xlsx?|csv)$/i.test(file.name); }
+function accepted(file: File) { return validateUploadFile(file.name, file.type || "application/octet-stream", file.size) === null; }
 function size(bytes: number) { return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`; }
 function icon(name: string) { return /\.(xlsx?|csv)$/i.test(name) ? FileSpreadsheet : FileText; }
 async function digest(file: File) {
@@ -45,7 +45,7 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
   function add(files: FileList | File[]) {
     const all = Array.from(files);
     const usable = all.filter(accepted);
-    setNotice(usable.length !== all.length ? "Obsługiwane są PDF, DOC/DOCX, XLS/XLSX i CSV. Nieobsługiwane pliki pominięto." : null);
+    setNotice(usable.length !== all.length ? "Część plików pominięto. Obsługiwane są m.in. PDF, DOCX, XLSX, CSV, obrazy, ZIP, XML i pliki tekstowe do 50 MB." : null);
     setItems((current) => current.concat(usable.map((file) => {
       const suggestion = suggestDocumentClassification(file.name, file.type);
       return { id: crypto.randomUUID(), file, category: suggestion.category, locked: false, confidence: suggestion.confidence, reason: suggestion.reason, status: "ready" as const };
@@ -100,7 +100,7 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
     <button type="button" className="pw-intake-trigger" onClick={() => setOpen((value) => !value)}><UploadCloud size={16} /> WRZUTNIA</button>
     {open ? <div className="pw-intake-popover" role="dialog" aria-label="Wrzutnia dokumentów">
       <div className="pw-intake-head"><div><p className="co-kicker">Centralne wejście plików</p><h3>Wrzutnia</h3><p>R2 → ekstrakcja → Gemini → klasyfikacja → Brain → moduły.</p></div><button type="button" className="pw-intake-close" onClick={() => setOpen(false)}><X size={17} /></button></div>
-      <input ref={input} className="pw-intake-file-input" type="file" accept={ACCEPT} multiple onChange={(event) => event.target.files && add(event.target.files)} />
+      <input ref={input} className="pw-intake-file-input" type="file" accept={SUPPORTED_UPLOAD_ACCEPT} multiple onChange={(event) => event.target.files && add(event.target.files)} />
       <button type="button" className={`pw-intake-dropzone ${drag ? "is-dragging" : ""}`} onClick={() => input.current?.click()} onDragEnter={(event) => { event.preventDefault(); setDrag(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { event.preventDefault(); setDrag(false); }} onDrop={(event) => { event.preventDefault(); setDrag(false); add(event.dataTransfer.files); }}>
         <span className="pw-intake-cloud"><UploadCloud size={27} /></span><strong>Przeciągnij PDF, Word lub Excel</strong><small>albo kliknij, aby wybrać pliki z dysku</small>
       </button>

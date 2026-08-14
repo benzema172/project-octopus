@@ -7,6 +7,7 @@ import {
   Brain,
   Calculator,
   CalendarDays,
+  ChartNoAxesCombined,
   ClipboardCheck,
   Construction,
   Database,
@@ -14,33 +15,43 @@ import {
   Gauge,
   LayoutDashboard,
   PackageCheck,
-  ShieldCheck
+  ShieldCheck,
+  UsersRound,
+  WalletCards,
+  Warehouse
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { ProjectIntake } from "@/components/projects/project-intake";
+import type { Domain } from "@/lib/authorization";
 
 type ProjectNavigationProps = {
   projectId: string;
+  allowedDomains: Domain[];
+  canUpload: boolean;
 };
 
-export function ProjectNavigation({ projectId }: ProjectNavigationProps) {
+export function ProjectNavigation({ projectId, allowedDomains, canUpload }: ProjectNavigationProps) {
   const pathname = usePathname();
   const base = `/workspace/projects/${projectId}`;
   const items = [
-    { href: base, label: "Dashboard", icon: LayoutDashboard, exact: true },
-    { href: `${base}/control`, label: "Kontrola 360", icon: Gauge },
-    { href: `${base}/data`, label: "Dane", icon: Database },
-    { href: `${base}/documentation`, label: "Dokumentacja", icon: FileText },
-    { href: `${base}/cost-estimate`, label: "Kosztorys", icon: Calculator },
-    { href: `${base}/brain`, label: "Brain AI", icon: Brain },
-    { href: `${base}/requests`, label: "Wnioski", icon: PackageCheck },
-    { href: `${base}/protocols`, label: "Protokoły", icon: ClipboardCheck },
-    { href: `${base}/schedule`, label: "Harmonogram", icon: CalendarDays },
-    { href: `${base}/progress`, label: "Przerób", icon: BarChart3 },
-    { href: `${base}/site`, label: "Budowa", icon: Construction },
-    { href: `${base}/closeout`, label: "Zamknięcie", icon: ShieldCheck },
-    { href: `${base}/outputs`, label: "Wyniki", icon: Archive }
-  ];
+    { href: base, label: "Dashboard", icon: LayoutDashboard, exact: true, domain: "investments" as const },
+    { href: `${base}/control`, label: "Kontrola 360", icon: Gauge, domain: "investments" as const },
+    { href: `${base}/data`, label: "Dane", icon: Database, domain: "investments" as const },
+    { href: `${base}/documentation`, label: "Dokumentacja", icon: FileText, domain: "investments" as const },
+    { href: `${base}/cost-estimate`, label: "Kosztorys", icon: Calculator, domain: "investments" as const },
+    { href: `${base}/brain`, label: "Brain AI", icon: Brain, domain: "investments" as const },
+    { href: `${base}/requests`, label: "Wnioski", icon: PackageCheck, domain: "investments" as const },
+    { href: `${base}/protocols`, label: "Protokoły", icon: ClipboardCheck, domain: "investments" as const },
+    { href: `${base}/schedule`, label: "Harmonogram", icon: CalendarDays, domain: "investments" as const },
+    { href: `${base}/progress`, label: "Przerób", icon: BarChart3, domain: "investments" as const },
+    { href: `${base}/finance`, label: "Finanse", icon: WalletCards, domain: "finance" as const },
+    { href: `${base}/team`, label: "Zespół", icon: UsersRound, domain: "hr" as const },
+    { href: `${base}/warehouse`, label: "Magazyn", icon: Warehouse, domain: "warehouse" as const },
+    { href: `${base}/reports`, label: "Raporty", icon: ChartNoAxesCombined, domain: "reports" as const },
+    { href: `${base}/site`, label: "Budowa", icon: Construction, domain: "investments" as const },
+    { href: `${base}/closeout`, label: "Zamknięcie", icon: ShieldCheck, domain: "investments" as const },
+    { href: `${base}/outputs`, label: "Wyniki", icon: Archive, domain: "investments" as const }
+  ].filter((item) => allowedDomains.includes(item.domain));
 
   return (
     <nav className="project-navigation project-navigation--v2" aria-label="Menu inwestycji">
@@ -57,7 +68,7 @@ export function ProjectNavigation({ projectId }: ProjectNavigationProps) {
           );
         })}
       </div>
-      <ProjectIntake projectId={projectId} />
+      {canUpload ? <ProjectIntake projectId={projectId} /> : null}
     </nav>
   );
 }

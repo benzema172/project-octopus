@@ -3,6 +3,8 @@ import { CompanyInvestmentsView } from "@/components/projects/company-investment
 import { requireCurrentUser } from "@/lib/auth";
 import { listProjectsForWorkspace } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
+import { DomainAccessDenied } from "@/components/access/domain-access-denied";
+import { domainAccessPolicyAllows, domainAccessPolicyHasAnyScope, loadDomainAccessPolicy } from "@/lib/authorization";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +21,14 @@ export default async function CompanyInvestmentsPage({ params }: CompanyInvestme
     notFound();
   }
 
-  const projects = await listProjectsForWorkspace(user, workspace.id);
+  const policy = await loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id });
+  if (!domainAccessPolicyHasAnyScope(policy, { domain: "investments", level: "read" })) {
+    return <DomainAccessDenied workspaceId={workspace.id} area="Inwestycje" />;
+  }
+  const projects = (await listProjectsForWorkspace(user, workspace.id)).filter((project) =>
+    domainAccessPolicyAllows(policy, { domain: "investments", level: "read", projectId: project.id })
+  );
+  const canCreate = domainAccessPolicyAllows(policy, { domain: "investments", level: "write", projectId: null });
 
-  return <CompanyInvestmentsView workspaceId={workspace.id} projects={projects} />;
+  return <CompanyInvestmentsView workspaceId={workspace.id} projects={projects} canCreate={canCreate} />;
 }

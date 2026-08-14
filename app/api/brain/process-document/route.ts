@@ -3,6 +3,7 @@ import { processDocumentVersion } from "@/lib/ai/process-document";
 import { getRequestUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -46,6 +47,9 @@ export async function POST(request: Request) {
 
   if (documentError) return jsonError(`Nie udało się pobrać dokumentu: ${documentError.message}`, 500);
   if (!sourceDocument) return jsonError("Nie znaleziono dokumentu w tej inwestycji.", 404);
+  if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: domainForDocumentCategory(sourceDocument.category), level: "write", projectId: project.id })) {
+    return jsonError("Brak uprawnienia do analizy tego dokumentu.", 403);
+  }
 
   try {
     const analysis = await processDocumentVersion({

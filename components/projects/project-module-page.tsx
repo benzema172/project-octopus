@@ -2,20 +2,33 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, Database, Sparkles, UploadCloud } from "lucide-react";
 import { requireCurrentUser } from "@/lib/auth";
+import { hasDomainAccess, type Domain } from "@/lib/authorization";
+import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { getProjectForUser } from "@/lib/data/projects";
 import type { ProjectModuleDefinition } from "@/lib/product/project-modules";
 
 type ProjectModulePageProps = {
   projectId: string;
   module: ProjectModuleDefinition;
+  requiredDomain?: Domain;
   children?: React.ReactNode;
 };
 
-export async function ProjectModulePage({ projectId, module, children }: ProjectModulePageProps) {
+export async function ProjectModulePage({ projectId, module, requiredDomain, children }: ProjectModulePageProps) {
   const user = await requireCurrentUser();
   const project = await getProjectForUser(user, projectId);
 
   if (!project) notFound();
+
+  if (requiredDomain && !await hasDomainAccess({
+    workspaceId: project.workspace_id,
+    userId: user.id,
+    domain: requiredDomain,
+    level: "read",
+    projectId: project.id
+  })) {
+    return <DomainAccessDenied workspaceId={project.workspace_id} area={module.title} />;
+  }
 
   return (
     <div className="project-tab-content">
@@ -31,11 +44,12 @@ export async function ProjectModulePage({ projectId, module, children }: Project
         </Link>
       </section>
 
+      <p className="project-metric-caption">Docelowe KPI modułu · wartości pojawią się z zatwierdzonych danych</p>
       <section className="metric-grid metric-grid--project">
         {module.metrics.map((metric) => (
           <article key={metric.label} className={`metric-card metric-card--${metric.tone ?? "default"}`}>
             <span>{metric.label}</span>
-            <strong>{metric.value}</strong>
+            <strong>{/^0(?:\s*(?:%|PLN|h|dni))?$/.test(metric.value) ? "—" : metric.value}</strong>
             <small>{metric.detail}</small>
           </article>
         ))}

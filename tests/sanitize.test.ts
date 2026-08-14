@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attachmentContentDisposition, inferDocumentCategory, sanitizeFileName } from "../lib/r2/sanitize";
+import { attachmentContentDisposition, inferDocumentCategory, sanitizeFileName, validateUploadFile } from "../lib/r2/sanitize";
 
 describe("sanitizeFileName", () => {
   it("keeps a useful extension and removes risky path characters", () => {
@@ -39,3 +39,16 @@ describe("attachmentContentDisposition", () => {
   });
 });
 
+describe("validateUploadFile", () => {
+  it("accepts business formats supported by the processing pipeline", () => {
+    expect(validateUploadFile("kosztorys.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 1024)).toBeNull();
+    expect(validateUploadFile("zdjecie.jpg", "image/jpeg", 1024)).toBeNull();
+    expect(validateUploadFile("dane.csv", "application/octet-stream", 1024)).toBeNull();
+  });
+
+  it("rejects legacy, mismatched and oversized files before signing the upload", () => {
+    expect(validateUploadFile("kosztorys.xls", "application/vnd.ms-excel", 1024)).toContain("konwersji");
+    expect(validateUploadFile("faktura.pdf", "text/html", 1024)).toContain("nie pasuje");
+    expect(validateUploadFile("projekt.pdf", "application/pdf", 51 * 1024 * 1024)).toContain("50 MB");
+  });
+});

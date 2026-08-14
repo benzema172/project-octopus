@@ -20,6 +20,8 @@ import { requireCurrentUser } from "@/lib/auth";
 import { listProjectsForWorkspace } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { domainAccessPolicyAllows, domainAccessPolicyHasAnyScope, domainForDocumentCategory, loadDomainAccessPolicy, type Domain } from "@/lib/authorization";
+import { getAiRuntimeStatus } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -36,31 +38,43 @@ export default async function CompanyDashboard({ params }: CompanyDashboardProps
     notFound();
   }
 
-  const projects = await listProjectsForWorkspace(user, workspace.id);
+  const accessPolicy = await loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id });
+  const projects = (await listProjectsForWorkspace(user, workspace.id)).filter((project) =>
+    domainAccessPolicyAllows(accessPolicy, { domain: "investments", level: "read", projectId: project.id })
+  );
   const supabase = createServiceSupabaseClient();
-  const { count: documentCount } = await supabase
+  const { data: documentRows } = await supabase
     .from("documents")
-    .select("id", { count: "exact", head: true })
+    .select("id,category,project_id")
     .eq("workspace_id", workspace.id)
     .is("deleted_at", null);
+  const documentCount = (documentRows ?? []).filter((document) => domainAccessPolicyAllows(accessPolicy, {
+    domain: domainForDocumentCategory(document.category),
+    level: "read",
+    projectId: document.project_id
+  })).length;
 
   const activeProjects = projects.filter((project) => project.status === "active").length;
   const completedProjects = projects.filter((project) => project.status === "completed").length;
   const modules = [
-    { label: "Inwestycje", description: "Dokumentacja, kosztorysy i prowadzenie realizacji", href: "investments", icon: FolderKanban },
-    { label: "Finanse", description: "Budżety, koszty, przychody i cash flow", href: "finances", icon: WalletCards },
-    { label: "Kadry", description: "Pracownicy, uprawnienia i przypisania", href: "hr", icon: UsersRound },
-    { label: "Magazyn", description: "Materiały, sprzęt, stany i wydania", href: "warehouse", icon: Boxes },
-    { label: "Flota", description: "Pojazdy, terminy, serwis, paliwo i koszty", href: "fleet", icon: CarFront },
-    { label: "Dokumenty", description: "Centralny widok dokumentów całej firmy", href: "documents", icon: FileStack },
-    { label: "Wzory", description: "Firmowe wzory i kontrolowane generatory dokumentów", href: "templates", icon: LayoutTemplate },
-    { label: "Octopus Brain", description: "Analiza kontekstu firmy i inwestycji", href: "brain", icon: Brain },
-    { label: "Skrzynka AI", description: "Decyzje, błędy i elementy wymagające zatwierdzenia", href: "ai-inbox", icon: Inbox },
-    { label: "Wyszukiwarka", description: "Dokumenty, fakty i wiedza ze źródłami", href: "search", icon: Search },
-    { label: "Pamięć firmy", description: "Lekcje, rozwiązania i ryzyka z realizacji", href: "knowledge", icon: LibraryBig },
-    { label: "Raporty", description: "Analityka przedsiębiorstwa i inwestycji", href: "reports", icon: ChartNoAxesCombined },
-    { label: "Ustawienia", description: "Dane firmy, role i konfiguracja", href: "settings", icon: Settings }
-  ];
+    { label: "Inwestycje", description: "Dokumentacja, kosztorysy i prowadzenie realizacji", href: "investments", icon: FolderKanban, domain: "investments" as Domain },
+    { label: "Finanse", description: "Budżety, koszty, przychody i cash flow", href: "finances", icon: WalletCards, domain: "finance" as Domain },
+    { label: "Kadry", description: "Pracownicy, uprawnienia i przypisania", href: "hr", icon: UsersRound, domain: "hr" as Domain },
+    { label: "Magazyn", description: "Materiały, sprzęt, stany i wydania", href: "warehouse", icon: Boxes, domain: "warehouse" as Domain },
+    { label: "Flota", description: "Pojazdy, terminy, serwis, paliwo i koszty", href: "fleet", icon: CarFront, domain: "fleet" as Domain },
+    { label: "Dokumenty", description: "Centralny widok dokumentów całej firmy", href: "documents", icon: FileStack, domain: "investments" as Domain },
+    { label: "Wzory", description: "Firmowe wzory i kontrolowane generatory dokumentów", href: "templates", icon: LayoutTemplate, domain: "templates" as Domain },
+    { label: "Octopus Brain", description: "Analiza kontekstu firmy i inwestycji", href: "brain", icon: Brain, domain: "investments" as Domain },
+    { label: "Skrzynka AI", description: "Decyzje, błędy i elementy wymagające zatwierdzenia", href: "ai-inbox", icon: Inbox, domain: "investments" as Domain },
+    { label: "Wyszukiwarka", description: "Dokumenty, fakty i wiedza ze źródłami", href: "search", icon: Search, domain: "investments" as Domain },
+    { label: "Pamięć firmy", description: "Lekcje, rozwiązania i ryzyka z realizacji", href: "knowledge", icon: LibraryBig, domain: "reports" as Domain },
+    { label: "Raporty", description: "Analityka przedsiębiorstwa i inwestycji", href: "reports", icon: ChartNoAxesCombined, domain: "reports" as Domain },
+    { label: "Ustawienia", description: "Dane firmy, role i konfiguracja", href: "settings", icon: Settings, domain: "settings" as Domain }
+  ].filter((module) => module.domain === "investments"
+    ? domainAccessPolicyHasAnyScope(accessPolicy, { domain: module.domain, level: "read" })
+    : domainAccessPolicyAllows(accessPolicy, { domain: module.domain, level: "read", projectId: null }));
+  const aiReady = getAiRuntimeStatus().ready;
+  const canUploadCompany = domainAccessPolicyAllows(accessPolicy, { domain: "investments", level: "write", projectId: null });
 
   return (
     <main className="co-page">
@@ -73,7 +87,7 @@ export default async function CompanyDashboard({ params }: CompanyDashboardProps
         <div className="co-company-address">
           <strong>{workspace.city || "Firma"}</strong>
           <span>{workspace.tax_id ? `NIP ${workspace.tax_id}` : "Uzupełnij dane w Ustawieniach"}</span>
-          <Link href={`/workspace/companies/${workspace.id}/documents?upload=1`} className="co-primary-button"><UploadCloud size={17} aria-hidden="true" /> Wrzutnia</Link>
+          {canUploadCompany ? <Link href={`/workspace/companies/${workspace.id}/documents?upload=1`} className="co-primary-button"><UploadCloud size={17} aria-hidden="true" /> Wrzutnia</Link> : null}
         </div>
       </header>
 
@@ -85,7 +99,7 @@ export default async function CompanyDashboard({ params }: CompanyDashboardProps
         </article>
         <article className="co-metric-card">
           <span>Dokumenty</span>
-          <strong>{documentCount ?? 0}</strong>
+          <strong>{documentCount}</strong>
           <small>aktywnych plików w firmie</small>
         </article>
         <article className="co-metric-card">
@@ -95,8 +109,8 @@ export default async function CompanyDashboard({ params }: CompanyDashboardProps
         </article>
         <article className="co-metric-card co-metric-card--ai">
           <span>OctopusAI</span>
-          <strong>Aktywny</strong>
-          <small>kontekst tej firmy</small>
+          <strong>{aiReady ? "Aktywny" : "Konfiguracja"}</strong>
+          <small>{aiReady ? "kontekst tej firmy" : "wymagany klucz Gemini"}</small>
         </article>
       </section>
 

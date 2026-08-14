@@ -135,8 +135,8 @@ export async function isDocumentStorageSchemaReady() {
   const { data, error } = await supabase
     .from("app_schema_versions")
     .select("version")
-    .eq("version", "20260814_execution_layer")
+    .eq("version", "20260814_domain_access_hardening")
     .maybeSingle<{ version: string }>();
 
-  return !error && data?.version === "20260814_execution_layer";
+  return !error && data?.version === "20260814_domain_access_hardening";
 }

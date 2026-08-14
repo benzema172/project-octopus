@@ -14,6 +14,7 @@ import {
   UploadCloud
 } from "lucide-react";
 import type { DocumentSummary, ProjectSummary } from "@/lib/types";
+import { MAX_SUPPORTED_UPLOAD_BYTES, SUPPORTED_UPLOAD_ACCEPT, validateUploadFile } from "@/lib/r2/sanitize";
 
 type DocumentUploadProps = {
   workspaceId?: string;
@@ -29,7 +30,6 @@ type DownloadResponse = { downloadUrl: string };
 type CompleteResponse = { documentId: string; versionId: string; versionNumber: number };
 
 const MAX_BROWSER_HASH_BYTES = 32 * 1024 * 1024;
-const ACCEPTED_FILES = ".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp,.zip,.xml";
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -94,7 +94,9 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
 
   async function uploadFile(file: File, documentId: string | null, contextProjectId: string | null) {
     setError(null);
-    setStatus(file.size <= MAX_BROWSER_HASH_BYTES ? "Obliczanie sumy kontrolnej" : "Przygotowywanie dużego pliku");
+    const validationError = validateUploadFile(file.name, file.type || "application/octet-stream", file.size);
+    if (validationError) throw new Error(validationError);
+    setStatus(file.size <= MAX_BROWSER_HASH_BYTES ? "Obliczanie sumy kontrolnej" : `Przygotowywanie pliku (limit ${MAX_SUPPORTED_UPLOAD_BYTES / 1024 / 1024} MB)`);
     const digest = await sha256ForSmallFile(file);
     const mimeType = file.type || "application/octet-stream";
     const prepareResponse = await fetch("/api/storage/upload-url", {
@@ -240,7 +242,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
 
       <div className="documents-layout">
         <div className="upload-panel">
-          <input ref={inputRef} type="file" accept={ACCEPTED_FILES} onChange={(event) => handleFiles(event.target.files)} disabled={!storageReady} />
+          <input ref={inputRef} type="file" accept={SUPPORTED_UPLOAD_ACCEPT} onChange={(event) => handleFiles(event.target.files)} disabled={!storageReady} />
           {!projectId && projects.length > 0 ? (
             <label className="upload-context">
               <span>Kontekst dokumentu</span>
@@ -270,7 +272,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
           <div className="upload-pipeline">
             <span>R2</span><span>Ekstrakcja</span><span>Gemini</span><span>Klasyfikacja</span><span>Moduły</span>
           </div>
-          {!storageReady ? <p className="form-message">Uruchom migrację 20260814_execution_layer, aby odblokować Wrzutnię.</p> : null}
+          {!storageReady ? <p className="form-message">Uruchom wszystkie migracje do 20260814_domain_access_hardening, aby odblokować Wrzutnię.</p> : null}
           {status ? <p className="upload-status">{status}</p> : null}
           {error ? <p className="form-message form-message--error">{error}</p> : null}
         </div>

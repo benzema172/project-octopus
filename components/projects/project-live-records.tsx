@@ -5,6 +5,8 @@ import { ReviewDecisionButton } from "@/components/projects/review-decision-butt
 import { requireCurrentUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { isExecutionLayerSchemaReady } from "@/lib/data/operations";
+import { ExecutionLayerNotice } from "@/components/system/execution-layer-notice";
 
 type Kind = "estimate" | "applications" | "protocols" | "schedule" | "progress" | "finance" | "warehouse" | "reports";
 type LiveRecord = { id: string; title: string; meta: string; status: string; actionable?: boolean };
@@ -13,6 +15,7 @@ export async function ProjectLiveRecords({ projectId, kind }: { projectId: strin
   const user = await requireCurrentUser();
   const project = await getProjectForUser(user, projectId);
   if (!project) notFound();
+  if (!await isExecutionLayerSchemaReady()) return <ExecutionLayerNotice />;
   const supabase = createServiceSupabaseClient();
   let records: LiveRecord[] = [];
   let heading = "Dane operacyjne";

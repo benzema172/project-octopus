@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { domainAccessPolicyAllows, domainForDocumentCategory, loadDomainAccessPolicy } from "@/lib/authorization";
 
 export const runtime = "nodejs";
 
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
 
   const workspace = await getWorkspaceForUser(user, workspaceId);
   if (!workspace) return jsonError("Nie znaleziono firmy lub nie masz do niej dostępu.", 404);
+  const accessPolicy = await loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id });
 
   const provider = (process.env.AI_PROVIDER || "gemini").trim().toLowerCase();
   if (provider !== "gemini") return jsonError("OctopusAI jest skonfigurowany do pracy z Gemini. Ustaw AI_PROVIDER=gemini w Vercel.", 503);
@@ -78,9 +80,22 @@ export async function POST(request: Request) {
   if (projectsResult.error) return jsonError(`Nie udało się przygotować kontekstu inwestycji: ${projectsResult.error.message}`, 500);
   if (documentsResult.error) return jsonError(`Nie udało się przygotować kontekstu dokumentów: ${documentsResult.error.message}`, 500);
 
-  const projects = projectsResult.data ?? [];
+  const projects = (projectsResult.data ?? []).filter((project) => domainAccessPolicyAllows(accessPolicy, {
+    domain: "investments",
+    level: "read",
+    projectId: project.id
+  }));
   const projectIds = projects.map((project) => project.id);
   const projectNames = new Map(projects.map((project) => [project.id, project.name]));
+  const documents = (documentsResult.data ?? []).filter((document) => domainAccessPolicyAllows(accessPolicy, {
+    domain: domainForDocumentCategory(document.category),
+    level: "read",
+    projectId: document.project_id
+  }));
+
+  if (!accessPolicy.administrator && projects.length === 0 && documents.length === 0) {
+    return jsonError("Nie masz roli domenowej pozwalającej OctopusAI korzystać z danych firmy.", 403);
+  }
 
   let facts: Array<Record<string, unknown>> = [];
   let materials: Array<Record<string, unknown>> = [];
@@ -120,7 +135,7 @@ export async function POST(request: Request) {
       location: project.location,
       description: project.description
     })),
-    documents: (documentsResult.data ?? []).map((document) => ({
+    documents: documents.map((document) => ({
       name: document.name,
       category: document.category,
       investment: projectNames.get(document.project_id) ?? "Nieznana inwestycja"

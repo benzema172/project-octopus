@@ -1,4 +1,4 @@
-# Project Octopus 0.4.0
+# Project Octopus 0.4.1
 
 System operacyjny firmy wykonawczej, w którym dokument źródłowy zasila Project DNA, kosztorys/BOQ, WBS, harmonogram, materiały, protokoły, przerób, finanse i raportowanie.
 
@@ -11,7 +11,7 @@ System operacyjny firmy wykonawczej, w którym dokument źródłowy zasila Proje
 - liczby finansowe pochodzą wyłącznie z rekordów źródłowych i jawnych założeń forecastu,
 - dane HR, finansowe i techniczne są rozdzielone rolami domenowymi.
 
-## Wersja 0.4.0
+## Wersja 0.4.1
 
 ### Dokumenty i AI
 
@@ -74,9 +74,11 @@ Na aktualnej bazie produkcyjnej zastosuj kolejno:
 ```text
 supabase/migrations/20260814090000_octopus_operating_system.sql
 supabase/migrations/20260814130000_octopus_execution_layer.sql
+supabase/migrations/20260814170000_atomic_estimate_approval.sql
+supabase/migrations/20260814180000_domain_access_hardening.sql
 ```
 
-Na pustej bazie uruchom wszystkie migracje chronologicznie. Interfejs uploadu wymaga markera `20260814_execution_layer`.
+Na pustej bazie uruchom wszystkie migracje chronologicznie. Interfejs operacyjny wymaga markera `20260814_domain_access_hardening`.
 
 ## Walidacja
 
@@ -96,4 +98,4 @@ npm run check:schema
 npm run test:e2e-upload
 ```
 
-Szczegóły wdrożenia znajdują się w `DEPLOYMENT.md`, a zakres wykonania i granice integracji w `IMPLEMENTATION_0.4.0.md`.
+Szczegóły wdrożenia znajdują się w `DEPLOYMENT.md`, zakres bazowy w `IMPLEMENTATION_0.4.0.md`, a wyniki przeglądu technicznego i produktowego w `AUDIT_2026-08-14.md`.

@@ -7,6 +7,7 @@ import { requireCurrentUser } from "@/lib/auth";
 import { getProjectProfile } from "@/lib/data/project-profile";
 import { getProjectForUser } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
+import { domainAccessPolicyAllows, loadDomainAccessPolicy, type Domain } from "@/lib/authorization";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,11 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
   ]);
 
   if (!workspace) notFound();
+  const policy = await loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id });
+  const domains: Domain[] = ["investments", "finance", "hr", "warehouse", "fleet", "templates", "reports", "settings"];
+  const allowedProjectDomains = domains.filter((domain) => domainAccessPolicyAllows(policy, { domain, level: "read", projectId: project.id }));
+  const allowedCompanyDomains = domains.filter((domain) => domainAccessPolicyAllows(policy, { domain, level: "read", projectId: null }));
+  const canUpload = domainAccessPolicyAllows(policy, { domain: "investments", level: "write", projectId: project.id });
 
   const location = [profile.street, [profile.postalCode, profile.city].filter(Boolean).join(" ")]
     .filter(Boolean)
@@ -54,7 +60,7 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
   const investorName = profile.investorName || project.investor_name || "Do uzupełnienia";
 
   return (
-    <CompanyShell workspaceId={workspace.id} companyName={workspace.name} userEmail={user.email ?? "Project Octopus"}>
+    <CompanyShell workspaceId={workspace.id} companyName={workspace.name} userEmail={user.email ?? "Project Octopus"} allowedDomains={allowedCompanyDomains}>
       <main className="workspace-page project-workspace co-project-workspace project-workspace-v2">
         <Link href={`/workspace/companies/${workspace.id}/investments`} className="pw-back-link">
           <ArrowLeft size={15} aria-hidden="true" />
@@ -84,7 +90,7 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
           </div>
         </header>
 
-        <ProjectNavigation projectId={project.id} />
+        <ProjectNavigation projectId={project.id} allowedDomains={allowedProjectDomains} canUpload={canUpload} />
         {children}
       </main>
     </CompanyShell>

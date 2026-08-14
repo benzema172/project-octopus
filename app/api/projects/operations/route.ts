@@ -3,6 +3,7 @@ import { getRequestUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { getProjectForUser } from "@/lib/data/projects";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { parseLocalizedNumber } from "@/lib/numbers/parse-localized-number";
 
 export const runtime = "nodejs";
 
@@ -15,13 +16,6 @@ type OperationBody = {
   locationLabel?: string;
   geoPoint?: { latitude: number; longitude: number } | null;
 };
-
-function numberFrom(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value !== "string") return 0;
-  const parsed = Number.parseFloat(value.replace(/[^0-9,.-]/g, "").replace(",", "."));
-  return Number.isFinite(parsed) ? parsed : 0;
-}
 
 export async function POST(request: Request) {
   const user = await getRequestUser(request);
@@ -84,11 +78,11 @@ export async function POST(request: Request) {
       supabase.from("commitments").select("amount").eq("project_id", body.projectId).in("status", ["open", "approved"]),
       supabase.from("budgets").select("total_cost,total_revenue").eq("project_id", body.projectId).in("status", ["approved", "active"]).order("version_number", { ascending: false }).limit(1).maybeSingle<{ total_cost: number; total_revenue: number }>()
     ]);
-    const actualCost = (allocations ?? []).reduce((sum, row) => sum + numberFrom(row.amount), 0);
-    const committedCost = (commitments ?? []).reduce((sum, row) => sum + numberFrom(row.amount), 0);
+    const actualCost = (allocations ?? []).reduce((sum, row) => sum + parseLocalizedNumber(row.amount), 0);
+    const committedCost = (commitments ?? []).reduce((sum, row) => sum + parseLocalizedNumber(row.amount), 0);
     const profile = profileFact?.value_json ?? {};
-    const contractValue = numberFrom(profile.contractValue) || numberFrom(budget?.total_revenue);
-    const plannedCost = numberFrom(budget?.total_cost);
+    const contractValue = parseLocalizedNumber(profile.contractValue) || parseLocalizedNumber(budget?.total_revenue);
+    const plannedCost = parseLocalizedNumber(budget?.total_cost);
     const estimateToComplete = Math.max(plannedCost - actualCost, committedCost);
     const estimateAtCompletion = actualCost + estimateToComplete;
     const margin = contractValue > 0 ? contractValue - estimateAtCompletion : null;

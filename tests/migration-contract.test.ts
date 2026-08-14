@@ -14,6 +14,14 @@ const executionLayer = readFileSync(
   "supabase/migrations/20260814130000_octopus_execution_layer.sql",
   "utf8"
 );
+const atomicEstimateApproval = readFileSync(
+  "supabase/migrations/20260814170000_atomic_estimate_approval.sql",
+  "utf8"
+);
+const domainAccessHardening = readFileSync(
+  "supabase/migrations/20260814180000_domain_access_hardening.sql",
+  "utf8"
+);
 
 describe("Supabase migration contract", () => {
   it("uses the project profile columns expected by the application", () => {
@@ -61,5 +69,20 @@ describe("Supabase migration contract", () => {
     expect(executionLayer).toContain("create table if not exists public.closeout_requirements");
     expect(executionLayer).toContain("create table if not exists public.ksef_inbox_items");
   });
-});
 
+  it("approves a cost estimate, WBS and schedule draft in one transaction", () => {
+    expect(atomicEstimateApproval).toContain("function public.approve_estimate_import_atomic");
+    expect(atomicEstimateApproval).toContain("pg_advisory_xact_lock");
+    expect(atomicEstimateApproval).toContain("insert into public.boq_versions");
+    expect(atomicEstimateApproval).toContain("insert into public.schedule_activities");
+    expect(atomicEstimateApproval).toContain("20260814_atomic_estimate_approval");
+  });
+
+  it("enforces finance, HR and document domains below the application layer", () => {
+    expect(domainAccessHardening).toContain("function public.has_domain_access");
+    expect(domainAccessHardening).toContain("function public.document_domain");
+    expect(domainAccessHardening).toContain("document domain members can read");
+    expect(domainAccessHardening).toContain("users can read own notifications");
+    expect(domainAccessHardening).toContain("20260814_domain_access_hardening");
+  });
+});

@@ -104,13 +104,12 @@ if (failed) {
 const { data: schemaMarker, error: markerError } = await supabase
   .from("app_schema_versions")
   .select("version")
-  .eq("version", "20260814_execution_layer")
+  .eq("version", "20260814_domain_access_hardening")
   .maybeSingle();
 
 if (markerError || !schemaMarker) {
-  console.error(`FAIL app_schema_versions: ${markerError?.message ?? "missing 20260814_execution_layer marker"}`);
+  console.error(`FAIL app_schema_versions: ${markerError?.message ?? "missing 20260814_domain_access_hardening marker"}`);
   process.exit(1);
 }
 
-console.log("Schema matches the Project Octopus 0.4.0 execution-layer requirements.");
-
+console.log("Schema matches the Project Octopus 0.4.1 domain-access requirements.");

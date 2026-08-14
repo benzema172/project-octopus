@@ -1,8 +1,6 @@
-import { ProjectModulePage } from "@/components/projects/project-module-page";
-import { ProjectLiveRecords } from "@/components/projects/project-live-records";
-import { PROJECT_MODULES } from "@/lib/product/project-modules";
+import { redirect } from "next/navigation";
 
-export default async function EstimatePage({ params }: { params: Promise<{ projectId: string }> }) {
+export default async function LegacyEstimatePage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
-  return <ProjectModulePage projectId={projectId} module={PROJECT_MODULES.estimate}><ProjectLiveRecords projectId={projectId} kind="estimate" /></ProjectModulePage>;
+  redirect(`/workspace/projects/${projectId}/cost-estimate`);
 }

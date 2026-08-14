@@ -7,13 +7,13 @@ import { getProjectForUser } from "@/lib/data/projects";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
 import { getR2Config, requireServerEnv } from "@/lib/env";
 import { createR2Client } from "@/lib/r2/client";
-import { sanitizeFileName } from "@/lib/r2/sanitize";
+import { MAX_SUPPORTED_UPLOAD_BYTES, sanitizeFileName, validateUploadFile } from "@/lib/r2/sanitize";
 import { createUploadToken, type UploadIntent } from "@/lib/r2/upload-token";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
 
 export const runtime = "nodejs";
 
-const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 const PRESIGNED_URL_TTL_SECONDS = 10 * 60;
 
 type UploadUrlBody = {
@@ -54,8 +54,9 @@ export async function POST(request: Request) {
     return jsonError("Brakuje prawidłowych danych pliku.", 400);
   }
 
-  if (fileSize > MAX_UPLOAD_BYTES) {
-    return jsonError("MVP obsługuje pojedynczy upload do 1 GB.", 413);
+  const fileValidationError = validateUploadFile(fileName, mimeType, fileSize);
+  if (fileValidationError) {
+    return jsonError(fileValidationError, fileSize > MAX_SUPPORTED_UPLOAD_BYTES ? 413 : 415);
   }
 
   const project = projectId ? await getProjectForUser(user, projectId) : null;
@@ -68,15 +69,16 @@ export async function POST(request: Request) {
   if (project && project.workspace_id !== workspace.id) return jsonError("Inwestycja nie należy do wskazanej firmy.", 422);
 
   let documentId: string = randomUUID();
+  let existingDocumentCategory: string | null = null;
 
   if (requestedDocumentId) {
     const supabase = createServiceSupabaseClient();
     const { data: document, error: documentError } = await supabase
       .from("documents")
-      .select("id,project_id")
+      .select("id,project_id,category")
       .eq("id", requestedDocumentId)
       .eq("workspace_id", workspace.id)
-      .maybeSingle<{ id: string; project_id: string | null }>();
+      .maybeSingle<{ id: string; project_id: string | null; category: string | null }>();
 
     if (documentError) {
       return jsonError(`Nie udało się sprawdzić dokumentu: ${documentError.message}`, 500);
@@ -88,6 +90,12 @@ export async function POST(request: Request) {
 
     documentId = document.id;
     projectId = document.project_id;
+    existingDocumentCategory = document.category;
+  }
+
+  const uploadDomain = existingDocumentCategory ? domainForDocumentCategory(existingDocumentCategory) : "investments";
+  if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: uploadDomain, level: "write", projectId })) {
+    return jsonError("Brak uprawnienia do dodawania dokumentów w tej domenie.", 403);
   }
 
   const versionId = randomUUID();

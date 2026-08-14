@@ -1,7 +1,5 @@
-import { OperationalModule } from "@/components/dashboard/operational-module";
-import { DomainLivePanel } from "@/components/dashboard/domain-live-panel";
-import { WORKSPACE_MODULES } from "@/lib/product/modules";
+import { redirectToCurrentCompany } from "@/lib/navigation/company-redirect";
 
-export default function SettingsPage() {
-  return <OperationalModule module={WORKSPACE_MODULES.settings}><DomainLivePanel kind="settings" /></OperationalModule>;
+export default async function LegacySettingsPage() {
+  return redirectToCurrentCompany("settings");
 }

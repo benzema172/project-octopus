@@ -9,9 +9,10 @@ import type { ProjectSummary } from "@/lib/types";
 type CompanyInvestmentsViewProps = {
   workspaceId: string;
   projects: ProjectSummary[];
+  canCreate: boolean;
 };
 
-export function CompanyInvestmentsView({ workspaceId, projects }: CompanyInvestmentsViewProps) {
+export function CompanyInvestmentsView({ workspaceId, projects, canCreate }: CompanyInvestmentsViewProps) {
   const [showCreateForm, setShowCreateForm] = useState(false);
 
   return (
@@ -24,7 +25,7 @@ export function CompanyInvestmentsView({ workspaceId, projects }: CompanyInvestm
         </div>
         <div className="co-investments-heading__actions">
           <strong className="co-count-badge">{projects.length} inwestycji</strong>
-          <button
+          {canCreate ? <button
             type="button"
             className="co-primary-button co-new-project-toggle"
             onClick={() => setShowCreateForm((value) => !value)}
@@ -33,11 +34,11 @@ export function CompanyInvestmentsView({ workspaceId, projects }: CompanyInvestm
           >
             {showCreateForm ? <X size={17} aria-hidden="true" /> : <Plus size={17} aria-hidden="true" />}
             {showCreateForm ? "Zamknij" : "Nowa inwestycja"}
-          </button>
+          </button> : null}
         </div>
       </header>
 
-      {showCreateForm ? (
+      {canCreate && showCreateForm ? (
         <section className="co-section co-section--form co-new-project-panel" id="new-project-panel">
           <div className="co-section-heading">
             <div>

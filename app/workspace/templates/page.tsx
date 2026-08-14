@@ -1,7 +1,5 @@
-import { OperationalModule } from "@/components/dashboard/operational-module";
-import { TemplateStudio } from "@/components/templates/template-studio";
-import { WORKSPACE_MODULES } from "@/lib/product/modules";
+import { redirectToCurrentCompany } from "@/lib/navigation/company-redirect";
 
-export default function TemplatesPage() {
-  return <OperationalModule module={WORKSPACE_MODULES.templates}><TemplateStudio /></OperationalModule>;
+export default async function LegacyTemplatesPage() {
+  return redirectToCurrentCompany("templates");
 }

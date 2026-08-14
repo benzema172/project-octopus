@@ -8,7 +8,9 @@ import { KnowledgeSearch } from "@/components/brain/knowledge-search";
 import { DomainLivePanel } from "@/components/dashboard/domain-live-panel";
 import { DocumentUpload } from "@/components/documents/document-upload";
 import { TemplateStudio } from "@/components/templates/template-studio";
+import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { requireCurrentUser } from "@/lib/auth";
+import { domainAccessPolicyAllows, domainForDocumentCategory, hasDomainAccess, loadDomainAccessPolicy, type Domain } from "@/lib/authorization";
 import { isDocumentStorageSchemaReady, listDocumentsForWorkspace } from "@/lib/data/documents";
 import { listAiInbox } from "@/lib/data/operations";
 import { listProjectsForWorkspace } from "@/lib/data/projects";
@@ -66,6 +68,22 @@ const LIVE_KINDS = {
   fleet: "fleet"
 } as const;
 
+const SECTION_ACCESS: Partial<Record<string, { domain: Domain; label: string }>> = {
+  investments: { domain: "investments", label: "Inwestycje" },
+  finances: { domain: "finance", label: "Finanse" },
+  hr: { domain: "hr", label: "Kadry" },
+  warehouse: { domain: "warehouse", label: "Magazyn" },
+  fleet: { domain: "fleet", label: "Flota" },
+  documents: { domain: "investments", label: "Dokumenty" },
+  templates: { domain: "templates", label: "Wzory" },
+  brain: { domain: "investments", label: "Octopus Brain" },
+  "ai-inbox": { domain: "investments", label: "Skrzynka AI" },
+  search: { domain: "investments", label: "Wyszukiwarka" },
+  knowledge: { domain: "reports", label: "Pamięć firmy" },
+  reports: { domain: "reports", label: "Raporty" },
+  settings: { domain: "settings", label: "Ustawienia" }
+};
+
 function projectName(document: DocumentRow) {
   if (Array.isArray(document.projects)) {
     return document.projects[0]?.name ?? "Inwestycja";
@@ -81,6 +99,16 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
 
   if (!workspace) {
     notFound();
+  }
+
+  const requiredAccess = SECTION_ACCESS[section];
+  if (requiredAccess && !await hasDomainAccess({
+    workspaceId: workspace.id,
+    userId: user.id,
+    domain: requiredAccess.domain,
+    level: "read"
+  })) {
+    return <DomainAccessDenied workspaceId={workspace.id} area={requiredAccess.label} />;
   }
 
   if (MODULES[section]) {
@@ -100,7 +128,7 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
               <article className="co-feature-card" key={feature}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
                 <h2>{feature}</h2>
-                <p>Obszar przygotowany jako część modułu {moduleConfig.kicker.toLowerCase()} i gotowy do dalszego rozwijania.</p>
+                <p>Zakres funkcjonalny modułu {moduleConfig.kicker.toLowerCase()}; bieżące dane i stan uruchomienia są widoczne poniżej.</p>
               </article>
             ))}
           </div>
@@ -112,11 +140,12 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
 
   if (section === "documents") {
     const supabase = createServiceSupabaseClient();
-    const [projects, documentSummaries, trashedDocuments, storageReady] = await Promise.all([
+    const [projects, allDocumentSummaries, allTrashedDocuments, storageReady, accessPolicy] = await Promise.all([
       listProjectsForWorkspace(user, workspace.id),
       listDocumentsForWorkspace(workspace.id),
       listDocumentsForWorkspace(workspace.id, true),
-      isDocumentStorageSchemaReady()
+      isDocumentStorageSchemaReady(),
+      loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id })
     ]);
     const { data, error } = await supabase
       .from("documents")
@@ -131,7 +160,12 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
       throw new Error(`Nie udało się pobrać dokumentów firmy: ${error.message}`);
     }
 
-    const documents = data ?? [];
+    const canReadDocument = (document: { category: string | null; project_id: string | null }) => domainAccessPolicyAllows(accessPolicy, {
+      domain: domainForDocumentCategory(document.category), level: "read", projectId: document.project_id
+    });
+    const documents = (data ?? []).filter(canReadDocument);
+    const documentSummaries = allDocumentSummaries.filter(canReadDocument);
+    const trashedDocuments = allTrashedDocuments.filter(canReadDocument);
     return (
       <main className="co-page">
         <header className="co-page-heading">
@@ -197,13 +231,19 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
   }
 
   if (section === "reports") {
-    const projects = await listProjectsForWorkspace(user, workspace.id);
+    const [projects, accessPolicy] = await Promise.all([
+      listProjectsForWorkspace(user, workspace.id),
+      loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id })
+    ]);
     const supabase = createServiceSupabaseClient();
-    const { count: documentCount } = await supabase
+    const { data: reportDocuments } = await supabase
       .from("documents")
-      .select("id", { count: "exact", head: true })
+      .select("id,category,project_id")
       .eq("workspace_id", workspace.id)
       .is("deleted_at", null);
+    const documentCount = (reportDocuments ?? []).filter((document) => domainAccessPolicyAllows(accessPolicy, {
+      domain: domainForDocumentCategory(document.category), level: "read", projectId: document.project_id
+    })).length;
     const statuses = projects.reduce<Record<string, number>>((result, project) => {
       result[project.status] = (result[project.status] ?? 0) + 1;
       return result;
@@ -222,7 +262,7 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
           <article className="co-metric-card"><span>Inwestycje</span><strong>{projects.length}</strong><small>łącznie</small></article>
           <article className="co-metric-card"><span>Aktywne</span><strong>{statuses.active ?? 0}</strong><small>w realizacji</small></article>
           <article className="co-metric-card"><span>Zakończone</span><strong>{statuses.completed ?? 0}</strong><small>zamknięte</small></article>
-          <article className="co-metric-card"><span>Dokumenty</span><strong>{documentCount ?? 0}</strong><small>w bibliotece firmy</small></article>
+          <article className="co-metric-card"><span>Dokumenty</span><strong>{documentCount}</strong><small>dostępne dla tej roli</small></article>
         </section>
         <section className="co-section">
           <div className="co-section-heading"><div><p className="co-kicker">Analityka</p><h2>Przekroje przygotowane do rozwoju</h2></div></div>
@@ -260,7 +300,20 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
   }
 
   if (section === "ai-inbox") {
-    const items = await listAiInbox(workspace.id);
+    const [allItems, accessPolicy] = await Promise.all([
+      listAiInbox(workspace.id),
+      loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id })
+    ]);
+    const items = allItems.filter((item) => {
+      const domain: Domain = item.entityType === "template_version"
+        ? "templates"
+        : item.entityType === "knowledge_entry"
+          ? "reports"
+          : item.entityType === "document"
+            ? domainForDocumentCategory(item.category)
+            : "investments";
+      return domainAccessPolicyAllows(accessPolicy, { domain, level: "read", projectId: item.projectId });
+    });
     const reviewCount = items.filter((item) => item.status === "review").length;
     const errorCount = items.filter((item) => item.status === "error").length;
     return (

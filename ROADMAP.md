@@ -1,4 +1,4 @@
-# Project Octopus — roadmap po 0.4.0
+# Project Octopus — roadmap po 0.4.1
 
 ## Zrealizowane w kodzie
 
@@ -24,4 +24,3 @@
 ## Kryterium gotowości operacyjnej
 
 Kierownik wybiera pozycję kosztorysu i widzi dokument źródłowy, WBS, wymagania, materiały, terminy, dokumenty formalne, wykonanie, dowody i koszt. Żadna sugestia AI nie zmienia zatwierdzonego zakresu bez zapisanej decyzji człowieka.
-
