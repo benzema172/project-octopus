@@ -83,11 +83,14 @@ export async function POST(request: Request) {
 
   const supabase = createServiceSupabaseClient();
 
+  // Project-owned tables do not need a duplicated workspace_id column: the already
+  // authorized project is the workspace boundary. This works for both progress_periods
+  // and the historical project-scoped boq_items table.
   const ownedProjectRecord = async (table: string, id: unknown, label: string) => {
     const recordId = clean(id);
     if (!recordId) throw new Error(`Wybierz: ${label}.`);
-    const { data } = await supabase.from(table).select("id").eq("id", recordId).eq("workspace_id", workspaceId).eq("project_id", project.id).maybeSingle<{ id: string }>();
-    if (!data) throw new Error(`${label} nie należy do tej inwestycji.`);
+    const { data, error } = await supabase.from(table).select("id").eq("id", recordId).eq("project_id", project.id).maybeSingle<{ id: string }>();
+    if (error || !data) throw new Error(`${label} nie należy do tej inwestycji.`);
     return recordId;
   };
 
@@ -323,7 +326,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, requirements: requirements.length });
     }
 
-    // create_forecast — deliberately calculated from live approved allocations and open commitments.
     const [{ data: profileFact }, { data: allocations }, { data: commitments }, { data: budget }] = await Promise.all([
       supabase.from("project_facts").select("value_json").eq("project_id", project.id).eq("fact_type", "project_profile").order("updated_at", { ascending: false }).limit(1).maybeSingle<{ value_json: Record<string, unknown> }>(),
       supabase.from("financial_allocations").select("amount").eq("project_id", project.id).eq("status", "approved"),
