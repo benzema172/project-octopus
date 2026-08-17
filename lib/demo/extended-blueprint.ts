@@ -436,7 +436,7 @@ function addProjectDataset(dataset: DemoBlueprint, spec: ExtraProjectSpec, proje
     ["commissioning", "Raport rozruchu automatyki", 5]
   ].forEach(([evidenceType, title, wbsIndex], evidenceIndex) => dataset.evidenceRequirements.push({
     id: demoId(3500 + projectIndex, evidenceIndex + 1), workspace_id: dataset.workspace.id, project_id: projectId,
-    wbs_node_id: demoId(2100 + projectIndex, wbsIndex), evidence_type: evidenceType, title, required: true,
+    wbs_node_id: demoId(2100 + projectIndex, Number(wbsIndex)), evidence_type: evidenceType, title, required: true,
     status: spec.status !== "tender" && spec.progress > 0.28 + evidenceIndex * 0.15 ? "complete" : "missing",
     due_at: atIso(reference, 12 + evidenceIndex * 18 + projectIndex), accepted_by: null, accepted_at: null
   }));
