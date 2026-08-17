@@ -10,12 +10,14 @@ const migrations = [
   "supabase/migrations/20260814170000_atomic_estimate_approval.sql",
   "supabase/migrations/20260814180000_domain_access_hardening.sql",
   "supabase/migrations/20260817210000_091_reliability_core.sql",
+  "supabase/migrations/20260817215000_091_boq_project_scope.sql",
   "supabase/migrations/20260817220000_092_performance_search.sql",
   "supabase/migrations/20260817230000_094_cost_material_graph.sql",
   "supabase/migrations/20260817231000_094_purchase_order_workflow.sql",
   "supabase/migrations/20260817240000_095_ai_quality.sql",
   "supabase/migrations/20260817241000_095_analysis_retry_capture.sql",
   "supabase/migrations/20260817250000_100_command_center.sql",
+  "supabase/migrations/20260817250500_100_boq_scope.sql",
   "supabase/migrations/20260817251000_100_command_center_nullsafe.sql"
 ];
 
@@ -82,7 +84,7 @@ try {
   }
 
   const markers = await database.query("select version from public.app_schema_versions where version like '20260817_%' order by version");
-  if (markers.rows.length < 8) throw new Error(`Expected 0.9.1–1.0 schema markers, received ${markers.rows.length}.`);
+  if (markers.rows.length < 10) throw new Error(`Expected 0.9.1–1.0 schema markers, received ${markers.rows.length}.`);
 
   const userId = "00000000-0000-4000-8000-000000000001";
   const workspaceId = "00000000-0000-4000-8000-000000000002";
@@ -95,8 +97,8 @@ try {
     insert into public.projects(id,workspace_id,name,created_by) values ('${projectId}','${workspaceId}','Test 1.0','${userId}');
     insert into public.project_facts(project_id,fact_type,value_text,value_json,confidence,status)
       values ('${projectId}','project_profile','Test 1.0','{"projectName":"Test 1.0","status":"active","contractValue":"100000"}'::jsonb,1,'approved');
-    insert into public.boq_items(id,workspace_id,project_id,item_number,description,quantity,unit,unit_price,total_price)
-      values ('${boqId}','${workspaceId}','${projectId}','1.1','Rura testowa DN110',10,'m',40,400);
+    insert into public.boq_items(id,project_id,item_number,description,quantity,unit,unit_price,total_price)
+      values ('${boqId}','${projectId}','1.1','Rura testowa DN110',10,'m',40,400);
   `);
 
   const firstBudget = await database.query("select * from public.create_budget_version_atomic($1,$2,'Budżet',100000,70000,$3)", [workspaceId, projectId, userId]);
@@ -128,12 +130,15 @@ try {
   const search = await database.query("select * from public.search_workspace_entities($1,'Test',20)", [workspaceId]);
   if (!search.rows.some((row) => row.entity_type === "project" && row.entity_id === projectId)) throw new Error("Workspace search did not find the project.");
 
+  const anomalyCount = await database.query("select public.refresh_project_anomalies($1,$2) count", [workspaceId, projectId]);
+  if (Number(anomalyCount.rows[0]?.count ?? 0) < 0) throw new Error("Anomaly refresh returned invalid result.");
+
   const command = await database.query("select public.get_project_command_center($1,$2) snapshot", [workspaceId, projectId]);
   const snapshot = command.rows[0]?.snapshot;
   if (!snapshot || !Array.isArray(snapshot.cashflow13w) || snapshot.cashflow13w.length !== 13) throw new Error("Command Center did not build a 13-week cash flow.");
 
   console.log(`OK   full migration chain: ${migrations.length} migrations`);
-  console.log("OK   atomic budget, warehouse ledger, MM, purchase order, search and Command Center smoke tests");
+  console.log("OK   atomic budget, warehouse ledger, MM, purchase order, search, anomalies and Command Center smoke tests");
 } finally {
   await database.close();
 }
