@@ -19,6 +19,7 @@ describe("inferDocumentCategory", () => {
 
   it("recognizes cost estimate spreadsheets", () => {
     expect(inferDocumentCategory("application/octet-stream", "kosztorys.xlsx")).toBe("estimate");
+    expect(inferDocumentCategory("application/vnd.ms-excel", "kosztorys.xls")).toBe("estimate");
   });
 
   it("uses construction context before the generic file type", () => {
@@ -42,12 +43,13 @@ describe("attachmentContentDisposition", () => {
 describe("validateUploadFile", () => {
   it("accepts business formats supported by the processing pipeline", () => {
     expect(validateUploadFile("kosztorys.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 1024)).toBeNull();
+    expect(validateUploadFile("kosztorys.xls", "application/vnd.ms-excel", 1024)).toBeNull();
+    expect(validateUploadFile("opis.doc", "application/msword", 1024)).toBeNull();
     expect(validateUploadFile("zdjecie.jpg", "image/jpeg", 1024)).toBeNull();
     expect(validateUploadFile("dane.csv", "application/octet-stream", 1024)).toBeNull();
   });
 
-  it("rejects legacy, mismatched and oversized files before signing the upload", () => {
-    expect(validateUploadFile("kosztorys.xls", "application/vnd.ms-excel", 1024)).toContain("konwersji");
+  it("rejects mismatched and oversized files before signing the upload", () => {
     expect(validateUploadFile("faktura.pdf", "text/html", 1024)).toContain("nie pasuje");
     expect(validateUploadFile("projekt.pdf", "application/pdf", 51 * 1024 * 1024)).toContain("50 MB");
   });
