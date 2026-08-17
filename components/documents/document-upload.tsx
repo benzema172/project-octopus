@@ -329,7 +329,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
           >
             <UploadCloud size={30} aria-hidden="true" />
             <strong>{isUploading ? "Przetwarzanie plików" : "Przeciągnij pliki lub wybierz z dysku"}</strong>
-            <span>PDF, Word, Excel, obrazy, XML i ZIP · do {MAX_SUPPORTED_UPLOAD_BYTES / 1024 / 1024} MB</span>
+            <span>PDF, DOC/DOCX, XLS/XLSX, CSV, obrazy, XML i ZIP · do {MAX_SUPPORTED_UPLOAD_BYTES / 1024 / 1024} MB</span>
           </button>
           <div className="upload-pipeline">
             <span>R2</span><span>Ekstrakcja</span><span>Gemini</span><span>Klasyfikacja</span><span>Moduły</span>

@@ -1,9 +1,24 @@
 import "server-only";
 
+import { createRequire } from "node:module";
 import { inflateRawSync } from "node:zlib";
 
 const MAX_ENTRY_BYTES = 12 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 36 * 1024 * 1024;
+const requireNode = createRequire(import.meta.url);
+
+type LegacyWordDocument = {
+  getBody?: () => string;
+  getFootnotes?: () => string;
+  getEndnotes?: () => string;
+  getHeaders?: (options?: { includeFooters?: boolean }) => string;
+  getFooters?: () => string;
+  getAnnotations?: () => string;
+  getTextboxes?: (options?: { includeHeadersAndFooters?: boolean; includeBody?: boolean }) => string;
+};
+type LegacyWordExtractor = { extract: (input: Buffer) => Promise<LegacyWordDocument> };
+const WordExtractor = requireNode("word-extractor") as new () => LegacyWordExtractor;
+const XLSX = requireNode("xlsx") as typeof import("xlsx");
 
 type ZipEntry = { name: string; method: number; compressedSize: number; uncompressedSize: number; localOffset: number };
 
@@ -121,6 +136,47 @@ export function extractXlsxText(buffer: Buffer) {
   }
 
   return sheets.join("\n\n").trim();
+}
+
+function safeLegacySection(reader: (() => string) | undefined) {
+  if (!reader) return "";
+  try {
+    return reader().replace(/\u0000/g, "").trim();
+  } catch {
+    return "";
+  }
+}
+
+export async function extractLegacyDocText(buffer: Buffer) {
+  const extractor = new WordExtractor();
+  const document = await extractor.extract(buffer);
+  const sections = [
+    ["Treść", safeLegacySection(document.getBody?.bind(document))],
+    ["Nagłówki", safeLegacySection(document.getHeaders?.bind(document, { includeFooters: false }))],
+    ["Stopki", safeLegacySection(document.getFooters?.bind(document))],
+    ["Przypisy", safeLegacySection(document.getFootnotes?.bind(document))],
+    ["Przypisy końcowe", safeLegacySection(document.getEndnotes?.bind(document))],
+    ["Komentarze", safeLegacySection(document.getAnnotations?.bind(document))],
+    ["Pola tekstowe", safeLegacySection(document.getTextboxes?.bind(document, { includeHeadersAndFooters: true, includeBody: true }))]
+  ].filter((section) => section[1]);
+  const text = sections.map(([label, value]) => `[${label}]\n${value}`).join("\n\n").trim();
+  if (!text) throw new Error("Nie udało się odczytać tekstu ze starego pliku DOC.");
+  return text;
+}
+
+export function extractLegacyXlsText(buffer: Buffer) {
+  const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true, sheetRows: 20_000 });
+  const sheets: string[] = [];
+  for (const name of workbook.SheetNames.slice(0, 100)) {
+    const sheet = workbook.Sheets[name];
+    if (!sheet) continue;
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "", blankrows: false }) as unknown[][];
+    const lines = rows.slice(0, 20_000).map((row) => row.map((value) => String(value ?? "").replace(/[\t\r\n]+/g, " ").trim()).join("\t"));
+    sheets.push(`[Arkusz: ${name}]\n${lines.join("\n")}`);
+  }
+  const text = sheets.join("\n\n").trim();
+  if (!text) throw new Error("Nie udało się odczytać komórek ze starego pliku XLS.");
+  return text;
 }
 
 export function listZipContents(buffer: Buffer) {

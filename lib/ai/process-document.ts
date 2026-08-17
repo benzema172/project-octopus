@@ -3,7 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { analyzeDocumentWithGemini, analyzeFileWithGemini } from "@/lib/ai/gemini-document";
-import { extractDocxText, extractXlsxText, listZipContents } from "@/lib/ai/office-extractor";
+import { extractDocxText, extractLegacyDocText, extractLegacyXlsText, extractXlsxText, listZipContents } from "@/lib/ai/office-extractor";
 import { getR2Config } from "@/lib/env";
 import { createR2Client } from "@/lib/r2/client";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -28,16 +28,17 @@ function extension(fileName: string) {
   return fileName.toLowerCase().split(".").at(-1) ?? "";
 }
 
-function prepareInput(fileName: string, mimeType: string, bytes: Buffer) {
+async function prepareInput(fileName: string, mimeType: string, bytes: Buffer) {
   const ext = extension(fileName);
+  if (ext === "doc") return { extractedText: await extractLegacyDocText(bytes) };
   if (ext === "docx") return { extractedText: extractDocxText(bytes) };
+  if (ext === "xls") return { extractedText: extractLegacyXlsText(bytes) };
   if (ext === "xlsx") return { extractedText: extractXlsxText(bytes) };
   if (ext === "zip") return { extractedText: `[Zawartość paczki ZIP]\n${listZipContents(bytes)}` };
   if (["txt", "csv", "xml", "json", "md"].includes(ext) || mimeType.startsWith("text/")) return { extractedText: bytes.toString("utf8") };
   if (mimeType === "application/pdf" || mimeType.startsWith("image/")) {
     return { inlineData: bytes.toString("base64") };
   }
-  if (ext === "xls" || ext === "doc") throw new Error("Starszy format wymaga konwersji do XLSX/DOCX przed analizą.");
   return { extractedText: `[Metadane dokumentu]\nNazwa: ${fileName}\nTyp MIME: ${mimeType}\nRozmiar: ${bytes.length} B` };
 }
 
@@ -83,7 +84,7 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
     if (!object.Body) throw new Error("R2 nie zwrócił treści dokumentu.");
     const bytes = Buffer.from(await object.Body.transformToByteArray());
     const useFilesApi = (version.mime_type === "application/pdf" || version.mime_type.startsWith("image/")) && bytes.length > MAX_INLINE_BYTES;
-    const prepared = useFilesApi ? {} : prepareInput(version.file_name, version.mime_type, bytes);
+    const prepared = useFilesApi ? {} : await prepareInput(version.file_name, version.mime_type, bytes);
     const { data: projectRows } = await supabase.from("projects")
       .select("id,name,investor_name,location")
       .eq("workspace_id", input.workspaceId)
