@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
-import { extractLegacyXlsText } from "@/lib/ai/office-extractor";
-import { inferDocumentCategory, SUPPORTED_UPLOAD_ACCEPT, validateUploadFile } from "@/lib/r2/sanitize";
+import { extractLegacyXlsText } from "../lib/ai/office-extractor";
+import { inferDocumentCategory, SUPPORTED_UPLOAD_ACCEPT, validateUploadFile } from "../lib/r2/sanitize";
 
 describe("legacy Office upload support", () => {
   it("accepts DOC and XLS with their standard MIME types", () => {
