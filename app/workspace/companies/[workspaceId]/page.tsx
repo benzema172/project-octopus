@@ -15,6 +15,7 @@ import {
   WalletCards
 } from "lucide-react";
 import { requireCurrentUser } from "@/lib/auth";
+import { listAiInbox } from "@/lib/data/operations";
 import { listProjectsForWorkspace } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -74,6 +75,85 @@ export default async function CompanyDashboard({ params }: CompanyDashboardProps
   const aiReady = getAiRuntimeStatus().ready;
   const canUploadCompany = domainAccessPolicyAllows(accessPolicy, { domain: "investments", level: "write", projectId: null });
 
+  const financeRead = domainAccessPolicyAllows(accessPolicy, { domain: "finance", level: "read", projectId: null });
+  const hrRead = domainAccessPolicyAllows(accessPolicy, { domain: "hr", level: "read", projectId: null });
+  const fleetRead = domainAccessPolicyAllows(accessPolicy, { domain: "fleet", level: "read", projectId: null });
+  const settingsRead = domainAccessPolicyAllows(accessPolicy, { domain: "settings", level: "read", projectId: null });
+  const today = new Date().toISOString().slice(0, 10);
+  const in14Days = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
+  const in30Days = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+
+  const [aiInbox, commitmentsResult, qualificationsResult, examsResult, fleetDocumentsResult, notificationsResult] = await Promise.all([
+    domainAccessPolicyHasAnyScope(accessPolicy, { domain: "investments", level: "read" })
+      ? listAiInbox(workspace.id).catch(() => [])
+      : Promise.resolve([]),
+    financeRead
+      ? supabase.from("commitments").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).in("status", ["open", "approved"]).lte("expected_date", in14Days)
+      : Promise.resolve({ count: 0, error: null }),
+    hrRead
+      ? supabase.from("qualifications").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).lte("valid_until", in30Days)
+      : Promise.resolve({ count: 0, error: null }),
+    hrRead
+      ? supabase.from("medical_exams").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).lte("valid_until", in30Days)
+      : Promise.resolve({ count: 0, error: null }),
+    fleetRead
+      ? supabase.from("vehicle_documents").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).lte("valid_until", in30Days)
+      : Promise.resolve({ count: 0, error: null }),
+    settingsRead
+      ? supabase.from("notifications").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).is("read_at", null)
+      : Promise.resolve({ count: 0, error: null })
+  ]);
+
+  const visibleAiItems = aiInbox.filter((item) => {
+    const domain: Domain = item.entityType === "template_version"
+      ? "templates"
+      : item.entityType === "knowledge_entry"
+        ? "reports"
+        : item.entityType === "document"
+          ? domainForDocumentCategory(item.category)
+          : "investments";
+    return domainAccessPolicyAllows(accessPolicy, { domain, level: "read", projectId: item.projectId });
+  });
+  const aiDecisions = visibleAiItems.filter((item) => ["review", "error"].includes(item.status)).length;
+  const hrDeadlines = Number(qualificationsResult.count ?? 0) + Number(examsResult.count ?? 0);
+  const attentionItems = [
+    {
+      show: domainAccessPolicyHasAnyScope(accessPolicy, { domain: "investments", level: "read" }),
+      href: "ai-inbox",
+      label: "Decyzje i błędy AI",
+      value: aiDecisions,
+      detail: aiDecisions ? "Wymagają weryfikacji człowieka" : "Brak decyzji wymagających uwagi"
+    },
+    {
+      show: financeRead,
+      href: "finances",
+      label: "Zobowiązania do 14 dni",
+      value: Number(commitmentsResult.count ?? 0),
+      detail: "Otwarte i zatwierdzone płatności"
+    },
+    {
+      show: hrRead,
+      href: "hr",
+      label: "Terminy HR do 30 dni",
+      value: hrDeadlines,
+      detail: "Uprawnienia i badania medyczne"
+    },
+    {
+      show: fleetRead,
+      href: "fleet",
+      label: "Terminy floty do 30 dni",
+      value: Number(fleetDocumentsResult.count ?? 0),
+      detail: "Dokumenty pojazdów i maszyn"
+    },
+    {
+      show: settingsRead,
+      href: "settings#security-automation",
+      label: "Nieprzeczytane alerty",
+      value: Number(notificationsResult.count ?? 0),
+      detail: "Automatyzacje i wyjątki systemowe"
+    }
+  ].filter((item) => item.show);
+
   return (
     <main className="co-page">
       <header className="co-page-heading">
@@ -111,6 +191,26 @@ export default async function CompanyDashboard({ params }: CompanyDashboardProps
           <small>{aiReady ? "kontekst tej firmy" : "wymagany klucz Gemini"}</small>
         </article>
       </section>
+
+      {attentionItems.length ? (
+        <section className="co-section">
+          <div className="co-section-heading">
+            <div>
+              <p className="co-kicker">Do zrobienia teraz</p>
+              <h2>Decyzje, terminy i wyjątki wymagające uwagi</h2>
+            </div>
+          </div>
+          <div className="co-project-strip">
+            {attentionItems.map((item) => (
+              <Link href={`/workspace/companies/${workspace.id}/${item.href}`} key={item.href}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+                <small>{item.detail}</small>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="co-section">
         <div className="co-section-heading">
