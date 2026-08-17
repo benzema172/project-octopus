@@ -1,4 +1,4 @@
-import { DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
@@ -6,6 +6,7 @@ import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { getR2Config, requireServerEnv } from "@/lib/env";
 import { normalizeDocumentCategory } from "@/lib/documents/classification";
 import { createR2Client } from "@/lib/r2/client";
+import { validateFileSignature } from "@/lib/r2/file-signature";
 import { inferDocumentCategory } from "@/lib/r2/sanitize";
 import { verifyUploadToken } from "@/lib/r2/upload-token";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -13,55 +14,27 @@ import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization"
 
 export const runtime = "nodejs";
 
-type CompleteBody = {
-  token?: string;
-  sha256?: string;
-  category?: string;
-};
+type CompleteBody = { token?: string; sha256?: string; category?: string };
 
-function jsonError(message: string, status: number) {
-  return NextResponse.json({ error: message }, { status });
-}
-
+function jsonError(message: string, status: number) { return NextResponse.json({ error: message }, { status }); }
 function normalizeSha256(value: string | undefined) {
-  if (!value) {
-    return null;
-  }
-
+  if (!value) return null;
   const normalized = value.trim().toLowerCase();
   return /^[a-f0-9]{64}$/.test(normalized) ? normalized : null;
 }
-
-function normalizeEtag(value: string | undefined) {
-  return value?.replace(/^"|"$/g, "") || null;
-}
+function normalizeEtag(value: string | undefined) { return value?.replace(/^"|"$/g, "") || null; }
 
 export async function POST(request: Request) {
   const user = await getRequestUser(request);
-
-  if (!user) {
-    return jsonError("Brak aktywnej sesji.", 401);
-  }
+  if (!user) return jsonError("Brak aktywnej sesji.", 401);
 
   let body: CompleteBody;
-
-  try {
-    body = (await request.json()) as CompleteBody;
-  } catch {
-    return jsonError("Nieprawidłowe dane zakończenia uploadu.", 400);
-  }
-
-  if (!body.token) {
-    return jsonError("Brakuje tokenu uploadu.", 400);
-  }
+  try { body = await request.json() as CompleteBody; } catch { return jsonError("Nieprawidłowe dane zakończenia uploadu.", 400); }
+  if (!body.token) return jsonError("Brakuje tokenu uploadu.", 400);
 
   let intent;
-
-  try {
-    intent = verifyUploadToken(body.token, requireServerEnv("SUPABASE_SECRET_KEY"));
-  } catch (error) {
-    return jsonError(error instanceof Error ? error.message : "Token uploadu jest nieprawidłowy.", 400);
-  }
+  try { intent = verifyUploadToken(body.token, requireServerEnv("SUPABASE_SECRET_KEY")); }
+  catch (error) { return jsonError(error instanceof Error ? error.message : "Token uploadu jest nieprawidłowy.", 400); }
 
   const workspace = await getWorkspaceForUser(user, intent.workspaceId);
   if (!workspace) return jsonError("Nie znaleziono firmy dokumentu.", 404);
@@ -73,67 +46,61 @@ export async function POST(request: Request) {
   const r2Config = getR2Config();
   const r2 = createR2Client();
   let head;
-
   try {
-    head = await r2.send(
-      new HeadObjectCommand({
-        Bucket: r2Config.bucketName,
-        Key: intent.objectKey
-      })
-    );
+    head = await r2.send(new HeadObjectCommand({ Bucket: r2Config.bucketName, Key: intent.objectKey }));
   } catch {
     return jsonError("Nie znaleziono przesłanego pliku w R2.", 409);
   }
 
   if (typeof head.ContentLength === "number" && head.ContentLength !== intent.fileSize) {
+    await r2.send(new DeleteObjectCommand({ Bucket: r2Config.bucketName, Key: intent.objectKey })).catch(() => undefined);
     return jsonError("Rozmiar pliku w R2 nie zgadza się z intencją uploadu.", 409);
+  }
+
+  // Verify actual bytes before any database record or AI job is created.
+  try {
+    const probe = await r2.send(new GetObjectCommand({ Bucket: r2Config.bucketName, Key: intent.objectKey, Range: "bytes=0-4095" }));
+    if (!probe.Body) throw new Error("R2 nie zwrócił treści kontrolnej pliku.");
+    const bytes = new Uint8Array(await probe.Body.transformToByteArray());
+    const signatureError = validateFileSignature(intent.fileName, intent.mimeType, bytes);
+    if (signatureError) {
+      await r2.send(new DeleteObjectCommand({ Bucket: r2Config.bucketName, Key: intent.objectKey })).catch(() => undefined);
+      return jsonError(signatureError, 415);
+    }
+  } catch (error) {
+    await r2.send(new DeleteObjectCommand({ Bucket: r2Config.bucketName, Key: intent.objectKey })).catch(() => undefined);
+    return jsonError(error instanceof Error ? `Nie udało się zweryfikować zawartości pliku: ${error.message}` : "Nie udało się zweryfikować zawartości pliku.", 409);
   }
 
   const supabase = createServiceSupabaseClient();
   const requestedCategory = normalizeDocumentCategory(body.category);
   if (body.category && !requestedCategory) return jsonError("Nieprawidłowa ręczna kategoria dokumentu.", 400);
   const category = requestedCategory ?? inferDocumentCategory(intent.mimeType, intent.fileName);
-  if (!await hasDomainAccess({
-    workspaceId: intent.workspaceId,
-    userId: user.id,
-    domain: domainForDocumentCategory(category),
-    level: "write",
-    projectId: intent.projectId
-  })) {
+  if (!await hasDomainAccess({ workspaceId: intent.workspaceId, userId: user.id, domain: domainForDocumentCategory(category), level: "write", projectId: intent.projectId })) {
     await r2.send(new DeleteObjectCommand({ Bucket: r2Config.bucketName, Key: intent.objectKey })).catch(() => undefined);
     return jsonError("Brak uprawnienia do zapisania dokumentu w wybranej kategorii.", 403);
   }
-  const uploadedAt = new Date().toISOString();
 
-  const { data: completed, error: completeError } = await supabase
-    .rpc("complete_document_upload", {
-      p_document_id: intent.documentId,
-      p_version_id: intent.versionId,
-      p_workspace_id: intent.workspaceId,
-      p_project_id: intent.projectId,
-      p_file_name: intent.fileName,
-      p_category: category,
-      p_mime_type: intent.mimeType,
-      p_file_size_bytes: intent.fileSize,
-      p_r2_bucket: r2Config.bucketName,
-      p_r2_object_key: intent.objectKey,
-      p_r2_etag: normalizeEtag(head.ETag),
-      p_sha256: normalizeSha256(body.sha256),
-      p_uploaded_by: user.id,
-      p_uploaded_at: uploadedAt
-    })
-    .single<{ document_id: string; version_id: string; version_number: number }>();
+  const uploadedAt = new Date().toISOString();
+  const { data: completed, error: completeError } = await supabase.rpc("complete_document_upload", {
+    p_document_id: intent.documentId,
+    p_version_id: intent.versionId,
+    p_workspace_id: intent.workspaceId,
+    p_project_id: intent.projectId,
+    p_file_name: intent.fileName,
+    p_category: category,
+    p_mime_type: intent.mimeType,
+    p_file_size_bytes: intent.fileSize,
+    p_r2_bucket: r2Config.bucketName,
+    p_r2_object_key: intent.objectKey,
+    p_r2_etag: normalizeEtag(head.ETag),
+    p_sha256: normalizeSha256(body.sha256),
+    p_uploaded_by: user.id,
+    p_uploaded_at: uploadedAt
+  }).single<{ document_id: string; version_id: string; version_number: number }>();
 
   if (completeError || !completed) {
-    await r2
-      .send(
-        new DeleteObjectCommand({
-          Bucket: r2Config.bucketName,
-          Key: intent.objectKey
-        })
-      )
-      .catch(() => undefined);
-
+    await r2.send(new DeleteObjectCommand({ Bucket: r2Config.bucketName, Key: intent.objectKey })).catch(() => undefined);
     return jsonError(`Nie udało się atomowo zapisać dokumentu: ${completeError?.message ?? "brak danych"}`, 500);
   }
 
@@ -142,10 +109,7 @@ export async function POST(request: Request) {
     documentId: completed.document_id,
     versionId: completed.version_id,
     versionNumber: completed.version_number,
-    objectKey: intent.objectKey
-  }, {
-    headers: {
-      "Cache-Control": "no-store"
-    }
-  });
+    objectKey: intent.objectKey,
+    signatureVerified: true
+  }, { headers: { "Cache-Control": "no-store" } });
 }
