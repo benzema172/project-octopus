@@ -36,7 +36,7 @@ export default async function CompanySectionLayout({ children, params }: { child
     ]);
     if (!canRead) return children;
     const data = await getCompanyPowerToolsData(workspace.id, kind);
-    return <>{children}<CompanyPowerTools workspaceId={workspace.id} kind={kind} data={data} canWrite={canWrite} referenceDate={new Date().toISOString()} /></>;
+    return <>{children}<CompanyPowerTools workspaceId={workspace.id} kind={kind} data={data as never} canWrite={canWrite} referenceDate={new Date().toISOString()} /></>;
   } catch (error) {
     console.error("Project Octopus 0.8.0 power tools failed softly", error);
     return children;
