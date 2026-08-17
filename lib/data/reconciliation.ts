@@ -11,7 +11,7 @@ export async function getProjectReconciliation(workspaceId: string, projectId: s
     db.from("material_requests").select("id,title,status,payload").eq("project_id", projectId).not("status", "in", "(superseded,cancelled,rejected)").order("created_at", { ascending: false }).limit(100),
     db.from("counterparties").select("id,name,tax_id,active").eq("workspace_id", workspaceId).eq("active", true).order("name").limit(500),
     db.from("stock_items").select("id,sku,name,unit,active").eq("workspace_id", workspaceId).eq("active", true).order("name").limit(1000),
-    db.from("boq_items").select("id,item_number,description,unit,wbs_node_id").eq("workspace_id", workspaceId).eq("project_id", projectId).order("item_number").limit(2000)
+    db.from("boq_items").select("id,item_number,description,unit,wbs_node_id").eq("project_id", projectId).order("item_number").limit(2000)
   ]);
   if (graphResult.error) throw new Error(`Nie udało się odczytać grafu kosztów: ${graphResult.error.message}`);
   if (linksResult.error) throw new Error(`Nie udało się odczytać powiązań: ${linksResult.error.message}`);
