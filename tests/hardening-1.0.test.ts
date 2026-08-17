@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { validateFileSignature } from "@/lib/r2/file-signature";
-import { matchScore, rankMatches } from "@/lib/investments/reconciliation-matcher";
+import { validateFileSignature } from "../lib/r2/file-signature";
+import { matchScore, rankMatches } from "../lib/investments/reconciliation-matcher";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
