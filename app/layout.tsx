@@ -9,6 +9,7 @@ import "./project-dashboard-combined.css";
 import "./project-dashboard-compact.css";
 import "./project-dashboard-layout-refinement.css";
 import "./project-intake.css";
+import "./project-navigation-refinement.css";
 import "./project-modules-operational.css";
 import "./brain-knowledge.css";
 
