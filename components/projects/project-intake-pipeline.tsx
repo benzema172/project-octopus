@@ -33,6 +33,35 @@ async function digest(file: File) {
   return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function IntakeOctopus() {
+  return (
+    <span className="pw-intake-octopus" aria-hidden="true">
+      <svg viewBox="0 0 112 56" focusable="false">
+        <defs>
+          <linearGradient id="pw-intake-octo-gradient" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#ff2d86" />
+            <stop offset="34%" stopColor="#8a2be2" />
+            <stop offset="68%" stopColor="#315be9" />
+            <stop offset="100%" stopColor="#00cfc2" />
+          </linearGradient>
+        </defs>
+        <g className="pw-octo-tentacle pw-octo-tentacle--1"><path d="M42 21C30 15 19 14 8 20" /></g>
+        <g className="pw-octo-tentacle pw-octo-tentacle--2"><path d="M40 25C26 23 16 29 7 39" /></g>
+        <g className="pw-octo-tentacle pw-octo-tentacle--3"><path d="M45 29C32 33 25 42 20 51" /></g>
+        <g className="pw-octo-tentacle pw-octo-tentacle--4"><path d="M51 30C46 40 44 47 41 54" /></g>
+        <g className="pw-octo-tentacle pw-octo-tentacle--5"><path d="M59 30C60 41 64 48 70 53" /></g>
+        <g className="pw-octo-tentacle pw-octo-tentacle--6"><path d="M66 28C78 34 86 43 96 49" /></g>
+        <g className="pw-octo-tentacle pw-octo-tentacle--7"><path d="M68 24C84 25 96 31 106 39" /></g>
+        <g className="pw-octo-tentacle pw-octo-tentacle--8"><path d="M66 19C80 13 93 14 104 20" /></g>
+        <ellipse className="pw-octo-head" cx="54" cy="18" rx="15" ry="13" />
+        <circle className="pw-octo-eye" cx="49" cy="17" r="1.6" />
+        <circle className="pw-octo-eye" cx="59" cy="17" r="1.6" />
+        <path className="pw-octo-smile" d="M50 22c2.5 2 5.5 2 8 0" />
+      </svg>
+    </span>
+  );
+}
+
 export function ProjectIntake({ projectId }: { projectId: string }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
@@ -45,7 +74,7 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
   function add(files: FileList | File[]) {
     const all = Array.from(files);
     const usable = all.filter(accepted);
-    setNotice(usable.length !== all.length ? "Część plików pominięto. Obsługiwane są m.in. PDF, DOCX, XLSX, CSV, obrazy, ZIP, XML i pliki tekstowe do 50 MB." : null);
+    setNotice(usable.length !== all.length ? "Część plików pominięto. Obsługiwane są m.in. PDF, DOC/DOCX, XLS/XLSX, CSV, obrazy, ZIP, XML i pliki tekstowe do 50 MB." : null);
     setItems((current) => current.concat(usable.map((file) => {
       const suggestion = suggestDocumentClassification(file.name, file.type);
       return { id: crypto.randomUUID(), file, category: suggestion.category, locked: false, confidence: suggestion.confidence, reason: suggestion.reason, status: "ready" as const };
@@ -97,12 +126,15 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
   const ready = items.filter((item) => item.status === "ready" || item.status === "error").length;
 
   return <div className="pw-intake">
-    <button type="button" className="pw-intake-trigger" onClick={() => setOpen((value) => !value)}><UploadCloud size={16} /> WRZUTNIA</button>
+    <button type="button" className="pw-intake-trigger pw-intake-trigger--octopus" onClick={() => setOpen((value) => !value)}>
+      <IntakeOctopus />
+      <span className="pw-intake-trigger__label">WRZUTNIA</span>
+    </button>
     {open ? <div className="pw-intake-popover" role="dialog" aria-label="Wrzutnia dokumentów">
       <div className="pw-intake-head"><div><p className="co-kicker">Centralne wejście plików</p><h3>Wrzutnia</h3><p>R2 → ekstrakcja → Gemini → klasyfikacja → Brain → moduły.</p></div><button type="button" className="pw-intake-close" onClick={() => setOpen(false)}><X size={17} /></button></div>
       <input ref={input} className="pw-intake-file-input" type="file" accept={SUPPORTED_UPLOAD_ACCEPT} multiple onChange={(event) => event.target.files && add(event.target.files)} />
       <button type="button" className={`pw-intake-dropzone ${drag ? "is-dragging" : ""}`} onClick={() => input.current?.click()} onDragEnter={(event) => { event.preventDefault(); setDrag(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { event.preventDefault(); setDrag(false); }} onDrop={(event) => { event.preventDefault(); setDrag(false); add(event.dataTransfer.files); }}>
-        <span className="pw-intake-cloud"><UploadCloud size={27} /></span><strong>Przeciągnij PDF, Word lub Excel</strong><small>albo kliknij, aby wybrać pliki z dysku</small>
+        <span className="pw-intake-cloud"><UploadCloud size={27} /></span><strong>Przeciągnij PDF, Word lub Excel</strong><small>DOC/DOCX i XLS/XLSX są odczytywane przez pipeline AI</small>
       </button>
       <div className="pw-intake-ai-note"><Sparkles size={16} /><span><strong>Pełna analiza AI:</strong> Gemini czyta zawartość, rozpoznaje fakty, materiały, urządzenia i pozycje kosztorysu. Ręczna zmiana kategorii blokuje jej automatyczne nadpisanie.</span></div>
       {notice ? <p className="pw-intake-error">{notice}</p> : null}

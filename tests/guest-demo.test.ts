@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildDemoDataset, validateDemoDataset } from "../lib/demo/dataset";
+import { EXTENDED_DEMO_EXPECTATIONS } from "../lib/demo/extended-blueprint";
 import {
   GUEST_AUTH_EMAIL,
   GUEST_AUTH_PASSWORD,
@@ -51,17 +52,20 @@ describe("coherent full-application demo dataset", () => {
 
   it("fills every major operational area with meaningful records", () => {
     expect(validateDemoDataset(demo)).toEqual([]);
-    expect(demo.projects.length).toBeGreaterThanOrEqual(8);
+    expect(demo.projects.length).toBeGreaterThanOrEqual(EXTENDED_DEMO_EXPECTATIONS.projects);
     expect(demo.projectFacts.length).toBe(demo.projects.length);
-    expect(demo.documents.length).toBeGreaterThanOrEqual(30);
-    expect(demo.boqItems.length).toBeGreaterThanOrEqual(40);
-    expect(demo.wbsNodes.length).toBeGreaterThanOrEqual(40);
-    expect(demo.scheduleActivities.length).toBeGreaterThanOrEqual(40);
-    expect(demo.invoices.length).toBeGreaterThanOrEqual(20);
-    expect(demo.employees.length).toBeGreaterThanOrEqual(12);
-    expect(demo.stockItems.length).toBeGreaterThanOrEqual(16);
-    expect(demo.vehicles.length).toBeGreaterThanOrEqual(6);
-    expect(demo.knowledgeEntries.length).toBeGreaterThanOrEqual(8);
+    expect(demo.documents.length).toBeGreaterThanOrEqual(EXTENDED_DEMO_EXPECTATIONS.documents);
+    expect(demo.boqItems.length).toBeGreaterThanOrEqual(EXTENDED_DEMO_EXPECTATIONS.boqItems);
+    expect(demo.wbsNodes.length).toBeGreaterThanOrEqual(70);
+    expect(demo.scheduleActivities.length).toBeGreaterThanOrEqual(EXTENDED_DEMO_EXPECTATIONS.scheduleActivities);
+    expect(demo.invoices.length).toBeGreaterThanOrEqual(EXTENDED_DEMO_EXPECTATIONS.invoices);
+    expect(demo.employees.length).toBeGreaterThanOrEqual(EXTENDED_DEMO_EXPECTATIONS.employees);
+    expect(demo.stockItems.length).toBeGreaterThanOrEqual(28);
+    expect(demo.vehicles.length).toBeGreaterThanOrEqual(EXTENDED_DEMO_EXPECTATIONS.vehicles);
+    expect(demo.knowledgeEntries.length).toBeGreaterThanOrEqual(13);
+    expect(demo.warehouses.length).toBeGreaterThanOrEqual(EXTENDED_DEMO_EXPECTATIONS.warehouses);
+    expect(demo.timesheets.length).toBeGreaterThanOrEqual(140);
+    expect(demo.assignments.length).toBeGreaterThanOrEqual(49);
     expect(demo.notifications.length).toBeGreaterThanOrEqual(4);
   });
 
@@ -70,6 +74,10 @@ describe("coherent full-application demo dataset", () => {
     expect(demo.projects.some((row) => row.status === "active")).toBe(true);
     expect(demo.projects.some((row) => row.status === "completed")).toBe(true);
     expect(demo.projects.some((row) => row.status === "planned")).toBe(true);
+    expect(demo.projects.some((row) => row.status === "paused")).toBe(true);
+    expect(demo.projects.some((row) => row.status === "tender")).toBe(true);
+    expect(demo.documents.some((row) => String(row.name).endsWith(".doc"))).toBe(true);
+    expect(demo.documents.some((row) => String(row.name).endsWith(".xls"))).toBe(true);
     expect(demo.projectFacts.some((row) => String((row.value_json as Record<string, unknown>).completionDate) < "2026-08-17")).toBe(true);
   });
 

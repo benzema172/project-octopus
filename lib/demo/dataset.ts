@@ -5,11 +5,13 @@ import {
   type DemoBlueprint,
   type DemoRow
 } from "./blueprint";
+import { extendDemoDataset } from "./extended-blueprint";
 
 export { demoId, type DemoRow };
 
 export function buildDemoDataset(userId: string, referenceDate = new Date()): DemoBlueprint {
   const dataset = buildDemoBlueprint(userId, referenceDate);
+  extendDemoDataset(dataset, userId, referenceDate);
 
   const boqById = new Map(dataset.boqItems.map((row) => [String(row.id), row]));
   dataset.boqItems = dataset.boqItems.map((row) => {
