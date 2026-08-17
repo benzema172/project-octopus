@@ -12,6 +12,7 @@ import "./project-intake.css";
 import "./project-navigation-refinement.css";
 import "./project-modules-operational.css";
 import "./brain-knowledge.css";
+import "./octopus-1-release.css";
 
 export const metadata: Metadata = {
   title: "Project Octopus",
