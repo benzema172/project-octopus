@@ -2,8 +2,10 @@ import Link from "next/link";
 import { ArrowLeft, Building2, MapPin } from "lucide-react";
 import { notFound } from "next/navigation";
 import { CompanyShell } from "@/components/layout/company-shell";
+import { ProjectAutopilotDock } from "@/components/projects/project-autopilot-dock";
 import { ProjectNavigation } from "@/components/projects/project-navigation";
 import { requireCurrentUser } from "@/lib/auth";
+import { getInvestmentAutopilotSummary } from "@/lib/data/investment-autopilot";
 import { getProjectProfile } from "@/lib/data/project-profile";
 import { getProjectForUser } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
@@ -32,9 +34,10 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
 
   if (!project) notFound();
 
-  const [profile, workspace] = await Promise.all([
+  const [profile, workspace, autopilotSummary] = await Promise.all([
     getProjectProfile(project),
-    getWorkspaceForUser(user, project.workspace_id)
+    getWorkspaceForUser(user, project.workspace_id),
+    getInvestmentAutopilotSummary(project.id).catch(() => ({ attentionCount: 0, aiCanDoCount: 0, blockerCount: 0, healthScore: 100, nextTitle: null }))
   ]);
 
   if (!workspace) notFound();
@@ -91,6 +94,7 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
         </header>
 
         <ProjectNavigation projectId={project.id} allowedDomains={allowedProjectDomains} canUpload={canUpload} />
+        {allowedProjectDomains.includes("investments") ? <ProjectAutopilotDock projectId={project.id} summary={autopilotSummary} canRun={canUpload} /> : null}
         {children}
       </main>
     </CompanyShell>
