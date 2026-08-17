@@ -10,15 +10,19 @@ declare v_count integer:=0;v_row record;
 begin
   perform 1 from public.projects where id=p_project_id and workspace_id=p_workspace_id;
   if not found then raise exception 'Inwestycja nie należy do aktywnej firmy.'; end if;
+
+  -- Mark all previous machine detections as resolved first. Current conditions are
+  -- re-opened below. If an anomaly was acknowledged by a user, acknowledged_at is
+  -- intentionally preserved so a still-active condition remains acknowledged.
   update public.project_anomalies set status='resolved',resolved_at=now()
-  where workspace_id=p_workspace_id and project_id=p_project_id and status='open' and anomaly_key like 'auto:%';
+  where workspace_id=p_workspace_id and project_id=p_project_id and status in ('open','acknowledged') and anomaly_key like 'auto:%';
 
   for v_row in select id,item_number,description,quantity,quantity_executed,quantity_accepted from public.boq_items
     where project_id=p_project_id and (quantity_executed>quantity+greatest(0.0001,abs(quantity)*0.000001) or quantity_accepted>quantity_executed+0.0001)
   loop
     insert into public.project_anomalies(workspace_id,project_id,anomaly_key,category,severity,title,detail,entity_type,entity_id,status,detected_at,resolved_at)
     values(p_workspace_id,p_project_id,'auto:boq:'||v_row.id,'progress','critical','Niespójność ilości BOQ',concat_ws(' · ',v_row.item_number,v_row.description),'boq_item',v_row.id::text,'open',now(),null)
-    on conflict(project_id,anomaly_key) do update set status='open',severity='critical',detail=excluded.detail,detected_at=now(),resolved_at=null;
+    on conflict(project_id,anomaly_key) do update set status=case when project_anomalies.acknowledged_at is not null then 'acknowledged' else 'open' end,severity='critical',detail=excluded.detail,detected_at=now(),resolved_at=null;
     v_count:=v_count+1;
   end loop;
 
@@ -26,7 +30,7 @@ begin
   loop
     insert into public.project_anomalies(workspace_id,project_id,anomaly_key,category,severity,title,detail,entity_type,entity_id,status,detected_at,resolved_at)
     values(p_workspace_id,p_project_id,'auto:schedule:'||v_row.id,'schedule','critical','Opóźnione zadanie krytyczne',v_row.title||' · termin '||v_row.planned_finish::text,'schedule_activity',v_row.id::text,'open',now(),null)
-    on conflict(project_id,anomaly_key) do update set status='open',severity='critical',detail=excluded.detail,detected_at=now(),resolved_at=null;
+    on conflict(project_id,anomaly_key) do update set status=case when project_anomalies.acknowledged_at is not null then 'acknowledged' else 'open' end,severity='critical',detail=excluded.detail,detected_at=now(),resolved_at=null;
     v_count:=v_count+1;
   end loop;
 
@@ -34,7 +38,7 @@ begin
   loop
     insert into public.project_anomalies(workspace_id,project_id,anomaly_key,category,severity,title,detail,entity_type,entity_id,status,detected_at,resolved_at)
     values(p_workspace_id,p_project_id,'auto:commitment:'||v_row.id,'finance','warning','Przeterminowane zobowiązanie',v_row.description||' · '||v_row.amount::text||' PLN','commitment',v_row.id::text,'open',now(),null)
-    on conflict(project_id,anomaly_key) do update set status='open',detail=excluded.detail,detected_at=now(),resolved_at=null;
+    on conflict(project_id,anomaly_key) do update set status=case when project_anomalies.acknowledged_at is not null then 'acknowledged' else 'open' end,detail=excluded.detail,detected_at=now(),resolved_at=null;
     v_count:=v_count+1;
   end loop;
 
@@ -42,7 +46,7 @@ begin
   loop
     insert into public.project_anomalies(workspace_id,project_id,anomaly_key,category,severity,title,detail,entity_type,entity_id,status,detected_at,resolved_at)
     values(p_workspace_id,p_project_id,'auto:evidence:'||v_row.id,'quality','warning','Brak dowodu po terminie',v_row.title,'evidence_requirement',v_row.id::text,'open',now(),null)
-    on conflict(project_id,anomaly_key) do update set status='open',detail=excluded.detail,detected_at=now(),resolved_at=null;
+    on conflict(project_id,anomaly_key) do update set status=case when project_anomalies.acknowledged_at is not null then 'acknowledged' else 'open' end,detail=excluded.detail,detected_at=now(),resolved_at=null;
     v_count:=v_count+1;
   end loop;
 
@@ -50,7 +54,7 @@ begin
   loop
     insert into public.project_anomalies(workspace_id,project_id,anomaly_key,category,severity,title,detail,entity_type,entity_id,status,detected_at,resolved_at)
     values(p_workspace_id,p_project_id,'auto:ai:'||v_row.id,'ai','warning','Dokument wymaga interwencji AI',v_row.name,'document',v_row.id::text,'open',now(),null)
-    on conflict(project_id,anomaly_key) do update set status='open',detail=excluded.detail,detected_at=now(),resolved_at=null;
+    on conflict(project_id,anomaly_key) do update set status=case when project_anomalies.acknowledged_at is not null then 'acknowledged' else 'open' end,detail=excluded.detail,detected_at=now(),resolved_at=null;
     v_count:=v_count+1;
   end loop;
   return v_count;
