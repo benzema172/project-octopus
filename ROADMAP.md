@@ -1,26 +1,30 @@
-# Project Octopus — roadmap po 0.4.1
+# Project Octopus — roadmap po 1.0
 
-## Zrealizowane w kodzie
+## Zrealizowane do 1.0
 
-- pełny model i widoki procesu dokument → BOQ/WBS → odbiór,
-- kolejka AI, retry/dead-letter, Skrzynka AI i akceptacje,
-- wyszukiwarka ze źródłami oraz pamięć organizacji,
-- radar rewizji, kompletność dowodowa, forecast i paczka zamknięcia,
-- mobilne zdarzenia z budowy,
-- Wzory oraz kontrolowany generator szkicu,
-- staging KSeF, role domenowe, integracje, alerty i dane operacyjne wszystkich modułów.
+- pełny proces `Wrzutnia → Brain → Project DNA → BOQ/WBS → plan → realizacja → odbiór → rozliczenie → raport → wiedza firmy`,
+- kolejka AI z retry/dead-letter, Skrzynką AI, decyzjami człowieka i telemetryką jakości,
+- atomowe operacje dla krytycznych zapisów przerobu, budżetu, magazynu, faktur, przebiegów i profilu inwestycji,
+- pełny ledger magazynowy liczony po całej historii zatwierdzonych ruchów,
+- Investment Autopilot z trwałą idempotencją i semantycznym doborem kandydatów,
+- Reconciliation Graph: WM → zamówienie → zobowiązanie → materiał/faktura → BOQ/WBS → magazyn → wykonanie/odbiór,
+- Project Command Center z Project Health Score, następnym krokiem, Anomaly Engine, 13-tygodniowym cash flow, Resource Plannerem i korespondencją,
+- wyszukiwarka wielomodułowa,
+- role domenowe i projektowe oraz RLS,
+- walidacja całego łańcucha migracji i staging E2E dla kluczowych operacji,
+- weryfikacja sygnatur plików po R2 przed uruchomieniem Brain.
 
-## Następny etap produkcyjny
+## Następny etap produkcyjny po 1.0
 
-1. Zastosować migrację i uruchomić test E2E na środowisku Supabase/R2/Gemini.
-2. Podłączyć harmonogram wywołujący worker i monitoring jego kosztu/błędów.
-3. Przeprowadzić testy na rzeczywistych: projekcie, STWiOR, kosztorysie XLSX, wzorze wniosku i protokole.
-4. Dodać edycję wierszy kosztorysu przed zatwierdzeniem oraz graficzny Gantt.
-5. Rozszerzyć generator o wierne wypełnianie DOCX oraz serwerowy eksport PDF.
-6. Podłączyć autoryzowany KSeF inbound na środowisku testowym, następnie produkcyjnym.
-7. Podłączyć wybrane systemy: bank/księgowość, karty paliwowe/GPS lub kadry-płace — każdą integrację jako osobny zakres.
-8. Wykonać test uprawnień, retencji, odtwarzania backupu i wydajności większych inwestycji.
+1. Uruchomić staging E2E przeciw rzeczywistemu Supabase/R2/Gemini po skonfigurowaniu sekretów GitHub.
+2. Wykonać benchmark Brain na reprezentatywnym zestawie rzeczywistych projektów, STWiOR, kosztorysów XLS/XLSX, faktur/WZ/PZ, WM i protokołów; ustalić progi jakości w `report:ai-quality`.
+3. Dodać pełny skaner antymalware/quarantine przed dopuszczeniem dokumentu do Brain.
+4. Podłączyć harmonogram produkcyjnego workera oraz monitoring kosztu, czasu i dead-letter queue.
+5. Rozszerzyć edycję BOQ, zależności harmonogramu i wizualny Gantt.
+6. Rozszerzyć generator dokumentów o wierne DOCX oraz serwerowy PDF.
+7. Podłączyć wybrane zewnętrzne systemy: KSeF, bank/księgowość, karty paliwowe/GPS lub kadry-płace — każdą integrację jako osobny zakres.
+8. Przeprowadzić test retencji, backup/restore i obciążenie na wielkich inwestycjach oraz wieloletniej historii firmy.
 
-## Kryterium gotowości operacyjnej
+## Kryterium operacyjne 1.0
 
-Kierownik wybiera pozycję kosztorysu i widzi dokument źródłowy, WBS, wymagania, materiały, terminy, dokumenty formalne, wykonanie, dowody i koszt. Żadna sugestia AI nie zmienia zatwierdzonego zakresu bez zapisanej decyzji człowieka.
+Kierownik otwiera inwestycję i z jednego Control 360 widzi stan finansowy, harmonogram, ryzyka, braki dowodowe, materiały, zamówienia, zasoby, korespondencję i następny krok. Pozycja kosztorysu może być prześledzona do kosztu i materiału, a krytyczne zapisy nie mogą zostać częściowo wykonane przy błędzie lub równoległej pracy. Żadna sugestia AI nie zmienia zatwierdzonego zakresu bez zapisanej decyzji człowieka.
