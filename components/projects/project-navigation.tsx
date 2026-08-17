@@ -64,7 +64,7 @@ export function ProjectNavigation({ projectId, allowedDomains, canUpload }: Proj
     domain: "investments"
   };
 
-  const groups: ProjectNavGroup[] = [
+  const navigationGroups: ProjectNavGroup[] = [
     {
       key: "project",
       label: "Projekt",
@@ -123,8 +123,13 @@ export function ProjectNavigation({ projectId, allowedDomains, canUpload }: Proj
         { href: `${base}/outputs`, label: "Wyniki i archiwum", icon: Archive, domain: "investments" }
       ]
     }
-  ]
-    .map((group) => ({ ...group, items: group.items.filter((item) => allowedDomains.includes(item.domain)) }))
+  ];
+
+  const groups: ProjectNavGroup[] = navigationGroups
+    .map((group): ProjectNavGroup => ({
+      ...group,
+      items: group.items.filter((item) => allowedDomains.includes(item.domain))
+    }))
     .filter((group) => group.items.length > 0);
 
   const showDashboard = allowedDomains.includes(dashboard.domain);
@@ -155,6 +160,9 @@ export function ProjectNavigation({ projectId, allowedDomains, canUpload }: Proj
               onMouseEnter={() => setOpenGroup(group.key)}
               onMouseLeave={() => setOpenGroup((current) => current === group.key ? null : current)}
               onFocus={() => setOpenGroup(group.key)}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpenGroup(null);
+              }}
             >
               <button
                 type="button"

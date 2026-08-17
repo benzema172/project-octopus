@@ -308,6 +308,7 @@ function addProjectDataset(dataset: DemoBlueprint, spec: ExtraProjectSpec, proje
     const itemId = demoId(2200 + projectIndex, itemIndex + 1);
     const executed = spec.status === "tender" ? 0 : roundMoney(quantity * Math.max(0, Math.min(1, spec.progress * (1.14 - itemIndex * 0.035))));
     const accepted = roundMoney(executed * (spec.status === "paused" ? 0.92 : 0.98));
+    const adjustedUnitPrice = Number(unitPrice) + projectIndex * 9;
     dataset.boqItems.push({
       id: itemId,
       project_id: projectId,
@@ -315,8 +316,8 @@ function addProjectDataset(dataset: DemoBlueprint, spec: ExtraProjectSpec, proje
       description,
       quantity,
       unit,
-      unit_price: unitPrice + projectIndex * 9,
-      total_price: roundMoney(quantity * (unitPrice + projectIndex * 9)),
+      unit_price: adjustedUnitPrice,
+      total_price: roundMoney(quantity * adjustedUnitPrice),
       boq_version_id: boqVersionId,
       wbs_node_id: demoId(2100 + projectIndex, wbsIndex + 1),
       cost_code: `MEP-${index}-${itemNumber.replace(".", "")}`,
