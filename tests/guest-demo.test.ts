@@ -1,13 +1,13 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildDemoBlueprint, validateDemoBlueprint } from "@/lib/demo/blueprint";
+import { buildDemoBlueprint, validateDemoBlueprint } from "../lib/demo/blueprint";
 import {
   GUEST_AUTH_EMAIL,
   GUEST_AUTH_PASSWORD,
   GUEST_PUBLIC_LOGIN,
   GUEST_PUBLIC_PASSWORD
-} from "@/lib/demo/guest-constants";
+} from "../lib/demo/guest-constants";
 
 const reference = new Date("2026-08-17T12:00:00.000Z");
 const userId = "11111111-1111-4111-8111-111111111111";
