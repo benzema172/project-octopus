@@ -88,16 +88,16 @@ export default async function CompanyDashboard({ params }: CompanyDashboardProps
       ? listAiInbox(workspace.id).catch(() => [])
       : Promise.resolve([]),
     financeRead
-      ? supabase.from("commitments").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).in("status", ["open", "approved"]).lte("expected_date", in14Days)
+      ? supabase.from("commitments").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).in("status", ["open", "approved"]).gte("expected_date", today).lte("expected_date", in14Days)
       : Promise.resolve({ count: 0, error: null }),
     hrRead
-      ? supabase.from("qualifications").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).lte("valid_until", in30Days)
+      ? supabase.from("qualifications").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).gte("valid_until", today).lte("valid_until", in30Days)
       : Promise.resolve({ count: 0, error: null }),
     hrRead
-      ? supabase.from("medical_exams").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).lte("valid_until", in30Days)
+      ? supabase.from("medical_exams").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).gte("valid_until", today).lte("valid_until", in30Days)
       : Promise.resolve({ count: 0, error: null }),
     fleetRead
-      ? supabase.from("vehicle_documents").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).lte("valid_until", in30Days)
+      ? supabase.from("vehicle_documents").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).gte("valid_until", today).lte("valid_until", in30Days)
       : Promise.resolve({ count: 0, error: null }),
     settingsRead
       ? supabase.from("notifications").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).is("read_at", null)
