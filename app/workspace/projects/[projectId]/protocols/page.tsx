@@ -1,6 +1,8 @@
 import { ClipboardCheck, Droplets, FileSignature, Gauge } from "lucide-react";
 import { notFound } from "next/navigation";
 import { ProjectModuleFoundation } from "@/components/projects/project-module-foundation";
+import { ProjectLiveRecords } from "@/components/projects/project-live-records";
+import { ProjectOperationPanel } from "@/components/projects/project-operation-panel";
 import { requireCurrentUser } from "@/lib/auth";
 import { listDocumentsForCategories } from "@/lib/data/documents";
 import { getProjectForUser } from "@/lib/data/projects";
@@ -43,5 +45,5 @@ export default async function ProtocolsPage({ params }: Props) {
       { title: "Odbiory częściowe", description: "Zestawienie zakresu, osób, dat i wyników odbioru w jednym spójnym workflow.", icon: ClipboardCheck }
     ]}
     principle="Octopus ma wskazywać, jakie protokoły wynikają z dokumentacji i wykonanych robót, a następnie automatycznie zasilać je zatwierdzonymi danymi inwestycji."
-  />;
+  ><ProjectOperationPanel projectId={projectId} mode="protocol" /><ProjectLiveRecords projectId={projectId} kind="protocols" /></ProjectModuleFoundation>;
 }

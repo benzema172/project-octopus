@@ -1,6 +1,8 @@
 import { CheckCircle2, FileCheck2, PackageSearch, ShieldCheck } from "lucide-react";
 import { notFound } from "next/navigation";
 import { ProjectModuleFoundation } from "@/components/projects/project-module-foundation";
+import { ProjectLiveRecords } from "@/components/projects/project-live-records";
+import { ProjectOperationPanel } from "@/components/projects/project-operation-panel";
 import { requireCurrentUser } from "@/lib/auth";
 import { listDocumentsForCategories } from "@/lib/data/documents";
 import { getMaterialKnowledge } from "@/lib/data/module-knowledge";
@@ -64,5 +66,5 @@ export default async function RequestsPage({ params }: Props) {
       { title: "Status akceptacji", description: "Workflow pozostaje kontrolowany przez użytkownika: roboczy, do akceptacji, zaakceptowany lub odrzucony.", icon: CheckCircle2 }
     ]}
     principle="AI wydobywa dane materiałowe automatycznie, ale nie zatwierdza za użytkownika wniosku materiałowego. Rozpoznane materiały i urządzenia są teraz bezpośrednio widoczne w module."
-  />;
+  ><ProjectOperationPanel projectId={projectId} mode="requirement" /><ProjectLiveRecords projectId={projectId} kind="applications" /></ProjectModuleFoundation>;
 }

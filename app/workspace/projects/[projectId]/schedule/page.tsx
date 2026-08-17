@@ -1,6 +1,8 @@
 import { CalendarCheck2, GitBranch, ListChecks, TriangleAlert } from "lucide-react";
 import { notFound } from "next/navigation";
 import { ProjectModuleFoundation } from "@/components/projects/project-module-foundation";
+import { ProjectLiveRecords } from "@/components/projects/project-live-records";
+import { ProjectOperationPanel } from "@/components/projects/project-operation-panel";
 import { requireCurrentUser } from "@/lib/auth";
 import { listDocumentsForCategories } from "@/lib/data/documents";
 import { getProjectForUser } from "@/lib/data/projects";
@@ -43,5 +45,5 @@ export default async function SchedulePage({ params }: Props) {
       { title: "Ryzyka i opóźnienia", description: "Alerty o brakach dokumentów, materiałów, odbiorów i zagrożeniach terminu.", icon: TriangleAlert }
     ]}
     principle="Harmonogram korzysta z tej samej wiedzy co Brain AI. Dzięki temu system może ostrzegać, że przed kolejnym etapem brakuje wniosku, materiału albo wymaganego protokołu."
-  />;
+  ><ProjectOperationPanel projectId={projectId} mode="schedule" /><ProjectLiveRecords projectId={projectId} kind="schedule" /></ProjectModuleFoundation>;
 }

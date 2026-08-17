@@ -21,17 +21,26 @@ const ENTITY_DOMAINS: Record<string, Domain> = {
   ai_invoice_import: "finance",
   employee: "hr",
   qualification: "hr",
+  medical_exam: "hr",
   leave_request: "hr",
+  leave_decision: "hr",
   timesheet: "hr",
+  timesheet_decision: "hr",
+  employee_status: "hr",
   warehouse: "warehouse",
   stock_item: "warehouse",
   stock_movement: "warehouse",
   ai_warehouse_import: "warehouse",
   stock_movement_approve: "warehouse",
+  reservation: "warehouse",
   vehicle: "fleet",
   fuel_entry: "fleet",
+  trip: "fleet",
   service_order: "fleet",
+  service_close: "fleet",
   vehicle_document: "fleet",
+  damage_case: "fleet",
+  vehicle_status: "fleet",
   report_definition: "reports",
   report_generate: "reports"
 };
@@ -101,25 +110,54 @@ async function createReportSnapshot(workspaceId: string, userId: string, payload
   const projectId = definition?.project_id ? String(definition.project_id) : null;
   const periodStart = date(payload.periodStart);
   const periodEnd = date(payload.periodEnd);
-  const [projects, documents, employees, vehicles, stockItems, invoices, commitments, openAi] = await Promise.all([
-    supabase.from("projects").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId),
-    supabase.from("documents").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).is("deleted_at", null),
-    supabase.from("employees").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("status", "active"),
-    supabase.from("vehicles").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("status", "active"),
-    supabase.from("stock_items").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("active", true),
-    supabase.from("invoices").select("direction,gross_amount,paid_amount,status").eq("workspace_id", workspaceId),
-    supabase.from("commitments").select("amount,status").eq("workspace_id", workspaceId).in("status", ["open", "approved"]),
-    supabase.from("document_intakes").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).in("status", ["queued", "review", "error"])
+  if (periodStart && periodEnd && periodStart > periodEnd) throw new Error("Początek okresu raportu nie może być późniejszy niż koniec.");
+  const [projects, documents, employees, vehicles, stockItems, invoices, commitments, openAi, allocations, assignments, vehicleAllocations, materialEvents] = await Promise.all([
+    supabase.from("projects").select("id,status").eq("workspace_id", workspaceId),
+    supabase.from("documents").select("id,project_id,created_at").eq("workspace_id", workspaceId).is("deleted_at", null),
+    supabase.from("employees").select("id,status").eq("workspace_id", workspaceId),
+    supabase.from("vehicles").select("id,status").eq("workspace_id", workspaceId),
+    supabase.from("stock_items").select("id,active").eq("workspace_id", workspaceId),
+    supabase.from("invoices").select("id,direction,issue_date,gross_amount,paid_amount,status").eq("workspace_id", workspaceId),
+    supabase.from("commitments").select("project_id,amount,expected_date,status").eq("workspace_id", workspaceId).in("status", ["open", "approved"]),
+    supabase.from("document_intakes").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).in("status", ["queued", "review", "error"]),
+    supabase.from("financial_allocations").select("source_id,project_id,status").eq("workspace_id", workspaceId).eq("source_type", "invoice").eq("status", "approved"),
+    supabase.from("assignments").select("employee_id,project_id,date_from,date_to").eq("workspace_id", workspaceId),
+    supabase.from("vehicle_allocations").select("vehicle_id,project_id").eq("workspace_id", workspaceId),
+    supabase.from("material_chain_events").select("stock_item_id,project_id,occurred_at").eq("workspace_id", workspaceId)
   ]);
-  const invoiceRows = invoices.data ?? [];
+  const inPeriod = (value: unknown) => {
+    if (!value) return true;
+    const normalized = String(value).slice(0, 10);
+    return (!periodStart || normalized >= periodStart) && (!periodEnd || normalized <= periodEnd);
+  };
+  const overlapsPeriod = (from: unknown, to: unknown) => {
+    const start = from ? String(from).slice(0, 10) : null;
+    const end = to ? String(to).slice(0, 10) : null;
+    return (!periodEnd || !start || start <= periodEnd) && (!periodStart || !end || end >= periodStart);
+  };
+  const projectInvoiceIds = projectId
+    ? new Set((allocations.data ?? []).filter((row) => row.project_id === projectId).map((row) => String(row.source_id)))
+    : null;
+  const invoiceRows = (invoices.data ?? []).filter((row) => inPeriod(row.issue_date) && (!projectInvoiceIds || projectInvoiceIds.has(String(row.id))));
   const sale = invoiceRows.filter((row) => row.direction === "sale").reduce((sum, row) => sum + Number(row.gross_amount ?? 0), 0);
   const purchase = invoiceRows.filter((row) => row.direction === "purchase").reduce((sum, row) => sum + Number(row.gross_amount ?? 0), 0);
   const paid = invoiceRows.reduce((sum, row) => sum + Number(row.paid_amount ?? 0), 0);
-  const committed = (commitments.data ?? []).reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
+  const committed = (commitments.data ?? [])
+    .filter((row) => (!projectId || row.project_id === projectId) && inPeriod(row.expected_date))
+    .reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
+  const assignedEmployees = projectId ? new Set((assignments.data ?? []).filter((row) => row.project_id === projectId && overlapsPeriod(row.date_from, row.date_to)).map((row) => String(row.employee_id))) : null;
+  const assignedVehicles = projectId ? new Set((vehicleAllocations.data ?? []).filter((row) => row.project_id === projectId).map((row) => String(row.vehicle_id))) : null;
+  const projectStockItems = projectId ? new Set((materialEvents.data ?? []).filter((row) => row.project_id === projectId && inPeriod(row.occurred_at)).map((row) => row.stock_item_id).filter(Boolean).map(String)) : null;
+  const projectRows = (projects.data ?? []).filter((row) => !projectId || row.id === projectId);
+  const documentRows = (documents.data ?? []).filter((row) => (!projectId || row.project_id === projectId) && inPeriod(row.created_at));
+  const employeeRows = (employees.data ?? []).filter((row) => row.status === "active" && (!assignedEmployees || assignedEmployees.has(String(row.id))));
+  const vehicleRows = (vehicles.data ?? []).filter((row) => row.status === "active" && (!assignedVehicles || assignedVehicles.has(String(row.id))));
+  const stockRows = (stockItems.data ?? []).filter((row) => row.active && (!projectStockItems || projectStockItems.has(String(row.id))));
   const snapshot = {
+    scope: { project_id: projectId, report_type: definition?.report_type ?? "management" },
     period: { start: periodStart, end: periodEnd },
-    portfolio: { projects: projects.count ?? 0, documents: documents.count ?? 0 },
-    resources: { employees: employees.count ?? 0, vehicles: vehicles.count ?? 0, stock_items: stockItems.count ?? 0 },
+    portfolio: { projects: projectRows.length, documents: documentRows.length },
+    resources: { employees: employeeRows.length, vehicles: vehicleRows.length, stock_items: stockRows.length },
     finance: { sales_gross: sale, purchases_gross: purchase, paid, open_commitments: committed, gross_result: sale - purchase },
     ai: { pending_decisions: openAi.count ?? 0 }
   };
@@ -142,7 +180,7 @@ async function createReportSnapshot(workspaceId: string, userId: string, payload
     data_snapshot: snapshot,
     narrative: {
       title: definition?.name ?? "Raport firmy",
-      summary: `Wynik brutto okresu: ${sale - purchase} PLN. Otwarte zobowiązania: ${committed} PLN.`,
+      summary: `Wynik brutto dla wybranego zakresu: ${sale - purchase} PLN. Otwarte zobowiązania: ${committed} PLN.`,
       generated_by: userId
     },
     source_references: ["projects", "documents", "employees", "vehicles", "stock_items", "invoices", "commitments"],
@@ -162,7 +200,9 @@ export async function POST(request: Request) {
   if (!workspace) return NextResponse.json({ error: "Brak dostępu do firmy." }, { status: 403 });
   const domain = ENTITY_DOMAINS[body.entity];
   if (!domain) return NextResponse.json({ error: "Nieobsługiwany rodzaj rekordu." }, { status: 400 });
-  if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain, level: "write", projectId: text(body.payload.projectId, "inwestycja") })) {
+  const approvalEntities = new Set(["leave_decision", "timesheet_decision", "stock_movement_approve"]);
+  const requiredLevel = approvalEntities.has(body.entity) ? "approve" : "write";
+  if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain, level: requiredLevel, projectId: text(body.payload.projectId, "inwestycja") })) {
     return NextResponse.json({ error: "Brak uprawnienia do zapisu w tym module." }, { status: 403 });
   }
 
@@ -175,18 +215,51 @@ export async function POST(request: Request) {
       if (error) throw error; id = data.id;
     } else if (body.entity === "invoice") {
       const counterpartyId = p.counterpartyId ? await requireOwnedId("counterparties", p.counterpartyId, workspace.id, "Kontrahent") : null;
+      const projectId = p.projectId ? await requireOwnedId("projects", p.projectId, workspace.id, "Inwestycja") : null;
       const net = amount(p.netAmount, "netto");
       const tax = amount(p.taxAmount, "VAT");
       const gross = amount(p.grossAmount, "brutto", true);
       const { data, error } = await supabase.from("invoices").insert({ workspace_id: workspace.id, counterparty_id: counterpartyId, invoice_number: text(p.invoiceNumber, "numer faktury", true), direction: text(p.direction, "kierunek", true), issue_date: date(p.issueDate), due_date: date(p.dueDate), net_amount: net, tax_amount: tax, gross_amount: gross, status: p.direction === "sale" ? "issued" : "received" }).select("id").single<{ id: string }>();
-      if (error) throw error; id = data.id;
+      if (error) throw error;
+      id = data.id;
+      const lineDescription = text(p.lineDescription, "opis pozycji");
+      if (lineDescription) {
+        const quantity = amount(p.lineQuantity, "ilość") || 1;
+        const unitPrice = amount(p.lineUnitPrice, "cena jednostkowa") || net || gross;
+        const { error: lineError } = await supabase.from("invoice_lines").insert({
+          workspace_id: workspace.id,
+          invoice_id: id,
+          line_number: 1,
+          description: lineDescription,
+          quantity,
+          unit: text(p.lineUnit, "jednostka") ?? "szt.",
+          unit_price: unitPrice,
+          net_amount: net,
+          gross_amount: gross
+        });
+        if (lineError) { await supabase.from("invoices").delete().eq("id", id); throw lineError; }
+      }
+      if (projectId) {
+        const { error: allocationError } = await supabase.from("financial_allocations").insert({
+          workspace_id: workspace.id,
+          project_id: projectId,
+          source_type: "invoice",
+          source_id: id,
+          amount: net || gross,
+          allocation_percent: 100,
+          status: "approved"
+        });
+        if (allocationError) { await supabase.from("invoices").delete().eq("id", id); throw allocationError; }
+      }
     } else if (body.entity === "payment") {
       const invoiceId = await requireOwnedId("invoices", p.invoiceId, workspace.id, "Faktura");
       const paymentAmount = amount(p.amount, "kwota płatności", true);
-      const { data: invoice } = await supabase.from("invoices").select("gross_amount,paid_amount").eq("id", invoiceId).single();
+      const { data: invoice } = await supabase.from("invoices").select("gross_amount").eq("id", invoiceId).single();
       const { data, error } = await supabase.from("payments").insert({ workspace_id: workspace.id, invoice_id: invoiceId, payment_date: date(p.paymentDate) ?? new Date().toISOString().slice(0, 10), amount: paymentAmount, bank_reference: text(p.bankReference, "referencja") }).select("id").single<{ id: string }>();
       if (error) throw error;
-      const paidAmount = Number(invoice?.paid_amount ?? 0) + paymentAmount;
+      const { data: confirmedPayments, error: paymentSumError } = await supabase.from("payments").select("amount").eq("workspace_id", workspace.id).eq("invoice_id", invoiceId).eq("status", "confirmed");
+      if (paymentSumError) throw paymentSumError;
+      const paidAmount = (confirmedPayments ?? []).reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
       await supabase.from("invoices").update({ paid_amount: paidAmount, status: paidAmount >= Number(invoice?.gross_amount ?? 0) ? "paid" : "partially_paid" }).eq("id", invoiceId);
       id = data.id;
     } else if (body.entity === "commitment") {
@@ -267,15 +340,49 @@ export async function POST(request: Request) {
       const employeeId = await requireOwnedId("employees", p.employeeId, workspace.id, "Pracownik");
       const { data, error } = await supabase.from("qualifications").insert({ workspace_id: workspace.id, employee_id: employeeId, qualification_type: text(p.qualificationType, "rodzaj uprawnienia", true), number: text(p.number, "numer"), issued_at: date(p.issuedAt), valid_until: date(p.validUntil), status: "valid" }).select("id").single<{ id: string }>();
       if (error) throw error; id = data.id;
+    } else if (body.entity === "medical_exam") {
+      const employeeId = await requireOwnedId("employees", p.employeeId, workspace.id, "Pracownik");
+      const result = text(p.result, "wynik") ?? "fit";
+      if (!["fit", "fit_with_restrictions", "unfit"].includes(result)) throw new Error("Nieprawidłowy wynik badania.");
+      const { data, error } = await supabase.from("medical_exams").insert({
+        workspace_id: workspace.id,
+        employee_id: employeeId,
+        exam_type: text(p.examType, "rodzaj badania", true),
+        examined_at: date(p.examinedAt),
+        valid_until: date(p.validUntil),
+        status: result === "fit" ? "valid" : result
+      }).select("id").single<{ id: string }>();
+      if (error) throw error; id = data.id;
     } else if (body.entity === "leave_request") {
       const employeeId = await requireOwnedId("employees", p.employeeId, workspace.id, "Pracownik");
+      const from = date(p.dateFrom);
+      const to = date(p.dateTo);
+      if (!from || !to || from > to) throw new Error("Podaj prawidłowy zakres urlopu.");
       const { data, error } = await supabase.from("leave_requests").insert({ workspace_id: workspace.id, employee_id: employeeId, leave_type: text(p.leaveType, "rodzaj urlopu") ?? "annual", date_from: date(p.dateFrom), date_to: date(p.dateTo), days: amount(p.days, "liczba dni", true), status: "pending" }).select("id").single<{ id: string }>();
       if (error) throw error; id = data.id;
+    } else if (body.entity === "leave_decision") {
+      const leaveId = await requireOwnedId("leave_requests", p.leaveId, workspace.id, "Wniosek urlopowy");
+      const decision = text(p.decision, "decyzja", true);
+      if (!decision || !["approved", "rejected"].includes(decision)) throw new Error("Nieprawidłowa decyzja urlopowa.");
+      const { error } = await supabase.from("leave_requests").update({ status: decision, approved_by: user.id }).eq("id", leaveId).eq("workspace_id", workspace.id);
+      if (error) throw error; id = leaveId;
     } else if (body.entity === "timesheet") {
       const employeeId = await requireOwnedId("employees", p.employeeId, workspace.id, "Pracownik");
       const projectId = p.projectId ? await requireOwnedId("projects", p.projectId, workspace.id, "Inwestycja") : null;
       const { data, error } = await supabase.from("timesheets").insert({ workspace_id: workspace.id, employee_id: employeeId, project_id: projectId, work_date: date(p.workDate) ?? new Date().toISOString().slice(0, 10), hours: amount(p.hours, "liczba godzin", true), overtime_hours: amount(p.overtimeHours, "nadgodziny"), status: "submitted" }).select("id").single<{ id: string }>();
       if (error) throw error; id = data.id;
+    } else if (body.entity === "timesheet_decision") {
+      const timesheetId = await requireOwnedId("timesheets", p.timesheetId, workspace.id, "Wpis czasu pracy");
+      const decision = text(p.decision, "decyzja", true);
+      if (!decision || !["approved", "rejected"].includes(decision)) throw new Error("Nieprawidłowa decyzja czasu pracy.");
+      const { error } = await supabase.from("timesheets").update({ status: decision, approved_by: user.id }).eq("id", timesheetId).eq("workspace_id", workspace.id);
+      if (error) throw error; id = timesheetId;
+    } else if (body.entity === "employee_status") {
+      const employeeId = await requireOwnedId("employees", p.employeeId, workspace.id, "Pracownik");
+      const status = text(p.status, "status", true);
+      if (!status || !["active", "inactive", "terminated"].includes(status)) throw new Error("Nieprawidłowy status pracownika.");
+      const { error } = await supabase.from("employees").update({ status, terminated_at: status === "terminated" ? date(p.terminatedAt) ?? new Date().toISOString().slice(0, 10) : null }).eq("id", employeeId).eq("workspace_id", workspace.id);
+      if (error) throw error; id = employeeId;
     } else if (body.entity === "warehouse") {
       const { data, error } = await supabase.from("warehouses").insert({ workspace_id: workspace.id, name: text(p.name, "nazwa magazynu", true), location: text(p.location, "lokalizacja"), warehouse_type: text(p.warehouseType, "typ") ?? "central" }).select("id").single<{ id: string }>();
       if (error) throw error; id = data.id;
@@ -351,22 +458,90 @@ export async function POST(request: Request) {
       const { error } = await supabase.from("stock_movements").update({ status: "approved", approved_by: user.id, approved_at: new Date().toISOString() }).eq("id", movementId).eq("workspace_id", workspace.id);
       if (error) throw error;
       id = movementId;
+    } else if (body.entity === "reservation") {
+      const projectId = await requireOwnedId("projects", p.projectId, workspace.id, "Inwestycja");
+      const warehouseId = await requireOwnedId("warehouses", p.warehouseId, workspace.id, "Magazyn");
+      const stockItemId = await requireOwnedId("stock_items", p.stockItemId, workspace.id, "Kartoteka");
+      const { data, error } = await supabase.from("reservations").insert({
+        workspace_id: workspace.id,
+        project_id: projectId,
+        warehouse_id: warehouseId,
+        stock_item_id: stockItemId,
+        quantity: amount(p.quantity, "ilość", true),
+        required_at: date(p.requiredAt),
+        status: "open"
+      }).select("id").single<{ id: string }>();
+      if (error) throw error; id = data.id;
     } else if (body.entity === "vehicle") {
       const { data, error } = await supabase.from("vehicles").insert({ workspace_id: workspace.id, registration_number: text(p.registrationNumber, "numer rejestracyjny", true)?.toUpperCase(), vin: text(p.vin, "VIN"), vehicle_type: text(p.vehicleType, "typ pojazdu", true), make: text(p.make, "marka"), model: text(p.model, "model"), production_year: amount(p.productionYear, "rok produkcji") || null, ownership_type: text(p.ownershipType, "forma własności"), current_mileage: amount(p.currentMileage, "przebieg") || null, status: "active" }).select("id").single<{ id: string }>();
       if (error) throw error; id = data.id;
     } else if (body.entity === "fuel_entry") {
       const vehicleId = await requireOwnedId("vehicles", p.vehicleId, workspace.id, "Pojazd");
       const projectId = p.projectId ? await requireOwnedId("projects", p.projectId, workspace.id, "Inwestycja") : null;
-      const { data, error } = await supabase.from("fuel_entries").insert({ workspace_id: workspace.id, vehicle_id: vehicleId, project_id: projectId, fueled_at: text(p.fueledAt, "data tankowania") ?? new Date().toISOString(), liters: amount(p.liters, "litry", true), gross_amount: amount(p.grossAmount, "koszt", true), mileage: amount(p.mileage, "przebieg") || null }).select("id").single<{ id: string }>();
+      const mileage = amount(p.mileage, "przebieg") || null;
+      const fueledAt = text(p.fueledAt, "data tankowania") ?? new Date().toISOString();
+      const { data, error } = await supabase.from("fuel_entries").insert({ workspace_id: workspace.id, vehicle_id: vehicleId, project_id: projectId, fueled_at: fueledAt, liters: amount(p.liters, "litry", true), gross_amount: amount(p.grossAmount, "koszt", true), mileage }).select("id").single<{ id: string }>();
+      if (error) throw error;
+      id = data.id;
+      if (mileage) {
+        const { data: vehicle } = await supabase.from("vehicles").select("current_mileage").eq("id", vehicleId).single<{ current_mileage: number | null }>();
+        if (mileage >= Number(vehicle?.current_mileage ?? 0)) {
+          await Promise.all([
+            supabase.from("vehicles").update({ current_mileage: mileage }).eq("id", vehicleId).eq("workspace_id", workspace.id),
+            supabase.from("meter_readings").insert({ workspace_id: workspace.id, vehicle_id: vehicleId, reading_date: fueledAt.slice(0, 10), mileage, source: "fuel_entry" })
+          ]);
+        }
+      }
+    } else if (body.entity === "trip") {
+      const vehicleId = await requireOwnedId("vehicles", p.vehicleId, workspace.id, "Pojazd");
+      const projectId = p.projectId ? await requireOwnedId("projects", p.projectId, workspace.id, "Inwestycja") : null;
+      const employeeId = p.employeeId ? await requireOwnedId("employees", p.employeeId, workspace.id, "Kierowca") : null;
+      const { data, error } = await supabase.from("trips").insert({
+        workspace_id: workspace.id,
+        vehicle_id: vehicleId,
+        employee_id: employeeId,
+        project_id: projectId,
+        started_at: text(p.startedAt, "początek przejazdu"),
+        finished_at: text(p.finishedAt, "koniec przejazdu"),
+        start_location: text(p.startLocation, "miejsce początkowe"),
+        end_location: text(p.endLocation, "miejsce docelowe"),
+        distance_km: amount(p.distanceKm, "dystans", true),
+        purpose: text(p.purpose, "cel przejazdu", true)
+      }).select("id").single<{ id: string }>();
       if (error) throw error; id = data.id;
     } else if (body.entity === "service_order") {
       const vehicleId = await requireOwnedId("vehicles", p.vehicleId, workspace.id, "Pojazd");
       const { data, error } = await supabase.from("service_orders").insert({ workspace_id: workspace.id, vehicle_id: vehicleId, service_type: text(p.serviceType, "rodzaj serwisu", true), opened_at: date(p.openedAt) ?? new Date().toISOString().slice(0, 10), next_due_date: date(p.nextDueDate), next_due_mileage: amount(p.nextDueMileage, "następny przebieg") || null, cost: amount(p.cost, "koszt") || null, status: "open" }).select("id").single<{ id: string }>();
       if (error) throw error; id = data.id;
+    } else if (body.entity === "service_close") {
+      const serviceId = await requireOwnedId("service_orders", p.serviceId, workspace.id, "Zlecenie serwisowe");
+      const update: Record<string, unknown> = { status: "closed", closed_at: date(p.closedAt) ?? new Date().toISOString().slice(0, 10) };
+      if (p.cost !== undefined && p.cost !== "") update.cost = amount(p.cost, "koszt") || null;
+      const { error } = await supabase.from("service_orders").update(update).eq("id", serviceId).eq("workspace_id", workspace.id);
+      if (error) throw error; id = serviceId;
     } else if (body.entity === "vehicle_document") {
       const vehicleId = await requireOwnedId("vehicles", p.vehicleId, workspace.id, "Pojazd");
       const { data, error } = await supabase.from("vehicle_documents").insert({ workspace_id: workspace.id, vehicle_id: vehicleId, document_type: text(p.documentType, "rodzaj dokumentu", true), number: text(p.number, "numer"), valid_from: date(p.validFrom), valid_until: date(p.validUntil), status: "valid" }).select("id").single<{ id: string }>();
       if (error) throw error; id = data.id;
+    } else if (body.entity === "damage_case") {
+      const vehicleId = await requireOwnedId("vehicles", p.vehicleId, workspace.id, "Pojazd");
+      const employeeId = p.employeeId ? await requireOwnedId("employees", p.employeeId, workspace.id, "Kierowca") : null;
+      const { data, error } = await supabase.from("damage_cases").insert({
+        workspace_id: workspace.id,
+        vehicle_id: vehicleId,
+        employee_id: employeeId,
+        occurred_at: text(p.occurredAt, "data szkody") ?? new Date().toISOString(),
+        description: text(p.description, "opis szkody", true),
+        cost: amount(p.cost, "koszt") || null,
+        status: "reported"
+      }).select("id").single<{ id: string }>();
+      if (error) throw error; id = data.id;
+    } else if (body.entity === "vehicle_status") {
+      const vehicleId = await requireOwnedId("vehicles", p.vehicleId, workspace.id, "Pojazd");
+      const status = text(p.status, "status", true);
+      if (!status || !["active", "inactive", "service", "sold"].includes(status)) throw new Error("Nieprawidłowy status pojazdu.");
+      const { error } = await supabase.from("vehicles").update({ status }).eq("id", vehicleId).eq("workspace_id", workspace.id);
+      if (error) throw error; id = vehicleId;
     } else if (body.entity === "report_definition") {
       const projectId = p.projectId ? await requireOwnedId("projects", p.projectId, workspace.id, "Inwestycja") : null;
       const { data, error } = await supabase.from("report_definitions").insert({ workspace_id: workspace.id, project_id: projectId, name: text(p.name, "nazwa raportu", true), report_type: text(p.reportType, "typ raportu", true), definition: { sections: ["portfolio", "finance", "resources", "documents", "ai"], created_from: "ui" }, schedule_rule: text(p.scheduleRule, "cykl"), created_by: user.id }).select("id").single<{ id: string }>();
@@ -376,7 +551,8 @@ export async function POST(request: Request) {
     }
 
     if (!id) throw new Error("Operacja nie utworzyła rekordu.");
-    await supabase.from("audit_events").insert({ workspace_id: workspace.id, actor_id: user.id, event_type: `${body.entity}.created`, entity_type: body.entity, entity_id: id, after_value: p });
+    const eventSuffix = body.entity.endsWith("_decision") || body.entity.endsWith("_status") || body.entity.endsWith("_approve") || body.entity.endsWith("_close") ? "updated" : "created";
+    await supabase.from("audit_events").insert({ workspace_id: workspace.id, actor_id: user.id, event_type: `${body.entity}.${eventSuffix}`, entity_type: body.entity, entity_id: id, after_value: p });
     return NextResponse.json({ ok: true, id });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Nie udało się zapisać rekordu.";

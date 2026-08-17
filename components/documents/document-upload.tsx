@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Download,
+  Eye,
   FilePlus2,
   FileSearch,
   FileText,
@@ -142,14 +143,31 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
 
   async function handleFiles(files: FileList | null) {
     if (!storageReady) return;
-    const file = files?.[0];
-    if (!file) return;
+    const selectedFiles = Array.from(files ?? []);
+    if (!selectedFiles.length) return;
+    if (targetDocumentIdRef.current && selectedFiles.length > 1) {
+      setError("Nowa wersja dokumentu może zawierać jeden plik. Dla paczki użyj głównej Wrzutni.");
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+    setIsUploading(true);
+    setError(null);
+    const failures: string[] = [];
+    let completed = 0;
+    for (const [index, file] of selectedFiles.entries()) {
+      try {
+        setStatus(`Plik ${index + 1} z ${selectedFiles.length}: ${file.name}`);
+        await uploadFile(file, targetDocumentIdRef.current, targetProjectIdRef.current);
+        completed += 1;
+      } catch (uploadError) {
+        failures.push(`${file.name}: ${uploadError instanceof Error ? uploadError.message : "upload nie powiódł się"}`);
+      }
+    }
+    if (completed) setStatus(`Zapisano ${completed} z ${selectedFiles.length} plików. Analiza działa w tle.`);
+    if (failures.length) setError(failures.join(" · "));
+    if (!completed) setStatus(null);
     try {
-      setIsUploading(true);
-      await uploadFile(file, targetDocumentIdRef.current, targetProjectIdRef.current);
-    } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "Upload nie powiódł się.");
-      setStatus(null);
+      startTransition(() => router.refresh());
     } finally {
       setIsUploading(false);
       targetDocumentIdRef.current = null;
@@ -183,6 +201,32 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
     } catch (downloadError) {
       setStatus(null);
       setError(downloadError instanceof Error ? downloadError.message : "Pobieranie nie powiodło się.");
+    }
+  }
+
+  async function previewVersion(versionId: string, contextProjectId: string | null) {
+    setError(null);
+    setStatus("Przygotowywanie podglądu");
+    const previewWindow = window.open("about:blank", "_blank");
+    if (previewWindow) previewWindow.opener = null;
+    try {
+      const response = await fetch("/api/storage/download-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId, projectId: contextProjectId, versionId })
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error ?? "Nie udało się przygotować podglądu.");
+      }
+      const payload = (await response.json()) as DownloadResponse;
+      setStatus(null);
+      if (previewWindow) previewWindow.location.replace(payload.downloadUrl);
+      else window.open(payload.downloadUrl, "_blank", "noopener,noreferrer");
+    } catch (previewError) {
+      previewWindow?.close();
+      setStatus(null);
+      setError(previewError instanceof Error ? previewError.message : "Podgląd nie powiódł się.");
     }
   }
 
@@ -244,7 +288,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
 
       <div className="documents-layout">
         <div className="upload-panel">
-          <input ref={inputRef} type="file" accept={SUPPORTED_UPLOAD_ACCEPT} onChange={(event) => handleFiles(event.target.files)} disabled={!storageReady} />
+          <input ref={inputRef} type="file" accept={SUPPORTED_UPLOAD_ACCEPT} multiple onChange={(event) => handleFiles(event.target.files)} disabled={!storageReady} />
           {!projectId && projects.length > 0 ? (
             <label className="upload-context">
               <span>Kontekst dokumentu</span>
@@ -284,7 +328,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
             disabled={isPending || isUploading || !storageReady}
           >
             <UploadCloud size={30} aria-hidden="true" />
-            <strong>{isUploading ? "Przetwarzanie pliku" : "Przeciągnij plik lub wybierz z dysku"}</strong>
+            <strong>{isUploading ? "Przetwarzanie plików" : "Przeciągnij pliki lub wybierz z dysku"}</strong>
             <span>PDF, Word, Excel, obrazy, XML i ZIP · do {MAX_SUPPORTED_UPLOAD_BYTES / 1024 / 1024} MB</span>
           </button>
           <div className="upload-pipeline">
@@ -300,7 +344,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
             const version = document.document_versions?.[0];
             const projectName = projects.find((item) => item.id === document.project_id)?.name;
             return (
-              <article key={document.id} className="document-row">
+              <article key={document.id} id={`document-${document.id}`} className="document-row">
                 <FileText size={19} aria-hidden="true" />
                 <div>
                   <div className="document-row__title">
@@ -313,6 +357,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
                 {version ? (
                   <div className="document-row__actions">
                     <button type="button" className="secondary-button" onClick={() => analyzeVersion(version.id)} disabled={isUploading}><Sparkles size={16} aria-hidden="true" />Analizuj</button>
+                    <button type="button" className="secondary-button" onClick={() => previewVersion(version.id, document.project_id)} disabled={isUploading}><Eye size={16} aria-hidden="true" />Podgląd</button>
                     <button type="button" className="secondary-button" onClick={() => downloadVersion(version.id, document.project_id)} disabled={isUploading}><Download size={16} aria-hidden="true" />Pobierz</button>
                     <button type="button" className="secondary-button" onClick={() => openFilePicker(document.id, document.project_id)} disabled={isUploading || !storageReady}><FilePlus2 size={16} aria-hidden="true" />Nowa wersja</button>
                     <button type="button" className="secondary-button secondary-button--danger" onClick={() => changeDocumentState(document.id, "trashed", document.project_id)} disabled={isUploading || isPending}><Trash2 size={16} aria-hidden="true" />Do kosza</button>
