@@ -1,6 +1,6 @@
 {
   "name": "project-octopus",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit",
     "test:migrations": "node scripts/validate-migrations-local.mjs",
     "check:schema": "node scripts/check-schema.mjs",
-    "test:e2e-upload": "node scripts/e2e-upload.mjs"
+    "test:e2e-upload": "node scripts/e2e-upload.mjs",
+    "test:e2e-core": "node scripts/e2e-core.mjs",
+    "test:e2e": "npm run test:e2e-upload && npm run test:e2e-core"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1107.0",
