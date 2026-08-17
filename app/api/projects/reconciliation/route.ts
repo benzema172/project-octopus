@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     }
 
     const [boqResult, allocResult, stockEventsResult] = await Promise.all([
-      db.from("boq_items").select("id,item_number,description,unit,cost_code").eq("workspace_id", project.workspace_id).eq("project_id", project.id).limit(2000),
+      db.from("boq_items").select("id,item_number,description,unit,cost_code").eq("project_id", project.id).limit(2000),
       db.from("financial_allocations").select("source_id").eq("workspace_id", project.workspace_id).eq("project_id", project.id).eq("source_type", "invoice").eq("status", "approved").limit(1000),
       db.from("material_chain_events").select("stock_item_id").eq("workspace_id", project.workspace_id).eq("project_id", project.id).not("stock_item_id", "is", null).limit(1000)
     ]);
