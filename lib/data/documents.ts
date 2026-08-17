@@ -47,6 +47,9 @@ function normalizeVersion(row: FlexibleRow, projectId: string | null, fallbackNa
     r2_etag: stringValue(row, "r2_etag"),
     sha256: stringValue(row, "sha256"),
     upload_status: stringValue(row, "upload_status", "status") ?? "uploaded",
+    security_status: stringValue(row, "security_status") ?? "pending",
+    security_report: row.security_report && typeof row.security_report === "object" ? row.security_report as Record<string, unknown> : {},
+    security_scanned_at: stringValue(row, "security_scanned_at"),
     uploaded_at: stringValue(row, "uploaded_at"),
     created_at: stringValue(row, "created_at") ?? ""
   };
@@ -135,8 +138,8 @@ export async function isDocumentStorageSchemaReady() {
   const { data, error } = await supabase
     .from("app_schema_versions")
     .select("version")
-    .eq("version", "20260814_domain_access_hardening")
+    .eq("version", "20260817_upload_security_and_atomic_document_review")
     .maybeSingle<{ version: string }>();
 
-  return !error && data?.version === "20260814_domain_access_hardening";
+  return !error && data?.version === "20260817_upload_security_and_atomic_document_review";
 }

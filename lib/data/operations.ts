@@ -258,3 +258,61 @@ export async function getBrainMetrics(workspaceId: string, projectId?: string) {
   const [ready, review, error, facts, wbs] = await Promise.all([documentCount("ready"), documentCount("review"), documentCount("error"), factQuery, wbsQuery]);
   return { readyDocuments: ready, reviewDocuments: review, errorDocuments: error, approvedFacts: facts.count ?? 0, wbsNodes: wbs.count ?? 0 };
 }
+
+export type ProcessingQueueHealth = {
+  state: "healthy" | "warning" | "critical";
+  queued: number;
+  running: number;
+  staleRunning: number;
+  deadLetter: number;
+  succeeded24h: number;
+  failed24h: number;
+  oldestQueuedAt: string | null;
+  oldestQueuedMinutes: number | null;
+  lastHeartbeatAt: string | null;
+  estimatedCost24h: number;
+  checkedAt: string;
+};
+
+export async function getProcessingQueueHealth(workspaceId: string): Promise<ProcessingQueueHealth> {
+  const supabase = createServiceSupabaseClient();
+  const checkedAt = new Date();
+  const since24h = new Date(checkedAt.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const staleBefore = new Date(checkedAt.getTime() - 15 * 60 * 1000).toISOString();
+  const countStatus = (status: string) => supabase.from("processing_jobs").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("status", status);
+  const [queued, running, stale, deadLetter, succeeded, failed, oldestQueued, lastHeartbeat, costs] = await Promise.all([
+    countStatus("queued"),
+    countStatus("running"),
+    supabase.from("processing_jobs").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("status", "running").or(`last_heartbeat_at.is.null,last_heartbeat_at.lt.${staleBefore}`),
+    countStatus("dead_letter"),
+    supabase.from("processing_jobs").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("status", "succeeded").gte("finished_at", since24h),
+    supabase.from("processing_jobs").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).in("status", ["failed", "dead_letter"]).gte("updated_at", since24h),
+    supabase.from("processing_jobs").select("created_at").eq("workspace_id", workspaceId).eq("status", "queued").order("created_at", { ascending: true }).limit(1).maybeSingle<{ created_at: string }>(),
+    supabase.from("processing_jobs").select("last_heartbeat_at").eq("workspace_id", workspaceId).not("last_heartbeat_at", "is", null).order("last_heartbeat_at", { ascending: false }).limit(1).maybeSingle<{ last_heartbeat_at: string }>(),
+    supabase.from("processing_jobs").select("estimated_cost").eq("workspace_id", workspaceId).gte("updated_at", since24h).limit(1000)
+  ]);
+  const oldestQueuedAt = oldestQueued.data?.created_at ?? null;
+  const oldestQueuedMinutes = oldestQueuedAt ? Math.max(0, Math.round((checkedAt.getTime() - Date.parse(oldestQueuedAt)) / 60_000)) : null;
+  const staleRunning = stale.count ?? 0;
+  const deadLetterCount = deadLetter.count ?? 0;
+  const queuedCount = queued.count ?? 0;
+  const state: ProcessingQueueHealth["state"] = deadLetterCount > 0 || staleRunning > 0
+    ? "critical"
+    : (oldestQueuedMinutes ?? 0) > 10 || queuedCount > 20
+      ? "warning"
+      : "healthy";
+  return {
+    state,
+    queued: queuedCount,
+    running: running.count ?? 0,
+    staleRunning,
+    deadLetter: deadLetterCount,
+    succeeded24h: succeeded.count ?? 0,
+    failed24h: failed.count ?? 0,
+    oldestQueuedAt,
+    oldestQueuedMinutes,
+    lastHeartbeatAt: lastHeartbeat.data?.last_heartbeat_at ?? null,
+    estimatedCost24h: (costs.data ?? []).reduce((sum, row) => sum + Number(row.estimated_cost ?? 0), 0),
+    checkedAt: checkedAt.toISOString()
+  };
+}

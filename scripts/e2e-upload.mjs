@@ -165,7 +165,7 @@ if (!completeResponse.ok) {
 const completed = await completeResponse.json();
 const { data: documentVersion, error: versionError } = await admin
   .from("document_versions")
-  .select("id,r2_object_key,r2_etag,sha256,upload_status,version_number")
+  .select("id,r2_object_key,r2_etag,sha256,upload_status,security_status,security_report,security_scanned_at,version_number")
   .eq("id", completed.versionId)
   .single();
 
@@ -176,6 +176,9 @@ if (versionError || !documentVersion) {
 
 if (
   documentVersion.upload_status !== "uploaded" ||
+  documentVersion.security_status !== "passed" ||
+  documentVersion.security_report?.sha256 !== sha256 ||
+  !documentVersion.security_scanned_at ||
   documentVersion.sha256 !== sha256 ||
   documentVersion.version_number !== 1 ||
   !documentVersion.r2_etag
@@ -207,4 +210,3 @@ if (processingJobError || !processingJob || processingJob.status !== "queued") {
 console.log(`E2E upload OK: ${completed.documentId}`);
 console.log(`R2 object: ${documentVersion.r2_object_key}`);
 console.log(`AI intake/job: ${intake.status}/${processingJob.status}`);
-

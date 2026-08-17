@@ -1,28 +1,27 @@
-# Project Octopus — plan ukończenia po 0.7.1
+# Project Octopus — plan ukończenia po 0.7.2
 
 Stan na 17 sierpnia 2026 r. Roadmapa rozdziela funkcje działające od zaplanowanych. „Gotowe” oznacza pełny przepływ z zapisem, odczytem, uprawnieniami, audytem i testem — nie sam ekran lub tabelę.
 
-## Działające w 0.7.1
+## Działające w 0.7.2
 
 | Obszar | Działający przepływ |
 |---|---|
-| Dokumenty | prywatny upload R2, wersje, kosz, kolejka, ekstrakcja, klasyfikacja, źródła, decyzja człowieka |
+| Dokumenty | prywatny upload R2, serwerowe SHA-256 i magic bytes, kontrola PDF/Office/ZIP, kwarantanna, wersje, kosz, ekstrakcja, klasyfikacja i atomowa decyzja człowieka |
 | Brain | zatwierdzone fakty, materiały, urządzenia, wyszukiwanie, asystent i pamięć firmy bez odrzuconych propozycji |
 | Kosztorys | import AI → kontrola → atomowe BOQ/WBS → szkic harmonogramu, bez duplikatów po ponowieniu |
 | Realizacja | ręczne wymagania, protokoły, zadania, okresy i ilości przerobu, zdarzenia z budowy oraz checklista zamknięcia |
 | Firma | operacyjne formularze i rejestry Finansów, Kadr, Magazynu, Floty i Raportów |
 | Uprawnienia | role domenowe i projektowe read/write/approve/admin, nadawanie, aktualizacja, odebranie i audyt |
 | Wzory i Wyniki | zatwierdzony wzór → snapshot danych → podgląd → decyzja → jeden wersjonowany plik HTML w R2 → pobieranie |
-| Kontrola jakości | 31 testów jednostkowych, pełny replay migracji, typecheck, lint i produkcyjny build |
+| Monitoring | health endpoint, opóźnienie kolejki, heartbeat, automatyczne odzyskanie zawieszonego zadania, dead-letter, tokeny i koszt konfigurowany stawkami modelu |
+| Kontrola jakości | testy jednostkowe i transakcyjne, pełny replay migracji, typecheck, lint i produkcyjny build |
 
 ## P0 — konieczne przed danymi produkcyjnymi
 
-1. Wdrożyć migrację `20260817090000_document_taxonomy_and_ai_review.sql` i potwierdzić marker `20260817_document_taxonomy_and_ai_review`.
+1. Wdrożyć migracje do `20260817130000_upload_security_and_atomic_document_review.sql` i potwierdzić marker `20260817_upload_security_and_atomic_document_review`.
 2. Wykonać E2E na docelowych Supabase/R2/Gemini: PDF, DOCX, XLSX, ponowienie, akceptacja, odrzucenie, nowa rewizja i pobranie wyniku.
 3. Przetestować macierz ról na osobnych kontach: właściciel, finanse, HR, kierownik, magazyn, flota i obserwator; zakres firmy oraz jednej inwestycji.
-4. Dodać skan antymalware i weryfikację magic bytes przed analizą pliku.
-5. Uruchomić monitoring kolejki: opóźnienie, retry, dead-letter, brak workera, tokeny i koszt Gemini.
-6. Przenieść wielotabelową decyzję dokumentu do jednej procedury transakcyjnej PostgreSQL, analogicznie do BOQ i publikacji wyniku.
+4. Podłączyć zewnętrzny silnik antymalware/CDR do plików produkcyjnych. Wbudowana kontrola 0.7.2 odrzuca niezgodne sygnatury, aktywne PDF, zip-bomby, traversal, makra oraz pliki wykonywalne, ale nie zastępuje aktualizowanej bazy sygnatur wirusów.
 
 Kryterium: kontrolowany test nie ujawnia danych między domenami, odrzucona rewizja nie zasila Brain, a awaria integracji jest widoczna jako błąd.
 

@@ -170,6 +170,31 @@ type GeminiFile = {
   error?: { message?: string };
 };
 
+type GeminiUsageMetadata = {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  thoughtsTokenCount?: number;
+  totalTokenCount?: number;
+};
+
+function tokenRate(name: string) {
+  const value = Number(getOptionalEnv(name) ?? 0);
+  return Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function normalizeUsage(value: GeminiUsageMetadata | undefined) {
+  const inputTokens = Math.max(0, Number(value?.promptTokenCount) || 0);
+  const outputTokens = Math.max(0, (Number(value?.candidatesTokenCount) || 0) + (Number(value?.thoughtsTokenCount) || 0));
+  const inputRate = tokenRate("GEMINI_INPUT_USD_PER_MILLION");
+  const outputRate = tokenRate("GEMINI_OUTPUT_USD_PER_MILLION");
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: Math.max(inputTokens + outputTokens, Number(value?.totalTokenCount) || 0),
+    estimatedCostUsd: inputTokens / 1_000_000 * inputRate + outputTokens / 1_000_000 * outputRate
+  };
+}
+
 function normalizeAnalysis(value: unknown): DocumentAnalysis {
   if (!value || typeof value !== "object") throw new Error("Gemini zwrócił nieprawidłową analizę.");
   const source = value as Partial<DocumentAnalysis>;
@@ -262,10 +287,10 @@ W searchPassages zwróć ważne, możliwe do wyszukania fragmenty i nagłówki d
     signal: AbortSignal.timeout(55_000)
   });
   if (!response.ok) throw new Error(`Gemini odrzucił analizę: HTTP ${response.status} ${await response.text()}`.slice(0, 700));
-  const payload = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+  const payload = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>; usageMetadata?: GeminiUsageMetadata };
   const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
   if (!text) throw new Error("Gemini nie zwrócił treści analizy.");
-  return { analysis: normalizeAnalysis(JSON.parse(text)), model };
+  return { analysis: normalizeAnalysis(JSON.parse(text)), model, usage: normalizeUsage(payload.usageMetadata) };
 }
 
 async function uploadGeminiFile(input: { fileName: string; mimeType: string; bytes: Buffer }) {

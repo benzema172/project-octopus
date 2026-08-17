@@ -10,6 +10,7 @@ import {
   FileText,
   RotateCcw,
   Search,
+  ShieldCheck,
   Sparkles,
   Trash2,
   UploadCloud
@@ -314,7 +315,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
           <div className="upload-pipeline">
             <span>R2</span><span>Ekstrakcja</span><span>Gemini</span><span>Klasyfikacja</span><span>Moduły</span>
           </div>
-          {!storageReady ? <p className="form-message">Uruchom wszystkie migracje do 20260814_domain_access_hardening, aby odblokować Wrzutnię.</p> : null}
+          {!storageReady ? <p className="form-message">Uruchom wszystkie migracje do 20260817_upload_security_and_atomic_document_review, aby odblokować bezpieczną Wrzutnię.</p> : null}
           {status ? <p className="upload-status">{status}</p> : null}
           {error ? <p className="form-message form-message--error">{error}</p> : null}
           </> : <div className="empty-state empty-state--compact"><FileSearch size={24} /><h3>Biblioteka tylko do odczytu</h3><p>Dodawanie i zmiana plików wymaga roli z poziomem zapisu w odpowiedniej domenie.</p></div>}
@@ -333,6 +334,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
                     <span className="document-category">{categoryLabel(document.category)}</span>
                   </div>
                   <p>{projectName ?? (document.project_id ? "Inwestycja" : "Dokument firmowy")} · {version?.mime_type ?? "plik"} · {version ? formatFileSize(version.file_size_bytes) : "bez wersji"} · {version ? `wersja ${version.version_number}` : "oczekuje"}</p>
+                  <span className="document-ai-state"><ShieldCheck size={13} aria-hidden="true" />{version?.security_status === "passed" ? "Plik zweryfikowany" : "Starszy plik bez kontroli zawartości"}</span>
                   <span className="document-ai-state"><Sparkles size={13} aria-hidden="true" />{["ready", "review"].includes(document.ai_status ?? "") ? "AI: analiza do weryfikacji" : "AI: w kolejce do analizy"}</span>
                 </div>
                 {version ? (

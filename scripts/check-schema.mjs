@@ -25,7 +25,7 @@ const checks = [
   ],
   [
     "document_versions",
-    "id,document_id,project_id,version_number,file_name,mime_type,file_size_bytes,r2_bucket,r2_object_key,r2_etag,sha256,upload_status,uploaded_by,uploaded_at,created_at"
+    "id,document_id,project_id,version_number,file_name,mime_type,file_size_bytes,r2_bucket,r2_object_key,r2_etag,sha256,upload_status,security_status,security_report,security_scanned_at,uploaded_by,uploaded_at,created_at"
   ],
   ["document_pages", "id,document_version_id,page_number,text_content,created_at"],
   ["document_chunks", "id,document_version_id,page_id,chunk_index,content,embedding,metadata,created_at"],
@@ -105,12 +105,12 @@ if (failed) {
 const { data: schemaMarker, error: markerError } = await supabase
   .from("app_schema_versions")
   .select("version")
-  .eq("version", "20260817_document_taxonomy_and_ai_review")
+  .eq("version", "20260817_upload_security_and_atomic_document_review")
   .maybeSingle();
 
 if (markerError || !schemaMarker) {
-  console.error(`FAIL app_schema_versions: ${markerError?.message ?? "missing 20260817_document_taxonomy_and_ai_review marker"}`);
+  console.error(`FAIL app_schema_versions: ${markerError?.message ?? "missing 20260817_upload_security_and_atomic_document_review marker"}`);
   process.exit(1);
 }
 
-console.log("Schema matches the Project Octopus 0.7.1 taxonomy, review and publication requirements.");
+console.log("Schema matches the Project Octopus 0.7.2 upload security, atomic review and publication requirements.");

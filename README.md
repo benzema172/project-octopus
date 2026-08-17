@@ -1,4 +1,4 @@
-# Project Octopus 0.7.1
+# Project Octopus 0.7.2
 
 System operacyjny firmy wykonawczej, w którym dokument źródłowy zasila Project DNA, kosztorys/BOQ, WBS, harmonogram, materiały, protokoły, przerób, finanse i raportowanie.
 
@@ -10,6 +10,18 @@ System operacyjny firmy wykonawczej, w którym dokument źródłowy zasila Proje
 - AI proponuje, reguły walidują, a człowiek zatwierdza operacje formalne, finansowe, kadrowe i magazynowe,
 - liczby finansowe pochodzą wyłącznie z rekordów źródłowych i jawnych założeń forecastu,
 - dane HR, finansowe i techniczne są rozdzielone rolami domenowymi.
+
+## Wersja 0.7.2
+
+### Bezpieczna Wrzutnia i operacyjny monitoring
+
+- serwer pobiera przesłany obiekt przed rejestracją, wylicza własne SHA-256 i sprawdza sygnaturę zawartości zamiast ufać nazwie oraz MIME klienta,
+- PDF, obrazy, tekst, JSON, DOCX, XLSX i ZIP mają kontrolę struktury; archiwa blokują traversal, zaszyfrowane wpisy, zip-bomby, makra i aktywne pliki,
+- odrzucony obiekt jest usuwany z R2, a przyczyna trafia do audytu jako zdarzenie kwarantanny,
+- wynik kontroli bezpieczeństwa jest zapisywany atomowo razem z wersją dokumentu,
+- decyzja dokumentu, publikacja wiedzy, superseded poprzedniej rewizji i audyt wykonują się w jednej transakcji PostgreSQL,
+- Skrzynka AI pokazuje stan kolejki, najstarsze zadanie, brak heartbeat, dead-letter, skuteczność i koszt z ostatnich 24 godzin,
+- administrator może ręcznie uruchomić do pięciu zadań, a endpoint health nadaje się do zewnętrznego monitoringu.
 
 ## Wersja 0.7.1
 
@@ -140,10 +152,12 @@ R2_ENDPOINT
 AI_PROVIDER=gemini
 GEMINI_MODEL=gemini-3.5-flash
 GEMINI_API_KEY
+GEMINI_INPUT_USD_PER_MILLION
+GEMINI_OUTPUT_USD_PER_MILLION
 CRON_SECRET
 ```
 
-`CRON_SECRET` chroni automatyczne wywołanie `/api/brain/worker`. Sekrety nie są zapisywane w tabelach biznesowych.
+`CRON_SECRET` chroni automatyczne wywołanie `/api/brain/worker`. Stawki Gemini służą wyłącznie do jawnego szacowania kosztu na podstawie `usageMetadata`; ustaw je zgodnie z aktualnym cennikiem używanego modelu. Sekrety nie są zapisywane w tabelach biznesowych.
 
 ## Migracje
 
@@ -155,9 +169,10 @@ supabase/migrations/20260814130000_octopus_execution_layer.sql
 supabase/migrations/20260814170000_atomic_estimate_approval.sql
 supabase/migrations/20260814180000_domain_access_hardening.sql
 supabase/migrations/20260817090000_document_taxonomy_and_ai_review.sql
+supabase/migrations/20260817130000_upload_security_and_atomic_document_review.sql
 ```
 
-Na pustej bazie uruchom wszystkie migracje chronologicznie. Funkcje 0.7.1 wymagają markera `20260817_document_taxonomy_and_ai_review`.
+Na pustej bazie uruchom wszystkie migracje chronologicznie. Funkcje 0.7.2 wymagają markera `20260817_upload_security_and_atomic_document_review`.
 
 ## Walidacja
 

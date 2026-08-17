@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { BookOpenCheck, CheckCircle2, CircleDashed, FileText, ShieldCheck, SlidersHorizontal, Sparkles } from "lucide-react";
 import { updateCompanyAction } from "@/app/actions";
 import { AiInbox } from "@/components/brain/ai-inbox";
+import { QueueHealthPanel } from "@/components/brain/queue-health-panel";
 import { KnowledgeEntryForm } from "@/components/brain/knowledge-entry-form";
 import { KnowledgeSearch } from "@/components/brain/knowledge-search";
 import { CompanyOperationsWorkspace } from "@/components/company/company-operations-workspace";
@@ -20,7 +21,7 @@ import {
   getReportsWorkspaceData,
   getWarehouseWorkspaceData
 } from "@/lib/data/company-operations";
-import { listAiInbox } from "@/lib/data/operations";
+import { getProcessingQueueHealth, listAiInbox } from "@/lib/data/operations";
 import { listProjectsForWorkspace } from "@/lib/data/projects";
 import { getWorkspaceForUser, isCompanyProfileSchemaReady } from "@/lib/data/workspace";
 import { getAiRuntimeStatus } from "@/lib/env";
@@ -294,6 +295,9 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
     ]);
     const canReadInbox = (["investments", "templates", "reports"] as Domain[]).some((domain) => domainAccessPolicyHasAnyScope(accessPolicy, { domain, level: "read" }));
     if (!canReadInbox) return <DomainAccessDenied workspaceId={workspace.id} area="Skrzynka AI" />;
+    const canReadQueueHealth = domainAccessPolicyHasAnyScope(accessPolicy, { domain: "settings", level: "read" });
+    const canRunWorker = domainAccessPolicyHasAnyScope(accessPolicy, { domain: "settings", level: "admin" });
+    const queueHealth = canReadQueueHealth ? await getProcessingQueueHealth(workspace.id) : null;
     const items = allItems.filter((item) => {
       if (item.entityType === "generation_run") return domainAccessPolicyAllows(accessPolicy, { domain: "templates", level: "read", projectId: item.projectId }) && domainAccessPolicyAllows(accessPolicy, { domain: "investments", level: "read", projectId: item.projectId }) && domainAccessPolicyAllows(accessPolicy, { domain: domainForDocumentCategory(generationDocumentCategory(item.category)), level: "read", projectId: item.projectId });
       const domain: Domain = item.entityType === "template_version"
@@ -310,6 +314,7 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
     return (
       <main className="co-page">
         <header className="co-page-heading"><div><p className="co-kicker">Wspólna kontrola AI</p><h1>Skrzynka AI</h1><p>Klasyfikacje, importy kosztorysów, skutki rewizji, szkice z budowy i wiedza firmy wymagające decyzji człowieka.</p></div><strong className="co-count-badge">{reviewCount} decyzji · {errorCount} błędów</strong></header>
+        {queueHealth ? <QueueHealthPanel health={queueHealth} workspaceId={workspace.id} canRunWorker={canRunWorker} /> : null}
         <section className="co-section"><AiInbox items={items} workspaceId={workspace.id} /></section>
       </main>
     );

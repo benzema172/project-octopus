@@ -26,6 +26,10 @@ const taxonomyAndReview = readFileSync(
   "supabase/migrations/20260817090000_document_taxonomy_and_ai_review.sql",
   "utf8"
 );
+const uploadSecurityAndAtomicReview = readFileSync(
+  "supabase/migrations/20260817130000_upload_security_and_atomic_document_review.sql",
+  "utf8"
+);
 
 describe("Supabase migration contract", () => {
   it("uses the project profile columns expected by the application", () => {
@@ -102,5 +106,16 @@ describe("Supabase migration contract", () => {
     expect(taxonomyAndReview).toContain("domain_role_grants_scope_unique_idx");
     expect(taxonomyAndReview).toContain("result_already_published");
     expect(taxonomyAndReview).toContain("20260817_document_taxonomy_and_ai_review");
+  });
+
+  it("records verified uploads and reviews documents in one transaction", () => {
+    expect(uploadSecurityAndAtomicReview).toContain("function public.complete_document_upload_secure");
+    expect(uploadSecurityAndAtomicReview).toContain("security_status = 'passed'");
+    expect(uploadSecurityAndAtomicReview).toContain("function public.review_document_atomic");
+    expect(uploadSecurityAndAtomicReview).toContain("insert into public.ai_review_actions");
+    expect(uploadSecurityAndAtomicReview).toContain("insert into public.audit_events");
+    expect(uploadSecurityAndAtomicReview).toContain("processing_jobs_workspace_health_idx");
+    expect(uploadSecurityAndAtomicReview).toContain("function public.recover_stale_processing_jobs");
+    expect(uploadSecurityAndAtomicReview).toContain("20260817_upload_security_and_atomic_document_review");
   });
 });

@@ -2769,6 +2769,12 @@ button:disabled {
 .project-operation-card__notice { background: #fff6df; color: #8a6414; }
 .project-operation-card__success { background: #edf8f4; color: #0b7750; }
 .project-operation-card__error { background: #fff0f0; color: #a83232; }
+.queue-health { margin-bottom: 18px; }
+.queue-health--healthy { border-color: rgba(27, 143, 99, .24); }
+.queue-health--warning { border-color: rgba(202, 139, 23, .32); }
+.queue-health--critical { border-color: rgba(194, 65, 65, .35); }
+.queue-worker-control { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.queue-worker-control small { color: var(--muted); }
 
 @media (max-width: 900px) {
   .project-operation-form > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }

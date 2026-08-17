@@ -6,6 +6,7 @@ import { analyzeDocumentWithGemini, analyzeFileWithGemini } from "@/lib/ai/gemin
 import { extractDocxText, extractXlsxText, listZipContents } from "@/lib/ai/office-extractor";
 import { getR2Config } from "@/lib/env";
 import { createR2Client } from "@/lib/r2/client";
+import { validateUploadedFileContent } from "@/lib/r2/file-content-validation";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { matchProjectHint, projectCatalogLine, type ProjectMatchCandidate } from "@/lib/ai/project-matcher";
 
@@ -83,6 +84,7 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
     const object = await createR2Client().send(new GetObjectCommand({ Bucket: version.r2_bucket, Key: version.r2_object_key }));
     if (!object.Body) throw new Error("R2 nie zwrócił treści dokumentu.");
     const bytes = Buffer.from(await object.Body.transformToByteArray());
+    validateUploadedFileContent(version.file_name, bytes);
     const useFilesApi = (version.mime_type === "application/pdf" || version.mime_type.startsWith("image/")) && bytes.length > MAX_INLINE_BYTES;
     const prepared = useFilesApi ? {} : prepareInput(version.file_name, version.mime_type, bytes);
     const { data: projectRows } = await supabase.from("projects")
@@ -95,7 +97,7 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
     }));
     const projectCatalog = projectCandidates.map(projectCatalogLine);
     await supabase.from("processing_jobs").update({ stage: "analyze" }).eq("job_key", jobKey);
-    const { analysis, model } = useFilesApi
+    const { analysis, model, usage } = useFilesApi
       ? await analyzeFileWithGemini({ fileName: version.file_name, mimeType: version.mime_type, bytes, projectCatalog })
       : await analyzeDocumentWithGemini({ fileName: version.file_name, mimeType: version.mime_type, ...prepared, projectCatalog });
     const projectMatch = version.project_id ? null : matchProjectHint(analysis.projectHint, projectCandidates);
@@ -400,7 +402,7 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
     const finalWrites = await Promise.all([
       supabase.from("documents").update({ category: analysis.category, ai_status: "review", ai_confidence: analysis.confidence, review_status: "pending" }).eq("id", version.document_id),
       supabase.from("document_intakes").update({ status: "review", suggested_category: analysis.category, proposed_project_id: proposedProjectId, confidence: analysis.confidence }).eq("document_id", version.document_id),
-      supabase.from("processing_jobs").update({ status: "succeeded", stage: "complete", model_name: model, finished_at: new Date().toISOString(), error_code: null, error_message: null }).eq("job_key", jobKey),
+      supabase.from("processing_jobs").update({ status: "succeeded", stage: "complete", model_name: model, input_tokens: usage.inputTokens, output_tokens: usage.outputTokens, estimated_cost: usage.estimatedCostUsd, finished_at: new Date().toISOString(), error_code: null, error_message: null }).eq("job_key", jobKey),
       supabase.from("audit_events").insert({
       workspace_id: input.workspaceId,
       project_id: proposedProjectId,

@@ -35,10 +35,13 @@ export async function POST(request: Request) {
   if (user && (!userWorkspace || !await hasDomainAccess({ workspaceId: userWorkspace.id, userId: user.id, domain: "settings", level: "admin" }))) {
     return NextResponse.json({ error: "Tylko administrator firmy może ręcznie uruchomić worker." }, { status: 403 });
   }
+  const workerWorkspaceId = userWorkspace?.id ?? (cronAuthorized ? requestedWorkspaceId ?? null : null);
+  const { data: recovery, error: recoveryError } = await supabase.rpc("recover_stale_processing_jobs", { p_workspace_id: workerWorkspaceId }).single<{ result_requeued: number; result_dead_lettered: number }>();
+  if (recoveryError) return NextResponse.json({ error: `Nie udało się odzyskać zawieszonych zadań: ${recoveryError.message}` }, { status: 500 });
   const results: Array<{ jobId: string; versionId: string | null; status: "succeeded" | "failed"; error?: string }> = [];
 
   for (let index = 0; index < limit; index += 1) {
-    const { data, error } = await supabase.rpc("claim_next_processing_job", { p_worker: workerName, p_workspace_id: userWorkspace?.id ?? null });
+    const { data, error } = await supabase.rpc("claim_next_processing_job", { p_worker: workerName, p_workspace_id: workerWorkspaceId });
     if (error) return NextResponse.json({ error: `Nie udało się pobrać zadania: ${error.message}`, results }, { status: 500 });
     const job = (Array.isArray(data) ? data[0] : null) as ClaimedJob | undefined;
     if (!job) break;
@@ -65,5 +68,5 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, worker: workerName, processed: results.length, results }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ ok: true, worker: workerName, recovered: recovery ?? { result_requeued: 0, result_dead_lettered: 0 }, processed: results.length, results }, { headers: { "Cache-Control": "no-store" } });
 }

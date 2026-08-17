@@ -1,10 +1,11 @@
-import { DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { getR2Config, requireServerEnv } from "@/lib/env";
 import { normalizeDocumentCategory } from "@/lib/documents/classification";
+import { validateUploadedFileContent, type FileSecurityReport } from "@/lib/r2/file-content-validation";
 import { createR2Client } from "@/lib/r2/client";
 import { inferDocumentCategory } from "@/lib/r2/sanitize";
 import { verifyUploadToken } from "@/lib/r2/upload-token";
@@ -86,10 +87,36 @@ export async function POST(request: Request) {
   }
 
   if (typeof head.ContentLength === "number" && head.ContentLength !== intent.fileSize) {
+    await r2.send(new DeleteObjectCommand({ Bucket: r2Config.bucketName, Key: intent.objectKey })).catch(() => undefined);
     return jsonError("Rozmiar pliku w R2 nie zgadza się z intencją uploadu.", 409);
   }
 
   const supabase = createServiceSupabaseClient();
+  let securityReport: FileSecurityReport;
+  try {
+    const object = await r2.send(new GetObjectCommand({ Bucket: r2Config.bucketName, Key: intent.objectKey }));
+    if (!object.Body) throw new Error("R2 nie zwrócił treści pliku do kontroli.");
+    const bytes = Buffer.from(await object.Body.transformToByteArray());
+    if (bytes.length !== intent.fileSize) throw new Error("Rozmiar pobranego pliku nie zgadza się z intencją uploadu.");
+    securityReport = validateUploadedFileContent(intent.fileName, bytes);
+    const clientSha256 = normalizeSha256(body.sha256);
+    if (clientSha256 && clientSha256 !== securityReport.sha256) throw new Error("Suma SHA-256 pliku nie zgadza się z wartością przesłaną przez klienta.");
+  } catch (securityError) {
+    const reason = securityError instanceof Error ? securityError.message : "Kontrola zawartości pliku nie powiodła się.";
+    await Promise.all([
+      r2.send(new DeleteObjectCommand({ Bucket: r2Config.bucketName, Key: intent.objectKey })).catch(() => undefined),
+      supabase.from("audit_events").insert({
+        workspace_id: intent.workspaceId,
+        project_id: intent.projectId,
+        actor_id: user.id,
+        event_type: "document.upload_quarantined",
+        entity_type: "document",
+        entity_id: intent.documentId,
+        after_value: { file_name: intent.fileName, object_key: intent.objectKey, reason }
+      })
+    ]);
+    return jsonError(`Plik został odrzucony przez kontrolę bezpieczeństwa: ${reason}`, 422);
+  }
   const requestedCategory = normalizeDocumentCategory(body.category);
   if (body.category && !requestedCategory) return jsonError("Nieprawidłowa ręczna kategoria dokumentu.", 400);
   const category = requestedCategory ?? inferDocumentCategory(intent.mimeType, intent.fileName);
@@ -106,7 +133,7 @@ export async function POST(request: Request) {
   const uploadedAt = new Date().toISOString();
 
   const { data: completed, error: completeError } = await supabase
-    .rpc("complete_document_upload", {
+    .rpc("complete_document_upload_secure", {
       p_document_id: intent.documentId,
       p_version_id: intent.versionId,
       p_workspace_id: intent.workspaceId,
@@ -118,7 +145,8 @@ export async function POST(request: Request) {
       p_r2_bucket: r2Config.bucketName,
       p_r2_object_key: intent.objectKey,
       p_r2_etag: normalizeEtag(head.ETag),
-      p_sha256: normalizeSha256(body.sha256),
+      p_sha256: securityReport.sha256,
+      p_security_report: securityReport,
       p_uploaded_by: user.id,
       p_uploaded_at: uploadedAt
     })
