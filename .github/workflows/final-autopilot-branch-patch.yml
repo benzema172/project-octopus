@@ -47,6 +47,6 @@ jobs:
           git rm .github/workflows/final-autopilot-branch-patch.yml
           git config user.name "Project Octopus Agent"
           git config user.email "actions@users.noreply.github.com"
-          git add lib/demo/extended-blueprint.ts package.json package-lock.json RELEASE_0.9.0.md .github/workflows/final-autopilot-branch-patch.yml
+          git add -A
           git commit -m "Finalize Project Octopus 0.9.0 Investment Autopilot"
           git push origin HEAD:agent/octopus-navigation-demo-full
