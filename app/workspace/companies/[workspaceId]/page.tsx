@@ -79,9 +79,10 @@ export default async function CompanyDashboard({ params }: CompanyDashboardProps
   const hrRead = domainAccessPolicyAllows(accessPolicy, { domain: "hr", level: "read", projectId: null });
   const fleetRead = domainAccessPolicyAllows(accessPolicy, { domain: "fleet", level: "read", projectId: null });
   const settingsRead = domainAccessPolicyAllows(accessPolicy, { domain: "settings", level: "read", projectId: null });
-  const today = new Date().toISOString().slice(0, 10);
-  const in14Days = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
-  const in30Days = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+  const referenceDate = new Date();
+  const today = referenceDate.toISOString().slice(0, 10);
+  const in14Days = new Date(referenceDate.getTime() + 14 * 86_400_000).toISOString().slice(0, 10);
+  const in30Days = new Date(referenceDate.getTime() + 30 * 86_400_000).toISOString().slice(0, 10);
 
   const [aiInbox, commitmentsResult, qualificationsResult, examsResult, fleetDocumentsResult, notificationsResult] = await Promise.all([
     domainAccessPolicyHasAnyScope(accessPolicy, { domain: "investments", level: "read" })
