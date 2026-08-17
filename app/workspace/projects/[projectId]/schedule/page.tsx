@@ -18,7 +18,7 @@ export default async function SchedulePage({ params }: Props) {
   const project = await getProjectForUser(user, projectId);
   if (!project) notFound();
   if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id })) return <DomainAccessDenied workspaceId={project.workspace_id} area="Harmonogram" />;
-  const documents = await listDocumentsForCategories(projectId, ["harmonogram"]);
+  const documents = await listDocumentsForCategories(projectId, ["schedule"]);
 
   return <ProjectModuleFoundation
     kicker="Harmonogram"

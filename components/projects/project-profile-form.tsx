@@ -6,6 +6,7 @@ type ProjectProfileFormProps = {
   projectId: string;
   profile: ProjectProfile;
   saved: boolean;
+  canWrite: boolean;
 };
 
 type FieldProps = {
@@ -42,7 +43,7 @@ function TextArea({ label, name, profile, placeholder }: TextAreaProps) {
   );
 }
 
-export function ProjectProfileForm({ projectId, profile, saved }: ProjectProfileFormProps) {
+export function ProjectProfileForm({ projectId, profile, saved, canWrite }: ProjectProfileFormProps) {
   const action = updateProjectProfileAction.bind(null, projectId);
 
   return (
@@ -53,10 +54,10 @@ export function ProjectProfileForm({ projectId, profile, saved }: ProjectProfile
           <h2>Karta inwestycji</h2>
           {saved ? <p className="save-confirmation">Dane zostały zapisane.</p> : null}
         </div>
-        <ProfileSaveButton />
+        {canWrite ? <ProfileSaveButton /> : <span className="status-chip">Tylko odczyt</span>}
       </div>
 
-      <fieldset className="project-data-section">
+      <fieldset className="project-data-section" disabled={!canWrite}>
         <legend>Identyfikacja inwestycji</legend>
         <div className="project-data-grid">
           <Field label="Pełna nazwa inwestycji" name="projectName" profile={profile} wide />
@@ -77,7 +78,7 @@ export function ProjectProfileForm({ projectId, profile, saved }: ProjectProfile
         </div>
       </fieldset>
 
-      <fieldset className="project-data-section">
+      <fieldset className="project-data-section" disabled={!canWrite}>
         <legend>Lokalizacja i decyzje</legend>
         <div className="project-data-grid">
           <Field label="Ulica i numer" name="street" profile={profile} />
@@ -91,7 +92,7 @@ export function ProjectProfileForm({ projectId, profile, saved }: ProjectProfile
         </div>
       </fieldset>
 
-      <fieldset className="project-data-section">
+      <fieldset className="project-data-section" disabled={!canWrite}>
         <legend>Umowa i terminy</legend>
         <div className="project-data-grid">
           <Field label="Numer umowy" name="contractNumber" profile={profile} />
@@ -106,7 +107,7 @@ export function ProjectProfileForm({ projectId, profile, saved }: ProjectProfile
         </div>
       </fieldset>
 
-      <fieldset className="project-data-section">
+      <fieldset className="project-data-section" disabled={!canWrite}>
         <legend>Inwestor</legend>
         <div className="project-data-grid">
           <Field label="Nazwa inwestora" name="investorName" profile={profile} wide />
@@ -118,7 +119,7 @@ export function ProjectProfileForm({ projectId, profile, saved }: ProjectProfile
         </div>
       </fieldset>
 
-      <fieldset className="project-data-section">
+      <fieldset className="project-data-section" disabled={!canWrite}>
         <legend>Wykonawcy i projektanci</legend>
         <div className="project-data-grid">
           <Field label="Generalny wykonawca" name="generalContractorName" profile={profile} wide />
@@ -131,7 +132,7 @@ export function ProjectProfileForm({ projectId, profile, saved }: ProjectProfile
         </div>
       </fieldset>
 
-      <fieldset className="project-data-section">
+      <fieldset className="project-data-section" disabled={!canWrite}>
         <legend>Nadzór i osoby funkcyjne</legend>
         <div className="project-data-grid">
           <Field label="Inspektor nadzoru" name="supervisionInspectorName" profile={profile} />
@@ -151,9 +152,7 @@ export function ProjectProfileForm({ projectId, profile, saved }: ProjectProfile
         </div>
       </fieldset>
 
-      <div className="project-profile-footer">
-        <ProfileSaveButton />
-      </div>
+      {canWrite ? <div className="project-profile-footer"><ProfileSaveButton /></div> : <p className="action-message">Masz dostęp do danych inwestycji w trybie odczytu. Edycja wymaga roli Inwestycje: zapis.</p>}
     </form>
   );
 }

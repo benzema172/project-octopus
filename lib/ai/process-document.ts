@@ -52,11 +52,12 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
 
   const { data: document, error: documentError } = await supabase
     .from("documents")
-    .select("id,workspace_id")
+    .select("id,workspace_id,current_version_id,review_status")
     .eq("id", version.document_id)
     .eq("workspace_id", input.workspaceId)
-    .maybeSingle<{ id: string; workspace_id: string }>();
+    .maybeSingle<{ id: string; workspace_id: string; current_version_id: string | null; review_status: string }>();
   if (documentError || !document) throw new Error("Dokument nie należy do aktywnego workspace.");
+  if (document.current_version_id === version.id && document.review_status === "approved") throw new Error("Zatwierdzonej wersji nie analizujemy ponownie. Dodaj nową wersję dokumentu, aby zachować audyt i poprzednie źródła.");
   if (version.file_size_bytes > MAX_PIPELINE_BYTES) throw new Error("Plik przekracza limit 50 MB pojedynczego zadania AI.");
 
   const jobKey = `document-pipeline:${version.id}`;
@@ -176,7 +177,12 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
 
     const searchableText = "extractedText" in prepared && typeof prepared.extractedText === "string"
       ? prepared.extractedText
-      : [analysis.summary, ...analysis.searchPassages, ...analysis.workStages, ...analysis.installations, ...analysis.facts.map((fact) => `${fact.label}: ${fact.value} ${fact.unit}`)].join("\n");
+      : [
+          analysis.summary, ...analysis.searchPassages, ...analysis.workStages, ...analysis.installations,
+          ...analysis.materials.map((item) => `${item.name}: ${item.specification} ${item.installation}`),
+          ...analysis.devices.map((item) => `${item.name}: ${item.installation} ${item.parameters.map((parameter) => `${parameter.name} ${parameter.value} ${parameter.unit}`).join(" ")}`),
+          ...analysis.facts.map((fact) => `${fact.label}: ${fact.value} ${fact.unit}`)
+        ].join("\n");
     const { error: textError } = await supabase.from("document_texts").upsert({
       workspace_id: input.workspaceId,
       project_id: proposedProjectId,
@@ -191,52 +197,88 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
     if (textError) throw new Error(`Nie udało się zapisać tekstu wyszukiwarki: ${textError.message}`);
 
     if (proposedProjectId) {
-      const { data: previousReferences } = await supabase
+      const { data: previousReferences, error: previousReferencesError } = await supabase
         .from("source_references")
         .select("id")
         .eq("document_version_id", version.id)
         .returns<Array<{ id: string }>>();
+      if (previousReferencesError) throw new Error(`Nie udało się odczytać poprzednich źródeł wersji: ${previousReferencesError.message}`);
       const previousReferenceIds = (previousReferences ?? []).map((reference) => reference.id);
       if (previousReferenceIds.length > 0) {
-        await supabase.from("protocol_requirements").delete().in("source_reference_id", previousReferenceIds).eq("status", "required");
-        await supabase.from("project_facts").delete().in("source_reference_id", previousReferenceIds).eq("status", "proposed");
-        await supabase.from("source_references").delete().in("id", previousReferenceIds);
+        const cleanupResults = await Promise.all([
+          supabase.from("materials").delete().in("source_reference_id", previousReferenceIds),
+          supabase.from("devices").delete().in("source_reference_id", previousReferenceIds),
+          supabase.from("evidence_requirements").delete().in("source_reference_id", previousReferenceIds).eq("status", "proposed"),
+          supabase.from("protocol_requirements").delete().in("source_reference_id", previousReferenceIds).eq("status", "proposed"),
+          supabase.from("project_facts").delete().in("source_reference_id", previousReferenceIds).eq("status", "proposed")
+        ]);
+        const cleanupError = cleanupResults.find((result) => result.error)?.error;
+        if (cleanupError) throw new Error(`Nie udało się wyczyścić poprzedniej propozycji: ${cleanupError.message}`);
+        const { error: sourceCleanupError } = await supabase.from("source_references").delete().in("id", previousReferenceIds);
+        if (sourceCleanupError) throw new Error(`Nie udało się odświeżyć cytowań: ${sourceCleanupError.message}`);
       }
 
-      const references = analysis.facts.map((fact) => ({
+      const summaryReference = {
+        id: randomUUID(), project_id: proposedProjectId, document_id: version.document_id, document_version_id: version.id,
+        section_label: analysis.subcategory || analysis.category, quote: analysis.summary.slice(0, 1000),
+        locator: { label: analysis.subcategory || analysis.category, entity_type: "document_summary" }
+      };
+      const factReferences = analysis.facts.map((fact) => ({
         id: randomUUID(),
         project_id: proposedProjectId,
         document_id: version.document_id,
         document_version_id: version.id,
         section_label: fact.locator || null,
         quote: fact.quote.slice(0, 1000),
-        locator: { label: fact.locator }
+        locator: { label: fact.locator, entity_type: "fact" }
       }));
+      const materialReferences = analysis.materials.map((item) => ({
+        id: randomUUID(), project_id: proposedProjectId, document_id: version.document_id, document_version_id: version.id,
+        section_label: item.locator || null, quote: item.quote.slice(0, 1000), locator: { label: item.locator, entity_type: "material" }
+      }));
+      const deviceReferences = analysis.devices.map((item) => ({
+        id: randomUUID(), project_id: proposedProjectId, document_id: version.document_id, document_version_id: version.id,
+        section_label: item.locator || null, quote: item.quote.slice(0, 1000), locator: { label: item.locator, entity_type: "device" }
+      }));
+      const references = [summaryReference, ...factReferences, ...materialReferences, ...deviceReferences];
       if (references.length > 0) {
         const { error: referencesError } = await supabase.from("source_references").insert(references);
         if (referencesError) throw new Error(`Nie udało się zapisać źródeł: ${referencesError.message}`);
-        const { error: factsError } = await supabase.from("project_facts").insert(analysis.facts.map((fact, index) => ({
-          project_id: proposedProjectId,
-          fact_type: fact.type || fact.label,
-          value_text: fact.value,
-          value_json: { label: fact.label, unit: fact.unit },
-          confidence: fact.confidence,
-          source_reference_id: references[index].id,
-          status: "proposed"
-        })));
-        if (factsError) throw new Error(`Nie udało się zapisać faktów Project DNA: ${factsError.message}`);
+        if (analysis.facts.length > 0) {
+          const { error: factsError } = await supabase.from("project_facts").insert(analysis.facts.map((fact, index) => ({
+            project_id: proposedProjectId,
+            fact_type: fact.type || fact.label,
+            value_text: fact.value,
+            value_json: { label: fact.label, unit: fact.unit },
+            confidence: fact.confidence,
+            source_reference_id: factReferences[index].id,
+            status: "proposed"
+          })));
+          if (factsError) throw new Error(`Nie udało się zapisać faktów Project DNA: ${factsError.message}`);
+        }
+        const { error: extractionReferenceError } = await supabase.from("document_extractions").update({
+          payload: {
+            ...analysis,
+            sourceReferenceMap: {
+              materials: materialReferences.map((reference) => reference.id),
+              devices: deviceReferences.map((reference) => reference.id)
+            }
+          }
+        }).eq("document_version_id", version.id).eq("extraction_type", "document_context");
+        if (extractionReferenceError) throw new Error(`Nie udało się powiązać ekstrakcji ze źródłami: ${extractionReferenceError.message}`);
       }
 
-      await supabase.from("project_requirements").delete()
+      const { error: requirementsDeleteError } = await supabase.from("project_requirements").delete()
         .eq("project_id", proposedProjectId)
         .eq("source_document_id", version.document_id)
         .eq("status", "proposed");
+      if (requirementsDeleteError) throw new Error(`Nie udało się odświeżyć wymagań: ${requirementsDeleteError.message}`);
       const requirements = [
         ...analysis.requiredApplications.map((title) => ({ requirement_type: "material_application", title })),
         ...analysis.workStages.map((title) => ({ requirement_type: "work_stage", title }))
       ];
       if (requirements.length > 0) {
-        await supabase.from("project_requirements").insert(requirements.map((requirement) => ({
+        const { error: requirementsInsertError } = await supabase.from("project_requirements").insert(requirements.map((requirement) => ({
           workspace_id: input.workspaceId,
           project_id: proposedProjectId,
           ...requirement,
@@ -245,29 +287,32 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
           status: "proposed",
           confidence: analysis.confidence
         })));
+        if (requirementsInsertError) throw new Error(`Nie udało się zapisać wymagań inwestycji: ${requirementsInsertError.message}`);
       }
 
       if (analysis.requiredProtocols.length > 0) {
         const firstReferenceId = references[0]?.id ?? null;
-        const { data: protocolRows } = await supabase.from("protocol_requirements").insert(analysis.requiredProtocols.map((title) => ({
+        const { data: protocolRows, error: protocolRowsError } = await supabase.from("protocol_requirements").insert(analysis.requiredProtocols.map((title) => ({
           workspace_id: input.workspaceId,
           project_id: proposedProjectId,
           protocol_type: title.toLowerCase().replaceAll(" ", "_").slice(0, 80),
           title,
-          status: "required",
+          status: "proposed",
           source_reference_id: firstReferenceId,
           trigger_rule: { document_version_id: version.id, ai_confidence: analysis.confidence },
           required_evidence: ["zakres", "lokalizacja", "wynik", "data", "osoby", "podpis"]
         }))).select("id,title").returns<Array<{ id: string; title: string }>>();
+        if (protocolRowsError) throw new Error(`Nie udało się zapisać wymaganych protokołów: ${protocolRowsError.message}`);
         if (protocolRows && protocolRows.length > 0) {
-          await supabase.from("evidence_requirements").insert(protocolRows.map((protocol) => ({
+          const { error: evidenceError } = await supabase.from("evidence_requirements").insert(protocolRows.map((protocol) => ({
             workspace_id: input.workspaceId,
             project_id: proposedProjectId,
             evidence_type: "protocol",
             title: protocol.title,
-            status: "missing",
+            status: "proposed",
             source_reference_id: firstReferenceId
           })));
+          if (evidenceError) throw new Error(`Nie udało się zapisać wymagań dowodowych: ${evidenceError.message}`);
         }
       }
 
@@ -286,7 +331,8 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
           updated_at: new Date().toISOString()
         }, { onConflict: "document_version_id" }).select("id").single<{ id: string }>();
         if (estimateError || !estimateImport) throw new Error(`Nie udało się utworzyć importu kosztorysu: ${estimateError?.message ?? "brak danych"}`);
-        await supabase.from("estimate_import_rows").delete().eq("estimate_import_id", estimateImport.id);
+        const { error: importRowsDeleteError } = await supabase.from("estimate_import_rows").delete().eq("estimate_import_id", estimateImport.id);
+        if (importRowsDeleteError) throw new Error(`Nie udało się odświeżyć pozycji kosztorysu: ${importRowsDeleteError.message}`);
         const { error: rowsError } = await supabase.from("estimate_import_rows").insert(analysis.boqItems.map((item, index) => ({
           workspace_id: input.workspaceId,
           estimate_import_id: estimateImport.id,
@@ -344,14 +390,18 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
           default_value: fact.value ? { value: fact.value, unit: fact.unit } : null,
           sort_order: index
         }));
-        if (fields.length > 0) await supabase.from("template_fields").insert(fields);
+        if (fields.length > 0) {
+          const { error: fieldsError } = await supabase.from("template_fields").insert(fields);
+          if (fieldsError) throw new Error(`Nie udało się zapisać pól wzoru: ${fieldsError.message}`);
+        }
       }
     }
 
-    await supabase.from("documents").update({ category: analysis.category, ai_status: "review", ai_confidence: analysis.confidence, review_status: "pending" }).eq("id", version.document_id);
-    await supabase.from("document_intakes").update({ status: "review", suggested_category: analysis.category, proposed_project_id: proposedProjectId, confidence: analysis.confidence }).eq("document_id", version.document_id);
-    await supabase.from("processing_jobs").update({ status: "succeeded", stage: "complete", model_name: model, finished_at: new Date().toISOString(), error_code: null, error_message: null }).eq("job_key", jobKey);
-    await supabase.from("audit_events").insert({
+    const finalWrites = await Promise.all([
+      supabase.from("documents").update({ category: analysis.category, ai_status: "review", ai_confidence: analysis.confidence, review_status: "pending" }).eq("id", version.document_id),
+      supabase.from("document_intakes").update({ status: "review", suggested_category: analysis.category, proposed_project_id: proposedProjectId, confidence: analysis.confidence }).eq("document_id", version.document_id),
+      supabase.from("processing_jobs").update({ status: "succeeded", stage: "complete", model_name: model, finished_at: new Date().toISOString(), error_code: null, error_message: null }).eq("job_key", jobKey),
+      supabase.from("audit_events").insert({
       workspace_id: input.workspaceId,
       project_id: proposedProjectId,
       actor_id: input.userId ?? null,
@@ -360,7 +410,10 @@ export async function processDocumentVersion(input: { workspaceId: string; versi
       entity_type: "document",
       entity_id: version.document_id,
       after_value: { category: analysis.category, confidence: analysis.confidence, proposedProjectId, projectMatchScore: projectMatch?.score ?? null, model }
-    });
+      })
+    ]);
+    const finalWriteError = finalWrites.find((result) => result.error)?.error;
+    if (finalWriteError) throw new Error(`Nie udało się zakończyć analizy: ${finalWriteError.message}`);
     return analysis;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Nieznany błąd analizy.";

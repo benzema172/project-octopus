@@ -4,5 +4,5 @@ import { PROJECT_MODULES } from "@/lib/product/project-modules";
 
 export default async function ProjectReportsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
-  return <ProjectModulePage projectId={projectId} module={PROJECT_MODULES.reports} requiredDomain="reports"><ProjectLiveRecords projectId={projectId} kind="reports" /></ProjectModulePage>;
+  return <ProjectModulePage projectId={projectId} module={PROJECT_MODULES.reports} requiredDomain="reports" kind="reports"><ProjectLiveRecords projectId={projectId} kind="reports" /></ProjectModulePage>;
 }

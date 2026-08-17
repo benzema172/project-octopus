@@ -18,7 +18,7 @@ export default async function ProgressPage({ params }: Props) {
   const project = await getProjectForUser(user, projectId);
   if (!project) notFound();
   if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id })) return <DomainAccessDenied workspaceId={project.workspace_id} area="Przerób" />;
-  const documents = await listDocumentsForCategories(projectId, ["kosztorys", "harmonogram", "protokol"]);
+  const documents = await listDocumentsForCategories(projectId, ["estimate", "schedule", "protocol"]);
 
   return <ProjectModuleFoundation
     kicker="Przerób i wykonanie"

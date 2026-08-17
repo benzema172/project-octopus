@@ -21,7 +21,7 @@ export default async function RequestsPage({ params }: Props) {
   if (!project) notFound();
   if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id })) return <DomainAccessDenied workspaceId={project.workspace_id} area="Wnioski materiałowe" />;
   const [documents, snapshot, brain] = await Promise.all([
-    listDocumentsForCategories(projectId, ["wniosek"]),
+    listDocumentsForCategories(projectId, ["application"]),
     getProjectKnowledgeSnapshot(projectId),
     getMaterialKnowledge(projectId)
   ]);

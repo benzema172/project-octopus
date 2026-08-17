@@ -22,6 +22,10 @@ const domainAccessHardening = readFileSync(
   "supabase/migrations/20260814180000_domain_access_hardening.sql",
   "utf8"
 );
+const taxonomyAndReview = readFileSync(
+  "supabase/migrations/20260817090000_document_taxonomy_and_ai_review.sql",
+  "utf8"
+);
 
 describe("Supabase migration contract", () => {
   it("uses the project profile columns expected by the application", () => {
@@ -87,5 +91,16 @@ describe("Supabase migration contract", () => {
     expect(domainAccessHardening).toContain("document domain members can read");
     expect(domainAccessHardening).toContain("users can read own notifications");
     expect(domainAccessHardening).toContain("20260814_domain_access_hardening");
+  });
+
+  it("normalizes document taxonomy and publishes approved generator runs atomically", () => {
+    expect(taxonomyAndReview).toContain("function public.canonical_document_category");
+    expect(taxonomyAndReview).toContain("pf.status = 'approved'");
+    expect(taxonomyAndReview).toContain("d.review_status = 'approved'");
+    expect(taxonomyAndReview).toContain("function public.publish_generation_run_atomic");
+    expect(taxonomyAndReview).toContain("document_version_requires_review");
+    expect(taxonomyAndReview).toContain("domain_role_grants_scope_unique_idx");
+    expect(taxonomyAndReview).toContain("result_already_published");
+    expect(taxonomyAndReview).toContain("20260817_document_taxonomy_and_ai_review");
   });
 });

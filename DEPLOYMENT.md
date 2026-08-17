@@ -1,30 +1,40 @@
-# Wdrożenie Project Octopus 0.4.1
+# Wdrożenie Project Octopus 0.7.1
 
 ## Kolejność
 
-1. Wykonaj backup Supabase oraz zapisz poprzednie wdrożenie Vercel.
-2. Uruchom kolejno migracje `20260814090000_octopus_operating_system.sql`, `20260814130000_octopus_execution_layer.sql`, `20260814170000_atomic_estimate_approval.sql` oraz `20260814180000_domain_access_hardening.sql`.
-3. Sprawdź marker `20260814_domain_access_hardening` poleceniem `npm run check:schema`.
-4. Dodaj `CRON_SECRET` do zmiennych środowiskowych Vercel.
-5. Wdróż kod 0.4.1.
-6. Uruchom `npm run test:e2e-upload`.
-7. Wywołaj `POST /api/brain/worker?limit=1` z nagłówkiem `Authorization: Bearer <CRON_SECRET>` i sprawdź przejście dokumentu do Skrzynki AI.
-8. Skonfiguruj harmonogram wywołujący worker. Przy małym ruchu wystarczy krótki interwał i limit 1–5 zadań.
-9. Sprawdź ręcznie: upload PDF/DOCX/XLSX, akceptację dokumentu, import kosztorysu, utworzenie BOQ/WBS, wyszukiwarkę, radar rewizji, forecast, zdarzenie mobilne, Wzory i checklistę zamknięcia.
+1. Wykonaj backup Supabase oraz zapisz identyfikator poprzedniego wdrożenia aplikacji.
+2. Zastosuj chronologicznie wszystkie brakujące migracje, kończąc na `20260817090000_document_taxonomy_and_ai_review.sql`.
+3. Uruchom `npm run check:schema`; wymagany marker to `20260817_document_taxonomy_and_ai_review`.
+4. Potwierdź zmienne Supabase, R2, Gemini i `CRON_SECRET`. Sekrety nie mogą trafić do tabel biznesowych ani logów klienta.
+5. Wdróż kod 0.7.1 i uruchom `npm run test:e2e-upload`.
+6. Wywołaj `POST /api/brain/worker?limit=1` z nagłówkiem `Authorization: Bearer <CRON_SECRET>`, a następnie skonfiguruj cykliczny worker.
+7. Przeprowadź test akceptacyjny poniżej na danych testowych przed wpuszczeniem danych produkcyjnych.
 
-## KSeF i inne integracje
+## Test akceptacyjny 0.7.1
 
-Migracja tworzy bezpieczny staging KSeF oraz rejestr synchronizacji. Uruchomienie prawdziwego pobierania wymaga osobnego sekretu/certyfikatu i konfiguracji firmy. Najpierw aktywuj wyłącznie faktury zakupowe na środowisku testowym; sprzedaż i UPO pozostaw wyłączone do zakończenia testów.
+- dodanie PDF/DOCX/XLSX i ręcznej kategorii przechodzi do Skrzynki AI,
+- akceptacja dokumentu publikuje fakty, materiały, urządzenia, wymagania i protokoły; odrzucenie ich nie publikuje,
+- nowa wersja dokumentu wraca do `pending`, a zatwierdzonej wersji nie można nadpisać ponowną analizą,
+- import kosztorysu tworzy raz BOQ, WBS i harmonogram także po ponowieniu żądania,
+- zdarzenie Teren można zatwierdzić i odrzucić w module,
+- pozycję checklisty Zamknięcia można oznaczyć jako kompletną i cofnąć,
+- rolę domenową można nadać, zmienić, odebrać i zobaczyć efekt odmowy dostępu,
+- szkic Wzorów można podejrzeć, zatwierdzić i pobrać z Wyników; ponowienie nie tworzy drugiego dokumentu,
+- wyszukiwarka, asystent i generator nie zwracają odrzuconych ani zastąpionych faktów.
+
+## KSeF i pozostałe integracje
+
+Migracje tworzą staging KSeF i rejestr synchronizacji, ale nie aktywują połączenia bez poświadczeń firmy. Najpierw testuj wyłącznie inbound zakupów, deduplikację i dekretację. Sprzedaż, UPO, bank, księgowość, GPS i kadry-płace są osobnymi wdrożeniami integracyjnymi.
+
+## Monitoring po wdrożeniu
+
+- udział `error/dead_letter`, czas kolejki i liczba ponowień,
+- koszt, tokeny i czas odpowiedzi Gemini,
+- liczba decyzji oczekujących i wiek najstarszej decyzji,
+- kompletność cytowań i udział zatwierdzonych faktów,
+- błędy publikacji R2 oraz niespójność dokument–wersja–generated_document,
+- próby odmowy dostępu do Finansów, HR i zakresów projektowych.
 
 ## Wycofanie
 
-W razie problemu przywróć poprzednie wdrożenie aplikacji. Nie usuwaj tabel 0.4.x. Są rozszerzeniem modelu 0.3.0. Zadania kolejki można zatrzymać przez usunięcie harmonogramu bez utraty dokumentów.
-
-## Kontrola po wdrożeniu
-
-- odsetek dokumentów w `error/dead_letter`,
-- czas oczekiwania i liczba ponowień,
-- koszt i liczba analiz Gemini,
-- liczba decyzji oczekujących,
-- kompletność źródeł oraz udział faktów zatwierdzonych,
-- brak dostępu technicznego użytkownika do danych HR/Finanse bez roli domenowej.
+W razie problemu przywróć poprzednie wdrożenie aplikacji i zatrzymaj worker. Nie usuwaj tabel, plików R2 ani markera migracji. Migracja 0.7.1 normalizuje kategorie, wygasza duplikaty ról i oznacza nieaktualną wiedzę jako `superseded`; rollback kodu nie powinien odwracać tych decyzji danych bez osobnego, zweryfikowanego skryptu.

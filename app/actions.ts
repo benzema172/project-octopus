@@ -191,7 +191,10 @@ export async function createProjectAction(formData: FormData) {
     fact_type: "project_profile",
     value_text: name,
     value_json: initialProfile,
-    confidence: 1
+    confidence: 1,
+    status: "approved",
+    approved_by: user.id,
+    approved_at: new Date().toISOString()
   });
 
   if (profileError) {
@@ -230,7 +233,7 @@ export async function updateProjectProfileAction(projectId: string, formData: Fo
   profile.status = allowedStatuses.has(profile.status) ? profile.status : "active";
   profile.currency = profile.currency || "PLN";
 
-  await saveProjectProfile(project, profile);
+  await saveProjectProfile(project, profile, user.id);
 
   revalidatePath("/workspace");
   revalidatePath(`/workspace/companies/${project.workspace_id}`);

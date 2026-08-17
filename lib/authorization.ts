@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { normalizeDocumentCategory } from "@/lib/documents/classification";
 
 const LEVELS = { read: 1, write: 2, approve: 3, admin: 4 } as const;
 export type AccessLevel = keyof typeof LEVELS;
@@ -76,11 +77,12 @@ export async function hasDomainAccess(input: {
 }
 
 export function domainForDocumentCategory(category: string | null | undefined) {
-  if (category === "invoice") return "finance" as const;
-  if (category === "hr") return "hr" as const;
-  if (category === "fleet") return "fleet" as const;
-  if (category === "warehouse") return "warehouse" as const;
-  if (category === "template") return "templates" as const;
-  if (category === "report") return "reports" as const;
+  const canonical = normalizeDocumentCategory(category);
+  if (canonical === "invoice") return "finance" as const;
+  if (canonical === "hr") return "hr" as const;
+  if (canonical === "fleet") return "fleet" as const;
+  if (canonical === "warehouse") return "warehouse" as const;
+  if (canonical === "template") return "templates" as const;
+  if (canonical === "report") return "reports" as const;
   return "investments" as const;
 }

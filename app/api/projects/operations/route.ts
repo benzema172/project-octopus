@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 type OperationBody = {
   projectId?: string;
-  action?: "site_event" | "initialize_closeout" | "create_forecast" | "project_requirement_create" | "protocol_requirement_create" | "schedule_activity_create" | "progress_period_create" | "progress_entry_create" | "assignment_create" | "budget_create" | "reservation_create" | "change_order_create";
+  action?: "site_event" | "initialize_closeout" | "closeout_requirement_update" | "create_forecast" | "project_requirement_create" | "protocol_requirement_create" | "schedule_activity_create" | "progress_period_create" | "progress_entry_create" | "assignment_create" | "budget_create" | "reservation_create" | "change_order_create";
   eventType?: string;
   title?: string;
   description?: string;
@@ -42,6 +42,8 @@ type OperationBody = {
   number?: string;
   valueChange?: string | number;
   daysChange?: string | number;
+  requirementId?: string;
+  status?: string;
 };
 
 function clean(value: unknown) {
@@ -69,7 +71,8 @@ export async function POST(request: Request) {
       : body.action === "reservation_create"
         ? "warehouse"
         : "investments";
-  if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: requiredDomain, level: "write", projectId: body.projectId })) return NextResponse.json({ error: "Brak uprawnienia do tej operacji." }, { status: 403 });
+  const requiredLevel = body.action === "closeout_requirement_update" ? "approve" : "write";
+  if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: requiredDomain, level: requiredLevel, projectId: body.projectId })) return NextResponse.json({ error: "Brak uprawnienia do tej operacji." }, { status: 403 });
   const supabase = createServiceSupabaseClient();
 
   const ownedProjectRecord = async (table: string, id: unknown, label: string) => {
@@ -96,10 +99,10 @@ export async function POST(request: Request) {
       if (!clean(body.title)) throw new Error("Uzupełnij tytuł wymagania.");
       const { data, error } = await supabase.from("project_requirements").insert({
         workspace_id: workspace.id, project_id: body.projectId, requirement_type: clean(body.requirementType) || "material_application",
-        title: clean(body.title), description: clean(body.description) || null, source_locator: { source: "manual" }, status: "proposed", confidence: 1
+        title: clean(body.title), description: clean(body.description) || null, source_locator: { source: "manual", created_by: user.id }, status: "approved", confidence: 1
       }).select("id").single<{ id: string }>();
       if (error || !data) throw new Error(`Nie udało się utworzyć wymagania: ${error?.message ?? "brak danych"}`);
-      return created("project_requirement", data.id, "proposed");
+      return created("project_requirement", data.id, "approved");
     }
 
     if (body.action === "protocol_requirement_create") {
@@ -214,6 +217,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, id: data.id, status: "draft" });
     }
 
+    if (body.action === "closeout_requirement_update") {
+      const requirementId = await ownedProjectRecord("closeout_requirements", body.requirementId, "pozycja checklisty");
+      const status = clean(body.status);
+      if (!["missing", "complete"].includes(status)) throw new Error("Nieprawidłowy status pozycji zamknięcia.");
+      const { error } = await supabase.from("closeout_requirements").update({ status }).eq("id", requirementId).eq("project_id", body.projectId);
+      if (error) throw new Error(`Nie udało się zaktualizować checklisty: ${error.message}`);
+      await supabase.from("audit_events").insert({
+        workspace_id: workspace.id, project_id: body.projectId, actor_id: user.id,
+        event_type: `closeout_requirement.${status}`, entity_type: "closeout_requirement", entity_id: requirementId,
+        after_value: { status }
+      });
+      return NextResponse.json({ ok: true, id: requirementId, status });
+    }
+
     if (body.action === "initialize_closeout") {
       const baseRequirements = [
         ["Dokumentacja", "Aktualna dokumentacja powykonawcza"], ["Dokumentacja", "Wykaz zatwierdzonych rewizji"],
@@ -222,7 +239,7 @@ export async function POST(request: Request) {
         ["Odbiory", "Protokoły odbiorów częściowych i końcowego"], ["Odbiory", "Rejestr usterek i potwierdzenie usunięcia"],
         ["Gwarancje", "Gwarancje, instrukcje i DTR"], ["Przekazanie", "Spis dokumentów i potwierdzenie przekazania"]
       ];
-      const { data: protocolRequirements } = await supabase.from("protocol_requirements").select("title").eq("project_id", body.projectId);
+      const { data: protocolRequirements } = await supabase.from("protocol_requirements").select("title").eq("project_id", body.projectId).eq("status", "required");
       const requirements = [
         ...baseRequirements.map(([category, title]) => ({ category, title })),
         ...(protocolRequirements ?? []).map((row) => ({ category: "Protokoły wymagane", title: String(row.title) }))

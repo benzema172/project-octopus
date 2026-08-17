@@ -2,6 +2,7 @@ import "server-only";
 
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { DocumentSummary, DocumentVersionSummary } from "@/lib/types";
+import { documentCategoryMatches } from "@/lib/documents/classification";
 
 type FlexibleRow = Record<string, unknown>;
 type FlexibleDocumentRow = FlexibleRow & {
@@ -126,8 +127,7 @@ export async function safeListDocumentsForProject(projectId: string): Promise<Do
 
 export async function listDocumentsForCategories(projectId: string, categories: string[]): Promise<DocumentSummary[]> {
   const documents = await safeListDocumentsForProject(projectId);
-  const accepted = new Set(categories.map((category) => category.toLocaleLowerCase("pl")));
-  return documents.filter((document) => document.category && accepted.has(document.category.toLocaleLowerCase("pl")));
+  return documents.filter((document) => documentCategoryMatches(document.category, categories));
 }
 
 export async function isDocumentStorageSchemaReady() {

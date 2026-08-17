@@ -32,7 +32,21 @@ export async function GET(request: Request) {
     p_limit: 100
   });
   if (error) return NextResponse.json({ error: `Wyszukiwanie nie powiodło się: ${error.message}` }, { status: 500 });
-  const results = ((data ?? []) as Array<{ source_type?: string; category?: string; project_id?: string | null }>).filter((result) => {
+  type SearchRow = { source_type?: string; source_id?: string; category?: string; project_id?: string | null };
+  const rawResults = (data ?? []) as SearchRow[];
+  const idsByType = (sourceType: string) => rawResults.filter((item) => item.source_type === sourceType && item.source_id).map((item) => item.source_id!);
+  const [documentsResult, factsResult, knowledgeResult] = await Promise.all([
+    idsByType("document").length ? supabase.from("documents").select("id").in("id", idsByType("document")).eq("review_status", "approved") : Promise.resolve({ data: [] as Array<{ id: string }> }),
+    idsByType("fact").length ? supabase.from("project_facts").select("id").in("id", idsByType("fact")).eq("status", "approved") : Promise.resolve({ data: [] as Array<{ id: string }> }),
+    idsByType("knowledge").length ? supabase.from("knowledge_entries").select("id").in("id", idsByType("knowledge")).eq("status", "approved") : Promise.resolve({ data: [] as Array<{ id: string }> })
+  ]);
+  const approvedIds = new Set([
+    ...(documentsResult.data ?? []).map((item) => String(item.id)),
+    ...(factsResult.data ?? []).map((item) => String(item.id)),
+    ...(knowledgeResult.data ?? []).map((item) => String(item.id))
+  ]);
+  const results = rawResults.filter((result) => {
+    if (!result.source_id || !approvedIds.has(result.source_id)) return false;
     const domain: Domain = result.source_type === "knowledge"
       ? "reports"
       : result.source_type === "document"

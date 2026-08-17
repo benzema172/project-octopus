@@ -1,4 +1,4 @@
-# Project Octopus 0.7.0
+# Project Octopus 0.7.1
 
 System operacyjny firmy wykonawczej, w którym dokument źródłowy zasila Project DNA, kosztorys/BOQ, WBS, harmonogram, materiały, protokoły, przerób, finanse i raportowanie.
 
@@ -10,6 +10,21 @@ System operacyjny firmy wykonawczej, w którym dokument źródłowy zasila Proje
 - AI proponuje, reguły walidują, a człowiek zatwierdza operacje formalne, finansowe, kadrowe i magazynowe,
 - liczby finansowe pochodzą wyłącznie z rekordów źródłowych i jawnych założeń forecastu,
 - dane HR, finansowe i techniczne są rozdzielone rolami domenowymi.
+
+## Wersja 0.7.1
+
+### Domknięcie przepływów i bezpieczeństwa wiedzy
+
+- wszystkie dokumenty używają jednej kanonicznej taksonomii; starsze polskie identyfikatory są migrowane bez utraty powiązań,
+- ręczny upload, filtry modułów, klasyfikacja Gemini i uprawnienia domenowe rozumieją te same kategorie,
+- materiały i urządzenia rozpoznane przez AI trafiają do modułów dopiero po zatwierdzeniu dokumentu przez człowieka,
+- Brain, asystent, generator oraz wyszukiwarka korzystają wyłącznie z zatwierdzonych faktów i wpisów wiedzy,
+- odrzucenie dokumentu wycofuje proponowane wymagania, dowody, protokoły i oczekujący import kosztorysu,
+- odbiór inwestycji ma działające oznaczanie pozycji jako kompletne lub brakujące,
+- zdarzenia budowy można zatwierdzać lub odrzucać bezpośrednio w module Teren,
+- role domenowe można nadawać, aktualizować i odbierać z trwałym audytem,
+- zatwierdzony szkic ze Studio Wzorów jest atomowo publikowany jako wersjonowany dokument HTML w R2 i pojawia się w module Wyniki,
+- karta inwestycji respektuje tryb tylko do odczytu i nie pokazuje pozornie aktywnych operacji zapisu.
 
 ## Wersja 0.7.0
 
@@ -139,9 +154,10 @@ supabase/migrations/20260814090000_octopus_operating_system.sql
 supabase/migrations/20260814130000_octopus_execution_layer.sql
 supabase/migrations/20260814170000_atomic_estimate_approval.sql
 supabase/migrations/20260814180000_domain_access_hardening.sql
+supabase/migrations/20260817090000_document_taxonomy_and_ai_review.sql
 ```
 
-Na pustej bazie uruchom wszystkie migracje chronologicznie. Interfejs operacyjny wymaga markera `20260814_domain_access_hardening`.
+Na pustej bazie uruchom wszystkie migracje chronologicznie. Funkcje 0.7.1 wymagają markera `20260817_document_taxonomy_and_ai_review`.
 
 ## Walidacja
 
@@ -161,4 +177,4 @@ npm run check:schema
 npm run test:e2e-upload
 ```
 
-Szczegóły wdrożenia znajdują się w `DEPLOYMENT.md`, zakres bazowy w `IMPLEMENTATION_0.4.0.md`, a wyniki przeglądu technicznego i produktowego w `AUDIT_2026-08-14.md`.
+Szczegóły wdrożenia znajdują się w `DEPLOYMENT.md`, bieżący plan domknięcia produktu w `ROADMAP.md`, a historyczny przegląd architektury w `AUDIT_2026-08-14.md`.

@@ -20,7 +20,11 @@ export default async function ProjectDataPage({ params, searchParams }: ProjectD
 
   if (!project) notFound();
 
-  if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id })) {
+  const [canRead, canWrite] = await Promise.all([
+    hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id }),
+    hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "write", projectId: project.id })
+  ]);
+  if (!canRead) {
     return <DomainAccessDenied workspaceId={project.workspace_id} area="Dane inwestycji" />;
   }
 
@@ -28,7 +32,7 @@ export default async function ProjectDataPage({ params, searchParams }: ProjectD
 
   return (
     <div className="project-tab-content pw-data-page">
-      <ProjectProfileForm projectId={project.id} profile={profile} saved={query.saved === "1"} />
+      <ProjectProfileForm projectId={project.id} profile={profile} saved={query.saved === "1"} canWrite={canWrite} />
     </div>
   );
 }

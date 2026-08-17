@@ -25,7 +25,7 @@ export default async function CostEstimatePage({ params }: Props) {
   if (!project) notFound();
   if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id })) return <DomainAccessDenied workspaceId={project.workspace_id} area="Kosztorys" />;
   const [documents, knowledge, boqItems] = await Promise.all([
-    listDocumentsForCategories(projectId, ["kosztorys"]),
+    listDocumentsForCategories(projectId, ["estimate"]),
     getProjectKnowledgeSnapshot(projectId),
     getBoqKnowledge(projectId)
   ]);

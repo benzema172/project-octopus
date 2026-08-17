@@ -104,7 +104,7 @@ export async function POST(request: Request) {
 
   if (projectIds.length) {
     const [factsResult, materialsResult, devicesResult, findingsResult] = await Promise.all([
-      supabase.from("project_facts").select("project_id,fact_type,value_text,confidence,updated_at").in("project_id", projectIds).order("updated_at", { ascending: false }).limit(220),
+      supabase.from("project_facts").select("project_id,fact_type,value_text,confidence,updated_at").in("project_id", projectIds).eq("status", "approved").order("updated_at", { ascending: false }).limit(220),
       supabase.from("materials").select("project_id,name,installation,specification,updated_at").in("project_id", projectIds).order("updated_at", { ascending: false }).limit(160),
       supabase.from("devices").select("project_id,name,installation,parameters,updated_at").in("project_id", projectIds).order("updated_at", { ascending: false }).limit(160),
       supabase.from("ai_findings").select("project_id,severity,title,description,created_at").in("project_id", projectIds).order("created_at", { ascending: false }).limit(100)

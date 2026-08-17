@@ -194,7 +194,6 @@ function Warehouse({ workspaceId, data, canWrite, pending, submit, query }: { wo
   const visibleWarehouses = warehouses.filter((row) => matches(row, query)), visibleItems = items.filter((row) => matches(row, query));
   const visibleMovements = movements.filter((row) => matches(row, query, `${warehouseNames.get(String(row.warehouse_id)) ?? ""} ${projectNames.get(String(row.project_id)) ?? "ogolny"}`));
   const visibleBalances = balances.filter((row) => matches(row, query, `${warehouseNames.get(String(row.warehouseId)) ?? ""} ${JSON.stringify(itemById.get(String(row.stockItemId)) ?? {})}`));
-  const movementValue = (movement: Row) => lines.filter((row) => row.movement_id === movement.id).reduce((sum, row) => sum + Number(row.quantity ?? 0) * Number(row.unit_cost ?? 0), 0);
   const latestCost = new Map<string, number>();
   movements.forEach((movement) => lines.filter((line) => line.movement_id === movement.id).forEach((line) => {
     if (Number(line.unit_cost ?? 0) > 0 && !latestCost.has(String(line.stock_item_id))) latestCost.set(String(line.stock_item_id), Number(line.unit_cost));

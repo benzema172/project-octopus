@@ -7,7 +7,8 @@ const migrations = [
   "supabase/migrations/20260814090000_octopus_operating_system.sql",
   "supabase/migrations/20260814130000_octopus_execution_layer.sql",
   "supabase/migrations/20260814170000_atomic_estimate_approval.sql",
-  "supabase/migrations/20260814180000_domain_access_hardening.sql"
+  "supabase/migrations/20260814180000_domain_access_hardening.sql",
+  "supabase/migrations/20260817090000_document_taxonomy_and_ai_review.sql"
 ];
 
 function withoutPgcrypto(sql) {
@@ -61,6 +62,9 @@ try {
   const hardeningMarker = await database.query(
     "select version from public.app_schema_versions where version = '20260814_domain_access_hardening'"
   );
+  const taxonomyMarker = await database.query(
+    "select version from public.app_schema_versions where version = '20260817_document_taxonomy_and_ai_review'"
+  );
   const uploadFunction = await database.query(`
     select proname
     from pg_proc
@@ -80,6 +84,10 @@ try {
     select proname from pg_proc
     where pronamespace = 'public'::regnamespace and proname = 'approve_estimate_import_atomic'
   `);
+  const publishGenerationFunction = await database.query(`
+    select proname from pg_proc
+    where pronamespace = 'public'::regnamespace and proname = 'publish_generation_run_atomic'
+  `);
   const legacyProgressShape = await database.query(`
     select column_name
     from information_schema.columns
@@ -93,7 +101,7 @@ try {
       and column_name = 'workspace_id'
   `);
 
-  if (marker.rows.length !== 1 || hardeningMarker.rows.length !== 1 || uploadFunction.rows.length !== 1 || claimFunction.rows.length !== 1 || searchFunction.rows.length !== 1 || estimateApprovalFunction.rows.length !== 1 || legacyProgressShape.rows.length !== 6 || legacyGeneratedDocumentShape.rows.length !== 1) {
+  if (marker.rows.length !== 1 || hardeningMarker.rows.length !== 1 || taxonomyMarker.rows.length !== 1 || uploadFunction.rows.length !== 1 || claimFunction.rows.length !== 1 || searchFunction.rows.length !== 1 || estimateApprovalFunction.rows.length !== 1 || publishGenerationFunction.rows.length !== 1 || legacyProgressShape.rows.length !== 6 || legacyGeneratedDocumentShape.rows.length !== 1) {
     throw new Error("Migration marker or atomic upload function is missing.");
   }
 
@@ -280,6 +288,49 @@ try {
   }
   await database.exec("select set_config('request.jwt.claim.sub', '', false)");
 
+  await database.exec(`
+    insert into public.templates (id, workspace_id, name, template_type, status)
+    values ('00000000-0000-4000-8000-000000000041', '00000000-0000-4000-8000-000000000002', 'Protokół testowy', 'protocol', 'approved');
+    insert into public.template_versions (id, workspace_id, template_id, version_number, status)
+    values ('00000000-0000-4000-8000-000000000042', '00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000041', 1, 'approved');
+    insert into public.generation_runs (id, workspace_id, project_id, template_version_id, status, input_snapshot, created_by)
+    values (
+      '00000000-0000-4000-8000-000000000043',
+      '00000000-0000-4000-8000-000000000002',
+      '00000000-0000-4000-8000-000000000003',
+      '00000000-0000-4000-8000-000000000042',
+      'draft', '{"document_type":"protocol"}'::jsonb,
+      '00000000-0000-4000-8000-000000000001'
+    );
+  `);
+  const publishGenerated = () => database.query(`select * from public.publish_generation_run_atomic(
+    '00000000-0000-4000-8000-000000000002',
+    '00000000-0000-4000-8000-000000000043',
+    '00000000-0000-4000-8000-000000000044',
+    '00000000-0000-4000-8000-000000000045',
+    'protocol-test.html', 'protocol', 'text/html', 512,
+    'test-bucket', 'generated/protocol-test.html',
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    '00000000-0000-4000-8000-000000000001'
+  )`);
+  const published = await publishGenerated();
+  const publishedReplay = await publishGenerated();
+  const publicationState = await database.query(`
+    select
+      (select count(*)::integer from public.generated_documents where generation_run_id = '00000000-0000-4000-8000-000000000043') as generated_count,
+      (select status from public.generation_runs where id = '00000000-0000-4000-8000-000000000043') as run_status,
+      (select review_status from public.documents where id = '00000000-0000-4000-8000-000000000044') as review_status
+  `);
+  if (
+    published.rows[0]?.result_already_published !== false ||
+    publishedReplay.rows[0]?.result_already_published !== true ||
+    publicationState.rows[0]?.generated_count !== 1 ||
+    publicationState.rows[0]?.run_status !== "approved" ||
+    publicationState.rows[0]?.review_status !== "approved"
+  ) {
+    throw new Error("Atomic generator publication failed its transaction or replay test.");
+  }
+
   await prepareDatabase(legacyDatabase);
   await legacyDatabase.exec(`
     create table public.workspaces (
@@ -394,7 +445,7 @@ try {
     throw new Error("Compatibility migration failed to map the legacy production schema.");
   }
 
-  console.log("Fresh and legacy migrations, global documents, AI enqueue, atomic approvals and domain access passed local PostgreSQL tests.");
+  console.log("Fresh and legacy migrations, global documents, AI enqueue, atomic approvals, generator publication and domain access passed local PostgreSQL tests.");
 } finally {
   await database.close();
   await legacyDatabase.close();

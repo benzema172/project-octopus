@@ -4,14 +4,14 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, LoaderCircle, X } from "lucide-react";
 
-export function ReviewDecisionButton({ entityType, entityId }: { entityType: "estimate_import" | "change_impact"; entityId: string }) {
+export function ReviewDecisionButton({ entityType, entityId, workspaceId }: { entityType: "estimate_import" | "change_impact" | "site_event" | "generation_run"; entityId: string; workspaceId?: string }) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const router = useRouter();
   function decide(action: "approve" | "reject") {
     setMessage(null);
     startTransition(async () => {
-      const response = await fetch("/api/brain/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entityType, entityId, action }) });
+      const response = await fetch("/api/brain/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, entityType, entityId, action }) });
       const payload = await response.json() as { error?: string };
       setMessage(response.ok ? "Decyzja została zapisana." : payload.error ?? "Nie udało się zapisać decyzji.");
       if (response.ok) router.refresh();

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import type { DocumentSummary, ProjectSummary } from "@/lib/types";
 import { MAX_SUPPORTED_UPLOAD_BYTES, SUPPORTED_UPLOAD_ACCEPT, validateUploadFile } from "@/lib/r2/sanitize";
+import { DOCUMENT_DESTINATIONS, documentCategoryLabel } from "@/lib/documents/classification";
 
 type DocumentUploadProps = {
   workspaceId?: string;
@@ -25,6 +26,9 @@ type DocumentUploadProps = {
   trashedDocuments: DocumentSummary[];
   storageReady: boolean;
   defaultCategory?: string;
+  allowedCategories?: string[];
+  editableDocumentIds?: string[];
+  canUpload?: boolean;
 };
 
 type UploadResponse = { uploadUrl: string; token: string; headers: Record<string, string> };
@@ -39,26 +43,7 @@ function formatFileSize(bytes: number) {
 }
 
 function categoryLabel(category: string | null) {
-  const labels: Record<string, string> = {
-    project: "Projekt",
-    specification: "STWiOR",
-    estimate: "Kosztorys",
-    invoice: "Faktura",
-    protocol: "Protokół",
-    application: "Wniosek",
-    template: "Wzór",
-    hr: "Kadry",
-    fleet: "Flota",
-    pdf: "PDF",
-    document: "Dokument",
-    package: "Paczka",
-    other: "Inne",
-    kosztorys: "Kosztorys",
-    dokument: "Dokument",
-    paczka: "Paczka",
-    inne: "Inne"
-  };
-  return category ? labels[category] ?? category : "Do klasyfikacji";
+  return documentCategoryLabel(category);
 }
 
 async function sha256ForSmallFile(file: File) {
@@ -68,7 +53,7 @@ async function sha256ForSmallFile(file: File) {
   return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export function DocumentUpload({ workspaceId, projectId, projects = [], documents, trashedDocuments, storageReady, defaultCategory = "" }: DocumentUploadProps) {
+export function DocumentUpload({ workspaceId, projectId, projects = [], documents, trashedDocuments, storageReady, defaultCategory = "", allowedCategories, editableDocumentIds, canUpload = true }: DocumentUploadProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const targetDocumentIdRef = useRef<string | null>(null);
@@ -82,6 +67,10 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const editableIds = useMemo(() => new Set(editableDocumentIds ?? documents.map((document) => document.id)), [documents, editableDocumentIds]);
+  const uploadDestinations = useMemo(() => DOCUMENT_DESTINATIONS.filter((destination) =>
+    !["pdf", "document", "package", "review"].includes(destination.value) && (!allowedCategories || allowedCategories.includes(destination.value))
+  ), [allowedCategories]);
 
   const categories = useMemo(
     () => Array.from(new Set(documents.map((document) => document.category).filter(Boolean))).sort() as string[],
@@ -288,7 +277,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
 
       <div className="documents-layout">
         <div className="upload-panel">
-          <input ref={inputRef} type="file" accept={SUPPORTED_UPLOAD_ACCEPT} multiple onChange={(event) => handleFiles(event.target.files)} disabled={!storageReady} />
+          {canUpload ? <><input ref={inputRef} type="file" accept={SUPPORTED_UPLOAD_ACCEPT} multiple onChange={(event) => handleFiles(event.target.files)} disabled={!storageReady} />
           {!projectId && projects.length > 0 ? (
             <label className="upload-context">
               <span>Kontekst dokumentu</span>
@@ -305,16 +294,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
             <span>Rodzaj źródła</span>
             <select value={uploadCategory} onChange={(event) => setUploadCategory(event.target.value)}>
               <option value="">AI rozpozna automatycznie</option>
-              <option value="project">Projekt / dokumentacja techniczna</option>
-              <option value="specification">STWiOR / specyfikacja</option>
-              <option value="estimate">Kosztorys</option>
-              <option value="invoice">Faktura</option>
-              <option value="protocol">Protokół</option>
-              <option value="application">Wniosek materiałowy</option>
-              <option value="template">Wzór i wiedza dla AI</option>
-              <option value="hr">Dokument kadrowy</option>
-              <option value="fleet">Dokument floty</option>
-              <option value="other">Inny dokument</option>
+              {uploadDestinations.map((destination) => <option key={destination.value} value={destination.value}>{destination.label}</option>)}
             </select>
           </label>
           <button
@@ -337,6 +317,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
           {!storageReady ? <p className="form-message">Uruchom wszystkie migracje do 20260814_domain_access_hardening, aby odblokować Wrzutnię.</p> : null}
           {status ? <p className="upload-status">{status}</p> : null}
           {error ? <p className="form-message form-message--error">{error}</p> : null}
+          </> : <div className="empty-state empty-state--compact"><FileSearch size={24} /><h3>Biblioteka tylko do odczytu</h3><p>Dodawanie i zmiana plików wymaga roli z poziomem zapisu w odpowiedniej domenie.</p></div>}
         </div>
 
         <div className="document-list">
@@ -356,11 +337,9 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
                 </div>
                 {version ? (
                   <div className="document-row__actions">
-                    <button type="button" className="secondary-button" onClick={() => analyzeVersion(version.id)} disabled={isUploading}><Sparkles size={16} aria-hidden="true" />Analizuj</button>
                     <button type="button" className="secondary-button" onClick={() => previewVersion(version.id, document.project_id)} disabled={isUploading}><Eye size={16} aria-hidden="true" />Podgląd</button>
                     <button type="button" className="secondary-button" onClick={() => downloadVersion(version.id, document.project_id)} disabled={isUploading}><Download size={16} aria-hidden="true" />Pobierz</button>
-                    <button type="button" className="secondary-button" onClick={() => openFilePicker(document.id, document.project_id)} disabled={isUploading || !storageReady}><FilePlus2 size={16} aria-hidden="true" />Nowa wersja</button>
-                    <button type="button" className="secondary-button secondary-button--danger" onClick={() => changeDocumentState(document.id, "trashed", document.project_id)} disabled={isUploading || isPending}><Trash2 size={16} aria-hidden="true" />Do kosza</button>
+                    {editableIds.has(document.id) ? <><button type="button" className="secondary-button" onClick={() => analyzeVersion(version.id)} disabled={isUploading}><Sparkles size={16} aria-hidden="true" />Analizuj</button><button type="button" className="secondary-button" onClick={() => openFilePicker(document.id, document.project_id)} disabled={isUploading || !storageReady || !canUpload}><FilePlus2 size={16} aria-hidden="true" />Nowa wersja</button><button type="button" className="secondary-button secondary-button--danger" onClick={() => changeDocumentState(document.id, "trashed", document.project_id)} disabled={isUploading || isPending}><Trash2 size={16} aria-hidden="true" />Do kosza</button></> : null}
                   </div>
                 ) : null}
               </article>
@@ -379,7 +358,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
               <article key={document.id} className="document-row document-row--trashed">
                 <Trash2 size={18} aria-hidden="true" />
                 <div><h3>{document.name}</h3><p>Przeniesiono do kosza</p></div>
-                <div className="document-row__actions"><button type="button" className="secondary-button" onClick={() => changeDocumentState(document.id, "active", document.project_id)} disabled={isPending}><RotateCcw size={16} aria-hidden="true" />Przywróć</button></div>
+                {editableIds.has(document.id) ? <div className="document-row__actions"><button type="button" className="secondary-button" onClick={() => changeDocumentState(document.id, "active", document.project_id)} disabled={isPending}><RotateCcw size={16} aria-hidden="true" />Przywróć</button></div> : null}
               </article>
             ))}
           </div>

@@ -59,6 +59,7 @@ const checks = [
   ["vehicles", "id,workspace_id,registration_number,vehicle_type,status,created_at"],
   ["templates", "id,workspace_id,name,template_type,status,created_at,updated_at"],
   ["generation_runs", "id,workspace_id,project_id,template_version_id,status,input_snapshot,warnings,created_at"],
+  ["generated_documents", "id,workspace_id,project_id,generation_run_id,document_id,output_format,status,created_at"],
   ["report_definitions", "id,workspace_id,name,report_type,active,created_at,updated_at"],
   ["document_texts", "id,workspace_id,project_id,document_id,document_version_id,extracted_text,extraction_method,quality_score,created_at,updated_at"],
   ["ai_review_actions", "id,workspace_id,project_id,document_id,entity_type,entity_id,action,next_status,decided_by,created_at"],
@@ -104,12 +105,12 @@ if (failed) {
 const { data: schemaMarker, error: markerError } = await supabase
   .from("app_schema_versions")
   .select("version")
-  .eq("version", "20260814_domain_access_hardening")
+  .eq("version", "20260817_document_taxonomy_and_ai_review")
   .maybeSingle();
 
 if (markerError || !schemaMarker) {
-  console.error(`FAIL app_schema_versions: ${markerError?.message ?? "missing 20260814_domain_access_hardening marker"}`);
+  console.error(`FAIL app_schema_versions: ${markerError?.message ?? "missing 20260817_document_taxonomy_and_ai_review marker"}`);
   process.exit(1);
 }
 
-console.log("Schema matches the Project Octopus 0.4.1 domain-access requirements.");
+console.log("Schema matches the Project Octopus 0.7.1 taxonomy, review and publication requirements.");

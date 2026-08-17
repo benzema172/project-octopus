@@ -13,6 +13,22 @@ export type DocumentAnalysis = {
   requiredProtocols: string[];
   requiredApplications: string[];
   searchPassages: string[];
+  materials: Array<{
+    name: string;
+    installation: string;
+    specification: string;
+    confidence: number;
+    locator: string;
+    quote: string;
+  }>;
+  devices: Array<{
+    name: string;
+    installation: string;
+    parameters: Array<{ name: string; value: string; unit: string }>;
+    confidence: number;
+    locator: string;
+    quote: string;
+  }>;
   businessDocument: {
     documentType: string;
     documentNumber: string;
@@ -65,6 +81,36 @@ const RESPONSE_SCHEMA = {
     requiredProtocols: { type: "ARRAY", items: { type: "STRING" } },
     requiredApplications: { type: "ARRAY", items: { type: "STRING" } },
     searchPassages: { type: "ARRAY", items: { type: "STRING" } },
+    materials: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING" }, installation: { type: "STRING" }, specification: { type: "STRING" },
+          confidence: { type: "NUMBER" }, locator: { type: "STRING" }, quote: { type: "STRING" }
+        },
+        required: ["name", "installation", "specification", "confidence", "locator", "quote"]
+      }
+    },
+    devices: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING" }, installation: { type: "STRING" }, confidence: { type: "NUMBER" },
+          locator: { type: "STRING" }, quote: { type: "STRING" },
+          parameters: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: { name: { type: "STRING" }, value: { type: "STRING" }, unit: { type: "STRING" } },
+              required: ["name", "value", "unit"]
+            }
+          }
+        },
+        required: ["name", "installation", "parameters", "confidence", "locator", "quote"]
+      }
+    },
     businessDocument: {
       type: "OBJECT",
       properties: {
@@ -111,7 +157,7 @@ const RESPONSE_SCHEMA = {
     },
     warnings: { type: "ARRAY", items: { type: "STRING" } }
   },
-  required: ["category", "subcategory", "confidence", "summary", "projectHint", "installations", "workStages", "requiredProtocols", "requiredApplications", "searchPassages", "businessDocument", "boqItems", "facts", "warnings"]
+  required: ["category", "subcategory", "confidence", "summary", "projectHint", "installations", "workStages", "requiredProtocols", "requiredApplications", "searchPassages", "materials", "devices", "businessDocument", "boqItems", "facts", "warnings"]
 };
 
 type AnalyzeInput = { fileName: string; mimeType: string; extractedText?: string; inlineData?: string; fileUri?: string; projectCatalog?: string[] };
@@ -139,6 +185,17 @@ function normalizeAnalysis(value: unknown): DocumentAnalysis {
     requiredProtocols: Array.isArray(source.requiredProtocols) ? source.requiredProtocols.map(String) : [],
     requiredApplications: Array.isArray(source.requiredApplications) ? source.requiredApplications.map(String) : [],
     searchPassages: Array.isArray(source.searchPassages) ? source.searchPassages.slice(0, 250).map(String) : [],
+    materials: Array.isArray(source.materials) ? source.materials.slice(0, 300).map((item) => ({
+      name: String(item.name ?? ""), installation: String(item.installation ?? ""), specification: String(item.specification ?? ""),
+      confidence: Math.max(0, Math.min(1, Number(item.confidence) || 0)), locator: String(item.locator ?? ""), quote: String(item.quote ?? "")
+    })).filter((item) => item.name) : [],
+    devices: Array.isArray(source.devices) ? source.devices.slice(0, 200).map((item) => ({
+      name: String(item.name ?? ""), installation: String(item.installation ?? ""),
+      parameters: Array.isArray(item.parameters) ? item.parameters.slice(0, 50).map((parameter) => ({
+        name: String(parameter.name ?? ""), value: String(parameter.value ?? ""), unit: String(parameter.unit ?? "")
+      })) : [],
+      confidence: Math.max(0, Math.min(1, Number(item.confidence) || 0)), locator: String(item.locator ?? ""), quote: String(item.quote ?? "")
+    })).filter((item) => item.name) : [],
     businessDocument: {
       documentType: String(source.businessDocument?.documentType ?? ""),
       documentNumber: String(source.businessDocument?.documentNumber ?? ""),
@@ -181,7 +238,7 @@ export async function analyzeDocumentWithGemini(input: AnalyzeInput) {
   const model = getOptionalEnv("GEMINI_MODEL") ?? "gemini-3.5-flash";
   const projectCatalog = input.projectCatalog?.length ? input.projectCatalog.join("\n") : "Brak zdefiniowanych inwestycji — użyj OGÓLNE.";
   const prompt = `Jesteś silnikiem analizy dokumentów w polskiej firmie wykonującej instalacje sanitarne, wentylację, klimatyzację i roboty budowlane.\n
-Przeanalizuj dokument ${input.fileName}. Rozpoznaj jego rzeczywisty kontekst, nie tylko rozszerzenie. Kosztorys traktuj jako źródło pozycji BOQ i etapów WBS. Jeżeli to kosztorys lub przedmiar, wypełnij boqItems rzeczywistymi wierszami tabeli; nie łącz pozycji i zachowaj numer, ilość, jednostkę oraz ceny. Jeżeli dokument nie jest kosztorysem, zwróć pustą tablicę boqItems. Dla dokumentacji wskaż instalacje, etapy, wymagane wnioski materiałowe i protokoły.
+Przeanalizuj dokument ${input.fileName}. Rozpoznaj jego rzeczywisty kontekst, nie tylko rozszerzenie. Kosztorys traktuj jako źródło pozycji BOQ i etapów WBS. Jeżeli to kosztorys lub przedmiar, wypełnij boqItems rzeczywistymi wierszami tabeli; nie łącz pozycji i zachowaj numer, ilość, jednostkę oraz ceny. Jeżeli dokument nie jest kosztorysem, zwróć pustą tablicę boqItems. Dla dokumentacji wskaż instalacje, etapy, wymagane wnioski materiałowe i protokoły. W materials wypisz konkretne materiały z wymaganiami/specyfikacją, a w devices konkretne urządzenia z ich parametrami. Nie wpisuj ogólnych nazw branż ani instalacji jako materiałów lub urządzeń. Każdy element musi mieć lokalizator i krótki cytat.
 
 Dla faktury, WZ, PZ lub dokumentu dostawy dokładnie wypełnij businessDocument: numer, daty, strony, NIP-y, kwoty oraz każdą pozycję materiałową. documentType ustaw na invoice, WZ, PZ albo delivery. direction ustaw na purchase lub sale. Jeżeli dokument nie jest dokumentem handlowym/magazynowym, zwróć puste pola i pustą tablicę lines. Nie utożsamiaj zakupu materiału z wykonaniem robót.
 

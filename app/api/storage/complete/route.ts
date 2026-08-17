@@ -137,6 +137,13 @@ export async function POST(request: Request) {
     return jsonError(`Nie udało się atomowo zapisać dokumentu: ${completeError?.message ?? "brak danych"}`, 500);
   }
 
+  const { error: reviewResetError } = await supabase.from("documents").update({
+    review_status: "pending",
+    approved_by: null,
+    approved_at: null
+  }).eq("id", completed.document_id).eq("workspace_id", intent.workspaceId);
+  if (reviewResetError) return jsonError(`Plik został zapisany, ale nie udało się otworzyć nowej wersji do weryfikacji: ${reviewResetError.message}`, 500);
+
   return NextResponse.json({
     ok: true,
     documentId: completed.document_id,

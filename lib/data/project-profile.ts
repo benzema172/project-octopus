@@ -107,7 +107,7 @@ export const getProjectProfile = cache(async function getProjectProfile(
   return normalizeProfile(data?.value_json, project);
 });
 
-export async function saveProjectProfile(project: ProjectSummary, profile: ProjectProfile) {
+export async function saveProjectProfile(project: ProjectSummary, profile: ProjectProfile, userId?: string) {
   const supabase = createServiceSupabaseClient();
   const { data: existing, error: readError } = await supabase
     .from("project_facts")
@@ -126,7 +126,10 @@ export async function saveProjectProfile(project: ProjectSummary, profile: Proje
     fact_type: PROFILE_FACT_TYPE,
     value_text: profile.shortName || project.name,
     value_json: profile,
-    confidence: 1
+    confidence: 1,
+    status: "approved",
+    approved_by: userId ?? null,
+    approved_at: new Date().toISOString()
   };
 
   const profileResult = existing
@@ -178,4 +181,3 @@ export function getProjectProfileCompletion(profile: ProjectProfile) {
 
   return Math.round((completed / required.length) * 100);
 }
-

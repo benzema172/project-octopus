@@ -2517,6 +2517,7 @@ button:disabled {
 .closeout-list strong, .closeout-list small, .live-record-list strong, .live-record-list small { display: block; }
 .closeout-list small, .live-record-list small { margin-bottom: 3px; color: var(--quiet); }
 .live-record-list .review-buttons { grid-column: 1 / -1; padding-top: 7px; border-top: 1px solid var(--line); }
+.closeout-list .inline-action { grid-column: 1 / -1; padding-top: 7px; border-top: 1px solid var(--line); }
 
 .live-domain-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
 .live-domain-grid article { display: grid; gap: 5px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }

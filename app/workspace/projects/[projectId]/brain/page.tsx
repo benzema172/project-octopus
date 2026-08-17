@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { BrainPanel } from "@/components/brain/brain-panel";
 import { requireCurrentUser } from "@/lib/auth";
-import { listDocumentsForCategories } from "@/lib/data/documents";
+import { listDocumentsForProject } from "@/lib/data/documents";
 import { getProjectKnowledgeSnapshot } from "@/lib/data/project-knowledge";
 import { getProjectForUser } from "@/lib/data/projects";
 import { getAiRuntimeStatus } from "@/lib/env";
@@ -25,7 +25,7 @@ export default async function ProjectBrainPage({ params }: ProjectBrainPageProps
   }
 
   const [reviewDocuments, knowledge] = await Promise.all([
-    listDocumentsForCategories(projectId, ["do_weryfikacji"]),
+    listDocumentsForProject(projectId).then((documents) => documents.filter((document) => document.ai_status === "review")),
     getProjectKnowledgeSnapshot(projectId)
   ]);
 

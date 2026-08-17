@@ -25,6 +25,8 @@ import { listProjectsForWorkspace } from "@/lib/data/projects";
 import { getWorkspaceForUser, isCompanyProfileSchemaReady } from "@/lib/data/workspace";
 import { getAiRuntimeStatus } from "@/lib/env";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { DOCUMENT_DESTINATIONS } from "@/lib/documents/classification";
+import { generationDocumentCategory } from "@/lib/templates/render-generation";
 
 export const dynamic = "force-dynamic";
 
@@ -74,8 +76,6 @@ const SECTION_ACCESS: Partial<Record<string, { domain: Domain; label: string }>>
   hr: { domain: "hr", label: "Kadry" },
   warehouse: { domain: "warehouse", label: "Magazyn" },
   fleet: { domain: "fleet", label: "Flota" },
-  documents: { domain: "investments", label: "Dokumenty" },
-  "ai-inbox": { domain: "investments", label: "Skrzynka AI" },
   search: { domain: "investments", label: "Wyszukiwarka" },
   reports: { domain: "reports", label: "Raporty" },
   settings: { domain: "settings", label: "Ustawienia" }
@@ -137,10 +137,15 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
     const canReadDocument = (document: { category: string | null; project_id: string | null }) => domainAccessPolicyAllows(accessPolicy, {
       domain: domainForDocumentCategory(document.category), level: "read", projectId: document.project_id
     });
+    const canReadAnyDocuments = (["investments", "finance", "hr", "warehouse", "fleet", "templates", "reports"] as Domain[]).some((domain) => domainAccessPolicyHasAnyScope(accessPolicy, { domain, level: "read" }));
+    if (!canReadAnyDocuments) return <DomainAccessDenied workspaceId={workspace.id} area="Dokumenty" />;
     const documentSummaries = allDocumentSummaries.filter(canReadDocument);
     const documents = documentSummaries.slice(0, 100);
     const trashedDocuments = allTrashedDocuments.filter(canReadDocument);
-    const projectNames = new Map(projects.map((project) => [project.id, project.name]));
+    const visibleProjects = projects.filter((project) => domainAccessPolicyAllows(accessPolicy, { domain: "investments", level: "read", projectId: project.id }));
+    const projectNames = new Map(visibleProjects.map((project) => [project.id, project.name]));
+    const editableDocumentIds = [...documentSummaries, ...trashedDocuments].filter((document) => domainAccessPolicyAllows(accessPolicy, { domain: domainForDocumentCategory(document.category), level: "write", projectId: document.project_id })).map((document) => document.id);
+    const allowedCategories = DOCUMENT_DESTINATIONS.filter((destination) => domainAccessPolicyHasAnyScope(accessPolicy, { domain: domainForDocumentCategory(destination.value), level: "write" })).map((destination) => destination.value);
     return (
       <main className="co-page">
         <header className="co-page-heading">
@@ -167,10 +172,13 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
 
         <DocumentUpload
           workspaceId={workspace.id}
-          projects={projects}
+          projects={visibleProjects}
           documents={documentSummaries}
           trashedDocuments={trashedDocuments}
           storageReady={storageReady}
+          canUpload={allowedCategories.length > 0}
+          allowedCategories={allowedCategories}
+          editableDocumentIds={editableDocumentIds}
         />
 
         <section className="co-section">
@@ -226,24 +234,32 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
   }
 
   if (section === "ai-center") {
-    const [projects, allDocuments, allTrashedDocuments, storageReady, accessPolicy, entriesResult] = await Promise.all([
+    const [projects, allDocuments, allTrashedDocuments, storageReady, accessPolicy] = await Promise.all([
       listProjectsForWorkspace(user, workspace.id),
       listDocumentsForWorkspace(workspace.id),
       listDocumentsForWorkspace(workspace.id, true),
       isDocumentStorageSchemaReady(),
-      loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id }),
-      createServiceSupabaseClient().from("knowledge_entries").select("id,entry_type,title,summary,solution,tags,status,created_at").eq("workspace_id", workspace.id).order("created_at", { ascending: false }).limit(100)
+      loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id })
     ]);
     const canReadAiCenter = (["investments", "templates", "reports"] as Domain[]).some((domain) =>
       domainAccessPolicyHasAnyScope(accessPolicy, { domain, level: "read" })
     );
     if (!canReadAiCenter) return <DomainAccessDenied workspaceId={workspace.id} area="Centrum AI" />;
+    const canReadTemplates = domainAccessPolicyHasAnyScope(accessPolicy, { domain: "templates", level: "read" });
+    const canWriteTemplates = domainAccessPolicyHasAnyScope(accessPolicy, { domain: "templates", level: "write" });
+    const canReadReports = domainAccessPolicyHasAnyScope(accessPolicy, { domain: "reports", level: "read" });
+    const canWriteReports = domainAccessPolicyHasAnyScope(accessPolicy, { domain: "reports", level: "write" });
+    const visibleProjects = projects.filter((project) => domainAccessPolicyAllows(accessPolicy, { domain: "investments", level: "read", projectId: project.id }));
     const canReadDocument = (document: { category: string | null; project_id: string | null }) => domainAccessPolicyAllows(accessPolicy, {
       domain: domainForDocumentCategory(document.category), level: "read", projectId: document.project_id
     });
     const documents = allDocuments.filter(canReadDocument);
     const trashedDocuments = allTrashedDocuments.filter(canReadDocument);
-    const entries = entriesResult.data ?? [];
+    const editableDocumentIds = [...documents, ...trashedDocuments].filter((document) => domainAccessPolicyAllows(accessPolicy, { domain: domainForDocumentCategory(document.category), level: "write", projectId: document.project_id })).map((document) => document.id);
+    const allowedCategories = DOCUMENT_DESTINATIONS.filter((destination) => domainAccessPolicyHasAnyScope(accessPolicy, { domain: domainForDocumentCategory(destination.value), level: "write" })).map((destination) => destination.value);
+    const entries = canReadReports
+      ? (await createServiceSupabaseClient().from("knowledge_entries").select("id,entry_type,title,summary,solution,tags,status,created_at").eq("workspace_id", workspace.id).order("created_at", { ascending: false }).limit(100)).data ?? []
+      : [];
     const ai = getAiRuntimeStatus();
     return (
       <main className="co-page">
@@ -259,13 +275,13 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
         </section>
         <section className="co-section">
           <div className="co-section-heading"><div><p className="co-kicker">Materiały dla AI</p><h2>Wrzutnia i biblioteka źródeł</h2></div><strong>{documents.length} dokumentów</strong></div>
-          <DocumentUpload workspaceId={workspace.id} projects={projects} documents={documents} trashedDocuments={trashedDocuments} storageReady={storageReady} defaultCategory="template" />
+          <DocumentUpload workspaceId={workspace.id} projects={visibleProjects} documents={documents} trashedDocuments={trashedDocuments} storageReady={storageReady} defaultCategory={canWriteTemplates ? "template" : undefined} canUpload={allowedCategories.length > 0} allowedCategories={allowedCategories} editableDocumentIds={editableDocumentIds} />
         </section>
-        <TemplateStudio workspaceId={workspace.id} />
-        <section className="control-dashboard-grid ai-center-knowledge">
-          <article className="module-panel"><div className="module-panel__heading"><BookOpenCheck size={20} /><div><p className="eyebrow">Pamięć firmy</p><h2>Dodaj sprawdzoną wiedzę</h2></div></div><KnowledgeEntryForm workspaceId={workspace.id} projects={projects.map((project) => ({ id: project.id, name: project.name }))} /></article>
+        {canReadTemplates ? <TemplateStudio workspaceId={workspace.id} /> : null}
+        {canReadReports ? <section className="control-dashboard-grid ai-center-knowledge">
+          <article className="module-panel"><div className="module-panel__heading"><BookOpenCheck size={20} /><div><p className="eyebrow">Pamięć firmy</p><h2>{canWriteReports ? "Dodaj sprawdzoną wiedzę" : "Pamięć tylko do odczytu"}</h2></div></div>{canWriteReports ? <KnowledgeEntryForm workspaceId={workspace.id} projects={visibleProjects.map((project) => ({ id: project.id, name: project.name }))} /> : <p>Dodawanie wpisów wymaga roli Raporty: zapis.</p>}</article>
           <article className="module-panel"><div className="module-panel__heading"><CheckCircle2 size={20} /><div><p className="eyebrow">Biblioteka wiedzy</p><h2>{entries.filter((item) => item.status === "approved").length} zatwierdzonych</h2></div></div><div className="knowledge-entry-list">{entries.map((entry) => <article key={entry.id}>{entry.status === "approved" ? <CheckCircle2 size={17} /> : <CircleDashed size={17} />}<div><small>{entry.entry_type} · {entry.status}</small><strong>{entry.title}</strong><p>{entry.summary}</p><span>{Array.isArray(entry.tags) ? entry.tags.join(" · ") : ""}</span></div></article>)}{!entries.length ? <p className="empty-copy">Dodaj pierwszy wpis z wiedzą firmy.</p> : null}</div></article>
-        </section>
+        </section> : null}
         <section className="co-section"><div className="co-section-heading"><div><p className="co-kicker">Octopus Brain</p><h2>Przeszukaj całą zatwierdzoną wiedzę</h2></div></div><KnowledgeSearch workspaceId={workspace.id} /></section>
       </main>
     );
@@ -276,7 +292,10 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
       listAiInbox(workspace.id),
       loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id })
     ]);
+    const canReadInbox = (["investments", "templates", "reports"] as Domain[]).some((domain) => domainAccessPolicyHasAnyScope(accessPolicy, { domain, level: "read" }));
+    if (!canReadInbox) return <DomainAccessDenied workspaceId={workspace.id} area="Skrzynka AI" />;
     const items = allItems.filter((item) => {
+      if (item.entityType === "generation_run") return domainAccessPolicyAllows(accessPolicy, { domain: "templates", level: "read", projectId: item.projectId }) && domainAccessPolicyAllows(accessPolicy, { domain: "investments", level: "read", projectId: item.projectId }) && domainAccessPolicyAllows(accessPolicy, { domain: domainForDocumentCategory(generationDocumentCategory(item.category)), level: "read", projectId: item.projectId });
       const domain: Domain = item.entityType === "template_version"
         ? "templates"
         : item.entityType === "knowledge_entry"
