@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as XLSX from "xlsx";
-import { extractLegacyXlsText } from "../lib/ai/office-extractor";
 import { inferDocumentCategory, SUPPORTED_UPLOAD_ACCEPT, validateUploadFile } from "../lib/r2/sanitize";
+
+vi.mock("server-only", () => ({}));
 
 describe("legacy Office upload support", () => {
   it("accepts DOC and XLS with their standard MIME types", () => {
@@ -17,7 +18,8 @@ describe("legacy Office upload support", () => {
     expect(inferDocumentCategory("application/msword", "Opis techniczny.doc")).toBe("document");
   });
 
-  it("extracts worksheet content from a BIFF8 XLS buffer", () => {
+  it("extracts worksheet content from a BIFF8 XLS buffer", async () => {
+    const { extractLegacyXlsText } = await import("../lib/ai/office-extractor");
     const sheet = XLSX.utils.aoa_to_sheet([
       ["Pozycja", "Ilość", "Cena"],
       ["Rura stalowa DN50", 12, 48.5],
