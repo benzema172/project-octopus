@@ -55,13 +55,15 @@ stable
 security definer
 set search_path = public
 as $$
-  with boq as (
+  with project_scope as (
+    select id from public.projects where id=p_project_id and workspace_id=p_workspace_id
+  ), boq as (
     select count(*)::int as items,
-           coalesce(sum(coalesce(total_price,quantity*unit_price,0)),0)::numeric as planned_value,
-           coalesce(sum(quantity),0)::numeric as planned_qty,
-           coalesce(sum(quantity_executed),0)::numeric as executed_qty,
-           coalesce(sum(quantity_accepted),0)::numeric as accepted_qty
-    from public.boq_items where workspace_id=p_workspace_id and project_id=p_project_id
+           coalesce(sum(coalesce(b.total_price,b.quantity*b.unit_price,0)),0)::numeric as planned_value,
+           coalesce(sum(b.quantity),0)::numeric as planned_qty,
+           coalesce(sum(b.quantity_executed),0)::numeric as executed_qty,
+           coalesce(sum(b.quantity_accepted),0)::numeric as accepted_qty
+    from public.boq_items b where b.project_id in (select id from project_scope)
   ), costs as (
     select coalesce(sum(amount),0)::numeric as actual_cost,
            count(*)::int as allocations,
@@ -87,7 +89,7 @@ as $$
            count(*) filter(where source_type in ('stock_item','purchase_order_line'))::int as material_links
     from public.entity_links
     where workspace_id=p_workspace_id and target_type='boq_item' and relation_type in ('semantic_match','cost_trace','material_trace')
-      and target_id in (select id from public.boq_items where workspace_id=p_workspace_id and project_id=p_project_id)
+      and target_id in (select b.id from public.boq_items b where b.project_id in (select id from project_scope))
   )
   select jsonb_build_object(
     'boq', jsonb_build_object('items',boq.items,'plannedValue',boq.planned_value,'plannedQty',boq.planned_qty,'executedQty',boq.executed_qty,'acceptedQty',boq.accepted_qty),
