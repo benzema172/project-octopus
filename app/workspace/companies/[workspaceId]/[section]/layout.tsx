@@ -21,24 +21,29 @@ const KIND_DOMAIN: Record<CompanyPowerKind, Domain> = {
   reports: "reports"
 };
 
-export default async function CompanySectionLayout({ children, params }: { children: ReactNode; params: Promise<{ workspaceId: string; section: string }> }) {
-  const { workspaceId, section } = await params;
-  const kind = SECTION_KIND[section];
-  if (!kind) return children;
-
+async function loadPowerContext(workspaceId: string, kind: CompanyPowerKind) {
   try {
     const user = await requireCurrentUser();
     const workspace = await getWorkspaceForUser(user, workspaceId);
-    if (!workspace) return children;
+    if (!workspace) return null;
     const [canRead, canWrite] = await Promise.all([
       hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: KIND_DOMAIN[kind], level: "read" }),
       hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: KIND_DOMAIN[kind], level: "write" })
     ]);
-    if (!canRead) return children;
+    if (!canRead) return null;
     const data = await getCompanyPowerToolsData(workspace.id, kind);
-    return <>{children}<CompanyPowerTools workspaceId={workspace.id} kind={kind} data={data as never} canWrite={canWrite} referenceDate={new Date().toISOString()} /></>;
+    return { workspaceId: workspace.id, canWrite, data };
   } catch (error) {
     console.error("Project Octopus 0.8.0 power tools failed softly", error);
-    return children;
+    return null;
   }
+}
+
+export default async function CompanySectionLayout({ children, params }: { children: ReactNode; params: Promise<{ workspaceId: string; section: string }> }) {
+  const { workspaceId, section } = await params;
+  const kind = SECTION_KIND[section];
+  if (!kind) return children;
+  const context = await loadPowerContext(workspaceId, kind);
+  if (!context) return children;
+  return <>{children}<CompanyPowerTools workspaceId={context.workspaceId} kind={kind} data={context.data as never} canWrite={context.canWrite} referenceDate={new Date().toISOString()} /></>;
 }
