@@ -2,7 +2,7 @@
 
 import { FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowDown, ArrowUp, CalendarClock, CheckCircle2, CircleDollarSign, Mail, RefreshCcw, UsersRound } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, CalendarClock, CheckCircle2, CircleDollarSign, HeartPulse, Mail, RefreshCcw, UsersRound } from "lucide-react";
 
 type Row=Record<string,unknown>;
 type Data={snapshot:Record<string,unknown>;anomalies:Row[];correspondence:Row[];resources:Row[];employees:Row[]};
@@ -14,12 +14,13 @@ function arr(v:unknown){return Array.isArray(v)?v as Row[]:[];}
 
 export function ProjectCommandCenter({projectId,data,canManage}:{projectId:string;data:Data;canManage:boolean}){
  const router=useRouter(); const [pending,startTransition]=useTransition(); const [message,setMessage]=useState<string|null>(null); const s=data.snapshot;
- const forecast=obj(s.forecast),schedule=obj(s.schedule),anomalyStats=obj(s.anomalies),quality=obj(s.quality),cash=arr(s.cashflow13w),lessons=arr(s.crossProjectKnowledge);
+ const forecast=obj(s.forecast),schedule=obj(s.schedule),anomalyStats=obj(s.anomalies),quality=obj(s.quality),health=obj(s.projectHealth),cash=arr(s.cashflow13w),lessons=arr(s.crossProjectKnowledge);
  async function action(actionName:string,payload:Record<string,unknown>){setMessage(null);const response=await fetch("/api/projects/command-center",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({projectId,action:actionName,payload})});const result=await response.json() as {error?:string};if(!response.ok)throw new Error(result.error??"Operacja nie powiodła się.");setMessage("Zapisano. Command Center został odświeżony.");startTransition(()=>router.refresh());}
  function submit(actionName:string){return async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();const form=new FormData(event.currentTarget);try{await action(actionName,Object.fromEntries(form.entries()));event.currentTarget.reset();}catch(error){setMessage(error instanceof Error?error.message:"Błąd zapisu.");}};}
  return <section className="section-band project-command-center">
-  <div className="section-heading"><div><p className="eyebrow">Project Octopus 1.0</p><h2>Command Center</h2><p>Cash flow, zasoby, korespondencja, anomalie i prognoza w jednym operacyjnym widoku.</p></div><span>{pending?<RefreshCcw size={16}/>:<CheckCircle2 size={16}/>} stan na żywo</span></div>
+  <div className="section-heading"><div><p className="eyebrow">Project Octopus 1.0</p><h2>Command Center</h2><p>Cash flow, zasoby, korespondencja, anomalie, Project Health i prognoza w jednym operacyjnym widoku.</p></div><span>{pending?<RefreshCcw size={16}/>:<CheckCircle2 size={16}/>} stan na żywo</span></div>
   {message?<p className="command-message">{message}</p>:null}
+  <div className="command-next-action"><HeartPulse size={21}/><div><small>Project Health · {String(health.status??"—")}</small><strong>{String(health.score??"—")}/100</strong><p>{String(s.nextAction??"Brak wyznaczonego następnego kroku.")}</p></div><ArrowRight size={20}/></div>
   <div className="command-kpis">
    <article><CircleDollarSign/><small>Kontrakt</small><strong>{money(s.contractValue)}</strong><span>Koszt {money(s.actualCost)} · zobowiązania {money(s.committedCost)}</span></article>
    <article><CalendarClock/><small>Prognoza końca</small><strong>{String(forecast.finishDate??schedule.latestOpenFinish??"—")}</strong><span>EAC {money(forecast.eac)} · marża {money(forecast.margin)}</span></article>
