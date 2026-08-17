@@ -39,8 +39,8 @@ describe("legacy Office upload support", () => {
     const source = readFileSync("lib/ai/process-document.ts", "utf8");
     expect(source).toContain("extractLegacyDocText");
     expect(source).toContain("extractLegacyXlsText");
-    expect(source).toContain('ext === "doc"');
-    expect(source).toContain('ext === "xls"');
-    expect(source).not.toContain("Starszy format wymaga konwersji");
+    expect(source).toContain('if (ext === "doc") return');
+    expect(source).toContain('if (ext === "xls") return');
+    expect(source).not.toContain('if (ext === "xls" || ext === "doc") throw');
   });
 });
