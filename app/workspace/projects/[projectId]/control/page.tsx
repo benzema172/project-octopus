@@ -30,14 +30,16 @@ export default async function ControlPage({ params }: { params: Promise<{ projec
   const [executionSnapshot, autopilotSnapshot, reconciliation, commandCenter] = await Promise.all([
     getProjectExecutionSnapshot(project.workspace_id, project.id, { includeFinance: financeAllowed, includeWarehouse: warehouseAllowed }),
     getInvestmentAutopilotSnapshot(project.workspace_id, project.id, { includeFinance: financeAllowed, includeWarehouse: warehouseAllowed }),
-    financeAllowed || warehouseAllowed ? getProjectReconciliation(project.workspace_id, project.id) : Promise.resolve({ graph: {}, links: [], orders: [] }),
+    financeAllowed || warehouseAllowed
+      ? getProjectReconciliation(project.workspace_id, project.id)
+      : Promise.resolve({ graph: {}, links: [], orders: [], requests: [], counterparties: [], stockItems: [], boqItems: [] }),
     getProjectCommandCenter(project.workspace_id, project.id)
   ]);
   return <div className="project-tab-content">
     <section className="project-module-heading"><div><p className="eyebrow">Kosztorys do odbioru</p><h2>Kontrola 360° inwestycji</h2><p>Jeden widok łączący zakres, wymagania, harmonogram, materiały, postęp, dowody, zmiany, cash flow i forecast.</p></div></section>
     <ProjectCommandCenter projectId={project.id} data={commandCenter} canManage={canManageInvestments} />
     <InvestmentAutopilotCenter projectId={project.id} workspaceId={project.workspace_id} snapshot={autopilotSnapshot} canRun={canManageInvestments} financeAllowed={financeAllowed} warehouseAllowed={warehouseAllowed} />
-    {financeAllowed || warehouseAllowed ? <ProjectReconciliationGraph projectId={project.id} data={reconciliation} canManage={canManageInvestments && (canManageFinance || canManageWarehouse)} /> : null}
+    {financeAllowed || warehouseAllowed ? <ProjectReconciliationGraph projectId={project.id} data={reconciliation} canManage={canManageInvestments && (canManageFinance || canManageWarehouse)} canOrder={canManageInvestments && canManageWarehouse} /> : null}
     <ProjectExecutionCenter workspaceId={project.workspace_id} projectId={project.id} snapshot={executionSnapshot} financeAllowed={financeAllowed} canManageFinance={canManageFinance} warehouseAllowed={warehouseAllowed} canManageInvestments={canManageInvestments} />
   </div>;
 }
