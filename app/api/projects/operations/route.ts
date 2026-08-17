@@ -138,19 +138,36 @@ export async function POST(request: Request) {
       const boqItemId = await ownedProjectRecord("boq_items", body.boqItemId, "pozycja BOQ");
       const quantityExecuted = parseLocalizedNumber(body.quantityExecuted), quantityAccepted = parseLocalizedNumber(body.quantityAccepted);
       if (quantityExecuted < 0 || quantityAccepted < 0 || quantityAccepted > quantityExecuted) throw new Error("Ilość odebrana musi mieścić się między 0 a ilością wykonaną.");
-      const { data: boq } = await supabase.from("boq_items").select("unit_price").eq("id", boqItemId).single<{ unit_price: number | null }>();
-      const unitPrice = Number(boq?.unit_price ?? 0);
+      const [{ data: boq, error: boqError }, { data: existingEntries, error: entriesError }] = await Promise.all([
+        supabase.from("boq_items").select("quantity,unit_price").eq("id", boqItemId).eq("project_id", body.projectId).single<{ quantity: number | null; unit_price: number | null }>(),
+        supabase.from("progress_entries").select("quantity_executed,quantity_accepted").eq("project_id", body.projectId).eq("boq_item_id", boqItemId)
+      ]);
+      if (boqError || !boq) throw new Error(`Nie udało się odczytać pozycji BOQ: ${boqError?.message ?? "brak danych"}`);
+      if (entriesError) throw new Error(`Nie udało się sprawdzić dotychczasowego przerobu: ${entriesError.message}`);
+      const existingExecuted = (existingEntries ?? []).reduce((sum, row) => sum + Number(row.quantity_executed ?? 0), 0);
+      const existingAccepted = (existingEntries ?? []).reduce((sum, row) => sum + Number(row.quantity_accepted ?? 0), 0);
+      const nextExecuted = existingExecuted + quantityExecuted;
+      const nextAccepted = existingAccepted + quantityAccepted;
+      const plannedQuantity = Number(boq.quantity ?? 0);
+      const tolerance = Math.max(0.0001, Math.abs(plannedQuantity) * 0.000001);
+      if (plannedQuantity > 0 && nextExecuted > plannedQuantity + tolerance) {
+        throw new Error(`Łączne wykonanie (${nextExecuted}) przekroczyłoby ilość BOQ (${plannedQuantity}). Najpierw zatwierdź zmianę zakresu lub zaktualizuj BOQ.`);
+      }
+      if (plannedQuantity > 0 && nextAccepted > plannedQuantity + tolerance) {
+        throw new Error(`Łączny odbiór (${nextAccepted}) przekroczyłby ilość BOQ (${plannedQuantity}). Najpierw zatwierdź zmianę zakresu lub zaktualizuj BOQ.`);
+      }
+      const unitPrice = Number(boq.unit_price ?? 0);
       const { data, error } = await supabase.from("progress_entries").insert({
         workspace_id: workspace.id, project_id: body.projectId, progress_period_id: progressPeriodId, boq_item_id: boqItemId,
         quantity_executed: quantityExecuted, quantity_accepted: quantityAccepted, value_executed: quantityExecuted * unitPrice,
         value_accepted: quantityAccepted * unitPrice, status: quantityAccepted === quantityExecuted && quantityExecuted > 0 ? "accepted" : "draft"
       }).select("id").single<{ id: string }>();
       if (error || !data) throw new Error(`Nie udało się zapisać postępu: ${error?.message ?? "brak danych"}`);
-      const { data: allEntries } = await supabase.from("progress_entries").select("quantity_executed,quantity_accepted").eq("project_id", body.projectId).eq("boq_item_id", boqItemId);
-      await supabase.from("boq_items").update({
-        quantity_executed: (allEntries ?? []).reduce((sum, row) => sum + Number(row.quantity_executed ?? 0), 0),
-        quantity_accepted: (allEntries ?? []).reduce((sum, row) => sum + Number(row.quantity_accepted ?? 0), 0)
+      const { error: aggregateError } = await supabase.from("boq_items").update({
+        quantity_executed: nextExecuted,
+        quantity_accepted: nextAccepted
       }).eq("id", boqItemId).eq("project_id", body.projectId);
+      if (aggregateError) throw new Error(`Przerób zapisano, ale nie udało się zaktualizować agregatu BOQ: ${aggregateError.message}`);
       return created("progress_entry", data.id, quantityAccepted === quantityExecuted && quantityExecuted > 0 ? "accepted" : "draft");
     }
 
