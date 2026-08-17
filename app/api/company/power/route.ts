@@ -65,13 +65,26 @@ function amount(value: unknown, label: string, required = false) {
   return result;
 }
 
+function periodsOverlap(fromA: string, toA: string | null, fromB: string, toB: string | null) {
+  const endA = toA ?? "9999-12-31";
+  const endB = toB ?? "9999-12-31";
+  return fromA <= endB && fromB <= endA;
+}
+
 export async function POST(request: Request) {
   const user = await getRequestUser(request);
   if (!user) return NextResponse.json({ error: "Brak aktywnej sesji." }, { status: 401 });
 
   let body: Body;
-  try { body = await request.json() as Body; } catch { return NextResponse.json({ error: "Nieprawidłowe dane operacji." }, { status: 400 }); }
-  if (!body.workspaceId || !body.action || !ACTION_DOMAIN[body.action]) return NextResponse.json({ error: "Brakuje firmy lub rodzaju operacji." }, { status: 400 });
+  try {
+    body = await request.json() as Body;
+  } catch {
+    return NextResponse.json({ error: "Nieprawidłowe dane operacji." }, { status: 400 });
+  }
+
+  if (!body.workspaceId || !body.action || !ACTION_DOMAIN[body.action]) {
+    return NextResponse.json({ error: "Brakuje firmy lub rodzaju operacji." }, { status: 400 });
+  }
 
   const workspace = await getWorkspaceForUser(user, body.workspaceId);
   if (!workspace) return NextResponse.json({ error: "Brak dostępu do firmy." }, { status: 403 });
@@ -90,29 +103,6 @@ export async function POST(request: Request) {
     return id;
   };
 
-  const currentStock = async (warehouseId: string, stockItemId: string) => {
-    const { data: movements, error: movementError } = await db.from("stock_movements").select("id,warehouse_id,target_warehouse_id,movement_type,status").eq("workspace_id", workspace.id).eq("status", "approved");
-    if (movementError) throw movementError;
-    const ids = (movements ?? []).map((row) => row.id);
-    if (!ids.length) return 0;
-    const { data: lines, error: lineError } = await db.from("stock_movement_lines").select("movement_id,stock_item_id,quantity").eq("workspace_id", workspace.id).eq("stock_item_id", stockItemId).in("movement_id", ids);
-    if (lineError) throw lineError;
-    const byId = new Map((movements ?? []).map((row) => [row.id, row]));
-    let balance = 0;
-    for (const line of lines ?? []) {
-      const movement = byId.get(line.movement_id);
-      if (!movement) continue;
-      const qty = Number(line.quantity ?? 0);
-      const type = String(movement.movement_type).toUpperCase();
-      if (String(movement.warehouse_id) === warehouseId) {
-        if (["PZ", "ZW"].includes(type)) balance += qty;
-        if (["WZ", "RW", "MM"].includes(type)) balance -= qty;
-      }
-      if (type === "MM" && String(movement.target_warehouse_id ?? "") === warehouseId) balance += qty;
-    }
-    return balance;
-  };
-
   const audit = async (entityType: string, entityId: string, action: string, before: unknown = null, after: unknown = null) => {
     await db.from("audit_events").insert({
       workspace_id: workspace.id,
@@ -127,21 +117,20 @@ export async function POST(request: Request) {
 
   try {
     let id = "";
+    let meta: Record<string, unknown> = {};
 
     if (body.action === "invoice_reassign") {
       const invoiceId = await owned("invoices", p.invoiceId, "Faktura");
       const projectId = p.projectId ? await owned("projects", p.projectId, "Inwestycja", true) : null;
-      const { data: invoice, error: invoiceError } = await db.from("invoices").select("gross_amount").eq("workspace_id", workspace.id).eq("id", invoiceId).single<{ gross_amount: number }>();
-      if (invoiceError || !invoice) throw new Error("Nie udało się odczytać faktury.");
-      const { data: before } = await db.from("financial_allocations").select("id,project_id,amount,status").eq("workspace_id", workspace.id).eq("source_type", "invoice").eq("source_id", invoiceId);
-      const { error: deleteError } = await db.from("financial_allocations").delete().eq("workspace_id", workspace.id).eq("source_type", "invoice").eq("source_id", invoiceId);
-      if (deleteError) throw deleteError;
-      if (projectId) {
-        const { error } = await db.from("financial_allocations").insert({ workspace_id: workspace.id, project_id: projectId, source_type: "invoice", source_id: invoiceId, amount: Number(invoice.gross_amount ?? 0), allocation_percent: 100, status: "approved" });
-        if (error) throw error;
-      }
-      id = invoiceId!;
-      await audit("invoice", id, "reassigned", before, { projectId });
+      const { data, error } = await db.rpc("reassign_invoice_atomic", {
+        p_workspace_id: workspace.id,
+        p_invoice_id: invoiceId,
+        p_project_id: projectId,
+        p_actor_id: user.id
+      });
+      if (error) throw new Error(`Nie udało się atomowo zmienić przypisania faktury: ${error.message}`);
+      id = String(data ?? invoiceId);
+      meta = { projectId };
     } else if (body.action === "commitment_status") {
       const commitmentId = await owned("commitments", p.commitmentId, "Zobowiązanie");
       const status = text(p.status, "status", true)!;
@@ -158,10 +147,21 @@ export async function POST(request: Request) {
       if (validTo && validFrom > validTo) throw new Error("Data zakończenia zatrudnienia nie może poprzedzać daty rozpoczęcia.");
       const fte = amount(p.fullTimeEquivalent, "wymiar etatu");
       if (fte < 0 || fte > 2) throw new Error("Wymiar etatu musi mieścić się w zakresie 0–2.");
+      const { data: existingTerms, error: termsError } = await db.from("employments").select("id,valid_from,valid_to").eq("workspace_id", workspace.id).eq("employee_id", employeeId);
+      if (termsError) throw termsError;
+      const overlap = (existingTerms ?? []).some((term) => periodsOverlap(validFrom, validTo, String(term.valid_from), term.valid_to ? String(term.valid_to) : null));
+      if (overlap) throw new Error("Ten pracownik ma już warunki zatrudnienia obejmujące część wskazanego okresu. Zakończ poprzedni okres albo zmień daty.");
       const { data, error } = await db.from("employments").insert({
-        workspace_id: workspace.id, employee_id: employeeId, employment_type: text(p.employmentType, "forma zatrudnienia", true), position: text(p.position, "stanowisko"),
-        valid_from: validFrom, valid_to: validTo, full_time_equivalent: fte || null, monthly_cost: amount(p.monthlyCost, "koszt miesięczny") || null,
-        hourly_cost: amount(p.hourlyCost, "koszt godzinowy") || null, currency: "PLN"
+        workspace_id: workspace.id,
+        employee_id: employeeId,
+        employment_type: text(p.employmentType, "forma zatrudnienia", true),
+        position: text(p.position, "stanowisko"),
+        valid_from: validFrom,
+        valid_to: validTo,
+        full_time_equivalent: fte || null,
+        monthly_cost: amount(p.monthlyCost, "koszt miesięczny") || null,
+        hourly_cost: amount(p.hourlyCost, "koszt godzinowy") || null,
+        currency: "PLN"
       }).select("id").single<{ id: string }>();
       if (error || !data) throw error ?? new Error("Nie utworzono zatrudnienia.");
       id = data.id;
@@ -169,15 +169,26 @@ export async function POST(request: Request) {
     } else if (body.action === "assignment_create") {
       const employeeId = await owned("employees", p.employeeId, "Pracownik");
       const projectId = await owned("projects", p.projectId, "Inwestycja");
-      const dateFrom = date(p.dateFrom);
+      const dateFrom = date(p.dateFrom) ?? new Date().toISOString().slice(0, 10);
       const dateTo = date(p.dateTo);
-      if (dateFrom && dateTo && dateFrom > dateTo) throw new Error("Początek przypisania nie może być po jego końcu.");
+      if (dateTo && dateFrom > dateTo) throw new Error("Początek przypisania nie może być po jego końcu.");
       const allocation = amount(p.allocationPercent, "zaangażowanie", true);
       if (allocation <= 0 || allocation > 100) throw new Error("Zaangażowanie musi mieścić się w zakresie 0–100%.");
-      const { data, error } = await db.from("assignments").insert({ workspace_id: workspace.id, employee_id: employeeId, project_id: projectId, role: text(p.role, "rola", true), date_from: dateFrom, date_to: dateTo, allocation_percent: allocation }).select("id").single<{ id: string }>();
+      const { data: overlappingAssignments } = await db.from("assignments").select("date_from,date_to,allocation_percent").eq("workspace_id", workspace.id).eq("employee_id", employeeId);
+      const existingLoad = (overlappingAssignments ?? []).filter((row) => periodsOverlap(dateFrom, dateTo, String(row.date_from ?? "1900-01-01"), row.date_to ? String(row.date_to) : null)).reduce((sum, row) => sum + Number(row.allocation_percent ?? 0), 0);
+      const { data, error } = await db.from("assignments").insert({
+        workspace_id: workspace.id,
+        employee_id: employeeId,
+        project_id: projectId,
+        role: text(p.role, "rola", true),
+        date_from: dateFrom,
+        date_to: dateTo,
+        allocation_percent: allocation
+      }).select("id").single<{ id: string }>();
       if (error || !data) throw error ?? new Error("Nie utworzono przypisania.");
       id = data.id;
-      await audit("assignment", id, "created");
+      meta = { allocationWarning: existingLoad + allocation > 100 ? `Łączne obłożenie w nakładającym się okresie wynosi ${existingLoad + allocation}%.` : null };
+      await audit("assignment", id, "created", null, { ...p, existingLoad, resultingLoad: existingLoad + allocation });
     } else if (body.action === "reservation_status") {
       const reservationId = await owned("reservations", p.reservationId, "Rezerwacja");
       const status = text(p.status, "status", true)!;
@@ -189,23 +200,15 @@ export async function POST(request: Request) {
       await audit("reservation", id, "status_updated", before, { status });
     } else if (body.action === "reservation_issue") {
       const reservationId = await owned("reservations", p.reservationId, "Rezerwacja");
-      const { data: reservation, error: reservationError } = await db.from("reservations").select("project_id,warehouse_id,stock_item_id,quantity,status").eq("workspace_id", workspace.id).eq("id", reservationId).single();
-      if (reservationError || !reservation) throw new Error("Nie udało się odczytać rezerwacji.");
-      if (reservation.status !== "open") throw new Error("Tylko otwartą rezerwację można wydać.");
-      const available = await currentStock(String(reservation.warehouse_id), String(reservation.stock_item_id));
-      const quantity = Number(reservation.quantity ?? 0);
-      if (quantity <= 0 || available + 0.000001 < quantity) throw new Error(`Brak wystarczającego stanu. Dostępne: ${available}, wymagane: ${quantity}.`);
-      const { data: movement, error: movementError } = await db.from("stock_movements").insert({
-        workspace_id: workspace.id, project_id: reservation.project_id, warehouse_id: reservation.warehouse_id, movement_type: "RW",
-        document_number: `RW-RES-${String(reservationId).slice(0, 8).toUpperCase()}`, movement_date: new Date().toISOString().slice(0, 10), status: "approved", approved_by: user.id, approved_at: new Date().toISOString()
-      }).select("id").single<{ id: string }>();
-      if (movementError || !movement) throw movementError ?? new Error("Nie utworzono RW.");
-      const { error: lineError } = await db.from("stock_movement_lines").insert({ workspace_id: workspace.id, movement_id: movement.id, stock_item_id: reservation.stock_item_id, quantity });
-      if (lineError) { await db.from("stock_movements").delete().eq("id", movement.id); throw lineError; }
-      const { error: reservationUpdateError } = await db.from("reservations").update({ status: "fulfilled" }).eq("workspace_id", workspace.id).eq("id", reservationId);
-      if (reservationUpdateError) throw reservationUpdateError;
-      id = movement.id;
-      await audit("reservation", reservationId!, "issued", { status: "open" }, { status: "fulfilled", movementId: id });
+      const { data, error } = await db.rpc("issue_reservation_atomic", {
+        p_workspace_id: workspace.id,
+        p_reservation_id: reservationId,
+        p_actor_id: user.id,
+        p_movement_date: new Date().toISOString().slice(0, 10)
+      }).single<{ result_movement_id: string; available_before: number; issued_quantity: number }>();
+      if (error || !data) throw new Error(`Nie udało się atomowo wydać rezerwacji: ${error?.message ?? "brak danych"}`);
+      id = data.result_movement_id;
+      meta = { availableBefore: data.available_before, issuedQuantity: data.issued_quantity };
     } else if (body.action === "stock_item_status") {
       const stockItemId = await owned("stock_items", p.stockItemId, "Kartoteka");
       const active = p.active === true || p.active === "true";
@@ -221,18 +224,20 @@ export async function POST(request: Request) {
       const stockItemId = await owned("stock_items", p.stockItemId, "Kartoteka");
       const projectId = p.projectId ? await owned("projects", p.projectId, "Inwestycja", true) : null;
       const quantity = amount(p.quantity, "ilość", true);
-      if (quantity <= 0) throw new Error("Ilość musi być większa od zera.");
-      const available = await currentStock(warehouseId!, stockItemId!);
-      if (available + 0.000001 < quantity) throw new Error(`Brak wystarczającego stanu do MM. Dostępne: ${available}.`);
-      const { data: movement, error } = await db.from("stock_movements").insert({
-        workspace_id: workspace.id, project_id: projectId, warehouse_id: warehouseId, target_warehouse_id: targetWarehouseId, movement_type: "MM",
-        document_number: text(p.documentNumber, "numer dokumentu") ?? `MM-${Date.now()}`, movement_date: date(p.movementDate) ?? new Date().toISOString().slice(0, 10), status: "approved", approved_by: user.id, approved_at: new Date().toISOString()
-      }).select("id").single<{ id: string }>();
-      if (error || !movement) throw error ?? new Error("Nie utworzono MM.");
-      const { error: lineError } = await db.from("stock_movement_lines").insert({ workspace_id: workspace.id, movement_id: movement.id, stock_item_id: stockItemId, quantity });
-      if (lineError) { await db.from("stock_movements").delete().eq("id", movement.id); throw lineError; }
-      id = movement.id;
-      await audit("stock_movement", id, "transferred");
+      const { data, error } = await db.rpc("transfer_stock_atomic", {
+        p_workspace_id: workspace.id,
+        p_project_id: projectId,
+        p_source_warehouse_id: warehouseId,
+        p_target_warehouse_id: targetWarehouseId,
+        p_stock_item_id: stockItemId,
+        p_quantity: quantity,
+        p_document_number: text(p.documentNumber, "numer dokumentu") ?? "",
+        p_movement_date: date(p.movementDate) ?? new Date().toISOString().slice(0, 10),
+        p_actor_id: user.id
+      }).single<{ result_movement_id: string; available_before: number }>();
+      if (error || !data) throw new Error(`Nie udało się atomowo przesunąć materiału: ${error?.message ?? "brak danych"}`);
+      id = data.result_movement_id;
+      meta = { availableBefore: data.available_before };
     } else if (body.action === "vehicle_allocation_create") {
       const vehicleId = await owned("vehicles", p.vehicleId, "Pojazd");
       const projectId = p.projectId ? await owned("projects", p.projectId, "Inwestycja", true) : null;
@@ -240,29 +245,39 @@ export async function POST(request: Request) {
       const dateFrom = date(p.dateFrom, true)!;
       const dateTo = date(p.dateTo);
       if (dateTo && dateFrom > dateTo) throw new Error("Koniec alokacji nie może poprzedzać początku.");
+      if (!projectId && !employeeId) throw new Error("Wskaż inwestycję lub pracownika dla alokacji pojazdu.");
       const allocation = amount(p.allocationPercent, "alokacja");
       if (allocation < 0 || allocation > 100) throw new Error("Alokacja musi mieścić się w zakresie 0–100%.");
+      const { data: existing } = await db.from("vehicle_allocations").select("date_from,date_to,allocation_percent").eq("workspace_id", workspace.id).eq("vehicle_id", vehicleId);
+      const existingLoad = (existing ?? []).filter((row) => periodsOverlap(dateFrom, dateTo, String(row.date_from), row.date_to ? String(row.date_to) : null)).reduce((sum, row) => sum + Number(row.allocation_percent ?? 0), 0);
       const { data, error } = await db.from("vehicle_allocations").insert({
-        workspace_id: workspace.id, vehicle_id: vehicleId, project_id: projectId, employee_id: employeeId, date_from: dateFrom, date_to: dateTo,
-        allocation_method: text(p.allocationMethod, "metoda") ?? "time", allocation_percent: allocation || null
+        workspace_id: workspace.id,
+        vehicle_id: vehicleId,
+        project_id: projectId,
+        employee_id: employeeId,
+        date_from: dateFrom,
+        date_to: dateTo,
+        allocation_method: text(p.allocationMethod, "metoda") ?? "time",
+        allocation_percent: allocation || null
       }).select("id").single<{ id: string }>();
       if (error || !data) throw error ?? new Error("Nie utworzono alokacji pojazdu.");
       id = data.id;
-      await audit("vehicle_allocation", id, "created");
+      meta = { allocationWarning: allocation > 0 && existingLoad + allocation > 100 ? `Pojazd ma ${existingLoad + allocation}% nakładających się alokacji.` : null };
+      await audit("vehicle_allocation", id, "created", null, { ...p, existingLoad, resultingLoad: existingLoad + allocation });
     } else if (body.action === "meter_reading_create") {
       const vehicleId = await owned("vehicles", p.vehicleId, "Pojazd");
       const readingDate = date(p.readingDate, true)!;
       const mileage = amount(p.mileage, "przebieg", true);
-      if (mileage < 0) throw new Error("Przebieg nie może być ujemny.");
-      const { data: vehicle, error: vehicleError } = await db.from("vehicles").select("current_mileage").eq("workspace_id", workspace.id).eq("id", vehicleId).single<{ current_mileage: number | null }>();
-      if (vehicleError || !vehicle) throw new Error("Nie udało się odczytać pojazdu.");
-      if (mileage + 0.001 < Number(vehicle.current_mileage ?? 0)) throw new Error(`Nowy przebieg (${mileage}) nie może być mniejszy od bieżącego (${Number(vehicle.current_mileage ?? 0)}).`);
-      const { data, error } = await db.from("meter_readings").insert({ workspace_id: workspace.id, vehicle_id: vehicleId, reading_date: readingDate, mileage, source: "manual" }).select("id").single<{ id: string }>();
-      if (error || !data) throw error ?? new Error("Nie zapisano odczytu.");
-      const { error: updateError } = await db.from("vehicles").update({ current_mileage: mileage }).eq("workspace_id", workspace.id).eq("id", vehicleId);
-      if (updateError) throw updateError;
-      id = data.id;
-      await audit("meter_reading", id, "created", { currentMileage: vehicle.current_mileage }, { mileage, readingDate });
+      const { data, error } = await db.rpc("record_meter_reading_atomic", {
+        p_workspace_id: workspace.id,
+        p_vehicle_id: vehicleId,
+        p_reading_date: readingDate,
+        p_mileage: mileage,
+        p_actor_id: user.id
+      }).single<{ result_id: string; previous_mileage: number; current_mileage: number }>();
+      if (error || !data) throw new Error(`Nie udało się atomowo zapisać przebiegu: ${error?.message ?? "brak danych"}`);
+      id = data.result_id;
+      meta = { previousMileage: data.previous_mileage, currentMileage: data.current_mileage };
     } else if (body.action === "damage_status") {
       const damageId = await owned("damage_cases", p.damageId, "Szkoda");
       const status = text(p.status, "status", true)!;
@@ -283,7 +298,7 @@ export async function POST(request: Request) {
     }
 
     if (!id) throw new Error("Operacja nie zmieniła danych.");
-    return NextResponse.json({ ok: true, id });
+    return NextResponse.json({ ok: true, id, ...meta });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Nie udało się wykonać operacji.";
     return NextResponse.json({ error: message }, { status: 400 });
