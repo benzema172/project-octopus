@@ -1,0 +1,321 @@
+import { NextResponse } from "next/server";
+import { getRequestUser } from "@/lib/auth";
+import { hasDomainAccess } from "@/lib/authorization";
+import { getWorkspaceForUser } from "@/lib/data/workspace";
+import { createServiceSupabaseClient } from "@/lib/supabase/service";
+
+export const runtime = "nodejs";
+
+type Body = {
+  workspaceId?: string;
+  action?: string;
+  payload?: Record<string, unknown>;
+};
+
+type NotificationInsert = {
+  workspace_id: string;
+  project_id: string | null;
+  event_type: string;
+  title: string;
+  body: string | null;
+  severity: string;
+  entity_type: string;
+  entity_id: string;
+};
+
+const EVENT_TYPES = new Set([
+  "qualification_expiry",
+  "medical_exam_expiry",
+  "vehicle_document_expiry",
+  "commitment_due",
+  "ai_review_required"
+]);
+
+const INTEGRATION_STATUSES = new Set(["not_configured", "configured", "active", "paused", "error"]);
+
+function text(value: unknown, label: string, required = false) {
+  const result = typeof value === "string" ? value.trim() : "";
+  if (required && !result) throw new Error(`Uzupełnij pole: ${label}.`);
+  return result || null;
+}
+
+function integer(value: unknown, fallback = 0) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function bool(value: unknown) {
+  return value === true || value === "true" || value === "1" || value === "on";
+}
+
+async function requireOwnedProject(workspaceId: string, projectIdValue: unknown) {
+  const projectId = text(projectIdValue, "inwestycja");
+  if (!projectId) return null;
+  const { data, error } = await createServiceSupabaseClient()
+    .from("projects")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("id", projectId)
+    .maybeSingle<{ id: string }>();
+  if (error || !data) throw new Error("Wybrana inwestycja nie należy do aktywnej firmy.");
+  return data.id;
+}
+
+async function runAlertScan(workspaceId: string) {
+  const db = createServiceSupabaseClient();
+  const { data: rules, error: rulesError } = await db
+    .from("notification_rules")
+    .select("id,project_id,event_type,lead_time_days,active")
+    .eq("workspace_id", workspaceId)
+    .eq("active", true);
+  if (rulesError) throw new Error(`Nie udało się odczytać reguł alertów: ${rulesError.message}`);
+
+  const { data: existing } = await db
+    .from("notifications")
+    .select("event_type,entity_type,entity_id")
+    .eq("workspace_id", workspaceId)
+    .is("read_at", null)
+    .limit(1000);
+  const existingKeys = new Set((existing ?? []).map((row) => `${row.event_type}|${row.entity_type}|${row.entity_id}`));
+  const pending = new Map<string, NotificationInsert>();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const add = (notification: NotificationInsert) => {
+    const key = `${notification.event_type}|${notification.entity_type}|${notification.entity_id}`;
+    if (!existingKeys.has(key) && !pending.has(key)) pending.set(key, notification);
+  };
+
+  for (const rule of rules ?? []) {
+    const lead = Math.min(365, Math.max(0, Number(rule.lead_time_days ?? 0)));
+    const until = new Date(Date.now() + lead * 86_400_000).toISOString().slice(0, 10);
+    const projectId = rule.project_id ? String(rule.project_id) : null;
+    const eventType = String(rule.event_type);
+
+    if (eventType === "qualification_expiry") {
+      const { data } = await db.from("qualifications")
+        .select("id,employee_id,qualification_type,valid_until")
+        .eq("workspace_id", workspaceId)
+        .gte("valid_until", today)
+        .lte("valid_until", until)
+        .limit(100);
+      for (const row of data ?? []) add({
+        workspace_id: workspaceId,
+        project_id: null,
+        event_type: eventType,
+        title: `Wygasa uprawnienie: ${String(row.qualification_type ?? "pracownika")}`,
+        body: `Termin ważności: ${String(row.valid_until ?? "—")}. Sprawdź kartę pracownika przed dopuszczeniem do pracy.`,
+        severity: "warning",
+        entity_type: "qualification",
+        entity_id: String(row.id)
+      });
+    }
+
+    if (eventType === "medical_exam_expiry") {
+      const { data } = await db.from("medical_exams")
+        .select("id,employee_id,exam_type,valid_until")
+        .eq("workspace_id", workspaceId)
+        .gte("valid_until", today)
+        .lte("valid_until", until)
+        .limit(100);
+      for (const row of data ?? []) add({
+        workspace_id: workspaceId,
+        project_id: null,
+        event_type: eventType,
+        title: `Kończą się badania: ${String(row.exam_type ?? "pracownika")}`,
+        body: `Termin ważności: ${String(row.valid_until ?? "—")}.`,
+        severity: "warning",
+        entity_type: "medical_exam",
+        entity_id: String(row.id)
+      });
+    }
+
+    if (eventType === "vehicle_document_expiry") {
+      const { data } = await db.from("vehicle_documents")
+        .select("id,vehicle_id,document_type,number,valid_until")
+        .eq("workspace_id", workspaceId)
+        .gte("valid_until", today)
+        .lte("valid_until", until)
+        .limit(100);
+      for (const row of data ?? []) add({
+        workspace_id: workspaceId,
+        project_id: null,
+        event_type: eventType,
+        title: `Kończy się ważność dokumentu floty: ${String(row.document_type ?? "dokument")}`,
+        body: `${String(row.number ?? "Bez numeru")} · ważny do ${String(row.valid_until ?? "—")}.`,
+        severity: "warning",
+        entity_type: "vehicle_document",
+        entity_id: String(row.id)
+      });
+    }
+
+    if (eventType === "commitment_due") {
+      let query = db.from("commitments")
+        .select("id,project_id,description,amount,expected_date,status")
+        .eq("workspace_id", workspaceId)
+        .in("status", ["open", "approved"])
+        .gte("expected_date", today)
+        .lte("expected_date", until)
+        .limit(100);
+      if (projectId) query = query.eq("project_id", projectId);
+      const { data } = await query;
+      for (const row of data ?? []) add({
+        workspace_id: workspaceId,
+        project_id: row.project_id ? String(row.project_id) : null,
+        event_type: eventType,
+        title: `Zbliża się zobowiązanie: ${String(row.description ?? "płatność")}`,
+        body: `${Number(row.amount ?? 0).toLocaleString("pl-PL")} PLN · termin ${String(row.expected_date ?? "—")}.`,
+        severity: "warning",
+        entity_type: "commitment",
+        entity_id: String(row.id)
+      });
+    }
+
+    if (eventType === "ai_review_required") {
+      let query = db.from("document_intakes")
+        .select("id,document_id,proposed_project_id,status,suggested_category,created_at")
+        .eq("workspace_id", workspaceId)
+        .in("status", ["review", "error"])
+        .limit(100);
+      if (projectId) query = query.eq("proposed_project_id", projectId);
+      const { data } = await query;
+      for (const row of data ?? []) add({
+        workspace_id: workspaceId,
+        project_id: row.proposed_project_id ? String(row.proposed_project_id) : null,
+        event_type: eventType,
+        title: row.status === "error" ? "Błąd analizy AI wymaga uwagi" : "AI czeka na decyzję człowieka",
+        body: `Kategoria: ${String(row.suggested_category ?? "nierozpoznana")}. Otwórz Skrzynkę AI i sprawdź propozycję.`,
+        severity: row.status === "error" ? "error" : "info",
+        entity_type: "document",
+        entity_id: String(row.document_id ?? row.id)
+      });
+    }
+  }
+
+  const inserts = Array.from(pending.values());
+  if (inserts.length) {
+    const { error } = await db.from("notifications").insert(inserts);
+    if (error) throw new Error(`Nie udało się zapisać alertów: ${error.message}`);
+  }
+  return inserts.length;
+}
+
+export async function POST(request: Request) {
+  const user = await getRequestUser(request);
+  if (!user) return NextResponse.json({ error: "Brak aktywnej sesji." }, { status: 401 });
+
+  let body: Body;
+  try {
+    body = await request.json() as Body;
+  } catch {
+    return NextResponse.json({ error: "Nieprawidłowe dane żądania." }, { status: 400 });
+  }
+
+  if (!body.workspaceId || !body.action) return NextResponse.json({ error: "Brakuje firmy lub operacji." }, { status: 400 });
+  const workspace = await getWorkspaceForUser(user, body.workspaceId);
+  if (!workspace) return NextResponse.json({ error: "Brak dostępu do firmy." }, { status: 403 });
+  if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "settings", level: "write" })) {
+    return NextResponse.json({ error: "Brak uprawnienia do zmiany automatyzacji." }, { status: 403 });
+  }
+
+  const db = createServiceSupabaseClient();
+  const payload = body.payload ?? {};
+
+  try {
+    if (body.action === "integration_upsert") {
+      const integrationType = text(payload.integrationType, "typ integracji", true)!;
+      const displayName = text(payload.displayName, "nazwa integracji", true)!;
+      const requestedStatus = text(payload.status, "status") ?? "configured";
+      const status = INTEGRATION_STATUSES.has(requestedStatus) ? requestedStatus : "configured";
+      const scope = text(payload.scope, "zakres");
+      const { error } = await db.from("integration_connections").upsert({
+        workspace_id: workspace.id,
+        integration_type: integrationType,
+        display_name: displayName,
+        status,
+        configuration: { scope: scope ?? "company" },
+        created_by: user.id,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "workspace_id,integration_type,display_name" });
+      if (error) throw error;
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "integration_status") {
+      const id = text(payload.id, "integracja", true)!;
+      const requestedStatus = text(payload.status, "status", true)!;
+      if (!INTEGRATION_STATUSES.has(requestedStatus)) throw new Error("Nieprawidłowy status integracji.");
+      const { error } = await db.from("integration_connections")
+        .update({ status: requestedStatus, updated_at: new Date().toISOString() })
+        .eq("workspace_id", workspace.id)
+        .eq("id", id);
+      if (error) throw error;
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "integration_delete") {
+      const id = text(payload.id, "integracja", true)!;
+      const { error } = await db.from("integration_connections").delete().eq("workspace_id", workspace.id).eq("id", id);
+      if (error) throw error;
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "rule_create") {
+      const eventType = text(payload.eventType, "rodzaj zdarzenia", true)!;
+      if (!EVENT_TYPES.has(eventType)) throw new Error("Nieobsługiwany rodzaj alertu.");
+      const projectId = await requireOwnedProject(workspace.id, payload.projectId);
+      const leadTimeDays = Math.min(365, Math.max(0, integer(payload.leadTimeDays, 7)));
+      const { error } = await db.from("notification_rules").insert({
+        workspace_id: workspace.id,
+        project_id: projectId,
+        event_type: eventType,
+        channels: ["in_app"],
+        recipients: [],
+        lead_time_days: leadTimeDays,
+        active: true
+      });
+      if (error) throw error;
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "rule_toggle") {
+      const id = text(payload.id, "reguła", true)!;
+      const { error } = await db.from("notification_rules")
+        .update({ active: bool(payload.active) })
+        .eq("workspace_id", workspace.id)
+        .eq("id", id);
+      if (error) throw error;
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "rule_delete") {
+      const id = text(payload.id, "reguła", true)!;
+      const { error } = await db.from("notification_rules").delete().eq("workspace_id", workspace.id).eq("id", id);
+      if (error) throw error;
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "notification_read") {
+      const id = text(payload.id, "alert", true)!;
+      const { error } = await db.from("notifications")
+        .update({ read_at: new Date().toISOString() })
+        .eq("workspace_id", workspace.id)
+        .eq("id", id);
+      if (error) throw error;
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "run_alert_scan") {
+      const created = await runAlertScan(workspace.id);
+      return NextResponse.json({ ok: true, created });
+    }
+
+    return NextResponse.json({ error: "Nieobsługiwana operacja." }, { status: 400 });
+  } catch (error) {
+    console.error("Project Octopus: settings automation action failed", {
+      workspaceId: workspace.id,
+      action: body.action,
+      message: error instanceof Error ? error.message : String(error)
+    });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Operacja nie powiodła się." }, { status: 400 });
+  }
+}
