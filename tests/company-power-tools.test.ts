@@ -55,15 +55,15 @@ describe("Project Octopus 0.8.0 operational metrics", () => {
   });
 });
 
-describe("Project Octopus 0.8.0 functional contract", () => {
+describe("Project Octopus 0.8.x functional contract", () => {
   const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
   const layout = readFileSync("app/workspace/companies/[workspaceId]/[section]/layout.tsx", "utf8");
   const route = readFileSync("app/api/company/power/route.ts", "utf8");
   const exportRoute = readFileSync("app/api/company/export/route.ts", "utf8");
   const component = readFileSync("components/company/company-power-tools.tsx", "utf8");
 
-  it("publishes version 0.8.0 and injects tools into all five operational tabs", () => {
-    expect(packageJson.version).toBe("0.8.0");
+  it("publishes version 0.8.1 and injects tools into all five operational tabs", () => {
+    expect(packageJson.version).toBe("0.8.1");
     for (const section of ["finances", "hr", "warehouse", "fleet", "reports"]) expect(layout).toContain(`${section}:`);
     expect(layout).toContain("CompanyPowerTools");
   });

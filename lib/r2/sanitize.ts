@@ -1,9 +1,11 @@
 export const MAX_SUPPORTED_UPLOAD_BYTES = 50 * 1024 * 1024;
-export const SUPPORTED_UPLOAD_ACCEPT = ".pdf,.docx,.xlsx,.csv,.png,.jpg,.jpeg,.webp,.zip,.xml,.txt,.json,.md";
+export const SUPPORTED_UPLOAD_ACCEPT = ".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp,.zip,.xml,.txt,.json,.md";
 
 const SUPPORTED_MIME_TYPES: Record<string, Set<string>> = {
   pdf: new Set(["application/pdf"]),
+  doc: new Set(["application/msword", "application/x-ole-storage", "application/x-cfb", "application/cdfv2"]),
   docx: new Set(["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/zip"]),
+  xls: new Set(["application/vnd.ms-excel", "application/x-ole-storage", "application/x-cfb", "application/cdfv2"]),
   xlsx: new Set(["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/zip"]),
   csv: new Set(["text/csv", "text/plain", "application/csv", "application/vnd.ms-excel"]),
   png: new Set(["image/png"]),
@@ -21,13 +23,9 @@ export function validateUploadFile(fileName: string, mimeType: string, fileSize?
   const trimmedName = fileName.trim();
   const extension = trimmedName.includes(".") ? trimmedName.toLowerCase().split(".").at(-1) ?? "" : "";
 
-  if (extension === "doc" || extension === "xls") {
-    return "Format DOC/XLS wymaga konwersji. Zapisz plik jako DOCX/XLSX albo PDF i spróbuj ponownie.";
-  }
-
   const allowedMimeTypes = SUPPORTED_MIME_TYPES[extension];
   if (!allowedMimeTypes) {
-    return "Nieobsługiwany format. Dozwolone są PDF, DOCX, XLSX, CSV, obrazy, ZIP, XML i pliki tekstowe.";
+    return "Nieobsługiwany format. Dozwolone są PDF, DOC/DOCX, XLS/XLSX, CSV, obrazy, ZIP, XML i pliki tekstowe.";
   }
 
   if (typeof fileSize === "number" && fileSize > MAX_SUPPORTED_UPLOAD_BYTES) {
@@ -83,7 +81,7 @@ export function inferDocumentCategory(mimeType: string, fileName: string): strin
     return "package";
   }
 
-  if (mimeType.includes("word") || lowerName.endsWith(".docx")) {
+  if (mimeType.includes("word") || lowerName.endsWith(".doc") || lowerName.endsWith(".docx")) {
     return "document";
   }
 
