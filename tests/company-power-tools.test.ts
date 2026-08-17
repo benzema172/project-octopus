@@ -4,7 +4,7 @@ import { employeeAllocationLoad, fleetEconomy, invoiceAging, stockHealth } from 
 
 const reference = "2026-08-17T12:00:00.000Z";
 
-describe("Project Octopus 0.8.0 operational metrics", () => {
+describe("Project Octopus operational metrics", () => {
   it("builds invoice aging from remaining balances instead of gross totals", () => {
     const aging = invoiceAging([
       { due_date: "2026-07-01", gross_amount: 1000, paid_amount: 250 },
@@ -55,15 +55,16 @@ describe("Project Octopus 0.8.0 operational metrics", () => {
   });
 });
 
-describe("Project Octopus 0.8.x functional contract", () => {
+describe("Project Octopus 1.0 functional contract", () => {
   const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
   const layout = readFileSync("app/workspace/companies/[workspaceId]/[section]/layout.tsx", "utf8");
   const route = readFileSync("app/api/company/power/route.ts", "utf8");
+  const reliability = readFileSync("supabase/migrations/20260817210000_091_reliability_core.sql", "utf8");
   const exportRoute = readFileSync("app/api/company/export/route.ts", "utf8");
   const component = readFileSync("components/company/company-power-tools.tsx", "utf8");
 
-  it("publishes version 0.9.0 and keeps tools in all five operational tabs", () => {
-    expect(packageJson.version).toBe("0.9.0");
+  it("publishes version 1.0.0 and keeps tools in all five operational tabs", () => {
+    expect(packageJson.version).toBe("1.0.0");
     for (const section of ["finances", "hr", "warehouse", "fleet", "reports"]) expect(layout).toContain(`${section}:`);
     expect(layout).toContain("CompanyPowerTools");
   });
@@ -79,10 +80,13 @@ describe("Project Octopus 0.8.x functional contract", () => {
     }
   });
 
-  it("protects stock issue/transfer and odometer updates with business invariants", () => {
-    expect(route).toContain("Brak wystarczającego stanu");
-    expect(route).toContain("Brak wystarczającego stanu do MM");
-    expect(route).toContain("nie może być mniejszy od bieżącego");
+  it("protects stock issue/transfer and odometer updates inside atomic SQL invariants", () => {
+    expect(route).toContain("issue_reservation_atomic");
+    expect(route).toContain("transfer_stock_atomic");
+    expect(route).toContain("record_meter_reading_atomic");
+    expect(reliability).toContain("Brak wystarczającego stanu");
+    expect(reliability).toContain("Brak wystarczającego stanu do MM");
+    expect(reliability).toContain("nie może być mniejszy od bieżącego");
   });
 
   it("exports every operational tab as CSV or JSON behind read authorization", () => {
