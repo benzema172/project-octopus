@@ -1,0 +1,123 @@
+name: Apply branch fixes
+
+on:
+  push:
+    branches:
+      - agent/octopus-navigation-demo-full
+    paths:
+      - .github/workflows/apply-branch-fixes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/octopus-navigation-demo-full
+          fetch-depth: 0
+      - name: Apply targeted fixes and strengthen demo tests
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          nav = Path('components/projects/project-navigation.tsx')
+          s = nav.read_text()
+          s = s.replace('  const groups: ProjectNavGroup[] = [\n', '  const navigationGroups: ProjectNavGroup[] = [\n', 1)
+          old = '''  ]
+    .map((group) => ({ ...group, items: group.items.filter((item) => allowedDomains.includes(item.domain)) }))
+    .filter((group) => group.items.length > 0);
+
+  const showDashboard'''
+          new = '''  ];
+
+  const groups: ProjectNavGroup[] = navigationGroups
+    .map((group): ProjectNavGroup => ({
+      ...group,
+      items: group.items.filter((item) => allowedDomains.includes(item.domain))
+    }))
+    .filter((group) => group.items.length > 0);
+
+  const showDashboard'''
+          if old not in s:
+              raise SystemExit('Navigation typing anchor not found')
+          s = s.replace(old, new, 1)
+          focus_anchor = '''              onFocus={() => setOpenGroup(group.key)}
+            >'''
+          focus_replacement = '''              onFocus={() => setOpenGroup(group.key)}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpenGroup(null);
+              }}
+            >'''
+          if focus_anchor not in s:
+              raise SystemExit('Navigation focus anchor not found')
+          s = s.replace(focus_anchor, focus_replacement, 1)
+          nav.write_text(s)
+
+          ext = Path('lib/demo/extended-blueprint.ts')
+          s = ext.read_text()
+          anchor = '''    const executed = spec.status === "tender" ? 0 : roundMoney(quantity * Math.max(0, Math.min(1, spec.progress * (1.14 - itemIndex * 0.035))));
+    const accepted = roundMoney(executed * (spec.status === "paused" ? 0.92 : 0.98));
+    dataset.boqItems.push({'''
+          replacement = '''    const executed = spec.status === "tender" ? 0 : roundMoney(quantity * Math.max(0, Math.min(1, spec.progress * (1.14 - itemIndex * 0.035))));
+    const accepted = roundMoney(executed * (spec.status === "paused" ? 0.92 : 0.98));
+    const adjustedUnitPrice = Number(unitPrice) + projectIndex * 9;
+    dataset.boqItems.push({'''
+          if anchor not in s:
+              raise SystemExit('BOQ type anchor not found')
+          s = s.replace(anchor, replacement, 1)
+          s = s.replace('      unit_price: unitPrice + projectIndex * 9,\n      total_price: roundMoney(quantity * (unitPrice + projectIndex * 9)),', '      unit_price: adjustedUnitPrice,\n      total_price: roundMoney(quantity * adjustedUnitPrice),', 1)
+          ext.write_text(s)
+
+          test = Path('tests/guest-demo.test.ts')
+          s = test.read_text()
+          import_anchor = 'import { buildDemoDataset, validateDemoDataset } from "../lib/demo/dataset";\n'
+          if import_anchor not in s:
+              raise SystemExit('Demo test import anchor not found')
+          s = s.replace(import_anchor, import_anchor + 'import { EXTENDED_DEMO_EXPECTATIONS } from "../lib/demo/extended-blueprint";\n', 1)
+          replacements = {
+              'expect(demo.projects.length).toBeGreaterThanOrEqual(8);': 'expect(demo.projects.length).toBeGreaterThanOrEqual(EXTENDED_DEMO_EXPECTATIONS.projects);',
+              'expect(demo.documents.length).toBeGreaterThanOrEqual(30);': 'expect(demo.documents.length).toBeGreaterThanOrEqual(EXTENDED_DEMO_EXPECTATIONS.documents);',
+              'expect(demo.boqItems.length).toBeGreaterThanOrEqual(40);': 'expect(demo.boqItems.length).toBeGreaterThanOrEqual(EXTENDED_DEMO_EXPECTATIONS.boqItems);',
+              'expect(demo.wbsNodes.length).toBeGreaterThanOrEqual(40);': 'expect(demo.wbsNodes.length).toBeGreaterThanOrEqual(70);',
+              'expect(demo.scheduleActivities.length).toBeGreaterThanOrEqual(40);': 'expect(demo.scheduleActivities.length).toBeGreaterThanOrEqual(EXTENDED_DEMO_EXPECTATIONS.scheduleActivities);',
+              'expect(demo.invoices.length).toBeGreaterThanOrEqual(20);': 'expect(demo.invoices.length).toBeGreaterThanOrEqual(EXTENDED_DEMO_EXPECTATIONS.invoices);',
+              'expect(demo.employees.length).toBeGreaterThanOrEqual(12);': 'expect(demo.employees.length).toBeGreaterThanOrEqual(EXTENDED_DEMO_EXPECTATIONS.employees);',
+              'expect(demo.stockItems.length).toBeGreaterThanOrEqual(16);': 'expect(demo.stockItems.length).toBeGreaterThanOrEqual(28);',
+              'expect(demo.vehicles.length).toBeGreaterThanOrEqual(6);': 'expect(demo.vehicles.length).toBeGreaterThanOrEqual(EXTENDED_DEMO_EXPECTATIONS.vehicles);'
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'Missing demo test anchor: {old}')
+              s = s.replace(old, new, 1)
+          extra_anchor = '    expect(demo.knowledgeEntries.length).toBeGreaterThanOrEqual(8);\n'
+          extra = '''    expect(demo.knowledgeEntries.length).toBeGreaterThanOrEqual(13);
+    expect(demo.warehouses.length).toBeGreaterThanOrEqual(EXTENDED_DEMO_EXPECTATIONS.warehouses);
+    expect(demo.timesheets.length).toBeGreaterThanOrEqual(140);
+    expect(demo.assignments.length).toBeGreaterThanOrEqual(49);
+'''
+          if extra_anchor not in s:
+              raise SystemExit('Demo test count anchor not found')
+          s = s.replace(extra_anchor, extra, 1)
+          scenario_anchor = '    expect(demo.projects.some((row) => row.status === "planned")).toBe(true);\n'
+          scenario_extra = '''    expect(demo.projects.some((row) => row.status === "planned")).toBe(true);
+    expect(demo.projects.some((row) => row.status === "paused")).toBe(true);
+    expect(demo.projects.some((row) => row.status === "tender")).toBe(true);
+    expect(demo.documents.some((row) => String(row.name).endsWith(".doc"))).toBe(true);
+    expect(demo.documents.some((row) => String(row.name).endsWith(".xls"))).toBe(true);
+'''
+          if scenario_anchor not in s:
+              raise SystemExit('Demo scenario anchor not found')
+          s = s.replace(scenario_anchor, scenario_extra, 1)
+          test.write_text(s)
+          PY
+      - name: Remove temporary workflow and commit fixes
+        run: |
+          rm .github/workflows/apply-branch-fixes.yml
+          git config user.name "Project Octopus Agent"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Finalize grouped navigation and realistic demo dataset"
+          git push origin HEAD:agent/octopus-navigation-demo-full
