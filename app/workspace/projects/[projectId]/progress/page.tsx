@@ -1,6 +1,8 @@
 import { BarChart3, CircleDollarSign, ListTodo, PercentCircle } from "lucide-react";
 import { notFound } from "next/navigation";
 import { ProjectModuleFoundation } from "@/components/projects/project-module-foundation";
+import { ProjectLiveRecords } from "@/components/projects/project-live-records";
+import { ProjectOperationPanel } from "@/components/projects/project-operation-panel";
 import { requireCurrentUser } from "@/lib/auth";
 import { listDocumentsForCategories } from "@/lib/data/documents";
 import { getProjectForUser } from "@/lib/data/projects";
@@ -43,5 +45,5 @@ export default async function ProgressPage({ params }: Props) {
       { title: "Porównanie planu", description: "Zestawienie harmonogramu, kosztorysu i faktycznego wykonania w jednym widoku.", icon: BarChart3 }
     ]}
     principle="Przerób wynika z tych samych pozycji kosztorysowych i zakresów, które znamy już w inwestycji. Dzięki temu późniejsze zestawienia wykonanych robót nie są tworzone od zera."
-  />;
+  ><ProjectOperationPanel projectId={projectId} mode="progress_period" /><ProjectOperationPanel projectId={projectId} mode="progress_entry" /><ProjectLiveRecords projectId={projectId} kind="progress" /></ProjectModuleFoundation>;
 }

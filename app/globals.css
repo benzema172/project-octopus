@@ -2667,7 +2667,8 @@ button:disabled {
 .ops-simple-list { display: grid; gap: 0; }
 .ops-simple-list > div { display: grid; grid-template-columns: minmax(76px, 0.6fr) minmax(110px, 1.3fr) minmax(120px, 1fr); gap: 8px; align-items: center; padding: 9px 2px; border-bottom: 1px solid var(--line); font-size: 0.75rem; }
 .ops-simple-list > div:last-child { border-bottom: 0; }
-.ops-simple-list span, .ops-simple-list small { color: var(--muted); }
+.ops-simple-list span, .ops-simple-list small, .ops-list-row__detail { color: var(--muted); }
+.ops-list-row__detail { min-width: 0; font-size: 0.72rem; }
 .ops-simple-list strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ops-simple-list__empty { grid-column: 1 / -1; margin: 12px 0 0; color: var(--muted); font-size: 0.8rem; }
 .ops-split-lists { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
@@ -2709,7 +2710,71 @@ button:disabled {
   .ops-search span { display: none; }
   .ops-auto-form-grid, .ops-split-lists, .ops-import-row__body dl { grid-template-columns: 1fr; }
   .ops-simple-list > div { grid-template-columns: 0.7fr 1.3fr; }
-  .ops-simple-list > div small { grid-column: 1 / -1; }
+  .ops-simple-list > div small, .ops-list-row__detail { grid-column: 1 / -1; }
   .ops-ai-intake-lead { align-items: stretch; flex-direction: column; }
   .fleet-register__details { padding-left: 13px; }
+}
+
+/* Project Octopus 0.7.0 — operational actions */
+.ops-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+  margin-top: 7px;
+}
+.ops-inline-action { display: inline-flex; margin: 0; }
+.ops-inline-action button { min-height: 31px; padding: 6px 9px; font-size: 0.7rem; }
+.report-snapshot-scope { padding: 7px 9px; border-radius: 8px; background: #fff; }
+.report-snapshot-grid .ops-inline-actions .secondary-button { min-height: 34px; padding: 7px 10px; font-size: 0.72rem; }
+
+.project-operation-card {
+  display: grid;
+  gap: 14px;
+  margin: 16px 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(145deg, #fff, var(--panel-2));
+}
+.project-operation-card__heading { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; }
+.project-operation-card__heading h3 { margin: 3px 0 5px; }
+.project-operation-card__heading p:not(.eyebrow) { max-width: 740px; margin: 0; color: var(--muted); font-size: 0.84rem; }
+.project-operation-card__heading > svg { flex: 0 0 auto; color: var(--green); }
+.project-operation-form { display: grid; gap: 12px; }
+.project-operation-form > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.project-operation-form label { display: grid; gap: 5px; color: var(--muted); font-size: 0.74rem; font-weight: 750; }
+.project-operation-form input, .project-operation-form select, .project-operation-form textarea {
+  width: 100%;
+  min-height: 41px;
+  padding: 9px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+.project-operation-form textarea { resize: vertical; }
+.project-operation-form .primary-button { justify-self: start; }
+.project-operation-card__notice, .project-operation-card__success, .project-operation-card__error {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 9px;
+  font-size: 0.79rem;
+}
+.project-operation-card__notice { background: #fff6df; color: #8a6414; }
+.project-operation-card__success { background: #edf8f4; color: #0b7750; }
+.project-operation-card__error { background: #fff0f0; color: #a83232; }
+
+@media (max-width: 900px) {
+  .project-operation-form > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 620px) {
+  .project-operation-form > div { grid-template-columns: 1fr; }
+  .ops-inline-actions { align-items: stretch; flex-direction: column; }
+  .ops-inline-actions > *, .ops-inline-actions button, .ops-inline-actions .secondary-button { width: 100%; justify-content: center; }
 }

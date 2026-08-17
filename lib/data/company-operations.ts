@@ -60,9 +60,10 @@ async function getOperationalDocumentImports(workspaceId: string, mode: "finance
 
 export async function getFinanceWorkspaceData(workspaceId: string) {
   const db = createServiceSupabaseClient();
-  const [counterpartiesResult, invoicesResult, paymentsResult, commitmentsResult, allocationsResult, projectsResult, aiImports] = await Promise.all([
+  const [counterpartiesResult, invoicesResult, invoiceLinesResult, paymentsResult, commitmentsResult, allocationsResult, projectsResult, aiImports] = await Promise.all([
     db.from("counterparties").select("id,name,tax_id,role,active").eq("workspace_id", workspaceId).order("name"),
     db.from("invoices").select("id,counterparty_id,document_id,invoice_number,direction,issue_date,due_date,currency,net_amount,tax_amount,gross_amount,paid_amount,status,created_at").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(100),
+    db.from("invoice_lines").select("id,invoice_id,line_number,description,quantity,unit,unit_price,net_amount,gross_amount").eq("workspace_id", workspaceId).order("line_number").limit(500),
     db.from("payments").select("id,invoice_id,payment_date,amount,bank_reference,status").eq("workspace_id", workspaceId).order("payment_date", { ascending: false }).limit(100),
     db.from("commitments").select("id,project_id,description,amount,expected_date,status,created_at").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(100),
     db.from("financial_allocations").select("id,project_id,source_id,amount,status").eq("workspace_id", workspaceId).eq("source_type", "invoice"),
@@ -72,6 +73,7 @@ export async function getFinanceWorkspaceData(workspaceId: string) {
   return {
     counterparties: rows(counterpartiesResult, "kontrahentów"),
     invoices: rows(invoicesResult, "faktur"),
+    invoiceLines: rows(invoiceLinesResult, "pozycji faktur"),
     payments: rows(paymentsResult, "płatności"),
     commitments: rows(commitmentsResult, "zobowiązań"),
     allocations: rows(allocationsResult, "alokacji finansowych"),
@@ -152,21 +154,25 @@ export async function getWarehouseWorkspaceData(workspaceId: string) {
 
 export async function getFleetWorkspaceData(workspaceId: string) {
   const db = createServiceSupabaseClient();
-  const [vehiclesResult, fuelResult, serviceResult, documentsResult, damagesResult, projectsResult] = await Promise.all([
+  const [vehiclesResult, fuelResult, tripsResult, serviceResult, documentsResult, damagesResult, projectsResult, employeesResult] = await Promise.all([
     db.from("vehicles").select("id,registration_number,vin,vehicle_type,make,model,production_year,ownership_type,status,current_mileage,created_at").eq("workspace_id", workspaceId).order("registration_number"),
     db.from("fuel_entries").select("id,vehicle_id,project_id,fueled_at,liters,gross_amount,mileage,created_at").eq("workspace_id", workspaceId).order("fueled_at", { ascending: false }).limit(200),
+    db.from("trips").select("id,vehicle_id,employee_id,project_id,started_at,finished_at,start_location,end_location,distance_km,purpose,created_at").eq("workspace_id", workspaceId).order("started_at", { ascending: false }).limit(200),
     db.from("service_orders").select("id,vehicle_id,service_type,opened_at,closed_at,next_due_date,next_due_mileage,cost,status").eq("workspace_id", workspaceId).order("opened_at", { ascending: false }).limit(100),
     db.from("vehicle_documents").select("id,vehicle_id,document_type,number,valid_from,valid_until,status").eq("workspace_id", workspaceId).order("valid_until").limit(100),
     db.from("damage_cases").select("id,vehicle_id,occurred_at,description,status,cost").eq("workspace_id", workspaceId).order("occurred_at", { ascending: false }).limit(100),
-    db.from("projects").select("id,name").eq("workspace_id", workspaceId).order("name")
+    db.from("projects").select("id,name").eq("workspace_id", workspaceId).order("name"),
+    db.from("employees").select("id,first_name,last_name,status").eq("workspace_id", workspaceId).eq("status", "active").order("last_name")
   ]);
   return {
     vehicles: rows(vehiclesResult, "pojazdów"),
     fuel: rows(fuelResult, "tankowań"),
+    trips: rows(tripsResult, "przejazdów"),
     service: rows(serviceResult, "serwisów"),
     documents: rows(documentsResult, "dokumentów floty"),
     damages: rows(damagesResult, "szkód"),
-    projects: rows(projectsResult, "inwestycji")
+    projects: rows(projectsResult, "inwestycji"),
+    employees: rows(employeesResult, "pracowników floty")
   };
 }
 

@@ -1,6 +1,8 @@
 import { Calculator, Layers3, Link2, Scale } from "lucide-react";
 import { notFound } from "next/navigation";
 import { ProjectModuleFoundation } from "@/components/projects/project-module-foundation";
+import { ProjectLiveRecords } from "@/components/projects/project-live-records";
+import { ProjectOperationPanel } from "@/components/projects/project-operation-panel";
 import { requireCurrentUser } from "@/lib/auth";
 import { listDocumentsForCategories } from "@/lib/data/documents";
 import { getBoqKnowledge } from "@/lib/data/module-knowledge";
@@ -64,5 +66,5 @@ export default async function CostEstimatePage({ params }: Props) {
       { title: "Plan kontra wykonanie", description: "Pozycje BOQ stanowią fundament późniejszego rozliczania przerobu i wykonanych ilości.", icon: Scale }
     ]}
     principle="Kosztorys jest przetwarzany do strukturalnych danych Brain. Oryginalny plik pozostaje źródłem, a rozpoznane pozycje są widoczne bez ponownego przepisywania i mogą zasilać inne moduły."
-  />;
+  ><ProjectOperationPanel projectId={projectId} mode="change_order" /><ProjectLiveRecords projectId={projectId} kind="estimate" /></ProjectModuleFoundation>;
 }

@@ -1,4 +1,4 @@
-# Project Octopus 0.5.1
+# Project Octopus 0.7.0
 
 System operacyjny firmy wykonawczej, w którym dokument źródłowy zasila Project DNA, kosztorys/BOQ, WBS, harmonogram, materiały, protokoły, przerób, finanse i raportowanie.
 
@@ -10,6 +10,46 @@ System operacyjny firmy wykonawczej, w którym dokument źródłowy zasila Proje
 - AI proponuje, reguły walidują, a człowiek zatwierdza operacje formalne, finansowe, kadrowe i magazynowe,
 - liczby finansowe pochodzą wyłącznie z rekordów źródłowych i jawnych założeń forecastu,
 - dane HR, finansowe i techniczne są rozdzielone rolami domenowymi.
+
+## Wersja 0.7.0
+
+### Sterowanie inwestycją i rejestr zmian
+
+- zespół inwestycji można budować z aktywnych pracowników wraz z rolą, okresem i procentem zaangażowania,
+- budżety są wersjonowane i zapisują planowany przychód oraz koszt wykorzystywany przez forecast,
+- zmiany kontraktowe mają numer, opis, wpływ na wartość i termin oraz trwały ślad audytowy,
+- magazyn inwestycji obsługuje rezerwację istniejącej kartoteki w konkretnym magazynie i terminie,
+- widoki finansów, magazynu i zespołu pokazują rzeczywiste rekordy zamiast wyłącznie opisów docelowych możliwości.
+
+## Wersja 0.6.0
+
+### Operacyjne moduły realizacji
+
+- wnioski materiałowe pozwalają ręcznie tworzyć wymagania obok propozycji pochodzących z Brain,
+- protokoły mają działający rejestr wymaganych prób, pomiarów, robót zanikowych i odbiorów,
+- harmonogram pozwala tworzyć zadania z kodem, terminami i flagą ścieżki krytycznej,
+- przerób obsługuje okresy oraz wpisy wykonania i odbioru dla pozycji BOQ,
+- wartości przerobu są obliczane z ceny jednostkowej BOQ, a ilości zbiorcze wracają do pozycji kosztorysu,
+- kosztorys udostępnia kolejkę importów do zatwierdzenia oraz rejestr zmian kontraktowych.
+
+## Wersja 0.5.2
+
+### Domknięcie operacji przedsiębiorstwa
+
+- Kadry: badania medyczne, rozdzielone terminy przyszłe i wygasłe, decyzje urlopowe i czasu pracy oraz aktywacja/dezaktywacja pracownika,
+- Magazyn: rezerwacje materiałowe i bieżąca wartość zapasu liczona jako stan razy ostatni koszt,
+- Flota: przejazdy, koszt na kilometr, szkody, aktualizacja przebiegu z tankowania, zamykanie serwisów i status pojazdu,
+- Raporty: zakres okresu i inwestycji jest respektowany, a zamknięty snapshot można pobrać jako CSV lub JSON,
+- Dokumenty: upload wielu plików, podgląd, stabilne odnośniki do rekordu i czytelny postęp paczki.
+
+## Naprawy wersji 0.5.1
+
+- filtry pustych wyników nie pokazują już błędnego stanu listy,
+- faktura ręczna może zawierać pozycję i zatwierdzoną alokację na inwestycję,
+- suma zapłacona jest przeliczana z potwierdzonych płatności,
+- alerty 30-dniowe nie mieszają przyszłych terminów z dokumentami już wygasłymi,
+- tankowanie aktualizuje przebieg pojazdu i zapisuje odczyt licznika,
+- snapshot raportu filtruje dane według definicji inwestycji oraz wybranego okresu.
 
 ## Wersja 0.5.1
 

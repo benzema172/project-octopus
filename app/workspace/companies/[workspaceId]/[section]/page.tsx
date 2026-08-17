@@ -190,7 +190,7 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
                     <small>{document.category || "Dokument"} · {document.project_id ? projectNames.get(document.project_id) ?? "Inwestycja" : "Dokument firmowy"}</small>
                   </div>
                   <time>{document.updated_at ? new Date(document.updated_at).toLocaleDateString("pl-PL") : ""}</time>
-                  <Link href={document.project_id ? `/workspace/projects/${document.project_id}/documentation` : `/workspace/companies/${workspace.id}/documents`}>Otwórz →</Link>
+                  <Link href={document.project_id ? `/workspace/projects/${document.project_id}/documentation#document-${document.id}` : `/workspace/companies/${workspace.id}/documents#document-${document.id}`}>Otwórz →</Link>
                 </article>
               ))}
             </div>

@@ -1,5 +1,6 @@
 import { CheckCircle2, FileText, Inbox, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import type { DocumentSummary } from "@/lib/types";
 
 type FoundationItem = {
@@ -33,6 +34,7 @@ type ProjectModuleFoundationProps = {
   intakeLabel?: string;
   knowledge?: KnowledgeItem[];
   knowledgeTitle?: string;
+  children?: ReactNode;
 };
 
 export function ProjectModuleFoundation({
@@ -52,7 +54,8 @@ export function ProjectModuleFoundation({
   ],
   intakeLabel = "Pliki przypisane do modułu",
   knowledge = [],
-  knowledgeTitle = "Dane rozpoznane przez Brain"
+  knowledgeTitle = "Dane rozpoznane przez Brain",
+  children
 }: ProjectModuleFoundationProps) {
   return (
     <div className="project-tab-content pw-module-page pw-module-page--operational">
@@ -123,6 +126,8 @@ export function ProjectModuleFoundation({
           )}
         </div>
       </section>
+
+      {children}
 
       {knowledge.length > 0 ? (
         <section className="pw-module-knowledge">
