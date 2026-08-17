@@ -1,0 +1,48 @@
+name: Final Autopilot test fix
+
+on:
+  push:
+    branches:
+      - agent/octopus-navigation-demo-full
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/octopus-navigation-demo-full
+          fetch-depth: 0
+      - name: Fix Polish normalization and release contract
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('lib/investments/autopilot.ts')
+          s = p.read_text()
+          old = 'return value.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();'
+          new = 'return value.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").replace(/[łŁ]/g, "l").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();'
+          if old not in s:
+              raise SystemExit('Autopilot clean() target not found')
+          p.write_text(s.replace(old, new, 1))
+
+          p = Path('tests/company-power-tools.test.ts')
+          s = p.read_text()
+          s = s.replace('publishes version 0.8.1 and injects tools into all five operational tabs', 'publishes version 0.9.0 and keeps tools in all five operational tabs')
+          old = 'expect(packageJson.version).toBe("0.8.1");'
+          new = 'expect(packageJson.version).toBe("0.9.0");'
+          if old not in s:
+              raise SystemExit('Release version assertion target not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git rm .github/workflows/final-autopilot-test-fix.yml
+          git config user.name "Project Octopus Agent"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix Autopilot Polish matching and 0.9.0 test contract"
+          git push origin HEAD:agent/octopus-navigation-demo-full
