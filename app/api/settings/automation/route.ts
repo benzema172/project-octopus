@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
+import { listAiInbox } from "@/lib/data/operations";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
@@ -70,19 +71,55 @@ async function runAlertScan(workspaceId: string) {
     .eq("active", true);
   if (rulesError) throw new Error(`Nie udało się odczytać reguł alertów: ${rulesError.message}`);
 
-  const { data: existing } = await db
+  const { data: existing, error: existingError } = await db
     .from("notifications")
     .select("event_type,entity_type,entity_id")
     .eq("workspace_id", workspaceId)
     .is("read_at", null)
     .limit(1000);
+  if (existingError) throw new Error(`Nie udało się sprawdzić istniejących alertów: ${existingError.message}`);
+
   const existingKeys = new Set((existing ?? []).map((row) => `${row.event_type}|${row.entity_type}|${row.entity_id}`));
   const pending = new Map<string, NotificationInsert>();
   const today = new Date().toISOString().slice(0, 10);
+  const employeeScopeCache = new Map<string, string[]>();
+  const vehicleScopeCache = new Map<string, string[]>();
+  let aiInboxCache: Awaited<ReturnType<typeof listAiInbox>> | null = null;
 
   const add = (notification: NotificationInsert) => {
     const key = `${notification.event_type}|${notification.entity_type}|${notification.entity_id}`;
     if (!existingKeys.has(key) && !pending.has(key)) pending.set(key, notification);
+  };
+
+  const employeeIdsForProject = async (projectId: string) => {
+    const cached = employeeScopeCache.get(projectId);
+    if (cached) return cached;
+    const { data, error } = await db
+      .from("assignments")
+      .select("employee_id,date_from,date_to")
+      .eq("workspace_id", workspaceId)
+      .eq("project_id", projectId);
+    if (error) throw new Error(`Nie udało się odczytać zespołu inwestycji: ${error.message}`);
+    const ids = Array.from(new Set((data ?? [])
+      .filter((row) => (!row.date_from || String(row.date_from).slice(0, 10) <= today) && (!row.date_to || String(row.date_to).slice(0, 10) >= today))
+      .map((row) => String(row.employee_id))
+      .filter(Boolean)));
+    employeeScopeCache.set(projectId, ids);
+    return ids;
+  };
+
+  const vehicleIdsForProject = async (projectId: string) => {
+    const cached = vehicleScopeCache.get(projectId);
+    if (cached) return cached;
+    const { data, error } = await db
+      .from("vehicle_allocations")
+      .select("vehicle_id")
+      .eq("workspace_id", workspaceId)
+      .eq("project_id", projectId);
+    if (error) throw new Error(`Nie udało się odczytać floty inwestycji: ${error.message}`);
+    const ids = Array.from(new Set((data ?? []).map((row) => String(row.vehicle_id)).filter(Boolean)));
+    vehicleScopeCache.set(projectId, ids);
+    return ids;
   };
 
   for (const rule of rules ?? []) {
@@ -92,15 +129,22 @@ async function runAlertScan(workspaceId: string) {
     const eventType = String(rule.event_type);
 
     if (eventType === "qualification_expiry") {
-      const { data } = await db.from("qualifications")
+      let query = db.from("qualifications")
         .select("id,employee_id,qualification_type,valid_until")
         .eq("workspace_id", workspaceId)
         .gte("valid_until", today)
         .lte("valid_until", until)
         .limit(100);
+      if (projectId) {
+        const employeeIds = await employeeIdsForProject(projectId);
+        if (!employeeIds.length) continue;
+        query = query.in("employee_id", employeeIds);
+      }
+      const { data, error } = await query;
+      if (error) throw new Error(`Nie udało się sprawdzić uprawnień: ${error.message}`);
       for (const row of data ?? []) add({
         workspace_id: workspaceId,
-        project_id: null,
+        project_id: projectId,
         event_type: eventType,
         title: `Wygasa uprawnienie: ${String(row.qualification_type ?? "pracownika")}`,
         body: `Termin ważności: ${String(row.valid_until ?? "—")}. Sprawdź kartę pracownika przed dopuszczeniem do pracy.`,
@@ -111,15 +155,22 @@ async function runAlertScan(workspaceId: string) {
     }
 
     if (eventType === "medical_exam_expiry") {
-      const { data } = await db.from("medical_exams")
+      let query = db.from("medical_exams")
         .select("id,employee_id,exam_type,valid_until")
         .eq("workspace_id", workspaceId)
         .gte("valid_until", today)
         .lte("valid_until", until)
         .limit(100);
+      if (projectId) {
+        const employeeIds = await employeeIdsForProject(projectId);
+        if (!employeeIds.length) continue;
+        query = query.in("employee_id", employeeIds);
+      }
+      const { data, error } = await query;
+      if (error) throw new Error(`Nie udało się sprawdzić badań: ${error.message}`);
       for (const row of data ?? []) add({
         workspace_id: workspaceId,
-        project_id: null,
+        project_id: projectId,
         event_type: eventType,
         title: `Kończą się badania: ${String(row.exam_type ?? "pracownika")}`,
         body: `Termin ważności: ${String(row.valid_until ?? "—")}.`,
@@ -130,15 +181,22 @@ async function runAlertScan(workspaceId: string) {
     }
 
     if (eventType === "vehicle_document_expiry") {
-      const { data } = await db.from("vehicle_documents")
+      let query = db.from("vehicle_documents")
         .select("id,vehicle_id,document_type,number,valid_until")
         .eq("workspace_id", workspaceId)
         .gte("valid_until", today)
         .lte("valid_until", until)
         .limit(100);
+      if (projectId) {
+        const vehicleIds = await vehicleIdsForProject(projectId);
+        if (!vehicleIds.length) continue;
+        query = query.in("vehicle_id", vehicleIds);
+      }
+      const { data, error } = await query;
+      if (error) throw new Error(`Nie udało się sprawdzić dokumentów floty: ${error.message}`);
       for (const row of data ?? []) add({
         workspace_id: workspaceId,
-        project_id: null,
+        project_id: projectId,
         event_type: eventType,
         title: `Kończy się ważność dokumentu floty: ${String(row.document_type ?? "dokument")}`,
         body: `${String(row.number ?? "Bez numeru")} · ważny do ${String(row.valid_until ?? "—")}.`,
@@ -157,7 +215,8 @@ async function runAlertScan(workspaceId: string) {
         .lte("expected_date", until)
         .limit(100);
       if (projectId) query = query.eq("project_id", projectId);
-      const { data } = await query;
+      const { data, error } = await query;
+      if (error) throw new Error(`Nie udało się sprawdzić zobowiązań: ${error.message}`);
       for (const row of data ?? []) add({
         workspace_id: workspaceId,
         project_id: row.project_id ? String(row.project_id) : null,
@@ -171,22 +230,19 @@ async function runAlertScan(workspaceId: string) {
     }
 
     if (eventType === "ai_review_required") {
-      let query = db.from("document_intakes")
-        .select("id,document_id,proposed_project_id,status,suggested_category,created_at")
-        .eq("workspace_id", workspaceId)
-        .in("status", ["review", "error"])
-        .limit(100);
-      if (projectId) query = query.eq("proposed_project_id", projectId);
-      const { data } = await query;
-      for (const row of data ?? []) add({
+      if (!aiInboxCache) aiInboxCache = await listAiInbox(workspaceId);
+      const candidates = aiInboxCache.filter((item) =>
+        ["review", "error"].includes(item.status) && (!projectId || item.projectId === projectId)
+      );
+      for (const item of candidates) add({
         workspace_id: workspaceId,
-        project_id: row.proposed_project_id ? String(row.proposed_project_id) : null,
+        project_id: item.projectId,
         event_type: eventType,
-        title: row.status === "error" ? "Błąd analizy AI wymaga uwagi" : "AI czeka na decyzję człowieka",
-        body: `Kategoria: ${String(row.suggested_category ?? "nierozpoznana")}. Otwórz Skrzynkę AI i sprawdź propozycję.`,
-        severity: row.status === "error" ? "error" : "info",
-        entity_type: "document",
-        entity_id: String(row.document_id ?? row.id)
+        title: item.status === "error" ? `Błąd AI: ${item.title}` : `Decyzja AI: ${item.title}`,
+        body: `${item.subtitle} · ${item.category}. ${item.detail}`,
+        severity: item.status === "error" ? "error" : "info",
+        entity_type: item.entityType,
+        entity_id: item.id
       });
     }
   }
