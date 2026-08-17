@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildDemoBlueprint, validateDemoBlueprint } from "../lib/demo/blueprint";
+import { buildDemoDataset, validateDemoDataset } from "../lib/demo/dataset";
 import {
   GUEST_AUTH_EMAIL,
   GUEST_AUTH_PASSWORD,
@@ -47,10 +47,10 @@ describe("guest demo account contract", () => {
 });
 
 describe("coherent full-application demo dataset", () => {
-  const demo = buildDemoBlueprint(userId, reference);
+  const demo = buildDemoDataset(userId, reference);
 
   it("fills every major operational area with meaningful records", () => {
-    expect(validateDemoBlueprint(demo)).toEqual([]);
+    expect(validateDemoDataset(demo)).toEqual([]);
     expect(demo.projects.length).toBeGreaterThanOrEqual(8);
     expect(demo.projectFacts.length).toBe(demo.projects.length);
     expect(demo.documents.length).toBeGreaterThanOrEqual(30);
