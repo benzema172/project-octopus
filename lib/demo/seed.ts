@@ -1,6 +1,6 @@
 import "server-only";
 
-import { buildDemoBlueprint, demoId, type DemoRow } from "@/lib/demo/blueprint";
+import { buildDemoDataset, demoId, type DemoRow } from "@/lib/demo/dataset";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 const TABLE_COLUMNS: Record<string, string[]> = {
@@ -129,7 +129,7 @@ function demoTemplates(userId: string, workspaceId: string) {
 }
 
 export async function seedGuestDemoData(userId: string) {
-  const blueprint = buildDemoBlueprint(userId);
+  const blueprint = buildDemoDataset(userId);
   const warnings: string[] = [];
   const counts: Record<string, number> = {};
   const workspaceId = String(blueprint.workspace.id);
@@ -208,9 +208,6 @@ export async function seedGuestDemoData(userId: string) {
   await write("notification_rules", blueprint.notificationRules);
   await write("ksef_connections", blueprint.ksefConnections, { onConflict: "workspace_id" });
 
-  // Revision-impact demo rows currently depend on real document versions. We do
-  // not fabricate R2 objects just to make the UI look full, so this one dataset
-  // is intentionally omitted until a real version is uploaded.
   counts.document_change_impacts = 0;
 
   return { workspaceId, counts, warnings };
