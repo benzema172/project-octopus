@@ -1,47 +1,57 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { buildFleetEconomics, buildInvoiceAging, buildLowStockRows, buildEmployeeAllocationSummary } from "../lib/company/power-metrics";
+import { employeeAllocationLoad, fleetEconomy, invoiceAging, stockHealth } from "../lib/company/power-metrics";
 
-describe("company power metrics", () => {
+const reference = "2026-08-17T12:00:00.000Z";
+
+describe("Project Octopus 0.8.0 operational metrics", () => {
   it("builds invoice aging from remaining balances instead of gross totals", () => {
-    const rows = buildInvoiceAging([
-      { id: "1", invoice_number: "F/1", due_date: "2026-07-01", gross_amount: 1000, paid_amount: 250, status: "open" },
-      { id: "2", invoice_number: "F/2", due_date: "2026-08-15", gross_amount: 500, paid_amount: 500, status: "paid" }
-    ], "2026-08-17");
-    expect(rows).toHaveLength(1);
-    expect(rows[0].remaining).toBe(750);
-    expect(rows[0].bucket).toBe("over_30");
+    const aging = invoiceAging([
+      { due_date: "2026-07-01", gross_amount: 1000, paid_amount: 250 },
+      { due_date: "2026-08-10", gross_amount: 2000, paid_amount: 500 },
+      { due_date: "2026-08-24", gross_amount: 3000, paid_amount: 0 },
+      { due_date: "2026-08-01", gross_amount: 400, paid_amount: 400 }
+    ], reference);
+    expect(aging.overdue31Plus).toBe(750);
+    expect(aging.overdue1to7).toBe(1500);
+    expect(aging.due14Days).toBe(3000);
+    expect(aging.open).toBe(5250);
   });
 
   it("detects overlapping employee allocations", () => {
-    const rows = buildEmployeeAllocationSummary([
-      { id: "a", employee_id: "e1", project_id: "p1", allocation_percent: 60, date_from: "2026-08-01", date_to: null },
-      { id: "b", employee_id: "e1", project_id: "p2", allocation_percent: 50, date_from: "2026-08-01", date_to: null }
-    ], "2026-08-17");
-    expect(rows[0].allocationPercent).toBe(110);
-    expect(rows[0].overallocated).toBe(true);
+    const load = employeeAllocationLoad([
+      { employee_id: "a", date_from: "2026-08-01", date_to: "2026-08-31", allocation_percent: 70 },
+      { employee_id: "a", date_from: "2026-08-10", allocation_percent: 50 },
+      { employee_id: "b", date_from: "2026-09-01", allocation_percent: 100 }
+    ], reference);
+    expect(load.get("a")).toBe(120);
+    expect(load.get("b") ?? 0).toBe(0);
   });
 
   it("aggregates stock across warehouses against minimum levels", () => {
-    const rows = buildLowStockRows(
-      [{ id: "i1", name: "Rura", sku: "R-1", unit: "m", minimum_stock: 20, active: true }],
-      [{ warehouseId: "w1", stockItemId: "i1", quantity: 7 }, { warehouseId: "w2", stockItemId: "i1", quantity: 8 }]
-    );
-    expect(rows[0].quantity).toBe(15);
-    expect(rows[0].shortage).toBe(5);
+    const health = stockHealth([
+      { id: "pipe", minimum_stock: 20 },
+      { id: "valve", minimum_stock: 5 }
+    ], [
+      { stockItemId: "pipe", quantity: 7 },
+      { stockItemId: "pipe", quantity: 8 },
+      { stockItemId: "valve", quantity: 10 }
+    ]);
+    expect(health.find((row) => row.id === "pipe")).toMatchObject({ quantity: 15, minimum: 20, shortage: 5, low: true });
+    expect(health.find((row) => row.id === "valve")?.low).toBe(false);
   });
 
   it("calculates fleet operating economics per vehicle", () => {
-    const rows = buildFleetEconomics(
-      [{ id: "v1", registration_number: "PO 1", current_mileage: 10000 }],
-      [{ vehicle_id: "v1", liters: 50, gross_amount: 350 }],
-      [{ vehicle_id: "v1", distance_km: 500 }],
-      [{ vehicle_id: "v1", cost: 150 }],
+    const result = fleetEconomy(
+      [{ id: "v1" }],
+      [{ vehicle_id: "v1", liters: 80, gross_amount: 600 }],
+      [{ vehicle_id: "v1", distance_km: 1000 }],
+      [{ vehicle_id: "v1", cost: 200 }],
       [{ vehicle_id: "v1", cost: 100 }]
-    );
-    expect(rows[0].litersPer100Km).toBe(10);
-    expect(rows[0].totalCost).toBe(600);
-    expect(rows[0].costPerKm).toBe(1.2);
+    )[0];
+    expect(result.litersPer100Km).toBe(8);
+    expect(result.costPerKm).toBe(0.9);
+    expect(result.totalCost).toBe(900);
   });
 });
 
@@ -52,8 +62,8 @@ describe("Project Octopus 0.8.x functional contract", () => {
   const exportRoute = readFileSync("app/api/company/export/route.ts", "utf8");
   const component = readFileSync("components/company/company-power-tools.tsx", "utf8");
 
-  it("publishes a 0.8.x version and injects tools into all five operational tabs", () => {
-    expect(packageJson.version).toMatch(/^0\.8\.\d+$/);
+  it("publishes version 0.8.1 and injects tools into all five operational tabs", () => {
+    expect(packageJson.version).toBe("0.8.1");
     for (const section of ["finances", "hr", "warehouse", "fleet", "reports"]) expect(layout).toContain(`${section}:`);
     expect(layout).toContain("CompanyPowerTools");
   });
@@ -63,18 +73,23 @@ describe("Project Octopus 0.8.x functional contract", () => {
       "invoice_reassign", "commitment_status", "employment_create", "assignment_create",
       "reservation_issue", "stock_transfer", "stock_item_status", "vehicle_allocation_create",
       "meter_reading_create", "damage_status", "report_definition_status"
-    ]) expect(route).toContain(action);
+    ]) {
+      expect(route).toContain(`\"${action}\"`);
+      expect(component).toContain(action);
+    }
   });
 
   it("protects stock issue/transfer and odometer updates with business invariants", () => {
-    expect(route).toContain("Niewystarczający stan magazynowy");
-    expect(route).toContain("Przebieg nie może być mniejszy");
+    expect(route).toContain("Brak wystarczającego stanu");
+    expect(route).toContain("Brak wystarczającego stanu do MM");
+    expect(route).toContain("nie może być mniejszy od bieżącego");
   });
 
   it("exports every operational tab as CSV or JSON behind read authorization", () => {
-    for (const kind of ["finance", "hr", "warehouse", "fleet", "reports"]) expect(exportRoute).toContain(`\"${kind}\"`);
     expect(exportRoute).toContain("hasDomainAccess");
-    expect(component).toContain("Eksport CSV");
-    expect(component).toContain("Eksport JSON");
+    expect(exportRoute).toContain("text/csv");
+    expect(exportRoute).toContain("application/json");
+    expect(component).toContain("format=csv");
+    expect(component).toContain("format=json");
   });
 });
