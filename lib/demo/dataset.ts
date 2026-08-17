@@ -4,7 +4,7 @@ import {
   validateDemoBlueprint,
   type DemoBlueprint,
   type DemoRow
-} from "@/lib/demo/blueprint";
+} from "./blueprint";
 
 export { demoId, type DemoRow };
 
