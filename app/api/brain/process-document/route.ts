@@ -4,6 +4,7 @@ import { getRequestUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
+import { runInvestmentAutopilot } from "@/lib/investments/run-autopilot";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -63,12 +64,24 @@ export async function POST(request: Request) {
       await supabase.from("documents").update({ category: finalCategory }).eq("id", sourceDocument.id);
     }
 
+    let autopilot: Awaited<ReturnType<typeof runInvestmentAutopilot>> | null = null;
+    try {
+      autopilot = await runInvestmentAutopilot({ workspaceId: project.workspace_id, projectId: project.id, userId: user.id });
+    } catch (autopilotError) {
+      console.error("Project Octopus: automatic investment autopilot after document analysis failed", {
+        projectId: project.id,
+        documentId: sourceDocument.id,
+        message: autopilotError instanceof Error ? autopilotError.message : String(autopilotError)
+      });
+    }
+
     return NextResponse.json({
       ok: true,
       category: finalCategory,
       ai_category: analysis.category,
       confidence: analysis.confidence,
       summary: analysis.summary,
+      autopilot,
       counts: {
         facts: analysis.facts.length,
         materials: analysis.requiredApplications.length,
