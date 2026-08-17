@@ -127,7 +127,7 @@ const STOP_WORDS = new Set([
 ]);
 
 function clean(value: string) {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[łŁ]/g, "l").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 function tokens(value: string) { return clean(value).split(/\s+/).filter((token) => token.length >= 4 && !STOP_WORDS.has(token)); }
 function priorityWeight(priority: AutopilotPriority) { return priority === "critical" ? 0 : priority === "high" ? 1 : priority === "medium" ? 2 : 3; }
