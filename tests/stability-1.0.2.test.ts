@@ -37,9 +37,12 @@ describe("Project Octopus 1.0.2 Stability", () => {
     expect(sql).toContain("20260818_102_stability");
   });
 
-  it("exposes the stability release in the application badge", () => {
+  it("keeps the 1.0.2 stability release represented by its migration and release notes after 1.1", () => {
     const release = read("lib/app-release.ts");
-    expect(release).toContain('version: "1.0.2"');
+    const notes = read("RELEASE_1.0.2.md");
+    expect(read("supabase/migrations/20260818090000_102_stability.sql")).toContain("20260818_102_stability");
+    expect(notes).toContain("1.0.2");
+    expect(release).toContain('version: "1.1.0"');
     expect(release).toContain('introducedAt: "18.08.2026"');
   });
 });
