@@ -23,7 +23,8 @@ const migrations = [
   "supabase/migrations/20260818074000_101_stock_and_document_integrity.sql",
   "supabase/migrations/20260818075000_101_finance_fleet_atomicity.sql",
   "supabase/migrations/20260818090000_102_stability.sql",
-  "supabase/migrations/20260818100000_110_operating_scale.sql"
+  "supabase/migrations/20260818100000_110_operating_scale.sql",
+  "supabase/migrations/20260818100500_110_runtime_cache_fix.sql"
 ];
 
 function withoutPgcrypto(sql) {
@@ -80,7 +81,7 @@ try {
   }
 
   const markers = await database.query("select version from public.app_schema_versions where version like '20260817_%' or version like '20260818_%' order by version");
-  if (markers.rows.length < 15) throw new Error(`Expected 0.9.1–1.1 schema markers, received ${markers.rows.length}.`);
+  if (markers.rows.length < 16) throw new Error(`Expected 0.9.1–1.1 schema markers, received ${markers.rows.length}.`);
 
   const userId="00000000-0000-4000-8000-000000000001";
   const workspaceId="00000000-0000-4000-8000-000000000002";
@@ -97,7 +98,6 @@ try {
       values ('${boqId}','${projectId}','1.1','Rura testowa DN110',10,'m',40,400);
   `);
 
-  // Company-level document finalization and later explicit atomic assignment.
   const documentId="00000000-0000-4000-8000-000000000005";
   const versionId="00000000-0000-4000-8000-000000000006";
   const upload=await database.query("select * from public.complete_document_upload($1,$2,$3,null,'instrukcja.pdf','general','application/pdf',128,'test','company/instrukcja.pdf','etag',null,$4,now())",[documentId,versionId,workspaceId,userId]);
@@ -106,7 +106,6 @@ try {
   const assigned=await database.query("select d.project_id,dv.project_id version_project from public.documents d join public.document_versions dv on dv.id=$2 where d.id=$1",[documentId,versionId]);
   if (assigned.rows[0]?.project_id!==projectId||assigned.rows[0]?.version_project!==projectId) throw new Error("Atomic document assignment failed.");
 
-  // Payments: partial payment works; silent overpayment must fail.
   const purchaseInvoiceId="00000000-0000-4000-8000-000000000008";
   const saleInvoiceId="00000000-0000-4000-8000-000000000009";
   await database.exec(`
@@ -123,12 +122,10 @@ try {
   try{await database.query("select * from public.record_payment_atomic($1,$2,current_date,700,'TOO-MUCH',$3)",[workspaceId,purchaseInvoiceId,userId]);}catch{overpaymentRejected=true;}
   if(!overpaymentRejected) throw new Error("Invoice overpayment was not rejected.");
 
-  // Company KPI coverage uses allocation percentage, not net-vs-gross amounts.
   const companyKpis=await database.query("select public.get_company_finance_kpis($1) kpi",[workspaceId]);
   const kpi=companyKpis.rows[0]?.kpi;
   if(Number(kpi?.allocationCoveragePct)!==100||Number(kpi?.unallocatedPurchase)!==0) throw new Error(`Company finance coverage is invalid: ${JSON.stringify(kpi)}`);
 
-  // Warehouse ledger, negative-stock guard and MM.
   const warehouseA="00000000-0000-4000-8000-000000000011";
   const warehouseB="00000000-0000-4000-8000-000000000012";
   const itemId="00000000-0000-4000-8000-000000000013";
@@ -147,7 +144,6 @@ try {
   const balanceMap=new Map(balances.rows.map((row)=>[row.warehouse_id,Number(row.quantity)]));
   if(balanceMap.get(warehouseA)!==6||balanceMap.get(warehouseB)!==4) throw new Error("MM ledger mismatch.");
 
-  // Anomaly refresh is stale-aware and preserves first detection time.
   const overdueCommitmentId="00000000-0000-4000-8000-000000000015";
   await database.exec(`insert into public.commitments(id,workspace_id,project_id,source_type,description,amount,expected_date,status) values ('${overdueCommitmentId}','${workspaceId}','${projectId}','manual','Przeterminowane testowe',100,current_date-2,'open');`);
   const refresh1=await database.query("select public.refresh_project_anomalies_if_stale($1,$2,300) refreshed",[workspaceId,projectId]);
@@ -162,7 +158,6 @@ try {
   const anomaly2=await database.query("select detected_at,first_detected_at,last_seen_at from public.project_anomalies where project_id=$1 and anomaly_key=$2",[projectId,`auto:commitment:${overdueCommitmentId}`]);
   if(String(anomaly1.rows[0]?.detected_at)!==String(anomaly2.rows[0]?.detected_at)||String(anomaly1.rows[0]?.first_detected_at)!==String(anomaly2.rows[0]?.first_detected_at)) throw new Error("Anomaly history was reset during refresh.");
 
-  // Report run + immutable snapshot must close atomically from server-side aggregates.
   const reportDefinitionId="00000000-0000-4000-8000-000000000016";
   await database.exec(`insert into public.report_definitions(id,workspace_id,project_id,name,report_type,definition,active,created_by) values ('${reportDefinitionId}','${workspaceId}','${projectId}','Raport testowy','project','{}'::jsonb,true,'${userId}');`);
   const report=await database.query("select public.generate_report_snapshot_atomic($1,$2,current_date-30,current_date,$3) snapshot_id",[workspaceId,reportDefinitionId,userId]);
@@ -170,7 +165,6 @@ try {
   const reportState=await database.query("select rr.status,count(rs.id)::integer snapshots from public.report_runs rr left join public.report_snapshots rs on rs.report_run_id=rr.id where rr.report_definition_id=$1 group by rr.status",[reportDefinitionId]);
   if(reportState.rows[0]?.status!=="completed"||reportState.rows[0]?.snapshots!==1) throw new Error("Report run and snapshot are inconsistent.");
 
-  // Unified FTS search and corrected Command Center finance semantics.
   const search=await database.query("select * from public.search_workspace_entities($1,'Test',20)",[workspaceId]);
   if(!search.rows.some((row)=>row.entity_type==="project"&&row.entity_id===projectId)) throw new Error("Unified workspace search did not find the project.");
   const command=await database.query("select public.get_project_command_center($1,$2) snapshot",[workspaceId,projectId]);
