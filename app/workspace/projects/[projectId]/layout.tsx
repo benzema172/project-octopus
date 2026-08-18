@@ -37,11 +37,13 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 async function AsyncProjectAutopilotDock({ projectId, canRun }: { projectId: string; canRun: boolean }) {
-  const summary = await getReliableInvestmentAutopilotSummary(projectId).catch((error) => {
-    console.error("Project Octopus: project Autopilot summary fallback", { projectId, message: error instanceof Error ? error.message : String(error) });
-    return { attentionCount: 0, aiCanDoCount: 0, blockerCount: 0, healthScore: 100, nextTitle: null };
-  });
-  return <ProjectAutopilotDock projectId={projectId} summary={summary} canRun={canRun} />;
+  try {
+    const summary = await getReliableInvestmentAutopilotSummary(projectId);
+    return <ProjectAutopilotDock projectId={projectId} summary={summary} canRun={canRun} />;
+  } catch (error) {
+    console.error("Project Octopus: project Autopilot summary unavailable", { projectId, message: error instanceof Error ? error.message : String(error) });
+    return null;
+  }
 }
 
 export default async function ProjectLayout({ children, params }: ProjectLayoutProps) {
