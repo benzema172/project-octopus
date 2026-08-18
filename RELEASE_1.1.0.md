@@ -11,8 +11,8 @@ Data wydania: 18.08.2026
 - Command Center odświeża Anomaly Engine tylko po zmianie danych lub po wygaśnięciu cache, zamiast przy każdym wejściu.
 - Project Health pokazuje konkretne potrącenia punktów oraz osobną wiarygodność danych finansowych.
 - Finanse rozróżniają koszt przypisany, przychód przypisany, zobowiązania i pokrycie alokacją.
-- Cash flow 13 tygodni ma scenariusz bazowy oraz ostrożny.
-- Raporty mają atomowy generator snapshotu z agregacjami wykonywanymi po stronie PostgreSQL.
+- Cash flow 13 tygodni ma scenariusz bazowy oraz ostrożny i nie dubluje faktury przy wielu alokacjach BOQ do tej samej inwestycji.
+- Raporty są faktycznie generowane przez atomowy RPC z agregacjami wykonywanymi po stronie PostgreSQL; endpoint aplikacji nie składa już snapshotu z pełnych tabel w Node.
 - Wyszukiwarka firmowa korzysta z indeksowanego Full Text Search i obejmuje inwestycje, dokumenty, faktury, pracowników, magazyn, flotę, BOQ i wiedzę firmy.
 - E2E upload obejmuje dokument inwestycji i dokument firmowy bez projectId, a po teście sprząta dane i obiekty R2.
 - Pełny validator uruchamia cały łańcuch 23 migracji oraz smoke testy finansów, magazynu, raportów, anomalii, wyszukiwania i Command Center.
