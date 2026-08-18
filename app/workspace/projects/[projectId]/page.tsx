@@ -16,23 +16,15 @@ import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { ExecutionLayerNotice } from "@/components/system/execution-layer-notice";
 import { hasDomainAccess } from "@/lib/authorization";
 import { requireCurrentUser } from "@/lib/auth";
-import { listDocumentsForProject } from "@/lib/data/documents";
 import { isExecutionLayerSchemaReady } from "@/lib/data/operations";
+import { getProjectDashboardSnapshot, type ProjectDashboardSnapshot } from "@/lib/data/project-dashboard-snapshot";
 import { getProjectProfile } from "@/lib/data/project-profile";
 import { getProjectForUser } from "@/lib/data/projects";
 import { parseLocalizedNumber } from "@/lib/numbers/parse-localized-number";
-import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 
 type ProjectPageProps = { params: Promise<{ projectId: string }> };
-type ForecastRow = {
-  contract_value: number | null;
-  actual_cost: number | null;
-  committed_cost: number | null;
-  estimate_at_completion: number | null;
-  forecast_margin: number | null;
-};
 
 const DAY = 86_400_000;
 
@@ -56,6 +48,18 @@ function clamp(value: number, min = 0, max = 100) {
   return Math.min(max, Math.max(min, value));
 }
 
+const EMPTY_DASHBOARD: ProjectDashboardSnapshot = {
+  documentsCount: 0,
+  boqValue: 0,
+  acceptedWorkValue: 0,
+  closeoutRequired: 0,
+  closeoutComplete: 0,
+  alerts: [],
+  milestones: [],
+  risks: [],
+  forecast: null
+};
+
 export default async function ProjectPage({ params }: ProjectPageProps) {
   const { projectId } = await params;
   const user = await requireCurrentUser();
@@ -71,52 +75,22 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   });
   if (!investmentsAllowed) return <DomainAccessDenied workspaceId={project.workspace_id} area="Inwestycja" />;
 
-  const [profile, documents, schemaReady, financeAllowed] = await Promise.all([
+  const [profile, schemaReady, financeAllowed] = await Promise.all([
     getProjectProfile(project),
-    listDocumentsForProject(project.id).catch(() => []),
     isExecutionLayerSchemaReady(),
     hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "finance", level: "read", projectId: project.id })
   ]);
 
-  const supabase = createServiceSupabaseClient();
-  let forecast: ForecastRow | null = null;
-  let boqValue = 0;
-  let acceptedWorkValue = 0;
-  let closeoutRequired = 0;
-  let closeoutComplete = 0;
-  let alerts: Array<{ id: string; severity: string; title: string; description: string | null }> = [];
-  let milestones: Array<{ id: string; title: string; planned_start: string | null; planned_finish: string | null; actual_finish: string | null; status: string }> = [];
-  let risks: Array<{ id: string; summary: string; risk_level: string }> = [];
-
+  let dashboard = EMPTY_DASHBOARD;
   if (schemaReady) {
-    const [boqResult, progressResult, closeoutResult, alertsResult, milestonesResult, risksResult] = await Promise.all([
-      supabase.from("boq_versions").select("net_value").eq("project_id", project.id).eq("status", "approved").order("version_number", { ascending: false }).limit(1).maybeSingle<{ net_value: number | null }>(),
-      supabase.from("progress_entries").select("value_accepted").eq("project_id", project.id).in("status", ["submitted", "accepted", "approved", "closed"]),
-      supabase.from("closeout_requirements").select("status").eq("project_id", project.id),
-      supabase.from("ai_findings").select("id,severity,title,description").eq("project_id", project.id).order("created_at", { ascending: false }).limit(3),
-      supabase.from("schedule_activities").select("id,title,planned_start,planned_finish,actual_finish,status").eq("project_id", project.id).order("planned_start", { ascending: true }).limit(4),
-      supabase.from("document_change_impacts").select("id,summary,risk_level").eq("project_id", project.id).eq("status", "proposed").order("created_at", { ascending: false }).limit(3)
-    ]);
-    boqValue = parseLocalizedNumber(boqResult.data?.net_value);
-    acceptedWorkValue = (progressResult.data ?? []).reduce((sum, row) => sum + parseLocalizedNumber(row.value_accepted), 0);
-    closeoutRequired = closeoutResult.data?.length ?? 0;
-    closeoutComplete = (closeoutResult.data ?? []).filter((row) => row.status === "complete").length;
-    alerts = (alertsResult.data ?? []) as typeof alerts;
-    milestones = (milestonesResult.data ?? []) as typeof milestones;
-    risks = (risksResult.data ?? []) as typeof risks;
-
-    if (financeAllowed) {
-      const { data } = await supabase
-        .from("forecast_snapshots")
-        .select("contract_value,actual_cost,committed_cost,estimate_at_completion,forecast_margin")
-        .eq("project_id", project.id)
-        .order("forecast_date", { ascending: false })
-        .limit(1)
-        .maybeSingle<ForecastRow>();
-      forecast = data;
+    try {
+      dashboard = await getProjectDashboardSnapshot(project.workspace_id, project.id, financeAllowed);
+    } catch (error) {
+      console.error("Project Octopus: lightweight dashboard snapshot unavailable", { projectId: project.id, message: error instanceof Error ? error.message : String(error) });
     }
   }
 
+  const { documentsCount, boqValue, acceptedWorkValue, closeoutRequired, closeoutComplete, alerts, milestones, risks, forecast } = dashboard;
   const base = `/workspace/projects/${project.id}`;
   const today = new Date();
   const start = parseDate(profile.startDate);
@@ -166,7 +140,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           <div className="pw-readiness-ring" style={{ background: `conic-gradient(#8a2be2 0 ${(readiness ?? 0) * 3.6}deg, #00aeb0 ${(readiness ?? 0) * 3.6}deg, #eee8f3 ${(readiness ?? 0) * 3.6}deg 360deg)` }}>
             <span>{readiness == null ? "—" : `${readiness}%`}</span>
           </div>
-          <small>{closeoutRequired ? `${closeoutComplete}/${closeoutRequired} pozycji` : `${documents.length} plików źródłowych`}</small>
+          <small>{closeoutRequired ? `${closeoutComplete}/${closeoutRequired} pozycji` : `${documentsCount} plików źródłowych`}</small>
           <b>Zobacz kompletność <ArrowRight size={14} /></b>
         </Link>
       </section>
