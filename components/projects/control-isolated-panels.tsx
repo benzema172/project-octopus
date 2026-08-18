@@ -21,6 +21,15 @@ type AccessProps = BaseProps & {
 };
 type CommandCenterData = ComponentProps<typeof ProjectCommandCenter>["data"];
 type ReconciliationData = ComponentProps<typeof ProjectReconciliationGraph>["data"];
+type Loaded<T> = { data: T; error: null } | { data: null; error: unknown };
+
+async function safeLoad<T>(loader: () => Promise<T>): Promise<Loaded<T>> {
+  try {
+    return { data: await loader(), error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+}
 
 function PanelFailure({ title, error }: { title: string; error: unknown }) {
   const detail = error instanceof Error ? error.message : "Nieznany błąd modułu.";
@@ -37,38 +46,28 @@ function PanelFailure({ title, error }: { title: string; error: unknown }) {
 }
 
 export async function CommandCenterPanel({ workspaceId, projectId, canManageInvestments }: BaseProps & { canManageInvestments: boolean }) {
-  try {
-    const data = await getControlCommandCenterData(workspaceId, projectId) as CommandCenterData;
-    return <ProjectCommandCenter projectId={projectId} data={data} canManage={canManageInvestments} />;
-  } catch (error) {
-    return <PanelFailure title="Command Center" error={error} />;
-  }
+  const result = await safeLoad(() => getControlCommandCenterData(workspaceId, projectId));
+  if (result.error) return <PanelFailure title="Command Center" error={result.error} />;
+  const data = result.data as CommandCenterData;
+  return <ProjectCommandCenter projectId={projectId} data={data} canManage={canManageInvestments} />;
 }
 
 export async function AutopilotPanel({ workspaceId, projectId, canManageInvestments, financeAllowed, warehouseAllowed }: AccessProps) {
-  try {
-    const snapshot = await getControlAutopilotSnapshot(workspaceId, projectId, { includeFinance: financeAllowed, includeWarehouse: warehouseAllowed });
-    return <InvestmentAutopilotCenter projectId={projectId} workspaceId={workspaceId} snapshot={snapshot} canRun={canManageInvestments} financeAllowed={financeAllowed} warehouseAllowed={warehouseAllowed} />;
-  } catch (error) {
-    return <PanelFailure title="Investment Autopilot" error={error} />;
-  }
+  const result = await safeLoad(() => getControlAutopilotSnapshot(workspaceId, projectId, { includeFinance: financeAllowed, includeWarehouse: warehouseAllowed }));
+  if (result.error) return <PanelFailure title="Investment Autopilot" error={result.error} />;
+  return <InvestmentAutopilotCenter projectId={projectId} workspaceId={workspaceId} snapshot={result.data} canRun={canManageInvestments} financeAllowed={financeAllowed} warehouseAllowed={warehouseAllowed} />;
 }
 
 export async function ReconciliationPanel({ workspaceId, projectId, canManageInvestments, financeAllowed, canManageFinance, warehouseAllowed, canManageWarehouse }: AccessProps) {
   if (!financeAllowed && !warehouseAllowed) return null;
-  try {
-    const data = await getControlReconciliationData(workspaceId, projectId) as ReconciliationData;
-    return <ProjectReconciliationGraph projectId={projectId} data={data} canManage={canManageInvestments && (canManageFinance || canManageWarehouse)} canOrder={canManageInvestments && canManageWarehouse} />;
-  } catch (error) {
-    return <PanelFailure title="Reconciliation" error={error} />;
-  }
+  const result = await safeLoad(() => getControlReconciliationData(workspaceId, projectId));
+  if (result.error) return <PanelFailure title="Reconciliation" error={result.error} />;
+  const data = result.data as ReconciliationData;
+  return <ProjectReconciliationGraph projectId={projectId} data={data} canManage={canManageInvestments && (canManageFinance || canManageWarehouse)} canOrder={canManageInvestments && canManageWarehouse} />;
 }
 
 export async function ExecutionPanel({ workspaceId, projectId, canManageInvestments, financeAllowed, canManageFinance, warehouseAllowed }: AccessProps) {
-  try {
-    const snapshot = await getControlExecutionSnapshot(workspaceId, projectId);
-    return <ProjectExecutionCenter workspaceId={workspaceId} projectId={projectId} snapshot={snapshot} financeAllowed={financeAllowed} canManageFinance={canManageFinance} warehouseAllowed={warehouseAllowed} canManageInvestments={canManageInvestments} />;
-  } catch (error) {
-    return <PanelFailure title="Execution Layer" error={error} />;
-  }
+  const result = await safeLoad(() => getControlExecutionSnapshot(workspaceId, projectId));
+  if (result.error) return <PanelFailure title="Execution Layer" error={result.error} />;
+  return <ProjectExecutionCenter workspaceId={workspaceId} projectId={projectId} snapshot={result.data} financeAllowed={financeAllowed} canManageFinance={canManageFinance} warehouseAllowed={warehouseAllowed} canManageInvestments={canManageInvestments} />;
 }
