@@ -133,90 +133,19 @@ async function assignSourceDocumentToProject(workspaceId: string, documentId: st
 }
 
 async function createReportSnapshot(workspaceId: string, userId: string, payload: Record<string, unknown>) {
-  const supabase = createServiceSupabaseClient();
   const definitionId = await requireOwnedId("report_definitions", payload.definitionId, workspaceId, "Definicja raportu");
-  const { data: definition } = await supabase.from("report_definitions").select("id,name,report_type,project_id,definition").eq("id", definitionId).single();
-  const projectId = definition?.project_id ? String(definition.project_id) : null;
   const periodStart = date(payload.periodStart);
   const periodEnd = date(payload.periodEnd);
   if (periodStart && periodEnd && periodStart > periodEnd) throw new Error("Początek okresu raportu nie może być późniejszy niż koniec.");
-  const [projects, documents, employees, vehicles, stockItems, invoices, commitments, openAi, allocations, assignments, vehicleAllocations, materialEvents] = await Promise.all([
-    supabase.from("projects").select("id,status").eq("workspace_id", workspaceId),
-    supabase.from("documents").select("id,project_id,created_at").eq("workspace_id", workspaceId).is("deleted_at", null),
-    supabase.from("employees").select("id,status").eq("workspace_id", workspaceId),
-    supabase.from("vehicles").select("id,status").eq("workspace_id", workspaceId),
-    supabase.from("stock_items").select("id,active").eq("workspace_id", workspaceId),
-    supabase.from("invoices").select("id,direction,issue_date,gross_amount,paid_amount,status").eq("workspace_id", workspaceId),
-    supabase.from("commitments").select("project_id,amount,expected_date,status").eq("workspace_id", workspaceId).in("status", ["open", "approved"]),
-    supabase.from("document_intakes").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).in("status", ["queued", "review", "error"]),
-    supabase.from("financial_allocations").select("source_id,project_id,status").eq("workspace_id", workspaceId).eq("source_type", "invoice").eq("status", "approved"),
-    supabase.from("assignments").select("employee_id,project_id,date_from,date_to").eq("workspace_id", workspaceId),
-    supabase.from("vehicle_allocations").select("vehicle_id,project_id").eq("workspace_id", workspaceId),
-    supabase.from("material_chain_events").select("stock_item_id,project_id,occurred_at").eq("workspace_id", workspaceId)
-  ]);
-  const inPeriod = (value: unknown) => {
-    if (!value) return true;
-    const normalized = String(value).slice(0, 10);
-    return (!periodStart || normalized >= periodStart) && (!periodEnd || normalized <= periodEnd);
-  };
-  const overlapsPeriod = (from: unknown, to: unknown) => {
-    const start = from ? String(from).slice(0, 10) : null;
-    const end = to ? String(to).slice(0, 10) : null;
-    return (!periodEnd || !start || start <= periodEnd) && (!periodStart || !end || end >= periodStart);
-  };
-  const projectInvoiceIds = projectId
-    ? new Set((allocations.data ?? []).filter((row) => row.project_id === projectId).map((row) => String(row.source_id)))
-    : null;
-  const invoiceRows = (invoices.data ?? []).filter((row) => inPeriod(row.issue_date) && (!projectInvoiceIds || projectInvoiceIds.has(String(row.id))));
-  const sale = invoiceRows.filter((row) => row.direction === "sale").reduce((sum, row) => sum + Number(row.gross_amount ?? 0), 0);
-  const purchase = invoiceRows.filter((row) => row.direction === "purchase").reduce((sum, row) => sum + Number(row.gross_amount ?? 0), 0);
-  const paid = invoiceRows.reduce((sum, row) => sum + Number(row.paid_amount ?? 0), 0);
-  const committed = (commitments.data ?? [])
-    .filter((row) => (!projectId || row.project_id === projectId) && inPeriod(row.expected_date))
-    .reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
-  const assignedEmployees = projectId ? new Set((assignments.data ?? []).filter((row) => row.project_id === projectId && overlapsPeriod(row.date_from, row.date_to)).map((row) => String(row.employee_id))) : null;
-  const assignedVehicles = projectId ? new Set((vehicleAllocations.data ?? []).filter((row) => row.project_id === projectId).map((row) => String(row.vehicle_id))) : null;
-  const projectStockItems = projectId ? new Set((materialEvents.data ?? []).filter((row) => row.project_id === projectId && inPeriod(row.occurred_at)).map((row) => row.stock_item_id).filter(Boolean).map(String)) : null;
-  const projectRows = (projects.data ?? []).filter((row) => !projectId || row.id === projectId);
-  const documentRows = (documents.data ?? []).filter((row) => (!projectId || row.project_id === projectId) && inPeriod(row.created_at));
-  const employeeRows = (employees.data ?? []).filter((row) => row.status === "active" && (!assignedEmployees || assignedEmployees.has(String(row.id))));
-  const vehicleRows = (vehicles.data ?? []).filter((row) => row.status === "active" && (!assignedVehicles || assignedVehicles.has(String(row.id))));
-  const stockRows = (stockItems.data ?? []).filter((row) => row.active && (!projectStockItems || projectStockItems.has(String(row.id))));
-  const snapshot = {
-    scope: { project_id: projectId, report_type: definition?.report_type ?? "management" },
-    period: { start: periodStart, end: periodEnd },
-    portfolio: { projects: projectRows.length, documents: documentRows.length },
-    resources: { employees: employeeRows.length, vehicles: vehicleRows.length, stock_items: stockRows.length },
-    finance: { sales_gross: sale, purchases_gross: purchase, paid, open_commitments: committed, gross_result: sale - purchase },
-    ai: { pending_decisions: openAi.count ?? 0 }
-  };
-  const { data: run, error: runError } = await supabase.from("report_runs").insert({
-    workspace_id: workspaceId,
-    project_id: projectId,
-    report_definition_id: definitionId,
-    period_start: periodStart,
-    period_end: periodEnd,
-    status: "completed",
-    started_at: new Date().toISOString(),
-    finished_at: new Date().toISOString()
-  }).select("id").single<{ id: string }>();
-  if (runError || !run) throw new Error(`Nie udało się utworzyć raportu: ${runError?.message ?? "brak danych"}`);
-  const { data: result, error } = await supabase.from("report_snapshots").insert({
-    workspace_id: workspaceId,
-    project_id: projectId,
-    report_run_id: run.id,
-    kpi_definitions: definition?.definition ?? {},
-    data_snapshot: snapshot,
-    narrative: {
-      title: definition?.name ?? "Raport firmy",
-      summary: `Wynik brutto dla wybranego zakresu: ${sale - purchase} PLN. Otwarte zobowiązania: ${committed} PLN.`,
-      generated_by: userId
-    },
-    source_references: ["projects", "documents", "employees", "vehicles", "stock_items", "invoices", "commitments"],
-    closed_at: new Date().toISOString()
-  }).select("id").single<{ id: string }>();
-  if (error || !result) throw new Error(`Nie udało się zamknąć snapshotu: ${error?.message ?? "brak danych"}`);
-  return result.id;
+  const { data, error } = await createServiceSupabaseClient().rpc("generate_report_snapshot_atomic", {
+    p_workspace_id: workspaceId,
+    p_definition_id: definitionId,
+    p_period_start: periodStart,
+    p_period_end: periodEnd,
+    p_actor_id: userId
+  });
+  if (error || !data) throw new Error(`Nie udało się atomowo wygenerować raportu: ${error?.message ?? "brak danych"}`);
+  return String(data);
 }
 
 export async function POST(request: Request) {

@@ -21,12 +21,15 @@ describe("Project Octopus 1.1 operating scale",()=>{
     expect(sql).toContain("filter(where direction='purchase')");
     expect(sql).toContain("'allocatedRevenue'");
     expect(sql).toContain("'financeCoverage'");
+    expect(sql).toContain("exists(select 1 from public.financial_allocations fa");
     expect(sql).toContain("allocationCoveragePct");
   });
 
   it("generates report snapshots atomically from server-side aggregates",()=>{
     const sql=read("supabase/migrations/20260818100000_110_operating_scale.sql");
     expect(sql).toContain("generate_report_snapshot_atomic");
+    const route=read("app/api/company/records/route.ts");
+    expect(route).toContain('.rpc("generate_report_snapshot_atomic"');
     expect(sql).toContain("insert into public.report_runs");
     expect(sql).toContain("insert into public.report_snapshots");
     expect(sql).toContain("report.generated_atomic");
@@ -52,7 +55,7 @@ describe("Project Octopus 1.1 operating scale",()=>{
     expect(ui).toContain("Scenariusz ostrożny");
   });
 
-  it("publishes 1.1.0 metadata and the full 22-migration validator",()=>{
+  it("publishes 1.1.0 metadata and the full 23-migration validator",()=>{
     const release=read("lib/app-release.ts");
     const pkg=JSON.parse(read("package.json")) as {version:string;scripts:Record<string,string>};
     const validator=read("scripts/validate-migrations-110.mjs");
