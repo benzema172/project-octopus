@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AppReleaseBadge } from "@/components/app-release-badge";
+import { CompanyActionDockController } from "@/components/company/company-action-dock-controller";
 import "./globals.css";
 import "./octopus-app.css";
 import "./company-selector-refinement.css";
@@ -15,6 +16,7 @@ import "./project-modules-operational.css";
 import "./brain-knowledge.css";
 import "./octopus-1-release.css";
 import "./release-badge.css";
+import "./company-actions-compact.css";
 
 export const metadata: Metadata = {
   title: "Project Octopus",
@@ -30,6 +32,7 @@ export default function RootLayout({
     <html lang="pl">
       <body>
         {children}
+        <CompanyActionDockController />
         <AppReleaseBadge />
       </body>
     </html>

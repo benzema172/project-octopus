@@ -1,0 +1,273 @@
+/* Project Octopus 1.1 — compact company actions + strict Wrzutnia placement. */
+
+/* Animated ProjectIntake is allowed only inside a concrete investment navigation. */
+.pw-intake {
+  display: none !important;
+}
+
+.project-navigation .pw-intake {
+  display: block !important;
+}
+
+/* Company Dashboard is the only company-level surface that exposes the animated Wrzutnia CTA. */
+.co-company-address > .co-primary-button[href*="/documents?upload=1"] {
+  position: relative;
+  isolation: isolate;
+  min-width: 138px;
+  min-height: 44px;
+  justify-content: flex-end;
+  overflow: visible;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(105deg,#8a2be2,#315be9 63%,#00aeb0);
+  color: #fff;
+  padding: 10px 16px 10px 52px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+  text-decoration: none;
+  box-shadow: 0 8px 20px rgba(84,54,169,.16);
+  transition: transform .16s ease, filter .16s ease, box-shadow .16s ease;
+}
+
+.co-company-address > .co-primary-button[href*="/documents?upload=1"] > svg {
+  display: none;
+}
+
+.co-company-address > .co-primary-button[href*="/documents?upload=1"]::before {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  top: -15px;
+  left: -22px;
+  width: 88px;
+  height: 48px;
+  pointer-events: none;
+  background: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 112 56'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23ff2d86'/%3E%3Cstop offset='.34' stop-color='%238a2be2'/%3E%3Cstop offset='.68' stop-color='%23315be9'/%3E%3Cstop offset='1' stop-color='%2300cfc2'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg fill='none' stroke='url(%23g)' stroke-width='3.2' stroke-linecap='round'%3E%3Cpath d='M42 21C30 15 19 14 8 20'/%3E%3Cpath d='M40 25C26 23 16 29 7 39'/%3E%3Cpath d='M45 29C32 33 25 42 20 51'/%3E%3Cpath d='M51 30C46 40 44 47 41 54'/%3E%3Cpath d='M59 30C60 41 64 48 70 53'/%3E%3Cpath d='M66 28C78 34 86 43 96 49'/%3E%3Cpath d='M68 24C84 25 96 31 106 39'/%3E%3Cpath d='M66 19C80 13 93 14 104 20'/%3E%3C/g%3E%3Cellipse cx='54' cy='18' rx='15' ry='13' fill='url(%23g)' stroke='%23fff' stroke-opacity='.82' stroke-width='1.1'/%3E%3Ccircle cx='49' cy='17' r='1.6' fill='%23fff'/%3E%3Ccircle cx='59' cy='17' r='1.6' fill='%23fff'/%3E%3Cpath d='M50 22c2.5 2 5.5 2 8 0' fill='none' stroke='%23fff' stroke-opacity='.86' stroke-width='1.2' stroke-linecap='round'/%3E%3C/svg%3E");
+  filter: drop-shadow(0 4px 8px rgba(64,34,111,.22));
+  transform-origin: 54% 38%;
+  animation: co-dashboard-octo-float 3.4s ease-in-out infinite;
+}
+
+.co-company-address > .co-primary-button[href*="/documents?upload=1"]::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 7px;
+  left: 7px;
+  width: 54px;
+  height: 28px;
+  border-radius: 50%;
+  background: radial-gradient(circle,rgba(138,43,226,.18),transparent 68%);
+  animation: co-dashboard-octo-glow 3.4s ease-in-out infinite;
+}
+
+.co-company-address > .co-primary-button[href*="/documents?upload=1"]:hover {
+  filter: brightness(1.04);
+  transform: translateY(-1px);
+  box-shadow: 0 11px 24px rgba(84,54,169,.21);
+}
+
+@keyframes co-dashboard-octo-float {
+  0%,100% { transform: rotate(-4deg) translate3d(0,0,0) scale(1); }
+  30% { transform: rotate(1deg) translate3d(1px,-2px,0) scale(1.025,.985); }
+  62% { transform: rotate(-7deg) translate3d(-1px,1px,0) scale(.99,1.025); }
+}
+
+@keyframes co-dashboard-octo-glow {
+  0%,100% { opacity: .48; transform: scale(.9); }
+  50% { opacity: .9; transform: scale(1.16); }
+}
+
+/* Actions in Finance / HR / Warehouse / Fleet / Reports are a compact dock, not full-width accordions. */
+.ops-form-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit,minmax(176px,1fr)) !important;
+  align-items: start;
+  gap: 8px !important;
+  margin: 10px 0 14px;
+}
+
+.ops-form-grid::before {
+  content: "Szybkie akcje";
+  grid-column: 1 / -1;
+  color: #918697;
+  padding: 1px 2px 0;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.ops-form-grid > .ops-panel.ops-disclosure {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #e8e1ed;
+  border-radius: 13px;
+  background: linear-gradient(145deg,#fff,rgba(249,247,251,.96));
+  box-shadow: none;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease, transform .16s ease;
+}
+
+.ops-form-grid > .ops-panel.ops-disclosure:not([open]) {
+  min-height: 48px;
+}
+
+.ops-form-grid > .ops-panel.ops-disclosure:not([open]):hover {
+  border-color: #d9cae4;
+  background: linear-gradient(135deg,rgba(255,45,134,.035),rgba(138,43,226,.05),rgba(49,91,233,.035));
+  box-shadow: 0 7px 18px rgba(51,37,70,.055);
+  transform: translateY(-1px);
+}
+
+.ops-form-grid > .ops-panel.ops-disclosure[open] {
+  grid-column: 1 / -1;
+  border-color: #dac9e7;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(50,36,68,.07);
+}
+
+.ops-form-grid > .ops-panel .ops-panel__summary {
+  display: grid;
+  min-height: 48px;
+  grid-template-columns: 28px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0;
+}
+
+.ops-form-grid > .ops-panel .ops-panel__summary::before {
+  content: "+";
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 9px;
+  background: linear-gradient(135deg,rgba(255,45,134,.10),rgba(138,43,226,.12),rgba(49,91,233,.10));
+  color: #6f37b6;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.ops-form-grid > .ops-panel[open] .ops-panel__summary::before {
+  content: "−";
+  background: linear-gradient(135deg,#8a2be2,#315be9 70%,#00aeb0);
+  color: #fff;
+}
+
+.ops-form-grid > .ops-panel .ops-panel__summary > div {
+  min-width: 0;
+}
+
+.ops-form-grid > .ops-panel .ops-panel__summary .eyebrow {
+  display: none;
+}
+
+.ops-form-grid > .ops-panel .ops-panel__summary h2 {
+  overflow: hidden;
+  margin: 0;
+  color: #342b3b;
+  font-size: 10.5px;
+  font-weight: 850;
+  letter-spacing: -.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-form-grid > .ops-panel .ops-panel__summary > span {
+  color: #918698;
+  font-size: 8px;
+}
+
+.ops-form-grid > .ops-panel .ops-panel__summary > svg {
+  width: 14px;
+  color: #96899f;
+  transition: transform .16s ease;
+}
+
+.ops-form-grid > .ops-panel[open] .ops-panel__summary > svg {
+  transform: rotate(180deg);
+}
+
+.ops-form-grid > .ops-panel .ops-panel__content {
+  padding: 11px 12px 12px;
+  border-top: 1px solid #eee7f1;
+  background: linear-gradient(180deg,#fff,#fdfcfe);
+}
+
+.ops-form-grid .ops-form {
+  display: grid;
+  gap: 10px;
+}
+
+.ops-form-grid .ops-auto-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(170px,1fr));
+  gap: 8px 10px;
+}
+
+.ops-form-grid .ops-auto-form-grid label {
+  gap: 4px;
+  color: #807487;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .035em;
+}
+
+.ops-form-grid .ops-auto-form-grid input,
+.ops-form-grid .ops-auto-form-grid select {
+  min-height: 36px;
+  border-radius: 9px;
+  padding: 7px 9px;
+  font-size: 9.5px;
+}
+
+.ops-form-grid .ops-form > .primary-button {
+  min-height: 36px;
+  justify-self: end;
+  border-radius: 10px;
+  padding: 8px 13px;
+  font-size: 9px;
+}
+
+/* Give the registers visual priority over creation forms. */
+.ops-workspace > .ops-panel[open]:not(.ops-form-grid .ops-panel) {
+  box-shadow: 0 8px 24px rgba(52,40,70,.035);
+}
+
+@media (max-width: 860px) {
+  .ops-form-grid {
+    grid-template-columns: repeat(2,minmax(0,1fr)) !important;
+  }
+  .ops-form-grid .ops-auto-form-grid {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .ops-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .ops-form-grid .ops-auto-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .ops-form-grid .ops-form > .primary-button {
+    width: 100%;
+    justify-content: center;
+  }
+  .co-company-address > .co-primary-button[href*="/documents?upload=1"] {
+    min-width: 126px;
+    padding-left: 48px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .co-company-address > .co-primary-button[href*="/documents?upload=1"]::before,
+  .co-company-address > .co-primary-button[href*="/documents?upload=1"]::after {
+    animation: none !important;
+  }
+}

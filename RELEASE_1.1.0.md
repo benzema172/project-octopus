@@ -14,6 +14,8 @@ Data wydania: 18.08.2026
 - Cash flow 13 tygodni ma scenariusz bazowy oraz ostrożny i nie dubluje faktury przy wielu alokacjach BOQ do tej samej inwestycji.
 - Raporty są faktycznie generowane przez atomowy RPC z agregacjami wykonywanymi po stronie PostgreSQL; endpoint aplikacji nie składa już snapshotu z pełnych tabel w Node.
 - Wyszukiwarka firmowa korzysta z indeksowanego Full Text Search i obejmuje inwestycje, dokumenty, faktury, pracowników, magazyn, flotę, BOQ i wiedzę firmy.
+- Finanse, Kadry, Magazyn, Flota i Raporty mają kompaktowy dock szybkich akcji: formularze nie zajmują już pełnej szerokości w stanie zamkniętym, a rozwinięta akcja dostaje pełną przestrzeń dopiero po kliknięciu.
+- Animowana Wrzutnia jest świadomie ograniczona do dwóch kontekstów: Dashboardu firmy oraz nawigacji wewnątrz konkretnej inwestycji. Moduły boczne nie wyświetlają animowanej Wrzutni.
 - E2E upload obejmuje dokument inwestycji i dokument firmowy bez projectId, a po teście sprząta dane i obiekty R2.
 - Pełny validator uruchamia cały łańcuch 23 migracji oraz smoke testy finansów, magazynu, raportów, anomalii, wyszukiwania i Command Center.
 - Zewnętrzny E2E Supabase/R2 jest uruchamiany automatycznie, gdy repozytorium ma skonfigurowane wymagane sekrety; bez nich workflow nadal obowiązkowo weryfikuje build i start aplikacji oraz jawnie raportuje pominięcie testów zewnętrznych.

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "agent/stability-1.1-staging": false,
+      "main": true
+    }
+  }
+}
