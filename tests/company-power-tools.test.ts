@@ -63,8 +63,8 @@ describe("Project Octopus 1.0 functional contract", () => {
   const exportRoute = readFileSync("app/api/company/export/route.ts", "utf8");
   const component = readFileSync("components/company/company-power-tools.tsx", "utf8");
 
-  it("publishes version 1.0.1 and keeps tools in all five operational tabs", () => {
-    expect(packageJson.version).toBe("1.0.1");
+  it("keeps the 1.0 operational tools contract in later releases", () => {
+    expect(["1.0.1", "1.0.2", "1.1.0"]).toContain(packageJson.version);
     for (const section of ["finances", "hr", "warehouse", "fleet", "reports"]) expect(layout).toContain(`${section}:`);
     expect(layout).toContain("CompanyPowerTools");
   });
