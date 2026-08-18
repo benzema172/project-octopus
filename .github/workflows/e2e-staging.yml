@@ -44,10 +44,26 @@ jobs:
           done
           cat /tmp/octopus-e2e.log
           exit 1
+      - name: Check external E2E configuration
+        id: external
+        shell: bash
+        run: |
+          if [[ -n "$NEXT_PUBLIC_SUPABASE_URL" && -n "$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" && -n "$SUPABASE_SECRET_KEY" && -n "$R2_ENDPOINT" && -n "$R2_BUCKET_NAME" && -n "$R2_ACCESS_KEY_ID" && -n "$R2_SECRET_ACCESS_KEY" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "External Supabase/R2 E2E is configured."
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::External Supabase/R2 E2E skipped because repository secrets are not configured. Build and application-start checks still ran."
+          fi
       - name: Real R2 upload E2E
+        if: steps.external.outputs.ready == 'true'
         run: npm run test:e2e-upload
       - name: Core data integrity E2E
+        if: steps.external.outputs.ready == 'true'
         run: npm run test:e2e-core
+      - name: Record external E2E skip
+        if: steps.external.outputs.ready != 'true'
+        run: echo "External E2E skipped: configure Supabase/R2 GitHub Actions secrets to enable it."
       - name: Server log on failure
         if: failure()
         run: cat /tmp/octopus-e2e.log || true
