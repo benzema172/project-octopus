@@ -10,7 +10,7 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
@@ -45,6 +45,8 @@ jobs:
         run: npm run test:e2e-upload
       - name: Core data integrity E2E
         run: npm run test:e2e-core
+      - name: Full investment lifecycle E2E
+        run: npm run test:e2e-lifecycle
       - name: Server log on failure
         if: failure()
         run: cat /tmp/octopus-e2e.log || true
