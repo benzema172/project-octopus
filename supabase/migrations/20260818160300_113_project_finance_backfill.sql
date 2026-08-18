@@ -1,5 +1,6 @@
 begin;
 
+alter table public.projects add column if not exists code text;
 alter table public.projects add column if not exists contract_value numeric;
 alter table public.projects add column if not exists currency char(3) default 'PLN';
 
