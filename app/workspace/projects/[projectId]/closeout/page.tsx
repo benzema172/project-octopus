@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
-import { CheckCircle2, CircleDashed, ShieldCheck } from "lucide-react";
 import { OperationsActionButton } from "@/components/projects/operations-action-button";
+import { CloseoutWorkspace } from "@/components/projects/closeout-workspace";
 import { requireCurrentUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -22,8 +22,14 @@ export default async function CloseoutPage({ params }: { params: Promise<{ proje
     hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "write", projectId: project.id })
   ]);
   if (!schemaReady) return <div className="project-tab-content"><ExecutionLayerNotice /></div>;
-  const { data: requirements } = await createServiceSupabaseClient().from("closeout_requirements").select("id,category,title,status,due_at").eq("project_id", project.id).order("category").order("title");
-  const complete = (requirements ?? []).filter((item) => item.status === "complete").length;
-  const percent = requirements?.length ? Math.round(complete / requirements.length * 100) : 0;
-  return <div className="project-tab-content"><section className="project-module-heading"><div><p className="eyebrow">Dokumentacja powykonawcza</p><h2>Paczka zamknięcia inwestycji</h2><p>Automatyczna checklista dokumentów, prób, odbiorów, gwarancji i przekazania.</p></div>{canManage ? <OperationsActionButton projectId={project.id} action="initialize_closeout" label="Utwórz / aktualizuj listę" /> : <small>Dostęp tylko do odczytu.</small>}</section><section className="metric-grid metric-grid--project"><article className="metric-card metric-card--positive"><span>Kompletność</span><strong>{percent}%</strong><small>{complete}/{requirements?.length ?? 0} pozycji</small></article><article className="metric-card"><span>Braki</span><strong>{(requirements?.length ?? 0) - complete}</strong><small>Wymagają dokumentu lub potwierdzenia</small></article><article className="metric-card"><span>Gotowe</span><strong>{complete}</strong><small>Zweryfikowane pozycje</small></article><article className="metric-card"><span>Tryb</span><strong>Kontrolowany</strong><small>Eksport po zatwierdzeniu</small></article></section><section className="section-band"><div className="section-heading"><div><p className="eyebrow">Checklista</p><h2>Zakres przekazania</h2></div><ShieldCheck size={22} /></div><div className="closeout-list">{(requirements ?? []).map((item) => <article key={item.id}>{item.status === "complete" ? <CheckCircle2 size={18} /> : <CircleDashed size={18} />}<div><small>{item.category}</small><strong>{item.title}</strong></div><span className={`status-chip ${item.status === "complete" ? "status-chip--positive" : "status-chip--warning"}`}>{item.status === "complete" ? "Kompletne" : "Brak"}</span></article>)}{!requirements?.length ? <div className="empty-state"><ShieldCheck size={25} /><strong>Checklista nie została jeszcze utworzona</strong><span>Uruchom ją, aby połączyć wymagania kontraktu, protokoły i dokumentację.</span></div> : null}</div></section></div>;
+  const db=createServiceSupabaseClient();
+  const [requirementsResult,documentsResult,outputsResult]=await Promise.all([
+    db.from("closeout_requirements").select("id,category,title,required,status,document_id,due_at").eq("workspace_id",project.workspace_id).eq("project_id",project.id).order("category").order("title"),
+    db.from("documents").select("id,name").eq("workspace_id",project.workspace_id).eq("project_id",project.id).is("deleted_at",null).order("name"),
+    db.from("project_outputs").select("id,title,version_number,status,generated_at,warnings").eq("workspace_id",project.workspace_id).eq("project_id",project.id).order("version_number",{ascending:false})
+  ]);
+  return <div className="project-tab-content">
+    <section className="project-module-heading"><div><p className="eyebrow">Dokumentacja powykonawcza</p><h2>Paczka zamknięcia inwestycji</h2><p>Checklista z dowodami, wersjonowany snapshot przekazania oraz kontrolowane zatwierdzenie kończące inwestycję.</p></div>{canManage ? <OperationsActionButton projectId={project.id} action="initialize_closeout" label="Utwórz / aktualizuj listę" /> : <small>Dostęp tylko do odczytu.</small>}</section>
+    <CloseoutWorkspace projectId={project.id} canManage={canManage} requirements={(requirementsResult.data??[]).map(row=>({id:String(row.id),category:String(row.category),title:String(row.title),required:row.required!==false,status:String(row.status),document_id:row.document_id?String(row.document_id):null}))} documents={(documentsResult.data??[]).map(row=>({id:String(row.id),name:String(row.name)}))} outputs={(outputsResult.data??[]).map(row=>({id:String(row.id),title:String(row.title),version_number:Number(row.version_number),status:String(row.status),generated_at:String(row.generated_at),warnings:row.warnings}))}/>
+  </div>;
 }
