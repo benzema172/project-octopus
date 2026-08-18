@@ -14,7 +14,8 @@
     "check:schema": "node scripts/check-schema.mjs",
     "test:e2e-upload": "node scripts/e2e-upload.mjs",
     "test:e2e-core": "node scripts/e2e-core.mjs",
-    "test:e2e": "npm run test:e2e-upload && npm run test:e2e-core",
+    "test:e2e-lifecycle": "node scripts/e2e-investment-lifecycle.mjs",
+    "test:e2e": "npm run test:e2e-upload && npm run test:e2e-core && npm run test:e2e-lifecycle",
     "report:ai-quality": "node scripts/ai-quality-report.mjs"
   },
   "dependencies": {
