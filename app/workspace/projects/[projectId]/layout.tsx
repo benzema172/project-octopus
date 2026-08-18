@@ -12,13 +12,10 @@ import { getProjectForUser } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { domainAccessPolicyAllows, loadDomainAccessPolicy, type Domain } from "@/lib/authorization";
 import "../../../project-workspace-v2.css";
-import "../../../project-dashboard-combined.css";
-import "../../../project-dashboard-compact.css";
 import "../../../project-dashboard-layout-refinement.css";
 import "../../../project-intake.css";
 import "../../../project-navigation-refinement.css";
 import "../../../project-modules-operational.css";
-import "../../../brain-knowledge.css";
 
 export const dynamic = "force-dynamic";
 
@@ -40,88 +37,65 @@ async function loadAutopilotSummary(projectId: string) {
   try {
     return await getReliableInvestmentAutopilotSummary(projectId);
   } catch (error) {
-    console.error("Project Octopus: project Autopilot summary unavailable", { projectId, message: error instanceof Error ? error.message : String(error) });
+    console.error("Investment Autopilot summary unavailable", error);
     return null;
   }
 }
 
-async function AsyncProjectAutopilotDock({ projectId, canRun }: { projectId: string; canRun: boolean }) {
+async function AutopilotDock({ projectId }: { projectId: string }) {
   const summary = await loadAutopilotSummary(projectId);
-  return summary ? <ProjectAutopilotDock projectId={projectId} summary={summary} canRun={canRun} /> : null;
+  return summary ? <ProjectAutopilotDock projectId={projectId} summary={summary} /> : null;
 }
 
 export default async function ProjectLayout({ children, params }: ProjectLayoutProps) {
   const { projectId } = await params;
   const user = await requireCurrentUser();
   const project = await getProjectForUser(user, projectId);
-
   if (!project) notFound();
 
   const [profile, workspace, policy] = await Promise.all([
-    getProjectProfile(project),
+    getProjectProfile(project.id),
     getWorkspaceForUser(user, project.workspace_id),
-    loadDomainAccessPolicy({ workspaceId: project.workspace_id, userId: user.id })
+    loadDomainAccessPolicy(project.workspace_id, user.id)
   ]);
-
   if (!workspace) notFound();
-  const domains: Domain[] = ["investments", "finance", "hr", "warehouse", "fleet", "templates", "reports", "settings"];
-  const allowedProjectDomains = domains.filter((domain) => domainAccessPolicyAllows(policy, { domain, level: "read", projectId: project.id }));
-  const allowedCompanyDomains = domains.filter((domain) => domainAccessPolicyAllows(policy, { domain, level: "read", projectId: null }));
-  const canUpload = domainAccessPolicyAllows(policy, { domain: "investments", level: "write", projectId: project.id });
 
-  const location = [profile.street, [profile.postalCode, profile.city].filter(Boolean).join(" ")]
-    .filter(Boolean)
-    .join(", ") || project.location || "Do uzupełnienia";
-  const shortName = profile.shortName || project.name;
-  const descriptionContractName = project.description
-    ?.replace(/\s*Lokalizacja:.*$/i, "")
-    .trim();
-  const officialName =
-    (profile.projectName && profile.projectName !== shortName ? profile.projectName : "") ||
-    descriptionContractName ||
-    profile.projectName ||
-    project.name;
-  const contractNumber = profile.contractNumber || "Do uzupełnienia";
-  const investorName = profile.investorName || project.investor_name || "Do uzupełnienia";
+  const can = (domain: Domain) => domainAccessPolicyAllows(policy, domain, "read", project.id);
+  const projectStatus = STATUS_LABELS[String(project.status)] ?? String(project.status || "Aktywna");
+  const internalName = profile.internalName || project.name;
+  const contractName = profile.contractName || project.name;
+  const contractNumber = profile.contractNumber || "—";
+  const investor = profile.investor || project.investor_name || "—";
+  const location = profile.location || project.location || "—";
 
   return (
-    <CompanyShell workspaceId={workspace.id} companyName={workspace.name} userEmail={user.email ?? "Project Octopus"} allowedDomains={allowedCompanyDomains}>
-      <main className="workspace-page project-workspace co-project-workspace project-workspace-v2">
-        <Link href={`/workspace/companies/${workspace.id}/investments`} className="pw-back-link">
-          <ArrowLeft size={15} aria-hidden="true" />
-          Wszystkie inwestycje
-        </Link>
-
+    <CompanyShell workspace={workspace} user={user} activeProjectId={project.id}>
+      <main className="project-workspace-v2">
         <header className="pw-project-header pw-project-header--contract">
           <div className="pw-project-header__identity">
-            <span className="pw-project-status">{STATUS_LABELS[profile.status] ?? profile.status}</span>
-            <h1>„{shortName}”</h1>
+            <Link href={`/workspace/companies/${workspace.id}/investments`} className="pw-back-link"><ArrowLeft size={15} /> Inwestycje</Link>
+            <span className="pw-project-status">{projectStatus}</span>
+            <h1>„{internalName}”</h1>
           </div>
-
-          <div className="pw-project-contract" aria-label="Dane kontraktowe inwestycji">
-            <strong>{officialName}</strong>
+          <div className="pw-project-contract">
+            <strong>{contractName}</strong>
             <span>Numer kontraktu: {contractNumber}</span>
           </div>
-
           <div className="pw-project-meta pw-project-meta--header">
-            <div>
-              <Building2 size={16} aria-hidden="true" />
-              <span><small>Inwestor</small><strong>{investorName}</strong></span>
-            </div>
-            <div>
-              <MapPin size={16} aria-hidden="true" />
-              <span><small>Lokalizacja</small><strong>{location}</strong></span>
-            </div>
+            <div><Building2 size={17} /><span><small>Inwestor</small><strong>{investor}</strong></span></div>
+            <div><MapPin size={17} /><span><small>Lokalizacja</small><strong>{location}</strong></span></div>
           </div>
         </header>
 
-        <ProjectNavigation projectId={project.id} allowedDomains={allowedProjectDomains} canUpload={canUpload} />
-        {allowedProjectDomains.includes("investments") ? (
-          <Suspense fallback={null}>
-            <AsyncProjectAutopilotDock projectId={project.id} canRun={canUpload} />
-          </Suspense>
-        ) : null}
+        <ProjectNavigation projectId={project.id} access={{
+          investments: can("investments"),
+          finance: can("finance"),
+          hr: can("hr"),
+          warehouse: can("warehouse"),
+          fleet: can("fleet")
+        }} />
         {children}
+        <Suspense fallback={null}><AutopilotDock projectId={project.id} /></Suspense>
       </main>
     </CompanyShell>
   );
