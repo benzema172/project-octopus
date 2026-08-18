@@ -79,12 +79,14 @@ function normalizeDocuments(rows: FlexibleDocumentRow[], fallbackProjectId: stri
   });
 }
 
+const DOCUMENT_WITH_VERSIONS_SELECT = "*, document_versions!document_versions_document_id_fkey(*)";
+
 export async function listDocumentsForProject(projectId: string, trashed = false): Promise<DocumentSummary[]> {
   const supabase = createServiceSupabaseClient();
 
   const { data, error } = await supabase
     .from("documents")
-    .select("*, document_versions(*)")
+    .select(DOCUMENT_WITH_VERSIONS_SELECT)
     .eq("project_id", projectId)
     .filter("deleted_at", trashed ? "not.is" : "is", null)
     .order("updated_at", { ascending: false })
@@ -101,7 +103,7 @@ export async function listDocumentsForWorkspace(workspaceId: string, trashed = f
   const supabase = createServiceSupabaseClient();
   const { data, error } = await supabase
     .from("documents")
-    .select("*, document_versions(*)")
+    .select(DOCUMENT_WITH_VERSIONS_SELECT)
     .eq("workspace_id", workspaceId)
     .filter("deleted_at", trashed ? "not.is" : "is", null)
     .order("updated_at", { ascending: false })
