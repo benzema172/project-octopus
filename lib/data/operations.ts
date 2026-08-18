@@ -191,14 +191,15 @@ export async function getProjectExecutionSnapshot(
     };
   }
   const supabase = createServiceSupabaseClient();
-  const count = (table: string, status?: string) => {
+  const count = (table: string, status?: string | string[]) => {
     let query = supabase.from(table).select("id", { count: "exact", head: true }).eq("project_id", projectId);
-    if (status) query = query.eq("status", status);
+    if (Array.isArray(status) && status.length) query = query.in("status", status);
+    else if (typeof status === "string") query = query.eq("status", status);
     return query;
   };
   const [boq, wbs, requirements, protocolRequired, protocolClosed, schedule, progress, evidenceRequired, evidenceComplete, impacts, materials, site, closeoutRequired, closeoutComplete, forecast] = await Promise.all([
     count("boq_items"), count("wbs_nodes"), count("project_requirements"), count("protocol_requirements"),
-    count("protocols", "closed"), count("schedule_activities"), count("progress_entries"),
+    count("protocols", ["approved", "archived"]), count("schedule_activities"), count("progress_entries"),
     count("evidence_requirements"), count("evidence_requirements", "accepted"),
     count("document_change_impacts", "proposed"),
     options.includeWarehouse ? count("material_chain_events") : Promise.resolve({ count: null }),
