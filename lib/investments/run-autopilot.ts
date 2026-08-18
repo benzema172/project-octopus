@@ -26,6 +26,7 @@ function object(value: unknown): Record<string, unknown> { return value && typeo
 function sourceRequirementId(value: unknown) { const id = object(value).source_requirement_id; return typeof id === "string" ? id : null; }
 function sourceKey(prefix: string, id: string) { return `${prefix}:${id}`; }
 
+const OPEN_REVIEW_STATUSES = new Set(["draft", "ai ready", "in review"]);
 const STOP_WORDS = new Set(["i", "w", "z", "na", "do", "dla", "oraz", "the", "of", "a", "szt", "sztuka", "instalacja", "instalacji", "material", "materialu", "urzadzenie"]);
 function tokens(value: string) {
   return new Set(normalize(value).split(" ").filter((token) => token.length > 2 && !STOP_WORDS.has(token)));
@@ -103,7 +104,7 @@ export async function runInvestmentAutopilot(input: { workspaceId: string; proje
   const generatedScheduleSources = new Set(existingSchedule.map((row) => row.generated_source_key ?? (row.constraint_note?.match(/requirement:([0-9a-f-]{36})/i)?.[1] ? sourceKey("requirement", row.constraint_note.match(/requirement:([0-9a-f-]{36})/i)![1]) : null)).filter((id): id is string => Boolean(id)));
 
   const requestCandidates = requirements
-    .filter((row) => ["material application", "material_application"].includes(normalize(row.requirement_type)))
+    .filter((row) => ["material application", "material approval"].includes(normalize(row.requirement_type)))
     .filter((row) => !["approved", "accepted", "closed", "rejected"].includes(normalize(row.status)))
     .filter((row) => !generatedRequestSources.has(sourceKey("requirement", row.id)));
 
@@ -112,11 +113,11 @@ export async function runInvestmentAutopilot(input: { workspaceId: string; proje
     .filter((row) => !generatedProtocolSources.has(sourceKey("protocol-requirement", row.id)))
     .filter((row) => !existingProtocols.some((protocol) => {
       const sameSource = sourceRequirementId(protocol.payload) === row.id;
-      return sameSource && ["closed", "approved", "complete", "completed", "accepted"].includes(normalize(protocol.status));
+      return sameSource && ["approved", "archived"].includes(normalize(protocol.status));
     }));
 
   const scheduleCandidates = requirements
-    .filter((row) => ["work stage", "work_stage"].includes(normalize(row.requirement_type)))
+    .filter((row) => normalize(row.requirement_type) === "work stage")
     .filter((row) => !["approved", "closed", "rejected"].includes(normalize(row.status)))
     .filter((row) => !generatedScheduleSources.has(sourceKey("requirement", row.id)));
 
@@ -183,14 +184,23 @@ export async function runInvestmentAutopilot(input: { workspaceId: string; proje
     if (inserted) scheduleDrafts += 1; else deduplicated += 1;
   }
 
-  const supersededRequestIds = existingRequests.filter((row) => { const source = sourceRequirementId(row.payload); return source && !activeRequirementIds.has(source) && ["draft", "review", "proposed"].includes(normalize(row.status)); }).map((row) => row.id);
-  const supersededProtocolIds = existingProtocols.filter((row) => { const source = sourceRequirementId(row.payload); return source && !activeProtocolIds.has(source) && ["draft", "review", "proposed"].includes(normalize(row.status)); }).map((row) => row.id);
-  const supersededScheduleIds = existingSchedule.filter((row) => { const source = row.constraint_note?.match(/requirement:([0-9a-f-]{36})/i)?.[1]; return source && !activeRequirementIds.has(source) && ["planned", "draft"].includes(normalize(row.status)); }).map((row) => row.id);
+  const supersededRequestIds = existingRequests.filter((row) => {
+    const source = sourceRequirementId(row.payload);
+    return source && !activeRequirementIds.has(source) && OPEN_REVIEW_STATUSES.has(normalize(row.status));
+  }).map((row) => row.id);
+  const supersededProtocolIds = existingProtocols.filter((row) => {
+    const source = sourceRequirementId(row.payload);
+    return source && !activeProtocolIds.has(source) && OPEN_REVIEW_STATUSES.has(normalize(row.status));
+  }).map((row) => row.id);
+  const supersededScheduleIds = existingSchedule.filter((row) => {
+    const source = row.constraint_note?.match(/requirement:([0-9a-f-]{36})/i)?.[1];
+    return source && !activeRequirementIds.has(source) && ["planned", "draft"].includes(normalize(row.status));
+  }).map((row) => row.id);
 
   const writes: Array<PromiseLike<unknown>> = [];
-  if (supersededRequestIds.length) writes.push(supabase.from("material_requests").update({ status: "superseded" }).in("id", supersededRequestIds).eq("project_id", input.projectId));
-  if (supersededProtocolIds.length) writes.push(supabase.from("protocols").update({ status: "superseded" }).in("id", supersededProtocolIds).eq("project_id", input.projectId));
-  if (supersededScheduleIds.length) writes.push(supabase.from("schedule_activities").update({ status: "superseded" }).in("id", supersededScheduleIds).eq("workspace_id", input.workspaceId).eq("project_id", input.projectId));
+  if (supersededRequestIds.length) writes.push(supabase.from("material_requests").update({ status: "archived" }).in("id", supersededRequestIds).eq("project_id", input.projectId));
+  if (supersededProtocolIds.length) writes.push(supabase.from("protocols").update({ status: "archived" }).in("id", supersededProtocolIds).eq("project_id", input.projectId));
+  if (supersededScheduleIds.length) writes.push(supabase.from("schedule_activities").update({ status: "cancelled" }).in("id", supersededScheduleIds).eq("workspace_id", input.workspaceId).eq("project_id", input.projectId));
   const results = await Promise.all(writes);
   const writeError = results.map((result) => result as { error?: { message: string } | null }).find((result) => result.error)?.error;
   if (writeError) throw new Error(`Autopilot nie zapisał wszystkich zmian: ${writeError.message}`);
