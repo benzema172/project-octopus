@@ -59,7 +59,6 @@ export async function getCompanyEnterpriseFlow(workspaceId: string): Promise<Ent
     ...accountingEntries.map((row) => String(row.invoice_id ?? "")),
     ...inbox.map((row) => String(row.invoice_id ?? ""))
   ].filter(Boolean))];
-  const invoiceLineIds = procurementMatches.map((row) => String(row.invoice_line_id ?? "")).filter(Boolean);
 
   const [linesResult, invoicesResult, invoiceLinesResult, stockItemsResult] = await Promise.all([
     entryIds.length
@@ -70,8 +69,8 @@ export async function getCompanyEnterpriseFlow(workspaceId: string): Promise<Ent
     invoiceIds.length
       ? db.from("invoices").select("id,invoice_number,counterparty_id,direction,issue_date,net_amount,tax_amount,gross_amount,status").eq("workspace_id", workspaceId).in("id", invoiceIds)
       : Promise.resolve({ data: [], error: null }),
-    invoiceLineIds.length
-      ? db.from("invoice_lines").select("id,invoice_id,line_number,description,quantity,unit,unit_price,net_amount,gross_amount,supplier_sku,stock_item_id").eq("workspace_id", workspaceId).in("id", invoiceLineIds)
+    invoiceIds.length
+      ? db.from("invoice_lines").select("id,invoice_id,line_number,line_type,description,quantity,unit,unit_price,net_amount,gross_amount,supplier_sku,stock_item_id").eq("workspace_id", workspaceId).in("invoice_id", invoiceIds).order("line_number").limit(1200)
       : Promise.resolve({ data: [], error: null }),
     db.from("stock_items").select("id,sku,name,unit,active").eq("workspace_id", workspaceId).eq("active", true).order("name").limit(1500)
   ]);
@@ -88,7 +87,7 @@ export async function getCompanyEnterpriseFlow(workspaceId: string): Promise<Ent
     priceObservations,
     projects,
     invoices: takeRows(invoicesResult, "faktur dla obiegu"),
-    invoiceLines: takeRows(invoiceLinesResult, "pozycji faktur dla uzgodnień"),
+    invoiceLines: takeRows(invoiceLinesResult, "pozycji faktur dla alokacji"),
     stockItems: takeRows(stockItemsResult, "kartotek materiałowych"),
     summary: {
       inboxOpen: inbox.filter((row) => !["processed", "ignored"].includes(String(row.status))).length,
