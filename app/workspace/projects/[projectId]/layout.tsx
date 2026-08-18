@@ -37,7 +37,14 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
   const [profile, workspace, autopilotSummary] = await Promise.all([
     getProjectProfile(project),
     getWorkspaceForUser(user, project.workspace_id),
-    getInvestmentAutopilotSummary(project.id).catch(() => ({ attentionCount: 0, aiCanDoCount: 0, blockerCount: 0, healthScore: 100, nextTitle: null }))
+    getInvestmentAutopilotSummary(project.id).catch(() => ({
+      attentionCount: 0,
+      aiCanDoCount: 0,
+      blockerCount: 0,
+      healthScore: 60,
+      nextTitle: "Autopilot ma niepełne dane — odśwież stan przed podjęciem decyzji.",
+      degraded: true
+    }))
   ]);
 
   if (!workspace) notFound();
