@@ -33,7 +33,8 @@ export async function findOne(db: Db, table: string, filters: Filters, select = 
   }
   const { data, error } = await query.limit(1);
   if (error) throw new Error(`Seed ${table}: ${error.message}`);
-  return ((data ?? [])[0] as Row | undefined) ?? null;
+  const rows = (data ?? []) as unknown as Row[];
+  return rows[0] ?? null;
 }
 
 export async function ensureRow(db: Db, table: string, filters: Filters, values: Row): Promise<{ row: Row; created: boolean }> {
@@ -41,7 +42,7 @@ export async function ensureRow(db: Db, table: string, filters: Filters, values:
   if (existing) return { row: existing, created: false };
   const { data, error } = await db.from(table).insert({ ...filters, ...values }).select("*").single();
   if (error || !data) throw new Error(`Seed ${table}: ${error?.message ?? "brak danych"}`);
-  return { row: data as Row, created: true };
+  return { row: data as unknown as Row, created: true };
 }
 
 function safeName(value: string) {
