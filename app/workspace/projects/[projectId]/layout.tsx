@@ -12,10 +12,13 @@ import { getProjectForUser } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { domainAccessPolicyAllows, loadDomainAccessPolicy, type Domain } from "@/lib/authorization";
 import "../../../project-workspace-v2.css";
+import "../../../project-dashboard-combined.css";
+import "../../../project-dashboard-compact.css";
 import "../../../project-dashboard-layout-refinement.css";
 import "../../../project-intake.css";
 import "../../../project-navigation-refinement.css";
 import "../../../project-modules-operational.css";
+import "../../../brain-knowledge.css";
 
 export const dynamic = "force-dynamic";
 
