@@ -98,7 +98,7 @@ describe("post-change reliability and performance hardening", () => {
     const progress = read("supabase/migrations/20260818142600_progress_domain_rls.sql");
     expect(migration).toContain("drop policy if exists documents_project_access");
     expect(migration).toContain("document_versions_domain_insert");
-    expect(migration).toContain("'investments',''write''");
+    expect(migration).toContain("has_domain_access(p.workspace_id,''investments'',''write'',p.id)");
     expect(progress).toContain("progress_entries_investment_read");
     expect(progress).toContain("progress_entries_investment_update");
   });
