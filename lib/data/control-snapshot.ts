@@ -39,9 +39,32 @@ export async function getControlAutopilotSnapshot(workspaceId:string,projectId:s
   const decisions:AutopilotDecision[]=aiInbox.filter(item=>item.projectId===projectId).map(item=>({id:item.id,title:item.title,subtitle:item.subtitle,status:item.status,confidence:item.confidence,category:item.category,detail:item.detail}));
   const input:AutopilotInput={
     nowIso:new Date().toISOString(),projectId,workspaceId,
-    documents:array(raw.documents),facts:array(raw.facts),requirements:array(raw.requirements),protocolRequirements:array(raw.protocolRequirements),protocols:array(raw.protocols),materialRequests:array(raw.materialRequests),scheduleActivities:array(raw.scheduleActivities),impacts:array(raw.impacts),evidence:array(raw.evidence),findings:array(raw.findings),materials:array(raw.materials),devices:array(raw.devices),wbsNodes:array(raw.wbsNodes),boqItems:array(raw.boqItems),boqVersions:array(raw.boqVersions),aiDecisions:decisions,
-    finance:options.includeFinance?{allocations:array(raw.allocations),invoices:array(raw.invoices),invoiceLines:array(raw.invoiceLines)}:null,
-    warehouse:options.includeWarehouse?{movements:array(raw.movements),movementLines:array(raw.movementLines),stockItems:array(raw.stockItems)}:null
+    documents:array<AutopilotInput["documents"][number]>(raw.documents),
+    facts:array<AutopilotInput["facts"][number]>(raw.facts),
+    requirements:array<AutopilotInput["requirements"][number]>(raw.requirements),
+    protocolRequirements:array<AutopilotInput["protocolRequirements"][number]>(raw.protocolRequirements),
+    protocols:array<AutopilotInput["protocols"][number]>(raw.protocols),
+    materialRequests:array<AutopilotInput["materialRequests"][number]>(raw.materialRequests),
+    scheduleActivities:array<AutopilotInput["scheduleActivities"][number]>(raw.scheduleActivities),
+    impacts:array<AutopilotInput["impacts"][number]>(raw.impacts),
+    evidence:array<AutopilotInput["evidence"][number]>(raw.evidence),
+    findings:array<AutopilotInput["findings"][number]>(raw.findings),
+    materials:array<AutopilotInput["materials"][number]>(raw.materials),
+    devices:array<AutopilotInput["devices"][number]>(raw.devices),
+    wbsNodes:array<AutopilotInput["wbsNodes"][number]>(raw.wbsNodes),
+    boqItems:array<AutopilotInput["boqItems"][number]>(raw.boqItems),
+    boqVersions:array<AutopilotInput["boqVersions"][number]>(raw.boqVersions),
+    aiDecisions:decisions,
+    finance:options.includeFinance?{
+      allocations:array<NonNullable<AutopilotInput["finance"]>["allocations"][number]>(raw.allocations),
+      invoices:array<NonNullable<AutopilotInput["finance"]>["invoices"][number]>(raw.invoices),
+      invoiceLines:array<NonNullable<AutopilotInput["finance"]>["invoiceLines"][number]>(raw.invoiceLines)
+    }:null,
+    warehouse:options.includeWarehouse?{
+      movements:array<NonNullable<AutopilotInput["warehouse"]>["movements"][number]>(raw.movements),
+      movementLines:array<NonNullable<AutopilotInput["warehouse"]>["movementLines"][number]>(raw.movementLines),
+      stockItems:array<NonNullable<AutopilotInput["warehouse"]>["stockItems"][number]>(raw.stockItems)
+    }:null
   };
   return buildInvestmentAutopilotSnapshot(input);
 }
