@@ -4,6 +4,7 @@ import { ArrowRight, Database, Sparkles, UploadCloud } from "lucide-react";
 import { requireCurrentUser } from "@/lib/auth";
 import { hasDomainAccess, type Domain } from "@/lib/authorization";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
+import { getProjectModuleLiveMetrics } from "@/lib/data/project-module-kpis";
 import { getProjectForUser } from "@/lib/data/projects";
 import type { ProjectModuleDefinition } from "@/lib/product/project-modules";
 
@@ -13,6 +14,24 @@ type ProjectModulePageProps = {
   requiredDomain?: Domain;
   children?: React.ReactNode;
 };
+
+function primaryHref(projectId: string, module: ProjectModuleDefinition) {
+  const title = module.title.toLocaleLowerCase("pl");
+  const action = module.primaryAction.toLocaleLowerCase("pl");
+  const base = `/workspace/projects/${projectId}`;
+  if (title.includes("kosztorys") || action.includes("importuj")) return `${base}/documentation?upload=1&category=estimate`;
+  if (title.includes("wnioski materiałowe") || action.includes("wniosek")) return `${base}/requests#material-request-workflow`;
+  if (title.includes("protoko") || action.includes("protok")) return `${base}/protocols#protocols-pro`;
+  if (title.includes("harmonogram") || action.includes("baseline")) return `${base}/schedule#schedule-operations`;
+  if (title.includes("przerób") || action.includes("okres przerobu")) return `${base}/progress#progress-operations`;
+  if (title.includes("finanse") || action.includes("budżet")) return `${base}/finance#finance-operations`;
+  if (title.includes("zespół") || action.includes("pracownik")) return `${base}/team#team-operations`;
+  if (title.includes("magazyn") || action.includes("rezerw")) return `${base}/warehouse#warehouse-operations`;
+  if (title.includes("flota") || action.includes("pojazd")) return `${base}/fleet#fleet-operations`;
+  if (title.includes("zamknię") || title.includes("odbior")) return `${base}/closeout`;
+  if (title.includes("dokument") || action.includes("dokument")) return `${base}/documentation?upload=1`;
+  return `${base}/brain`;
+}
 
 export async function ProjectModulePage({ projectId, module, requiredDomain, children }: ProjectModulePageProps) {
   const user = await requireCurrentUser();
@@ -30,6 +49,9 @@ export async function ProjectModulePage({ projectId, module, requiredDomain, chi
     return <DomainAccessDenied workspaceId={project.workspace_id} area={module.title} />;
   }
 
+  const liveMetrics = await getProjectModuleLiveMetrics(project.workspace_id, project.id, module);
+  const actionHref = primaryHref(project.id, module);
+
   return (
     <div className="project-tab-content">
       <section className="project-module-heading">
@@ -38,18 +60,18 @@ export async function ProjectModulePage({ projectId, module, requiredDomain, chi
           <h2>{module.title}</h2>
           <p>{module.description}</p>
         </div>
-        <Link href={`/workspace/projects/${project.id}/documentation?upload=1`} className="primary-button">
+        <Link href={actionHref} className="primary-button">
           <UploadCloud size={17} aria-hidden="true" />
           {module.primaryAction}
         </Link>
       </section>
 
-      <p className="project-metric-caption">Docelowe KPI modułu · wartości pojawią się z zatwierdzonych danych</p>
+      <p className="project-metric-caption">KPI na żywo · wyłącznie z aktualnych danych inwestycji</p>
       <section className="metric-grid metric-grid--project">
-        {module.metrics.map((metric) => (
+        {liveMetrics.map((metric) => (
           <article key={metric.label} className={`metric-card metric-card--${metric.tone ?? "default"}`}>
             <span>{metric.label}</span>
-            <strong>{/^0(?:\s*(?:%|PLN|h|dni))?$/.test(metric.value) ? "—" : metric.value}</strong>
+            <strong>{metric.value}</strong>
             <small>{metric.detail}</small>
           </article>
         ))}
