@@ -11,70 +11,40 @@ type FlexibleDocumentRow = FlexibleRow & {
 function stringValue(row: FlexibleRow, ...keys: string[]) {
   for (const key of keys) {
     const value = row[key];
-
-    if (typeof value === "string") {
-      return value;
-    }
+    if (typeof value === "string") return value;
   }
-
   return null;
 }
 
 function numberValue(row: FlexibleRow, ...keys: string[]) {
   for (const key of keys) {
     const value = row[key];
-
-    if (typeof value === "number") {
-      return value;
-    }
+    if (typeof value === "number") return value;
   }
-
   return 0;
 }
 
 function normalizeVersion(row: FlexibleRow, projectId: string | null, fallbackName: string): DocumentVersionSummary {
   return {
-    id: stringValue(row, "id") ?? "",
-    document_id: stringValue(row, "document_id") ?? "",
-    project_id: stringValue(row, "project_id") ?? projectId,
-    version_number: numberValue(row, "version_number", "version_no") || 1,
-    file_name: stringValue(row, "file_name", "original_filename") ?? fallbackName,
-    mime_type: stringValue(row, "mime_type") ?? "application/octet-stream",
-    file_size_bytes: numberValue(row, "file_size_bytes", "size_bytes"),
-    r2_bucket: stringValue(row, "r2_bucket", "storage_bucket") ?? "",
-    r2_object_key: stringValue(row, "r2_object_key", "storage_key") ?? "",
-    r2_etag: stringValue(row, "r2_etag"),
-    sha256: stringValue(row, "sha256"),
-    upload_status: stringValue(row, "upload_status", "status") ?? "uploaded",
-    uploaded_at: stringValue(row, "uploaded_at"),
-    created_at: stringValue(row, "created_at") ?? ""
+    id: stringValue(row, "id") ?? "", document_id: stringValue(row, "document_id") ?? "", project_id: stringValue(row, "project_id") ?? projectId,
+    version_number: numberValue(row, "version_number", "version_no") || 1, file_name: stringValue(row, "file_name", "original_filename") ?? fallbackName,
+    mime_type: stringValue(row, "mime_type") ?? "application/octet-stream", file_size_bytes: numberValue(row, "file_size_bytes", "size_bytes"),
+    r2_bucket: stringValue(row, "r2_bucket", "storage_bucket") ?? "", r2_object_key: stringValue(row, "r2_object_key", "storage_key") ?? "",
+    r2_etag: stringValue(row, "r2_etag"), sha256: stringValue(row, "sha256"), upload_status: stringValue(row, "upload_status", "status") ?? "uploaded",
+    uploaded_at: stringValue(row, "uploaded_at"), created_at: stringValue(row, "created_at") ?? ""
   };
 }
 
 function normalizeDocuments(rows: FlexibleDocumentRow[], fallbackProjectId: string | null) {
   return rows.map((row) => {
     const projectId = stringValue(row, "project_id") ?? fallbackProjectId;
-    const versions = [...(row.document_versions ?? [])].sort(
-      (left, right) => numberValue(right, "version_number", "version_no") - numberValue(left, "version_number", "version_no")
-    );
-    const name =
-      stringValue(row, "name", "file_name", "original_filename") ??
-      (versions[0] ? stringValue(versions[0], "file_name", "original_filename") : null) ??
-      "Dokument";
-
+    const versions = [...(row.document_versions ?? [])].sort((left, right) => numberValue(right, "version_number", "version_no") - numberValue(left, "version_number", "version_no"));
+    const name = stringValue(row, "name", "file_name", "original_filename") ?? (versions[0] ? stringValue(versions[0], "file_name", "original_filename") : null) ?? "Dokument";
     return {
-      id: stringValue(row, "id") ?? "",
-      project_id: projectId,
-      workspace_id: stringValue(row, "workspace_id") ?? "",
-      name,
-      category: stringValue(row, "category", "document_type"),
-      ai_status: stringValue(row, "ai_status"),
-      ai_confidence: typeof row.ai_confidence === "number" ? row.ai_confidence : null,
-      current_version_id: stringValue(row, "current_version_id"),
-      deleted_at: stringValue(row, "deleted_at"),
-      created_at: stringValue(row, "created_at") ?? "",
-      updated_at: stringValue(row, "updated_at", "created_at") ?? "",
-      document_versions: versions.map((version) => normalizeVersion(version, projectId, name))
+      id: stringValue(row, "id") ?? "", project_id: projectId, workspace_id: stringValue(row, "workspace_id") ?? "", name,
+      category: stringValue(row, "category", "document_type"), ai_status: stringValue(row, "ai_status"), ai_confidence: typeof row.ai_confidence === "number" ? row.ai_confidence : null,
+      current_version_id: stringValue(row, "current_version_id"), deleted_at: stringValue(row, "deleted_at"), created_at: stringValue(row, "created_at") ?? "",
+      updated_at: stringValue(row, "updated_at", "created_at") ?? "", document_versions: versions.map((version) => normalizeVersion(version, projectId, name))
     } satisfies DocumentSummary;
   });
 }
@@ -82,48 +52,26 @@ function normalizeDocuments(rows: FlexibleDocumentRow[], fallbackProjectId: stri
 const DOCUMENT_WITH_VERSIONS_SELECT = "*, document_versions!document_versions_document_id_fkey(*)";
 
 export async function listDocumentsForProject(projectId: string, trashed = false): Promise<DocumentSummary[]> {
-  const supabase = createServiceSupabaseClient();
-
-  const { data, error } = await supabase
-    .from("documents")
-    .select(DOCUMENT_WITH_VERSIONS_SELECT)
-    .eq("project_id", projectId)
-    .filter("deleted_at", trashed ? "not.is" : "is", null)
-    .order("updated_at", { ascending: false })
-    .returns<FlexibleDocumentRow[]>();
-
-  if (error) {
-    throw new Error(`Nie udało się pobrać dokumentów: ${error.message}`);
-  }
-
+  const { data, error } = await createServiceSupabaseClient().from("documents").select(DOCUMENT_WITH_VERSIONS_SELECT).eq("project_id", projectId).filter("deleted_at", trashed ? "not.is" : "is", null).order("updated_at", { ascending: false }).returns<FlexibleDocumentRow[]>();
+  if (error) throw new Error(`Nie udało się pobrać dokumentów: ${error.message}`);
   return normalizeDocuments(data ?? [], projectId);
 }
 
+export async function listDocumentsForProjectPage(projectId: string, options: { trashed?: boolean; page?: number; pageSize?: number } = {}) {
+  const trashed=options.trashed??false,page=Math.max(1,Math.floor(options.page??1)),pageSize=Math.min(100,Math.max(10,Math.floor(options.pageSize??50))),from=(page-1)*pageSize,to=from+pageSize-1;
+  const {data,error,count}=await createServiceSupabaseClient().from("documents").select(DOCUMENT_WITH_VERSIONS_SELECT,{count:"exact"}).eq("project_id",projectId).filter("deleted_at",trashed?"not.is":"is",null).order("updated_at",{ascending:false}).range(from,to).returns<FlexibleDocumentRow[]>();
+  if(error)throw new Error(`Nie udało się pobrać strony dokumentów: ${error.message}`);
+  return {items:normalizeDocuments(data??[],projectId),total:count??0,page,pageSize};
+}
+
 export async function listDocumentsForWorkspace(workspaceId: string, trashed = false): Promise<DocumentSummary[]> {
-  const supabase = createServiceSupabaseClient();
-  const { data, error } = await supabase
-    .from("documents")
-    .select(DOCUMENT_WITH_VERSIONS_SELECT)
-    .eq("workspace_id", workspaceId)
-    .filter("deleted_at", trashed ? "not.is" : "is", null)
-    .order("updated_at", { ascending: false })
-    .returns<FlexibleDocumentRow[]>();
-
+  const { data, error } = await createServiceSupabaseClient().from("documents").select(DOCUMENT_WITH_VERSIONS_SELECT).eq("workspace_id", workspaceId).filter("deleted_at", trashed ? "not.is" : "is", null).order("updated_at", { ascending: false }).returns<FlexibleDocumentRow[]>();
   if (error) throw new Error(`Nie udało się pobrać dokumentów firmy: ${error.message}`);
-
   return normalizeDocuments(data ?? [], null);
 }
 
 export async function safeListDocumentsForProject(projectId: string): Promise<DocumentSummary[]> {
-  try {
-    return await listDocumentsForProject(projectId);
-  } catch (error) {
-    console.error("Project Octopus: module document list fallback", {
-      projectId,
-      message: error instanceof Error ? error.message : String(error)
-    });
-    return [];
-  }
+  try { return await listDocumentsForProject(projectId); } catch (error) { console.error("Project Octopus: module document list fallback", { projectId, message: error instanceof Error ? error.message : String(error) }); return []; }
 }
 
 export async function listDocumentsForCategories(projectId: string, categories: string[]): Promise<DocumentSummary[]> {
@@ -133,12 +81,6 @@ export async function listDocumentsForCategories(projectId: string, categories: 
 }
 
 export async function isDocumentStorageSchemaReady() {
-  const supabase = createServiceSupabaseClient();
-  const { data, error } = await supabase
-    .from("app_schema_versions")
-    .select("version")
-    .eq("version", "20260814_domain_access_hardening")
-    .maybeSingle<{ version: string }>();
-
+  const { data, error } = await createServiceSupabaseClient().from("app_schema_versions").select("version").eq("version", "20260814_domain_access_hardening").maybeSingle<{ version: string }>();
   return !error && data?.version === "20260814_domain_access_hardening";
 }
