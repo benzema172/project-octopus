@@ -36,14 +36,18 @@ const STATUS_LABELS: Record<string, string> = {
   archived: "Archiwalna"
 };
 
-async function AsyncProjectAutopilotDock({ projectId, canRun }: { projectId: string; canRun: boolean }) {
+async function loadAutopilotSummary(projectId: string) {
   try {
-    const summary = await getReliableInvestmentAutopilotSummary(projectId);
-    return <ProjectAutopilotDock projectId={projectId} summary={summary} canRun={canRun} />;
+    return await getReliableInvestmentAutopilotSummary(projectId);
   } catch (error) {
     console.error("Project Octopus: project Autopilot summary unavailable", { projectId, message: error instanceof Error ? error.message : String(error) });
     return null;
   }
+}
+
+async function AsyncProjectAutopilotDock({ projectId, canRun }: { projectId: string; canRun: boolean }) {
+  const summary = await loadAutopilotSummary(projectId);
+  return summary ? <ProjectAutopilotDock projectId={projectId} summary={summary} canRun={canRun} /> : null;
 }
 
 export default async function ProjectLayout({ children, params }: ProjectLayoutProps) {
