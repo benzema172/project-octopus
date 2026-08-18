@@ -1,1 +1,1 @@
-2026-08-18 live PDF/XLSX R2 -> Gemini -> Brain verification
+2026-08-18 final P0-P2 verification: PDF/XLSX R2 -> Gemini -> Brain + full investment lifecycle
