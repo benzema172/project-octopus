@@ -2,6 +2,10 @@ name: Staging E2E
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/e2e-live-trigger.txt"
 
 jobs:
   e2e:
@@ -37,7 +41,7 @@ jobs:
           done
           cat /tmp/octopus-e2e.log
           exit 1
-      - name: Real R2 upload E2E
+      - name: Real PDF + XLSX R2 to Gemini/Brain E2E
         run: npm run test:e2e-upload
       - name: Core data integrity E2E
         run: npm run test:e2e-core
