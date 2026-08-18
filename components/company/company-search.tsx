@@ -7,7 +7,8 @@ import { FileSearch, LoaderCircle, Search } from "lucide-react";
 type SearchResult = { entity_type: string; entity_id: string; domain: string; project_id: string | null; title: string; subtitle: string; score: number };
 
 function href(workspaceId: string, row: SearchResult) {
-  if (row.entity_type === "project" || row.entity_type === "boq_item") return row.project_id ? `/workspace/projects/${row.project_id}` : `/workspace/companies/${workspaceId}/investments`;
+  if (["project", "boq_item"].includes(row.entity_type)) return row.project_id ? `/workspace/projects/${row.project_id}` : `/workspace/companies/${workspaceId}/investments`;
+  if (row.entity_type === "knowledge") return row.project_id ? `/workspace/projects/${row.project_id}/knowledge` : `/workspace/companies/${workspaceId}/ai-center`;
   if (row.entity_type === "document") return `/workspace/companies/${workspaceId}/documents`;
   if (row.entity_type === "invoice") return `/workspace/companies/${workspaceId}/finances`;
   if (row.entity_type === "employee") return `/workspace/companies/${workspaceId}/hr`;
@@ -16,7 +17,16 @@ function href(workspaceId: string, row: SearchResult) {
   return `/workspace/companies/${workspaceId}`;
 }
 
-const labels: Record<string, string> = { project: "Inwestycja", document: "Dokument", invoice: "Faktura", employee: "Pracownik", stock_item: "Magazyn", vehicle: "Pojazd", boq_item: "BOQ" };
+const labels: Record<string, string> = {
+  project: "Inwestycja",
+  document: "Dokument",
+  invoice: "Faktura",
+  employee: "Pracownik",
+  stock_item: "Magazyn",
+  vehicle: "Pojazd",
+  boq_item: "BOQ",
+  knowledge: "Wiedza firmy"
+};
 
 export function CompanySearch({ workspaceId }: { workspaceId: string }) {
   const [query, setQuery] = useState("");
@@ -41,8 +51,8 @@ export function CompanySearch({ workspaceId }: { workspaceId: string }) {
   return <section className="co-section">
     <form onSubmit={submit} className="company-search-form">
       <Search size={19} aria-hidden="true" />
-      <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Inwestycja, dokument, faktura, pracownik, materiał, pojazd, pozycja BOQ…" aria-label="Szukaj w firmie" />
-      <button type="submit" disabled={pending || query.trim().length < 2}>{pending ? <LoaderCircle size={16} /> : <Search size={16} />} Szukaj</button>
+      <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Inwestycja, dokument, faktura, pracownik, materiał, pojazd, BOQ lub wiedza firmy…" aria-label="Szukaj w firmie" />
+      <button type="submit" disabled={pending || query.trim().length < 2}>{pending ? <LoaderCircle className="spin" size={16} /> : <Search size={16} />} Szukaj</button>
     </form>
     {error ? <p className="form-error">{error}</p> : null}
     <div className="company-search-results">

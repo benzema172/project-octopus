@@ -1,6 +1,6 @@
 {
   "name": "project-octopus",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "test": "vitest run tests",
     "typecheck": "tsc --noEmit",
-    "test:migrations": "node scripts/validate-migrations-local.mjs",
+    "test:migrations": "node scripts/validate-migrations-110.mjs",
     "check:schema": "node scripts/check-schema.mjs",
     "test:e2e-upload": "node scripts/e2e-upload.mjs",
     "test:e2e-core": "node scripts/e2e-core.mjs",
