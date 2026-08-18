@@ -10,17 +10,43 @@ type Json = Record<string, unknown>;
 function record(value: unknown): Json { return value && typeof value === "object" && !Array.isArray(value) ? value as Json : {}; }
 function array<T>(value: unknown): T[] { return Array.isArray(value) ? value as T[] : []; }
 
-export const getControlSnapshotRaw = cache(async (workspaceId: string, projectId: string) => {
-  const db=createServiceSupabaseClient();
-  const { error: refreshError }=await db.rpc("refresh_project_anomalies",{p_workspace_id:workspaceId,p_project_id:projectId});
-  if(refreshError) console.error("Project Octopus: Control anomaly refresh failed",refreshError.message);
-  const {data,error}=await db.rpc("get_project_control_snapshot",{p_workspace_id:workspaceId,p_project_id:projectId});
-  if(error) throw new Error(`Control Snapshot nie może odczytać stanu inwestycji: ${error.message}`);
+const refreshProjectAnomalies = cache(async (workspaceId: string, projectId: string) => {
+  const { error } = await createServiceSupabaseClient().rpc("refresh_project_anomalies", { p_workspace_id: workspaceId, p_project_id: projectId });
+  if (error) console.error("Project Octopus: Control anomaly refresh failed", error.message);
+});
+
+const getCommandPanelRaw = cache(async (workspaceId: string, projectId: string) => {
+  await refreshProjectAnomalies(workspaceId, projectId);
+  const { data, error } = await createServiceSupabaseClient().rpc("get_project_command_panel_snapshot", { p_workspace_id: workspaceId, p_project_id: projectId });
+  if (error) throw new Error(`Command Center nie może odczytać stanu inwestycji: ${error.message}`);
+  return record(data);
+});
+
+const getReconciliationRaw = cache(async (workspaceId: string, projectId: string) => {
+  const { data, error } = await createServiceSupabaseClient().rpc("get_project_reconciliation_snapshot", { p_workspace_id: workspaceId, p_project_id: projectId });
+  if (error) throw new Error(`Reconciliation nie może odczytać stanu inwestycji: ${error.message}`);
+  return record(data);
+});
+
+const getExecutionRaw = cache(async (workspaceId: string, projectId: string) => {
+  const { data, error } = await createServiceSupabaseClient().rpc("get_project_execution_snapshot", { p_workspace_id: workspaceId, p_project_id: projectId });
+  if (error) throw new Error(`Execution Layer nie może odczytać stanu inwestycji: ${error.message}`);
+  return record(data);
+});
+
+const getAutopilotRaw = cache(async (workspaceId: string, projectId: string, includeFinance: boolean, includeWarehouse: boolean) => {
+  const { data, error } = await createServiceSupabaseClient().rpc("get_project_autopilot_snapshot", {
+    p_workspace_id: workspaceId,
+    p_project_id: projectId,
+    p_include_finance: includeFinance,
+    p_include_warehouse: includeWarehouse
+  });
+  if (error) throw new Error(`Investment Autopilot nie może odczytać stanu inwestycji: ${error.message}`);
   return record(data);
 });
 
 export async function getControlCommandCenterData(workspaceId:string,projectId:string){
-  const raw=await getControlSnapshotRaw(workspaceId,projectId);
+  const raw=await getCommandPanelRaw(workspaceId,projectId);
   const snapshot=record(raw.commandCenter);
   const health=record(snapshot.projectHealth);
   if(!Object.keys(health).length){
@@ -35,7 +61,8 @@ export async function getControlCommandCenterData(workspaceId:string,projectId:s
 }
 
 export async function getControlAutopilotSnapshot(workspaceId:string,projectId:string,options:{includeFinance?:boolean;includeWarehouse?:boolean}={}):Promise<InvestmentAutopilotSnapshot>{
-  const [raw,aiInbox]=await Promise.all([getControlSnapshotRaw(workspaceId,projectId),listAiInbox(workspaceId).catch(()=>[])]);
+  const includeFinance=Boolean(options.includeFinance),includeWarehouse=Boolean(options.includeWarehouse);
+  const [raw,aiInbox]=await Promise.all([getAutopilotRaw(workspaceId,projectId,includeFinance,includeWarehouse),listAiInbox(workspaceId).catch(()=>[])]);
   const decisions:AutopilotDecision[]=aiInbox.filter(item=>item.projectId===projectId).map(item=>({id:item.id,title:item.title,subtitle:item.subtitle,status:item.status,confidence:item.confidence,category:item.category,detail:item.detail}));
   const input:AutopilotInput={
     nowIso:new Date().toISOString(),projectId,workspaceId,
@@ -55,12 +82,12 @@ export async function getControlAutopilotSnapshot(workspaceId:string,projectId:s
     boqItems:array<AutopilotInput["boqItems"][number]>(raw.boqItems),
     boqVersions:array<AutopilotInput["boqVersions"][number]>(raw.boqVersions),
     aiDecisions:decisions,
-    finance:options.includeFinance?{
+    finance:includeFinance?{
       allocations:array<NonNullable<AutopilotInput["finance"]>["allocations"][number]>(raw.allocations),
       invoices:array<NonNullable<AutopilotInput["finance"]>["invoices"][number]>(raw.invoices),
       invoiceLines:array<NonNullable<AutopilotInput["finance"]>["invoiceLines"][number]>(raw.invoiceLines)
     }:null,
-    warehouse:options.includeWarehouse?{
+    warehouse:includeWarehouse?{
       movements:array<NonNullable<AutopilotInput["warehouse"]>["movements"][number]>(raw.movements),
       movementLines:array<NonNullable<AutopilotInput["warehouse"]>["movementLines"][number]>(raw.movementLines),
       stockItems:array<NonNullable<AutopilotInput["warehouse"]>["stockItems"][number]>(raw.stockItems)
@@ -70,11 +97,11 @@ export async function getControlAutopilotSnapshot(workspaceId:string,projectId:s
 }
 
 export async function getControlReconciliationData(workspaceId:string,projectId:string){
-  const raw=await getControlSnapshotRaw(workspaceId,projectId);
+  const raw=await getReconciliationRaw(workspaceId,projectId);
   return {graph:record(raw.costGraph),links:array(raw.entityLinks),orders:array(raw.purchaseOrders),requests:array(raw.materialRequests),counterparties:array(raw.counterparties),stockItems:array(raw.stockItems),boqItems:array(raw.boqItems)};
 }
 
 export async function getControlExecutionSnapshot(workspaceId:string,projectId:string):Promise<ProjectExecutionSnapshot>{
-  const raw=await getControlSnapshotRaw(workspaceId,projectId);const e=record(raw.execution);const forecast=record(e.latestForecast);
+  const e=await getExecutionRaw(workspaceId,projectId);const forecast=record(e.latestForecast);
   return {schemaReady:true,boqItems:Number(e.boqItems??0),wbsNodes:Number(e.wbsNodes??0),requirements:Number(e.requirements??0),protocolsRequired:Number(e.protocolsRequired??0),protocolsClosed:Number(e.protocolsClosed??0),scheduleActivities:Number(e.scheduleActivities??0),progressEntries:Number(e.progressEntries??0),evidenceRequired:Number(e.evidenceRequired??0),evidenceComplete:Number(e.evidenceComplete??0),changeImpacts:Number(e.changeImpacts??0),materialEvents:Number(e.materialEvents??0),siteEvents:Number(e.siteEvents??0),closeoutRequired:Number(e.closeoutRequired??0),closeoutComplete:Number(e.closeoutComplete??0),latestForecast:Object.keys(forecast).length?{forecast_finish_date:forecast.forecast_finish_date?String(forecast.forecast_finish_date):null,estimate_at_completion:Number(forecast.estimate_at_completion??0),forecast_margin:forecast.forecast_margin==null?null:Number(forecast.forecast_margin)}:null};
 }
