@@ -1,0 +1,69 @@
+import { AlertTriangle } from "lucide-react";
+import { InvestmentAutopilotCenter } from "@/components/projects/investment-autopilot-center";
+import { ProjectCommandCenter } from "@/components/projects/project-command-center";
+import { ProjectExecutionCenter } from "@/components/projects/project-execution-center";
+import { ProjectReconciliationGraph } from "@/components/projects/project-reconciliation-graph";
+import { getInvestmentAutopilotSnapshot } from "@/lib/data/investment-autopilot";
+import { getProjectExecutionSnapshot } from "@/lib/data/operations";
+import { getProjectCommandCenter } from "@/lib/data/project-command-center";
+import { getProjectReconciliation } from "@/lib/data/reconciliation";
+
+type BaseProps = { workspaceId: string; projectId: string };
+type AccessProps = BaseProps & {
+  canManageInvestments: boolean;
+  financeAllowed: boolean;
+  canManageFinance: boolean;
+  warehouseAllowed: boolean;
+  canManageWarehouse: boolean;
+};
+
+function PanelFailure({ title, error }: { title: string; error: unknown }) {
+  const detail = error instanceof Error ? error.message : "Nieznany błąd modułu.";
+  console.error(`Project Octopus: Control 360 panel failed: ${title}`, error);
+  return (
+    <section className="execution-layer-notice" role="status">
+      <AlertTriangle size={22} aria-hidden="true" />
+      <div>
+        <strong>{title} jest chwilowo niedostępny</strong>
+        <p>{detail} Pozostałe części Kontroli 360 działają niezależnie.</p>
+      </div>
+    </section>
+  );
+}
+
+export async function CommandCenterPanel({ workspaceId, projectId, canManageInvestments }: BaseProps & { canManageInvestments: boolean }) {
+  try {
+    const data = await getProjectCommandCenter(workspaceId, projectId);
+    return <ProjectCommandCenter projectId={projectId} data={data} canManage={canManageInvestments} />;
+  } catch (error) {
+    return <PanelFailure title="Command Center" error={error} />;
+  }
+}
+
+export async function AutopilotPanel({ workspaceId, projectId, canManageInvestments, financeAllowed, warehouseAllowed }: AccessProps) {
+  try {
+    const snapshot = await getInvestmentAutopilotSnapshot(workspaceId, projectId, { includeFinance: financeAllowed, includeWarehouse: warehouseAllowed });
+    return <InvestmentAutopilotCenter projectId={projectId} workspaceId={workspaceId} snapshot={snapshot} canRun={canManageInvestments} financeAllowed={financeAllowed} warehouseAllowed={warehouseAllowed} />;
+  } catch (error) {
+    return <PanelFailure title="Investment Autopilot" error={error} />;
+  }
+}
+
+export async function ReconciliationPanel({ workspaceId, projectId, canManageInvestments, financeAllowed, canManageFinance, warehouseAllowed, canManageWarehouse }: AccessProps) {
+  if (!financeAllowed && !warehouseAllowed) return null;
+  try {
+    const data = await getProjectReconciliation(workspaceId, projectId);
+    return <ProjectReconciliationGraph projectId={projectId} data={data} canManage={canManageInvestments && (canManageFinance || canManageWarehouse)} canOrder={canManageInvestments && canManageWarehouse} />;
+  } catch (error) {
+    return <PanelFailure title="Reconciliation" error={error} />;
+  }
+}
+
+export async function ExecutionPanel({ workspaceId, projectId, canManageInvestments, financeAllowed, canManageFinance, warehouseAllowed }: AccessProps) {
+  try {
+    const snapshot = await getProjectExecutionSnapshot(workspaceId, projectId, { includeFinance: financeAllowed, includeWarehouse: warehouseAllowed });
+    return <ProjectExecutionCenter workspaceId={workspaceId} projectId={projectId} snapshot={snapshot} financeAllowed={financeAllowed} canManageFinance={canManageFinance} warehouseAllowed={warehouseAllowed} canManageInvestments={canManageInvestments} />;
+  } catch (error) {
+    return <PanelFailure title="Execution Layer" error={error} />;
+  }
+}
