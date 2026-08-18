@@ -19,7 +19,8 @@ const migrations = [
   "supabase/migrations/20260817250000_100_command_center.sql",
   "supabase/migrations/20260817250500_100_boq_scope.sql",
   "supabase/migrations/20260817251000_100_command_center_nullsafe.sql",
-  "supabase/migrations/20260818073000_101_company_document_upload_fix.sql"
+  "supabase/migrations/20260818073000_101_company_document_upload_fix.sql",
+  "supabase/migrations/20260818074000_101_stock_and_document_integrity.sql"
 ];
 
 function withoutPgcrypto(sql) {
@@ -77,7 +78,10 @@ try {
     "create_purchase_order_atomic",
     "get_ai_quality_metrics",
     "refresh_project_anomalies",
-    "get_project_command_center"
+    "get_project_command_center",
+    "create_stock_movement_atomic",
+    "approve_stock_movement_atomic",
+    "assign_document_to_project_atomic"
   ];
   for (const name of expectedFunctions) {
     const result = await database.query("select count(*)::integer count from pg_proc where pronamespace='public'::regnamespace and proname=$1", [name]);
@@ -85,7 +89,7 @@ try {
   }
 
   const markers = await database.query("select version from public.app_schema_versions where version like '20260817_%' or version like '20260818_%' order by version");
-  if (markers.rows.length < 11) throw new Error(`Expected 0.9.1–1.0.1 schema markers, received ${markers.rows.length}.`);
+  if (markers.rows.length < 12) throw new Error(`Expected 0.9.1–1.0.1 schema markers, received ${markers.rows.length}.`);
 
   const userId = "00000000-0000-4000-8000-000000000001";
   const workspaceId = "00000000-0000-4000-8000-000000000002";
@@ -123,6 +127,12 @@ try {
     identityConflictRejected = true;
   }
   if (!identityConflictRejected) throw new Error("Company document could be rebound to a project through a later version.");
+  await database.query("select public.assign_document_to_project_atomic($1,$2,$3,$4)", [workspaceId, companyDocumentId, projectId, userId]);
+  const assignedCompanyDocument = await database.query("select project_id from public.documents where id=$1", [companyDocumentId]);
+  const assignedCompanyVersion = await database.query("select project_id from public.document_versions where id=$1", [companyVersionId]);
+  if (assignedCompanyDocument.rows[0]?.project_id !== projectId || assignedCompanyVersion.rows[0]?.project_id !== projectId) {
+    throw new Error("Atomic document assignment did not update document and version together.");
+  }
 
   const firstBudget = await database.query("select * from public.create_budget_version_atomic($1,$2,'Budżet',100000,70000,$3)", [workspaceId, projectId, userId]);
   const secondBudget = await database.query("select * from public.create_budget_version_atomic($1,$2,'Budżet korekta',100000,75000,$3)", [workspaceId, projectId, userId]);
@@ -140,10 +150,27 @@ try {
   `);
   const beforeTransfer = await database.query("select quantity from public.get_stock_balances($1) where warehouse_id=$2 and stock_item_id=$3", [workspaceId, warehouseA, itemId]);
   if (Number(beforeTransfer.rows[0]?.quantity) !== 10) throw new Error("Full stock ledger failed before MM.");
+  let negativeStockRejected = false;
+  try {
+    await database.query("select * from public.create_stock_movement_atomic($1,$2,$3,null,$4,'RW',99,null,'RW-TOO-MUCH',current_date,$5)", [workspaceId, projectId, warehouseA, itemId, userId]);
+  } catch {
+    negativeStockRejected = true;
+  }
+  if (!negativeStockRejected) throw new Error("Manual RW could create negative stock.");
+  const manualIssue = await database.query("select * from public.create_stock_movement_atomic($1,$2,$3,null,$4,'RW',2,40,'RW-TEST',current_date,$5)", [workspaceId, projectId, warehouseA, itemId, userId]);
+  if (Number(manualIssue.rows[0]?.available_before) !== 10 || Number(manualIssue.rows[0]?.available_after) !== 8) throw new Error("Atomic manual warehouse movement returned invalid balances.");
   await database.query("select * from public.transfer_stock_atomic($1,$2,$3,$4,$5,4,'MM-TEST',current_date,$6)", [workspaceId, projectId, warehouseA, warehouseB, itemId, userId]);
   const balances = await database.query("select warehouse_id,quantity from public.get_stock_balances($1) where stock_item_id=$2 order by warehouse_id", [workspaceId, itemId]);
   const balanceMap = new Map(balances.rows.map((row) => [row.warehouse_id, Number(row.quantity)]));
-  if (balanceMap.get(warehouseA) !== 6 || balanceMap.get(warehouseB) !== 4) throw new Error("Atomic stock transfer or full ledger failed.");
+  if (balanceMap.get(warehouseA) !== 4 || balanceMap.get(warehouseB) !== 4) throw new Error("Atomic stock transfer or full ledger failed.");
+  const unsafeDraftId = "00000000-0000-4000-8000-000000000015";
+  await database.exec(`
+    insert into public.stock_movements(id,workspace_id,project_id,warehouse_id,movement_type,status) values ('${unsafeDraftId}','${workspaceId}','${projectId}','${warehouseA}','WZ','draft');
+    insert into public.stock_movement_lines(workspace_id,movement_id,stock_item_id,quantity) values ('${workspaceId}','${unsafeDraftId}','${itemId}',50);
+  `);
+  let unsafeApprovalRejected = false;
+  try { await database.query("select public.approve_stock_movement_atomic($1,$2,$3)", [workspaceId, unsafeDraftId, userId]); } catch { unsafeApprovalRejected = true; }
+  if (!unsafeApprovalRejected) throw new Error("Draft WZ above stock could be approved.");
 
   const order = await database.query("select * from public.create_purchase_order_atomic($1,$2,null,null,'ZAM-TEST',current_date,current_date+7,'Rura testowa DN110',$3,$4,5,'m',42,$5)", [workspaceId, projectId, itemId, boqId, userId]);
   if (!order.rows[0]?.result_order_id || Number(order.rows[0]?.total_amount) !== 210) throw new Error("Atomic purchase-order workflow failed.");
@@ -161,7 +188,7 @@ try {
   if (!snapshot || !Array.isArray(snapshot.cashflow13w) || snapshot.cashflow13w.length !== 13) throw new Error("Command Center did not build a 13-week cash flow.");
 
   console.log(`OK   full migration chain: ${migrations.length} migrations`);
-  console.log("OK   company-level upload, atomic budget, warehouse ledger, MM, purchase order, search, anomalies and Command Center smoke tests");
+  console.log("OK   company upload/assignment, manual stock integrity, atomic budget, warehouse ledger, MM, purchase order, search, anomalies and Command Center smoke tests");
 } finally {
   await database.close();
 }

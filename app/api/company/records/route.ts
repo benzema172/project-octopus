@@ -92,15 +92,15 @@ async function loadAiBusinessDocument(workspaceId: string, documentIdValue: unkn
   return { documentId, extraction: data, business: business as Record<string, unknown> };
 }
 
-async function assignSourceDocumentToProject(documentId: string, projectId: string | null) {
+async function assignSourceDocumentToProject(workspaceId: string, documentId: string, projectId: string | null, actorId: string) {
   if (!projectId) return;
-  const supabase = createServiceSupabaseClient();
-  await Promise.all([
-    supabase.from("documents").update({ project_id: projectId }).eq("id", documentId),
-    supabase.from("document_versions").update({ project_id: projectId }).eq("document_id", documentId),
-    supabase.from("document_extractions").update({ project_id: projectId }).eq("document_id", documentId),
-    supabase.from("document_intakes").update({ proposed_project_id: projectId }).eq("document_id", documentId)
-  ]);
+  const { error } = await createServiceSupabaseClient().rpc("assign_document_to_project_atomic", {
+    p_workspace_id: workspaceId,
+    p_document_id: documentId,
+    p_project_id: projectId,
+    p_actor_id: actorId
+  });
+  if (error) throw new Error(`Nie udało się atomowo przypisać dokumentu do inwestycji: ${error.message}`);
 }
 
 async function createReportSnapshot(workspaceId: string, userId: string, payload: Record<string, unknown>) {
@@ -326,7 +326,7 @@ export async function POST(request: Request) {
         });
         if (allocationError) { await supabase.from("invoices").delete().eq("id", invoice.id); throw allocationError; }
       }
-      await assignSourceDocumentToProject(source.documentId, projectId);
+      await assignSourceDocumentToProject(workspace.id, source.documentId, projectId, user.id);
       id = invoice.id;
     } else if (body.entity === "employee") {
       const { data, error } = await supabase.from("employees").insert({ workspace_id: workspace.id, employee_number: text(p.employeeNumber, "numer pracownika"), first_name: text(p.firstName, "imię", true), last_name: text(p.lastName, "nazwisko", true), email: text(p.email, "e-mail"), phone: text(p.phone, "telefon"), hired_at: date(p.hiredAt), status: "active" }).select("id").single<{ id: string }>();
@@ -394,11 +394,21 @@ export async function POST(request: Request) {
       const stockItemId = await requireOwnedId("stock_items", p.stockItemId, workspace.id, "Kartoteka");
       const projectId = p.projectId ? await requireOwnedId("projects", p.projectId, workspace.id, "Inwestycja") : null;
       const targetWarehouseId = p.targetWarehouseId ? await requireOwnedId("warehouses", p.targetWarehouseId, workspace.id, "Magazyn docelowy") : null;
-      const { data: movement, error } = await supabase.from("stock_movements").insert({ workspace_id: workspace.id, project_id: projectId, warehouse_id: warehouseId, target_warehouse_id: targetWarehouseId, movement_type: text(p.movementType, "typ ruchu", true), document_number: text(p.documentNumber, "numer dokumentu"), movement_date: date(p.movementDate) ?? new Date().toISOString().slice(0, 10), status: "approved", approved_by: user.id, approved_at: new Date().toISOString() }).select("id").single<{ id: string }>();
-      if (error || !movement) throw error ?? new Error("Nie utworzono ruchu.");
-      const { error: lineError } = await supabase.from("stock_movement_lines").insert({ workspace_id: workspace.id, movement_id: movement.id, stock_item_id: stockItemId, quantity: amount(p.quantity, "ilość", true), unit_cost: amount(p.unitCost, "koszt jednostkowy") || null });
-      if (lineError) { await supabase.from("stock_movements").delete().eq("id", movement.id); throw lineError; }
-      id = movement.id;
+      const { data: movement, error } = await supabase.rpc("create_stock_movement_atomic", {
+        p_workspace_id: workspace.id,
+        p_project_id: projectId,
+        p_warehouse_id: warehouseId,
+        p_target_warehouse_id: targetWarehouseId,
+        p_stock_item_id: stockItemId,
+        p_movement_type: text(p.movementType, "typ ruchu", true),
+        p_quantity: amount(p.quantity, "ilość", true),
+        p_unit_cost: p.unitCost === undefined || p.unitCost === "" ? null : amount(p.unitCost, "koszt jednostkowy"),
+        p_document_number: text(p.documentNumber, "numer dokumentu") ?? "",
+        p_movement_date: date(p.movementDate) ?? new Date().toISOString().slice(0, 10),
+        p_actor_id: user.id
+      }).single<{ result_movement_id: string }>();
+      if (error || !movement) throw new Error(`Nie udało się atomowo zapisać ruchu magazynowego: ${error?.message ?? "brak danych"}`);
+      id = movement.result_movement_id;
     } else if (body.entity === "ai_warehouse_import") {
       const source = await loadAiBusinessDocument(workspace.id, p.documentId);
       const { data: existing } = await supabase.from("stock_movements").select("id").eq("workspace_id", workspace.id).eq("source_document_id", source.documentId).maybeSingle<{ id: string }>();
@@ -449,15 +459,17 @@ export async function POST(request: Request) {
       }
       const { error: lineError } = await supabase.from("stock_movement_lines").insert(movementLines);
       if (lineError) { await supabase.from("stock_movements").delete().eq("id", movement.id); throw lineError; }
-      await assignSourceDocumentToProject(source.documentId, projectId);
+      await assignSourceDocumentToProject(workspace.id, source.documentId, projectId, user.id);
       id = movement.id;
     } else if (body.entity === "stock_movement_approve") {
       const movementId = await requireOwnedId("stock_movements", p.movementId, workspace.id, "Ruch magazynowy");
-      const { count } = await supabase.from("stock_movement_lines").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).eq("movement_id", movementId);
-      if (!count) throw new Error("Nie można zatwierdzić ruchu bez pozycji.");
-      const { error } = await supabase.from("stock_movements").update({ status: "approved", approved_by: user.id, approved_at: new Date().toISOString() }).eq("id", movementId).eq("workspace_id", workspace.id);
-      if (error) throw error;
-      id = movementId;
+      const { data: approvedId, error } = await supabase.rpc("approve_stock_movement_atomic", {
+        p_workspace_id: workspace.id,
+        p_movement_id: movementId,
+        p_actor_id: user.id
+      });
+      if (error) throw new Error(`Nie udało się atomowo zatwierdzić ruchu magazynowego: ${error.message}`);
+      id = String(approvedId ?? movementId);
     } else if (body.entity === "reservation") {
       const projectId = await requireOwnedId("projects", p.projectId, workspace.id, "Inwestycja");
       const warehouseId = await requireOwnedId("warehouses", p.warehouseId, workspace.id, "Magazyn");

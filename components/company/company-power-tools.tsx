@@ -1,11 +1,11 @@
 "use client";
 
 import type { FormEvent, ReactNode } from "react";
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle, ArrowRightLeft, BadgeCheck, Banknote, BriefcaseBusiness, CalendarClock, CarFront,
-  Check, ChevronDown, CircleDollarSign, Download, Gauge, LoaderCircle, PackageCheck, Plus, RefreshCcw,
+  Check, ChevronDown, CircleDollarSign, Download, Gauge, LoaderCircle, PackageCheck, RefreshCcw,
   ShieldAlert, Sparkles, UserRoundCheck, UsersRound, Warehouse
 } from "lucide-react";
 import { employeeAllocationLoad, fleetEconomy, invoiceAging, stockHealth } from "@/lib/company/power-metrics";
@@ -65,7 +65,7 @@ type PropsSubmit = (action: string, success: string) => (event: FormEvent<HTMLFo
 
 function FinanceTools({ data, submit, pending, canWrite, referenceDate }: { data: Data; submit: PropsSubmit; pending: boolean; canWrite: boolean; referenceDate: string }) {
   const invoices = data.invoices ?? [], allocations = data.allocations ?? [], projects = data.projects ?? [], commitments = data.commitments ?? [];
-  const aging = useMemo(() => invoiceAging(invoices, referenceDate), [invoices, referenceDate]);
+  const aging = invoiceAging(invoices, referenceDate);
   const projectNames = new Map(projects.map((row) => [String(row.id), String(row.name)]));
   const allocationsByInvoice = new Map(allocations.map((row) => [String(row.source_id), row]));
   const openInvoices = invoices.filter((row) => Number(row.gross_amount ?? 0) > Number(row.paid_amount ?? 0));
