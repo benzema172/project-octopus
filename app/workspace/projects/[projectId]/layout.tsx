@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { ArrowLeft, Building2, MapPin } from "lucide-react";
 import { notFound } from "next/navigation";
 import { CompanyShell } from "@/components/layout/company-shell";
@@ -27,6 +28,14 @@ const STATUS_LABELS: Record<string, string> = {
   archived: "Archiwalna"
 };
 
+async function AsyncProjectAutopilotDock({ projectId, canRun }: { projectId: string; canRun: boolean }) {
+  const summary = await getInvestmentAutopilotSummary(projectId).catch((error) => {
+    console.error("Project Octopus: project Autopilot summary fallback", { projectId, message: error instanceof Error ? error.message : String(error) });
+    return { attentionCount: 0, aiCanDoCount: 0, blockerCount: 0, healthScore: 100, nextTitle: null };
+  });
+  return <ProjectAutopilotDock projectId={projectId} summary={summary} canRun={canRun} />;
+}
+
 export default async function ProjectLayout({ children, params }: ProjectLayoutProps) {
   const { projectId } = await params;
   const user = await requireCurrentUser();
@@ -34,14 +43,13 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
 
   if (!project) notFound();
 
-  const [profile, workspace, autopilotSummary] = await Promise.all([
+  const [profile, workspace, policy] = await Promise.all([
     getProjectProfile(project),
     getWorkspaceForUser(user, project.workspace_id),
-    getInvestmentAutopilotSummary(project.id).catch(() => ({ attentionCount: 0, aiCanDoCount: 0, blockerCount: 0, healthScore: 100, nextTitle: null }))
+    loadDomainAccessPolicy({ workspaceId: project.workspace_id, userId: user.id })
   ]);
 
   if (!workspace) notFound();
-  const policy = await loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id });
   const domains: Domain[] = ["investments", "finance", "hr", "warehouse", "fleet", "templates", "reports", "settings"];
   const allowedProjectDomains = domains.filter((domain) => domainAccessPolicyAllows(policy, { domain, level: "read", projectId: project.id }));
   const allowedCompanyDomains = domains.filter((domain) => domainAccessPolicyAllows(policy, { domain, level: "read", projectId: null }));
@@ -94,7 +102,11 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
         </header>
 
         <ProjectNavigation projectId={project.id} allowedDomains={allowedProjectDomains} canUpload={canUpload} />
-        {allowedProjectDomains.includes("investments") ? <ProjectAutopilotDock projectId={project.id} summary={autopilotSummary} canRun={canUpload} /> : null}
+        {allowedProjectDomains.includes("investments") ? (
+          <Suspense fallback={null}>
+            <AsyncProjectAutopilotDock projectId={project.id} canRun={canUpload} />
+          </Suspense>
+        ) : null}
         {children}
       </main>
     </CompanyShell>
