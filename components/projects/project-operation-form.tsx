@@ -91,7 +91,9 @@ export function ProjectOperationForm({ projectId, mode, title, description, canW
     const values = Object.fromEntries(new FormData(form).entries());
     setMessage(null); setError(null);
     startTransition(async () => {
-      const response = await fetch("/api/projects/operations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, action: actions[mode], ...values }) });
+      const endpoint = mode === "reservation" ? "/api/projects/reservations" : "/api/projects/operations";
+      const payload = mode === "reservation" ? { projectId, ...values } : { projectId, action: actions[mode], ...values };
+      const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const result = await response.json() as { error?: string };
       if (!response.ok) { setError(result.error ?? "Nie udało się zapisać rekordu."); return; }
       form.reset(); setMessage("Zapisano. Dane są już widoczne w rejestrze poniżej."); router.refresh();
