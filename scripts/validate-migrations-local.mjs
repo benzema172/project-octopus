@@ -20,7 +20,8 @@ const migrations = [
   "supabase/migrations/20260817250500_100_boq_scope.sql",
   "supabase/migrations/20260817251000_100_command_center_nullsafe.sql",
   "supabase/migrations/20260818073000_101_company_document_upload_fix.sql",
-  "supabase/migrations/20260818074000_101_stock_and_document_integrity.sql"
+  "supabase/migrations/20260818074000_101_stock_and_document_integrity.sql",
+  "supabase/migrations/20260818075000_101_finance_fleet_atomicity.sql"
 ];
 
 function withoutPgcrypto(sql) {
@@ -81,7 +82,9 @@ try {
     "get_project_command_center",
     "create_stock_movement_atomic",
     "approve_stock_movement_atomic",
-    "assign_document_to_project_atomic"
+    "assign_document_to_project_atomic",
+    "record_payment_atomic",
+    "record_fuel_entry_atomic"
   ];
   for (const name of expectedFunctions) {
     const result = await database.query("select count(*)::integer count from pg_proc where pronamespace='public'::regnamespace and proname=$1", [name]);
@@ -89,7 +92,7 @@ try {
   }
 
   const markers = await database.query("select version from public.app_schema_versions where version like '20260817_%' or version like '20260818_%' order by version");
-  if (markers.rows.length < 12) throw new Error(`Expected 0.9.1–1.0.1 schema markers, received ${markers.rows.length}.`);
+  if (markers.rows.length < 13) throw new Error(`Expected 0.9.1–1.0.1 schema markers, received ${markers.rows.length}.`);
 
   const userId = "00000000-0000-4000-8000-000000000001";
   const workspaceId = "00000000-0000-4000-8000-000000000002";
@@ -133,6 +136,21 @@ try {
   if (assignedCompanyDocument.rows[0]?.project_id !== projectId || assignedCompanyVersion.rows[0]?.project_id !== projectId) {
     throw new Error("Atomic document assignment did not update document and version together.");
   }
+
+  const invoiceId = "00000000-0000-4000-8000-000000000008";
+  await database.exec(`insert into public.invoices(id,workspace_id,invoice_number,direction,gross_amount,status) values ('${invoiceId}','${workspaceId}','FV-AUDIT','purchase',1000,'received');`);
+  const payment = await database.query("select * from public.record_payment_atomic($1,$2,current_date,400,'AUDIT',$3)", [workspaceId, invoiceId, userId]);
+  if (!payment.rows[0]?.result_payment_id || Number(payment.rows[0]?.paid_total) !== 400 || payment.rows[0]?.invoice_status !== "partially_paid") throw new Error("Atomic payment workflow failed.");
+  const paidInvoice = await database.query("select paid_amount,status from public.invoices where id=$1", [invoiceId]);
+  if (Number(paidInvoice.rows[0]?.paid_amount) !== 400 || paidInvoice.rows[0]?.status !== "partially_paid") throw new Error("Payment did not update invoice atomically.");
+
+  const vehicleId = "00000000-0000-4000-8000-000000000009";
+  await database.exec(`insert into public.vehicles(id,workspace_id,registration_number,vehicle_type,status,current_mileage) values ('${vehicleId}','${workspaceId}','AUDIT01','van','active',12000);`);
+  const fuel = await database.query("select * from public.record_fuel_entry_atomic($1,$2,$3,now(),42,320,12125,$4)", [workspaceId, vehicleId, projectId, userId]);
+  if (!fuel.rows[0]?.result_fuel_entry_id || Number(fuel.rows[0]?.vehicle_mileage) !== 12125) throw new Error("Atomic fuel workflow failed.");
+  const vehicleAfterFuel = await database.query("select current_mileage from public.vehicles where id=$1", [vehicleId]);
+  const meterAfterFuel = await database.query("select count(*)::integer count from public.meter_readings where vehicle_id=$1 and mileage=12125", [vehicleId]);
+  if (Number(vehicleAfterFuel.rows[0]?.current_mileage) !== 12125 || meterAfterFuel.rows[0]?.count !== 1) throw new Error("Fuel entry did not update vehicle and meter atomically.");
 
   const firstBudget = await database.query("select * from public.create_budget_version_atomic($1,$2,'Budżet',100000,70000,$3)", [workspaceId, projectId, userId]);
   const secondBudget = await database.query("select * from public.create_budget_version_atomic($1,$2,'Budżet korekta',100000,75000,$3)", [workspaceId, projectId, userId]);
@@ -188,7 +206,7 @@ try {
   if (!snapshot || !Array.isArray(snapshot.cashflow13w) || snapshot.cashflow13w.length !== 13) throw new Error("Command Center did not build a 13-week cash flow.");
 
   console.log(`OK   full migration chain: ${migrations.length} migrations`);
-  console.log("OK   company upload/assignment, manual stock integrity, atomic budget, warehouse ledger, MM, purchase order, search, anomalies and Command Center smoke tests");
+  console.log("OK   company upload/assignment, stock integrity, atomic payments/fuel, budget, warehouse ledger, MM, purchase order, search, anomalies and Command Center smoke tests");
 } finally {
   await database.close();
 }

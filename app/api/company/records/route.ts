@@ -283,15 +283,16 @@ export async function POST(request: Request) {
       }
     } else if (body.entity === "payment") {
       const invoiceId = await requireOwnedId("invoices", p.invoiceId, workspace.id, "Faktura");
-      const paymentAmount = amount(p.amount, "kwota płatności", true);
-      const { data: invoice } = await supabase.from("invoices").select("gross_amount").eq("id", invoiceId).single();
-      const { data, error } = await supabase.from("payments").insert({ workspace_id: workspace.id, invoice_id: invoiceId, payment_date: date(p.paymentDate) ?? new Date().toISOString().slice(0, 10), amount: paymentAmount, bank_reference: text(p.bankReference, "referencja") }).select("id").single<{ id: string }>();
-      if (error) throw error;
-      const { data: confirmedPayments, error: paymentSumError } = await supabase.from("payments").select("amount").eq("workspace_id", workspace.id).eq("invoice_id", invoiceId).eq("status", "confirmed");
-      if (paymentSumError) throw paymentSumError;
-      const paidAmount = (confirmedPayments ?? []).reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
-      await supabase.from("invoices").update({ paid_amount: paidAmount, status: paidAmount >= Number(invoice?.gross_amount ?? 0) ? "paid" : "partially_paid" }).eq("id", invoiceId);
-      id = data.id;
+      const { data, error } = await supabase.rpc("record_payment_atomic", {
+        p_workspace_id: workspace.id,
+        p_invoice_id: invoiceId,
+        p_payment_date: date(p.paymentDate) ?? new Date().toISOString().slice(0, 10),
+        p_amount: amount(p.amount, "kwota płatności", true),
+        p_bank_reference: text(p.bankReference, "referencja") ?? "",
+        p_actor_id: user.id
+      }).single<{ result_payment_id: string }>();
+      if (error || !data) throw new Error(`Nie udało się atomowo zapisać płatności: ${error?.message ?? "brak danych"}`);
+      id = data.result_payment_id;
     } else if (body.entity === "commitment") {
       const projectId = p.projectId ? await requireOwnedId("projects", p.projectId, workspace.id, "Inwestycja") : null;
       const { data, error } = await supabase.from("commitments").insert({ workspace_id: workspace.id, project_id: projectId, source_type: "manual", description: text(p.description, "opis", true), amount: amount(p.amount, "wartość", true), expected_date: date(p.expectedDate), status: "open" }).select("id").single<{ id: string }>();
@@ -522,18 +523,18 @@ export async function POST(request: Request) {
       const projectId = p.projectId ? await requireOwnedId("projects", p.projectId, workspace.id, "Inwestycja") : null;
       const mileage = amount(p.mileage, "przebieg") || null;
       const fueledAt = text(p.fueledAt, "data tankowania") ?? new Date().toISOString();
-      const { data, error } = await supabase.from("fuel_entries").insert({ workspace_id: workspace.id, vehicle_id: vehicleId, project_id: projectId, fueled_at: fueledAt, liters: amount(p.liters, "litry", true), gross_amount: amount(p.grossAmount, "koszt", true), mileage }).select("id").single<{ id: string }>();
-      if (error) throw error;
-      id = data.id;
-      if (mileage) {
-        const { data: vehicle } = await supabase.from("vehicles").select("current_mileage").eq("id", vehicleId).single<{ current_mileage: number | null }>();
-        if (mileage >= Number(vehicle?.current_mileage ?? 0)) {
-          await Promise.all([
-            supabase.from("vehicles").update({ current_mileage: mileage }).eq("id", vehicleId).eq("workspace_id", workspace.id),
-            supabase.from("meter_readings").insert({ workspace_id: workspace.id, vehicle_id: vehicleId, reading_date: fueledAt.slice(0, 10), mileage, source: "fuel_entry" })
-          ]);
-        }
-      }
+      const { data, error } = await supabase.rpc("record_fuel_entry_atomic", {
+        p_workspace_id: workspace.id,
+        p_vehicle_id: vehicleId,
+        p_project_id: projectId,
+        p_fueled_at: fueledAt,
+        p_liters: amount(p.liters, "litry", true),
+        p_gross_amount: amount(p.grossAmount, "koszt", true),
+        p_mileage: mileage,
+        p_actor_id: user.id
+      }).single<{ result_fuel_entry_id: string }>();
+      if (error || !data) throw new Error(`Nie udało się atomowo zapisać tankowania: ${error?.message ?? "brak danych"}`);
+      id = data.result_fuel_entry_id;
     } else if (body.entity === "trip") {
       const vehicleId = await requireOwnedId("vehicles", p.vehicleId, workspace.id, "Pojazd");
       const projectId = p.projectId ? await requireOwnedId("projects", p.projectId, workspace.id, "Inwestycja") : null;
