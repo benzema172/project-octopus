@@ -1,6 +1,7 @@
 import { CompanySelector } from "@/components/companies/company-selector";
 import { requireCurrentUser } from "@/lib/auth";
 import { isCompanyProfileSchemaReady, listCompanyWorkspacesForUser } from "@/lib/data/workspace";
+import "../company-selector-refinement.css";
 
 export const dynamic = "force-dynamic";
 

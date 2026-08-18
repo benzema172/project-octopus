@@ -1,8 +1,10 @@
 import "server-only";
 
 import { cache } from "react";
-import { listAiInbox, type ProjectExecutionSnapshot } from "@/lib/data/operations";
-import { buildInvestmentAutopilotSnapshot, type AutopilotDecision, type AutopilotInput, type InvestmentAutopilotSnapshot } from "@/lib/investments/autopilot";
+import type { ProjectExecutionSnapshot } from "@/lib/data/operations";
+import { listProjectAiInbox } from "@/lib/data/project-ai-inbox";
+import { buildCompactAutopilotSnapshot } from "@/lib/investments/compact-autopilot";
+import type { AutopilotDecision, InvestmentAutopilotSnapshot } from "@/lib/investments/autopilot";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 type Json = Record<string, unknown>;
@@ -35,13 +37,13 @@ const getExecutionRaw = cache(async (workspaceId: string, projectId: string) => 
 });
 
 const getAutopilotRaw = cache(async (workspaceId: string, projectId: string, includeFinance: boolean, includeWarehouse: boolean) => {
-  const { data, error } = await createServiceSupabaseClient().rpc("get_project_autopilot_snapshot", {
+  const { data, error } = await createServiceSupabaseClient().rpc("get_project_autopilot_compact_snapshot", {
     p_workspace_id: workspaceId,
     p_project_id: projectId,
     p_include_finance: includeFinance,
     p_include_warehouse: includeWarehouse
   });
-  if (error) throw new Error(`Investment Autopilot nie może odczytać stanu inwestycji: ${error.message}`);
+  if (error) throw new Error(`Investment Autopilot nie może odczytać kompaktowego stanu inwestycji: ${error.message}`);
   return record(data);
 });
 
@@ -62,38 +64,12 @@ export async function getControlCommandCenterData(workspaceId:string,projectId:s
 
 export async function getControlAutopilotSnapshot(workspaceId:string,projectId:string,options:{includeFinance?:boolean;includeWarehouse?:boolean}={}):Promise<InvestmentAutopilotSnapshot>{
   const includeFinance=Boolean(options.includeFinance),includeWarehouse=Boolean(options.includeWarehouse);
-  const [raw,aiInbox]=await Promise.all([getAutopilotRaw(workspaceId,projectId,includeFinance,includeWarehouse),listAiInbox(workspaceId).catch(()=>[])]);
-  const decisions:AutopilotDecision[]=aiInbox.filter(item=>item.projectId===projectId).map(item=>({id:item.id,title:item.title,subtitle:item.subtitle,status:item.status,confidence:item.confidence,category:item.category,detail:item.detail}));
-  const input:AutopilotInput={
-    nowIso:new Date().toISOString(),projectId,workspaceId,
-    documents:array<AutopilotInput["documents"][number]>(raw.documents),
-    facts:array<AutopilotInput["facts"][number]>(raw.facts),
-    requirements:array<AutopilotInput["requirements"][number]>(raw.requirements),
-    protocolRequirements:array<AutopilotInput["protocolRequirements"][number]>(raw.protocolRequirements),
-    protocols:array<AutopilotInput["protocols"][number]>(raw.protocols),
-    materialRequests:array<AutopilotInput["materialRequests"][number]>(raw.materialRequests),
-    scheduleActivities:array<AutopilotInput["scheduleActivities"][number]>(raw.scheduleActivities),
-    impacts:array<AutopilotInput["impacts"][number]>(raw.impacts),
-    evidence:array<AutopilotInput["evidence"][number]>(raw.evidence),
-    findings:array<AutopilotInput["findings"][number]>(raw.findings),
-    materials:array<AutopilotInput["materials"][number]>(raw.materials),
-    devices:array<AutopilotInput["devices"][number]>(raw.devices),
-    wbsNodes:array<AutopilotInput["wbsNodes"][number]>(raw.wbsNodes),
-    boqItems:array<AutopilotInput["boqItems"][number]>(raw.boqItems),
-    boqVersions:array<AutopilotInput["boqVersions"][number]>(raw.boqVersions),
-    aiDecisions:decisions,
-    finance:includeFinance?{
-      allocations:array<NonNullable<AutopilotInput["finance"]>["allocations"][number]>(raw.allocations),
-      invoices:array<NonNullable<AutopilotInput["finance"]>["invoices"][number]>(raw.invoices),
-      invoiceLines:array<NonNullable<AutopilotInput["finance"]>["invoiceLines"][number]>(raw.invoiceLines)
-    }:null,
-    warehouse:includeWarehouse?{
-      movements:array<NonNullable<AutopilotInput["warehouse"]>["movements"][number]>(raw.movements),
-      movementLines:array<NonNullable<AutopilotInput["warehouse"]>["movementLines"][number]>(raw.movementLines),
-      stockItems:array<NonNullable<AutopilotInput["warehouse"]>["stockItems"][number]>(raw.stockItems)
-    }:null
-  };
-  return buildInvestmentAutopilotSnapshot(input);
+  const [raw,aiInbox]=await Promise.all([
+    getAutopilotRaw(workspaceId,projectId,includeFinance,includeWarehouse),
+    listProjectAiInbox(workspaceId,projectId,80).catch((error)=>{console.error("Project Octopus: project AI Inbox unavailable for Autopilot",error);return[];})
+  ]);
+  const decisions:AutopilotDecision[]=aiInbox.map(item=>({id:item.id,title:item.title,subtitle:item.subtitle,status:item.status,confidence:item.confidence,category:item.category,detail:item.detail}));
+  return buildCompactAutopilotSnapshot(raw,decisions,workspaceId,projectId,new Date().toISOString());
 }
 
 export async function getControlReconciliationData(workspaceId:string,projectId:string){

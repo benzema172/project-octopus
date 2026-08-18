@@ -1,7 +1,5 @@
 import { requireCurrentUser } from "@/lib/auth";
-import "../company-selector-refinement.css";
 import "../company-switcher-refinement.css";
-import "../investments-refinement.css";
 
 export const dynamic = "force-dynamic";
 

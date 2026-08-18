@@ -42,10 +42,12 @@ describe("0.9.1–1.0 implementation contracts", () => {
     expect(companyRoute).toContain("record_meter_reading_atomic");
   });
 
-  it("uses full SQL stock ledger in both warehouse loaders", () => {
-    expect(read("lib/data/company-operations.ts")).toContain("getStockBalances(workspaceId)");
+  it("uses the full SQL stock ledger while the primary warehouse page scopes the returned balances", () => {
+    expect(read("lib/data/company-operations.ts")).toContain("getStockBalancesForItems(workspaceId, itemIds)");
     expect(read("lib/data/company-power-tools.ts")).toContain("getStockBalances(workspaceId)");
+    expect(read("lib/data/stock-balances.ts")).toContain('rpc("get_stock_balances_for_items"');
     expect(read("supabase/migrations/20260817210000_091_reliability_core.sql")).toContain("get_stock_balances");
+    expect(read("supabase/migrations/20260818140500_paged_stock_balances.sql")).toContain("get_stock_balances_for_items");
   });
 
   it("hardens Autopilot with durable source keys and semantic candidates", () => {
