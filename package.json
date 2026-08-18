@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "test": "vitest run tests",
     "typecheck": "tsc --noEmit",
-    "test:migrations": "node scripts/validate-migrations-local.mjs",
+    "test:migrations": "node scripts/validate-migrations-local.mjs && node scripts/validate-all-migrations-local.mjs",
     "check:schema": "node scripts/check-schema.mjs",
     "test:e2e-upload": "node scripts/e2e-upload.mjs",
     "test:e2e-core": "node scripts/e2e-core.mjs",
