@@ -9,6 +9,11 @@ function takeRows(result: { data: unknown; error: { message: string } | null }, 
   return (result.data ?? []) as Row[];
 }
 
+function numberFrom(value: unknown) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export type EnterpriseFlowData = {
   inbox: Row[];
   accountingEntries: Row[];
@@ -19,7 +24,6 @@ export type EnterpriseFlowData = {
   projects: Row[];
   invoices: Row[];
   invoiceLines: Row[];
-  stockItems: Row[];
   summary: {
     inboxOpen: number;
     accountingProposed: number;
@@ -31,9 +35,9 @@ export type EnterpriseFlowData = {
 
 export async function getCompanyEnterpriseFlow(workspaceId: string): Promise<EnterpriseFlowData> {
   const db = createServiceSupabaseClient();
-  const [inboxResult, entriesResult, matchesResult, deviationsResult, projectsResult, pricesResult] = await Promise.all([
+  const [inboxResult, entriesResult, matchesResult, deviationsResult, projectsResult, pricesResult, summaryResult] = await Promise.all([
     db.from("business_inbox_items")
-      .select("id,source_channel,external_key,document_id,invoice_id,project_id,document_type,status,payload,received_at,processed_at")
+      .select("id,source_channel,external_key,document_id,invoice_id,project_id,document_type,status,received_at,processed_at")
       .eq("workspace_id", workspaceId).order("received_at", { ascending: false }).limit(80),
     db.from("accounting_entries")
       .select("id,project_id,invoice_id,document_id,entry_date,description,currency,total_debit,total_credit,status,approved_at,exported_at,external_reference,created_at")
@@ -45,7 +49,8 @@ export async function getCompanyEnterpriseFlow(workspaceId: string): Promise<Ent
       .select("id,project_id,deviation_type,severity,source_type,source_id,title,detail,status,resolution_note,closed_at,created_at")
       .eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(120),
     db.from("projects").select("id,name,code,status").eq("workspace_id", workspaceId).order("name").limit(500),
-    db.rpc("get_price_intelligence", { p_workspace_id: workspaceId, p_project_id: null, p_limit: 100 })
+    db.rpc("get_price_intelligence", { p_workspace_id: workspaceId, p_project_id: null, p_limit: 100 }),
+    db.rpc("get_company_enterprise_flow_summary", { p_workspace_id: workspaceId })
   ]);
 
   const inbox = takeRows(inboxResult, "business inbox");
@@ -53,6 +58,7 @@ export async function getCompanyEnterpriseFlow(workspaceId: string): Promise<Ent
   const procurementMatches = takeRows(matchesResult, "uzgodnień zakupowych");
   const deviations = takeRows(deviationsResult, "odstępstw procesu");
   const projects = takeRows(projectsResult, "inwestycji");
+  if (summaryResult.error) throw new Error(`Nie udało się pobrać podsumowania Enterprise Flow: ${summaryResult.error.message}`);
 
   const entryIds = accountingEntries.map((row) => String(row.id ?? "")).filter(Boolean);
   const invoiceIds = [...new Set([
@@ -60,7 +66,7 @@ export async function getCompanyEnterpriseFlow(workspaceId: string): Promise<Ent
     ...inbox.map((row) => String(row.invoice_id ?? ""))
   ].filter(Boolean))];
 
-  const [linesResult, invoicesResult, invoiceLinesResult, stockItemsResult] = await Promise.all([
+  const [linesResult, invoicesResult, invoiceLinesResult] = await Promise.all([
     entryIds.length
       ? db.from("accounting_entry_lines")
         .select("id,entry_id,project_id,account_id,side,amount,description,invoice_line_id,boq_item_id,wbs_node_id,cost_code,vat_code,line_number,accounting_accounts(code,name)")
@@ -71,12 +77,14 @@ export async function getCompanyEnterpriseFlow(workspaceId: string): Promise<Ent
       : Promise.resolve({ data: [], error: null }),
     invoiceIds.length
       ? db.from("invoice_lines").select("id,invoice_id,line_number,line_type,description,quantity,unit,unit_price,net_amount,gross_amount,supplier_sku,stock_item_id").eq("workspace_id", workspaceId).in("invoice_id", invoiceIds).order("line_number").limit(1200)
-      : Promise.resolve({ data: [], error: null }),
-    db.from("stock_items").select("id,sku,name,unit,active").eq("workspace_id", workspaceId).eq("active", true).order("name").limit(1500)
+      : Promise.resolve({ data: [], error: null })
   ]);
 
   const pricePayload = pricesResult.error ? {} : (pricesResult.data && typeof pricesResult.data === "object" ? pricesResult.data as Record<string, unknown> : {});
   const priceObservations = Array.isArray(pricePayload.observations) ? pricePayload.observations as Row[] : [];
+  const summaryPayload = summaryResult.data && typeof summaryResult.data === "object" && !Array.isArray(summaryResult.data)
+    ? summaryResult.data as Row
+    : {};
 
   return {
     inbox,
@@ -88,13 +96,12 @@ export async function getCompanyEnterpriseFlow(workspaceId: string): Promise<Ent
     projects,
     invoices: takeRows(invoicesResult, "faktur dla obiegu"),
     invoiceLines: takeRows(invoiceLinesResult, "pozycji faktur dla alokacji"),
-    stockItems: takeRows(stockItemsResult, "kartotek materiałowych"),
     summary: {
-      inboxOpen: inbox.filter((row) => !["processed", "ignored"].includes(String(row.status))).length,
-      accountingProposed: accountingEntries.filter((row) => row.status === "proposed").length,
-      matchingReview: procurementMatches.filter((row) => row.status === "review").length,
-      matchingOk: procurementMatches.filter((row) => ["matched", "approved"].includes(String(row.status))).length,
-      deviationsOpen: deviations.filter((row) => row.status === "open").length
+      inboxOpen: numberFrom(summaryPayload.inboxOpen),
+      accountingProposed: numberFrom(summaryPayload.accountingProposed),
+      matchingReview: numberFrom(summaryPayload.matchingReview),
+      matchingOk: numberFrom(summaryPayload.matchingOk),
+      deviationsOpen: numberFrom(summaryPayload.deviationsOpen)
     }
   };
 }
