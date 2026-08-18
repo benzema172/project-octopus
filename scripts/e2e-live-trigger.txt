@@ -1,1 +1,1 @@
-2026-08-18 final P0-P2 verification: PDF/XLSX R2 -> Gemini -> Brain + full investment lifecycle
+2026-08-18 final P0-P2 verification after atomic warehouse routing and Control typing fix
