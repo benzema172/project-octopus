@@ -40,7 +40,7 @@ function makePdf(snapshot: Record<string, unknown>, title: string) {
   const xref=Buffer.byteLength(pdf);pdf+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n`;
   for(let i=1;i<=objects.length;i+=1)pdf+=`${String(offsets[i]).padStart(10,"0")} 00000 n \n`;
   pdf+=`trailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return Buffer.from(pdf,"binary");
+  return new Uint8Array(Buffer.from(pdf,"binary"));
 }
 
 async function context(request: Request, projectId: string, level: "read" | "write") {
@@ -79,6 +79,6 @@ export async function GET(request: Request) {
     const safeName=`closeout-${project.id}-v${data.version_number}`;
     if(format==="json")return new Response(JSON.stringify(data.snapshot,null,2),{headers:{"Content-Type":"application/json; charset=utf-8","Content-Disposition":`attachment; filename="${safeName}.json"`}});
     const pdf=makePdf(data.snapshot as Record<string,unknown>,`${data.title} v${data.version_number} [${data.status}]`);
-    return new Response(pdf,{headers:{"Content-Type":"application/pdf","Content-Disposition":`attachment; filename="${safeName}.pdf"`,`Cache-Control`:`private, no-store`}});
+    return new Response(pdf,{headers:{"Content-Type":"application/pdf","Content-Disposition":`attachment; filename="${safeName}.pdf"`,"Cache-Control":"private, no-store"}});
   }catch(error){const message=error instanceof Error?error.message:String(error);if(message==="AUTH")return NextResponse.json({error:"Brak aktywnej sesji."},{status:401});if(message==="ACCESS")return NextResponse.json({error:"Brak dostępu."},{status:403});return NextResponse.json({error:message},{status:404});}
 }
