@@ -74,6 +74,35 @@ async function requireOwnedId(table: string, id: unknown, workspaceId: string, l
   return normalized;
 }
 
+async function resolveRecordAccessProjectId(entity: string, payload: Record<string, unknown>, workspaceId: string) {
+  const directProjectEntities = new Set([
+    "invoice", "commitment", "ai_invoice_import", "timesheet", "stock_movement",
+    "ai_warehouse_import", "reservation", "fuel_entry", "trip", "report_definition"
+  ]);
+  if (directProjectEntities.has(entity)) return text(payload.projectId, "inwestycja");
+
+  const db = createServiceSupabaseClient();
+  if (entity === "timesheet_decision") {
+    const id = text(payload.timesheetId, "wpis czasu pracy");
+    if (!id) return null;
+    const { data } = await db.from("timesheets").select("project_id").eq("workspace_id", workspaceId).eq("id", id).maybeSingle<{ project_id: string | null }>();
+    return data?.project_id ?? null;
+  }
+  if (entity === "stock_movement_approve") {
+    const id = text(payload.movementId, "ruch magazynowy");
+    if (!id) return null;
+    const { data } = await db.from("stock_movements").select("project_id").eq("workspace_id", workspaceId).eq("id", id).maybeSingle<{ project_id: string | null }>();
+    return data?.project_id ?? null;
+  }
+  if (entity === "report_generate") {
+    const id = text(payload.definitionId, "definicja raportu");
+    if (!id) return null;
+    const { data } = await db.from("report_definitions").select("project_id").eq("workspace_id", workspaceId).eq("id", id).maybeSingle<{ project_id: string | null }>();
+    return data?.project_id ?? null;
+  }
+  return null;
+}
+
 async function loadAiBusinessDocument(workspaceId: string, documentIdValue: unknown) {
   const documentId = await requireOwnedId("documents", documentIdValue, workspaceId, "Dokument źródłowy");
   const { data, error } = await createServiceSupabaseClient()
@@ -202,7 +231,8 @@ export async function POST(request: Request) {
   if (!domain) return NextResponse.json({ error: "Nieobsługiwany rodzaj rekordu." }, { status: 400 });
   const approvalEntities = new Set(["leave_decision", "timesheet_decision", "stock_movement_approve"]);
   const requiredLevel = approvalEntities.has(body.entity) ? "approve" : "write";
-  if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain, level: requiredLevel, projectId: text(body.payload.projectId, "inwestycja") })) {
+  const accessProjectId = await resolveRecordAccessProjectId(body.entity, body.payload, workspace.id);
+  if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain, level: requiredLevel, projectId: accessProjectId })) {
     return NextResponse.json({ error: "Brak uprawnienia do zapisu w tym module." }, { status: 403 });
   }
 
