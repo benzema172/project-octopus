@@ -67,7 +67,7 @@ export async function POST(request: Request) {
   }
 
   const status = documentId ? "processing" : "new";
-  const { data, error } = await db.from("business_inbox_items").upsert({
+  const { data: inserted, error } = await db.from("business_inbox_items").upsert({
     workspace_id: workspaceId,
     source_channel: sourceChannel,
     external_key: externalKey,
@@ -77,8 +77,21 @@ export async function POST(request: Request) {
     status,
     payload: body.payload && typeof body.payload === "object" ? body.payload : {},
     received_at: new Date().toISOString()
-  }, { onConflict: "workspace_id,source_channel,external_key" }).select("id,status").single<{ id: string; status: string }>();
-  if (error || !data) return Response.json({ error: error?.message ?? "Nie udało się przyjąć danych integracji." }, { status: 422 });
+  }, { onConflict: "workspace_id,source_channel,external_key", ignoreDuplicates: true })
+    .select("id,status")
+    .maybeSingle<{ id: string; status: string }>();
+  if (error) return Response.json({ error: error.message }, { status: 422 });
+
+  if (!inserted) {
+    const { data: existing, error: existingError } = await db.from("business_inbox_items")
+      .select("id,status")
+      .eq("workspace_id", workspaceId)
+      .eq("source_channel", sourceChannel)
+      .eq("external_key", externalKey)
+      .maybeSingle<{ id: string; status: string }>();
+    if (existingError || !existing) return Response.json({ error: existingError?.message ?? "Nie udało się potwierdzić istniejącego elementu integracji." }, { status: 422 });
+    return Response.json({ ok: true, id: existing.id, status: existing.status, duplicate: true }, { status: 200 });
+  }
 
   await db.from("audit_events").insert({
     workspace_id: workspaceId,
@@ -86,9 +99,9 @@ export async function POST(request: Request) {
     actor_type: "integration",
     event_type: "business_inbox.external_received",
     entity_type: "business_inbox_item",
-    entity_id: data.id,
+    entity_id: inserted.id,
     after_value: { sourceChannel, externalKey, documentType, hasDocument: Boolean(documentId) }
   });
 
-  return Response.json({ ok: true, id: data.id, status: data.status }, { status: 202 });
+  return Response.json({ ok: true, id: inserted.id, status: inserted.status, duplicate: false }, { status: 202 });
 }
