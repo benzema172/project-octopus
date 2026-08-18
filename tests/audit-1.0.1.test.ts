@@ -41,4 +41,25 @@ describe("Project Octopus 1.0.1 audit regressions", () => {
     expect(route).toContain('entity === "stock_movement_approve"');
     expect(route).toContain('.from("stock_movements").select("project_id")');
   });
+
+  it("records payments and fuel/mileage updates through atomic database functions", () => {
+    const route = read("app/api/company/records/route.ts");
+    const sql = read("supabase/migrations/20260818075000_101_finance_fleet_atomicity.sql");
+    expect(route).toContain('.rpc("record_payment_atomic"');
+    expect(route).toContain('.rpc("record_fuel_entry_atomic"');
+    expect(sql).toContain("create or replace function public.record_payment_atomic");
+    expect(sql).toContain("create or replace function public.record_fuel_entry_atomic");
+    expect(sql).toContain("set paid_amount = v_paid, status = v_status");
+    expect(sql).toContain("insert into public.meter_readings");
+  });
+
+  it("keeps package and lock metadata aligned at 1.0.1", () => {
+    const pkg = JSON.parse(read("package.json")) as { version: string; devDependencies: Record<string, string> };
+    const lock = JSON.parse(read("package-lock.json")) as { version: string; packages: Record<string, { version?: string; devDependencies?: Record<string, string> }> };
+    expect(pkg.version).toBe("1.0.1");
+    expect(lock.version).toBe("1.0.1");
+    expect(lock.packages[""]?.version).toBe("1.0.1");
+    expect(pkg.devDependencies["@types/node"]).toBe("22.12.0");
+    expect(lock.packages[""]?.devDependencies?.["@types/node"]).toBe("22.12.0");
+  });
 });
