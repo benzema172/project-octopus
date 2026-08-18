@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { DocumentSummary, DocumentVersionSummary } from "@/lib/types";
 
@@ -29,7 +30,7 @@ function normalizeVersion(row: FlexibleRow, projectId: string | null, fallbackNa
     id: stringValue(row, "id") ?? "", document_id: stringValue(row, "document_id") ?? "", project_id: stringValue(row, "project_id") ?? projectId,
     version_number: numberValue(row, "version_number", "version_no") || 1, file_name: stringValue(row, "file_name", "original_filename") ?? fallbackName,
     mime_type: stringValue(row, "mime_type") ?? "application/octet-stream", file_size_bytes: numberValue(row, "file_size_bytes", "size_bytes"),
-    r2_bucket: stringValue(row, "r2_bucket", "storage_bucket") ?? "", r2_object_key: stringValue(row, "r2_object_key", "storage_key") ?? "",
+    r2_bucket: stringValue(row, "r2_bucket", "bucket_name", "storage_bucket") ?? "", r2_object_key: stringValue(row, "r2_object_key", "object_key", "storage_key") ?? "",
     r2_etag: stringValue(row, "r2_etag"), sha256: stringValue(row, "sha256"), upload_status: stringValue(row, "upload_status", "status") ?? "uploaded",
     uploaded_at: stringValue(row, "uploaded_at"), created_at: stringValue(row, "created_at") ?? ""
   };
@@ -39,7 +40,7 @@ function normalizeDocuments(rows: FlexibleDocumentRow[], fallbackProjectId: stri
   return rows.map((row) => {
     const projectId = stringValue(row, "project_id") ?? fallbackProjectId;
     const versions = [...(row.document_versions ?? [])].sort((left, right) => numberValue(right, "version_number", "version_no") - numberValue(left, "version_number", "version_no"));
-    const name = stringValue(row, "name", "file_name", "original_filename") ?? (versions[0] ? stringValue(versions[0], "file_name", "original_filename") : null) ?? "Dokument";
+    const name = stringValue(row, "name", "title", "file_name", "original_filename") ?? (versions[0] ? stringValue(versions[0], "file_name", "original_filename") : null) ?? "Dokument";
     return {
       id: stringValue(row, "id") ?? "", project_id: projectId, workspace_id: stringValue(row, "workspace_id") ?? "", name,
       category: stringValue(row, "category", "document_type"), ai_status: stringValue(row, "ai_status"), ai_confidence: typeof row.ai_confidence === "number" ? row.ai_confidence : null,
@@ -49,19 +50,32 @@ function normalizeDocuments(rows: FlexibleDocumentRow[], fallbackProjectId: stri
   });
 }
 
-const DOCUMENT_WITH_VERSIONS_SELECT = "*, document_versions!document_versions_document_id_fkey(*)";
+const DOCUMENT_WITH_VERSIONS_SELECT = [
+  "id", "project_id", "workspace_id", "name", "title", "category", "document_type", "ai_status", "ai_confidence", "current_version_id", "deleted_at", "created_at", "updated_at",
+  "document_versions!document_versions_document_id_fkey(id,document_id,project_id,version_no,version_number,original_filename,file_name,mime_type,size_bytes,file_size_bytes,bucket_name,r2_bucket,object_key,r2_object_key,r2_etag,sha256,upload_status,uploaded_at,created_at)"
+].join(",");
+
+function documentQuery(projectId: string, trashed: boolean) {
+  return createServiceSupabaseClient().from("documents").select(DOCUMENT_WITH_VERSIONS_SELECT).eq("project_id", projectId).filter("deleted_at", trashed ? "not.is" : "is", null);
+}
 
 export async function listDocumentsForProject(projectId: string, trashed = false): Promise<DocumentSummary[]> {
-  const { data, error } = await createServiceSupabaseClient().from("documents").select(DOCUMENT_WITH_VERSIONS_SELECT).eq("project_id", projectId).filter("deleted_at", trashed ? "not.is" : "is", null).order("updated_at", { ascending: false }).returns<FlexibleDocumentRow[]>();
+  const { data, error } = await documentQuery(projectId, trashed).order("updated_at", { ascending: false }).returns<FlexibleDocumentRow[]>();
   if (error) throw new Error(`Nie udało się pobrać dokumentów: ${error.message}`);
   return normalizeDocuments(data ?? [], projectId);
 }
 
+export async function countDocumentsForProject(projectId: string, trashed = false) {
+  const { count, error } = await createServiceSupabaseClient().from("documents").select("id", { count: "exact", head: true }).eq("project_id", projectId).filter("deleted_at", trashed ? "not.is" : "is", null);
+  if (error) throw new Error(`Nie udało się policzyć dokumentów: ${error.message}`);
+  return count ?? 0;
+}
+
 export async function listDocumentsForProjectPage(projectId: string, options: { trashed?: boolean; page?: number; pageSize?: number } = {}) {
-  const trashed=options.trashed??false,page=Math.max(1,Math.floor(options.page??1)),pageSize=Math.min(100,Math.max(10,Math.floor(options.pageSize??50))),from=(page-1)*pageSize,to=from+pageSize-1;
-  const {data,error,count}=await createServiceSupabaseClient().from("documents").select(DOCUMENT_WITH_VERSIONS_SELECT,{count:"exact"}).eq("project_id",projectId).filter("deleted_at",trashed?"not.is":"is",null).order("updated_at",{ascending:false}).range(from,to).returns<FlexibleDocumentRow[]>();
-  if(error)throw new Error(`Nie udało się pobrać strony dokumentów: ${error.message}`);
-  return {items:normalizeDocuments(data??[],projectId),total:count??0,page,pageSize};
+  const trashed = options.trashed ?? false, page = Math.max(1, Math.floor(options.page ?? 1)), pageSize = Math.min(100, Math.max(10, Math.floor(options.pageSize ?? 50))), from = (page - 1) * pageSize, to = from + pageSize - 1;
+  const { data, error, count } = await createServiceSupabaseClient().from("documents").select(DOCUMENT_WITH_VERSIONS_SELECT, { count: "exact" }).eq("project_id", projectId).filter("deleted_at", trashed ? "not.is" : "is", null).order("updated_at", { ascending: false }).range(from, to).returns<FlexibleDocumentRow[]>();
+  if (error) throw new Error(`Nie udało się pobrać strony dokumentów: ${error.message}`);
+  return { items: normalizeDocuments(data ?? [], projectId), total: count ?? 0, page, pageSize };
 }
 
 export async function listDocumentsForWorkspace(workspaceId: string, trashed = false): Promise<DocumentSummary[]> {
@@ -75,12 +89,15 @@ export async function safeListDocumentsForProject(projectId: string): Promise<Do
 }
 
 export async function listDocumentsForCategories(projectId: string, categories: string[]): Promise<DocumentSummary[]> {
-  const documents = await safeListDocumentsForProject(projectId);
-  const accepted = new Set(categories.map((category) => category.toLocaleLowerCase("pl")));
-  return documents.filter((document) => document.category && accepted.has(document.category.toLocaleLowerCase("pl")));
+  if (!categories.length) return [];
+  const normalizedCategories = Array.from(new Set(categories.map((category) => category.trim()).filter(Boolean)));
+  if (!normalizedCategories.length) return [];
+  const { data, error } = await documentQuery(projectId, false).in("category", normalizedCategories).order("updated_at", { ascending: false }).returns<FlexibleDocumentRow[]>();
+  if (error) throw new Error(`Nie udało się pobrać dokumentów modułu: ${error.message}`);
+  return normalizeDocuments(data ?? [], projectId);
 }
 
-export async function isDocumentStorageSchemaReady() {
+export const isDocumentStorageSchemaReady = cache(async () => {
   const { data, error } = await createServiceSupabaseClient().from("app_schema_versions").select("version").eq("version", "20260814_domain_access_hardening").maybeSingle<{ version: string }>();
   return !error && data?.version === "20260814_domain_access_hardening";
-}
+});

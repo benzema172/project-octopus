@@ -6,7 +6,6 @@ import { ProjectOperationPanel } from "@/components/projects/project-operation-p
 import { requireCurrentUser } from "@/lib/auth";
 import { listDocumentsForCategories } from "@/lib/data/documents";
 import { getMaterialKnowledge } from "@/lib/data/module-knowledge";
-import { getProjectKnowledgeSnapshot } from "@/lib/data/project-knowledge";
 import { getProjectForUser } from "@/lib/data/projects";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { hasDomainAccess } from "@/lib/authorization";
@@ -23,9 +22,8 @@ export default async function RequestsPage({ params }: Props) {
   if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id })) return <DomainAccessDenied workspaceId={project.workspace_id} area="Wnioski materiałowe" />;
   const canWrite = await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "write", projectId: project.id });
   const db = createServiceSupabaseClient();
-  const [documents, snapshot, brain, requirementsResult, requestsResult] = await Promise.all([
+  const [documents, brain, requirementsResult, requestsResult] = await Promise.all([
     listDocumentsForCategories(projectId, ["wniosek"]),
-    getProjectKnowledgeSnapshot(projectId),
     getMaterialKnowledge(projectId),
     db.from("project_requirements").select("id,title,description,status").eq("workspace_id", project.workspace_id).eq("project_id", project.id).eq("requirement_type", "material_application").order("created_at", { ascending: false }),
     db.from("material_requests").select("id,source_requirement_id,title,manufacturer,product_name,model,proposed_use,compliance_summary,status,sent_to,submitted_at,sent_at,decision_note").eq("project_id", project.id).order("created_at", { ascending: false })

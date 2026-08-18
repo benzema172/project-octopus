@@ -64,15 +64,22 @@ describe("0.9.1–1.0 implementation contracts", () => {
     expect(capture).toContain("source_reference_retry_evidence_cleanup");
   });
 
-  it("provides 1.0 cash flow, resources, correspondence and anomaly engine", () => {
+  it("provides 1.0 cash flow, resources, correspondence and isolated Control 360 panels", () => {
     const migration = read("supabase/migrations/20260817250000_100_command_center.sql");
+    const controlPage = read("app/workspace/projects/[projectId]/control/page.tsx");
+    const isolatedPanels = read("components/projects/control-isolated-panels.tsx");
     expect(migration).toContain("project_correspondence");
     expect(migration).toContain("resource_plan_entries");
     expect(migration).toContain("project_anomalies");
     expect(migration).toContain("refresh_project_anomalies");
     expect(read("supabase/migrations/20260817251000_100_command_center_nullsafe.sql")).toContain("generate_series(0,12)");
-    expect(read("app/workspace/projects/[projectId]/control/page.tsx")).toContain("ProjectCommandCenter");
-    expect(read("app/workspace/projects/[projectId]/control/page.tsx")).toContain("ProjectReconciliationGraph");
+    expect(controlPage).toContain("CommandCenterPanel");
+    expect(controlPage).toContain("ReconciliationPanel");
+    expect(controlPage).toContain("ExecutionPanel");
+    expect(controlPage).toContain("Suspense");
+    expect(isolatedPanels).toContain("ProjectCommandCenter");
+    expect(isolatedPanels).toContain("ProjectReconciliationGraph");
+    expect(isolatedPanels).toContain("PanelFailure");
   });
 
   it("activates the previously missing company search route", () => {
