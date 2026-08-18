@@ -34,7 +34,8 @@ begin
   if tg_op='DELETE' and old.exported_at is not null then
     raise exception 'Wyeksportowany dekret jest zamrożony. Użyj korekty lub storna zamiast zmiany historii.';
   end if;
-  if tg_op='UPDATE' and old.exported_at is not null then
+  if tg_op='UPDATE' and old.exported_at is not null
+     and (to_jsonb(new)-'exported_at') is distinct from (to_jsonb(old)-'exported_at') then
     raise exception 'Wyeksportowany dekret jest zamrożony. Użyj korekty lub storna zamiast zmiany historii.';
   end if;
   return case when tg_op='DELETE' then old else new end;
@@ -71,10 +72,6 @@ returns trigger
 language plpgsql
 set search_path=public
 as $$
-declare
-  v_workspace_id uuid;
-  v_source_type text;
-  v_source_id uuid;
 begin
   if tg_op in ('UPDATE','DELETE') and old.source_type='invoice' and old.source_id is not null and exists(
     select 1 from public.accounting_entries ae
