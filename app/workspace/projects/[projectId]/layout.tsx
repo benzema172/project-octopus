@@ -6,7 +6,7 @@ import { CompanyShell } from "@/components/layout/company-shell";
 import { ProjectAutopilotDock } from "@/components/projects/project-autopilot-dock";
 import { ProjectNavigation } from "@/components/projects/project-navigation";
 import { requireCurrentUser } from "@/lib/auth";
-import { getInvestmentAutopilotSummary } from "@/lib/data/investment-autopilot";
+import { getReliableInvestmentAutopilotSummary } from "@/lib/data/investment-autopilot-summary";
 import { getProjectProfile } from "@/lib/data/project-profile";
 import { getProjectForUser } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
@@ -37,7 +37,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 async function AsyncProjectAutopilotDock({ projectId, canRun }: { projectId: string; canRun: boolean }) {
-  const summary = await getInvestmentAutopilotSummary(projectId).catch((error) => {
+  const summary = await getReliableInvestmentAutopilotSummary(projectId).catch((error) => {
     console.error("Project Octopus: project Autopilot summary fallback", { projectId, message: error instanceof Error ? error.message : String(error) });
     return { attentionCount: 0, aiCanDoCount: 0, blockerCount: 0, healthScore: 100, nextTitle: null };
   });
