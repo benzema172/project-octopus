@@ -29,7 +29,7 @@ export async function CompanyOperationalPage({workspaceId,page,query,domain,kind
   if(!workspace)notFound();
   const canRead=await hasDomainAccess({workspaceId:workspace.id,userId:user.id,domain,level:"read"});
   if(!canRead)return <DomainAccessDenied workspaceId={workspace.id} area={kicker}/>;
-  const referenceDate=new Date().toISOString();
+  const referenceDate=new Date().toISOString().slice(0,10);
   const [data,canWrite]=await Promise.all([
     loader(workspace.id,{page:Number(page??1),query,referenceDate}),
     hasDomainAccess({workspaceId:workspace.id,userId:user.id,domain,level:"write"})
