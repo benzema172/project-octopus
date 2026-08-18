@@ -28,6 +28,7 @@ export type DocumentAnalysis = {
     taxAmount: number;
     grossAmount: number;
     lines: Array<{
+      lineType: "material" | "service" | "other";
       sku: string;
       description: string;
       quantity: number;
@@ -77,10 +78,11 @@ const RESPONSE_SCHEMA = {
           items: {
             type: "OBJECT",
             properties: {
+              lineType: { type: "STRING", enum: ["material", "service", "other"] },
               sku: { type: "STRING" }, description: { type: "STRING" }, quantity: { type: "NUMBER" }, unit: { type: "STRING" },
               unitPrice: { type: "NUMBER" }, netAmount: { type: "NUMBER" }, grossAmount: { type: "NUMBER" }, confidence: { type: "NUMBER" }
             },
-            required: ["sku", "description", "quantity", "unit", "unitPrice", "netAmount", "grossAmount", "confidence"]
+            required: ["lineType", "sku", "description", "quantity", "unit", "unitPrice", "netAmount", "grossAmount", "confidence"]
           }
         }
       },
@@ -154,6 +156,7 @@ function normalizeAnalysis(value: unknown): DocumentAnalysis {
       taxAmount: Number(source.businessDocument?.taxAmount) || 0,
       grossAmount: Number(source.businessDocument?.grossAmount) || 0,
       lines: Array.isArray(source.businessDocument?.lines) ? source.businessDocument.lines.slice(0, 500).map((line) => ({
+        lineType: ["material", "service", "other"].includes(String(line.lineType)) ? line.lineType as "material" | "service" | "other" : (String(line.sku ?? "").trim() ? "material" : "other"),
         sku: String(line.sku ?? ""), description: String(line.description ?? ""), quantity: Number(line.quantity) || 0,
         unit: String(line.unit ?? "szt."), unitPrice: Number(line.unitPrice) || 0, netAmount: Number(line.netAmount) || 0,
         grossAmount: Number(line.grossAmount) || 0, confidence: Math.max(0, Math.min(1, Number(line.confidence) || 0))
@@ -183,7 +186,7 @@ export async function analyzeDocumentWithGemini(input: AnalyzeInput) {
   const prompt = `Jesteś silnikiem analizy dokumentów w polskiej firmie wykonującej instalacje sanitarne, wentylację, klimatyzację i roboty budowlane.\n
 Przeanalizuj dokument ${input.fileName}. Rozpoznaj jego rzeczywisty kontekst, nie tylko rozszerzenie. Kosztorys traktuj jako źródło pozycji BOQ i etapów WBS. Jeżeli to kosztorys lub przedmiar, wypełnij boqItems rzeczywistymi wierszami tabeli; nie łącz pozycji i zachowaj numer, ilość, jednostkę oraz ceny. Jeżeli dokument nie jest kosztorysem, zwróć pustą tablicę boqItems. Dla dokumentacji wskaż instalacje, etapy, wymagane wnioski materiałowe i protokoły.
 
-Dla faktury, WZ, PZ lub dokumentu dostawy dokładnie wypełnij businessDocument: numer, daty, strony, NIP-y, kwoty oraz każdą pozycję materiałową. documentType ustaw na invoice, WZ, PZ albo delivery. direction ustaw na purchase lub sale. Jeżeli dokument nie jest dokumentem handlowym/magazynowym, zwróć puste pola i pustą tablicę lines. Nie utożsamiaj zakupu materiału z wykonaniem robót.
+Dla faktury, WZ, PZ lub dokumentu dostawy dokładnie wypełnij businessDocument: numer, daty, strony, NIP-y, kwoty i każdą pozycję. Dla każdej pozycji ustaw lineType: material wyłącznie dla fizycznych materiałów/towarów/urządzeń, service dla robocizny, usług, transportu, najmu, podwykonawstwa i innych świadczeń niematerialnych, a other dla rabatów, korekt i pozycji niejednoznacznych. Nie oznaczaj usługi jako materiał tylko dlatego, że ma ilość i cenę. documentType ustaw na invoice, WZ, PZ albo delivery. direction ustaw na purchase lub sale. Jeżeli dokument nie jest dokumentem handlowym/magazynowym, zwróć puste pola i pustą tablicę lines. Nie utożsamiaj zakupu materiału z wykonaniem robót.
 
 Spróbuj dopasować dokument do jednej inwestycji z katalogu poniżej. W projectHint zwróć dokładnie pełny wiersz najlepszego dopasowania albo OGÓLNE, gdy dokument dotyczy całej firmy lub brak wiarygodnych wskazówek. Nie zgaduj.
 KATALOG INWESTYCJI:
