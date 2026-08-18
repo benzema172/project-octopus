@@ -1,4 +1,4 @@
-import { demoId, type DemoBlueprint, type DemoRow } from "./blueprint";
+import { demoId, type DemoBlueprint } from "./blueprint";
 
 const DAY = 86_400_000;
 
