@@ -1,18 +1,21 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { InvestmentAutopilotCenter } from "@/components/projects/investment-autopilot-center";
-import { ProjectExecutionCenter } from "@/components/projects/project-execution-center";
-import { ProjectReconciliationGraph } from "@/components/projects/project-reconciliation-graph";
-import { ProjectCommandCenter } from "@/components/projects/project-command-center";
-import { requireCurrentUser } from "@/lib/auth";
-import { getInvestmentAutopilotSnapshot } from "@/lib/data/investment-autopilot";
-import { getProjectExecutionSnapshot } from "@/lib/data/operations";
-import { getProjectForUser } from "@/lib/data/projects";
-import { getProjectReconciliation } from "@/lib/data/reconciliation";
-import { getProjectCommandCenter } from "@/lib/data/project-command-center";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
+import {
+  AutopilotPanel,
+  CommandCenterPanel,
+  ExecutionPanel,
+  ReconciliationPanel
+} from "@/components/projects/control-isolated-panels";
+import { requireCurrentUser } from "@/lib/auth";
+import { getProjectForUser } from "@/lib/data/projects";
 import { hasDomainAccess } from "@/lib/authorization";
 
 export const dynamic = "force-dynamic";
+
+function PanelLoading({ label }: { label: string }) {
+  return <section className="execution-layer-notice" role="status"><div><strong>Ładowanie: {label}</strong><p>Ta część Kontroli 360 ładuje się niezależnie.</p></div></section>;
+}
 
 export default async function ControlPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
@@ -20,6 +23,7 @@ export default async function ControlPage({ params }: { params: Promise<{ projec
   const project = await getProjectForUser(user, projectId);
   if (!project) notFound();
   if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id })) return <DomainAccessDenied workspaceId={project.workspace_id} area="Kontrola 360°" />;
+
   const [canManageInvestments, financeAllowed, canManageFinance, warehouseAllowed, canManageWarehouse] = await Promise.all([
     hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "write", projectId: project.id }),
     hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "finance", level: "read", projectId: project.id }),
@@ -27,19 +31,14 @@ export default async function ControlPage({ params }: { params: Promise<{ projec
     hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "warehouse", level: "read", projectId: project.id }),
     hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "warehouse", level: "write", projectId: project.id })
   ]);
-  const [executionSnapshot, autopilotSnapshot, reconciliation, commandCenter] = await Promise.all([
-    getProjectExecutionSnapshot(project.workspace_id, project.id, { includeFinance: financeAllowed, includeWarehouse: warehouseAllowed }),
-    getInvestmentAutopilotSnapshot(project.workspace_id, project.id, { includeFinance: financeAllowed, includeWarehouse: warehouseAllowed }),
-    financeAllowed || warehouseAllowed
-      ? getProjectReconciliation(project.workspace_id, project.id)
-      : Promise.resolve({ graph: {}, links: [], orders: [], requests: [], counterparties: [], stockItems: [], boqItems: [] }),
-    getProjectCommandCenter(project.workspace_id, project.id)
-  ]);
+
+  const shared = { workspaceId: project.workspace_id, projectId: project.id, canManageInvestments, financeAllowed, canManageFinance, warehouseAllowed, canManageWarehouse };
+
   return <div className="project-tab-content">
-    <section className="project-module-heading"><div><p className="eyebrow">Kosztorys do odbioru</p><h2>Kontrola 360° inwestycji</h2><p>Jeden widok łączący zakres, wymagania, harmonogram, materiały, postęp, dowody, zmiany, cash flow i forecast.</p></div></section>
-    <ProjectCommandCenter projectId={project.id} data={commandCenter} canManage={canManageInvestments} />
-    <InvestmentAutopilotCenter projectId={project.id} workspaceId={project.workspace_id} snapshot={autopilotSnapshot} canRun={canManageInvestments} financeAllowed={financeAllowed} warehouseAllowed={warehouseAllowed} />
-    {financeAllowed || warehouseAllowed ? <ProjectReconciliationGraph projectId={project.id} data={reconciliation} canManage={canManageInvestments && (canManageFinance || canManageWarehouse)} canOrder={canManageInvestments && canManageWarehouse} /> : null}
-    <ProjectExecutionCenter workspaceId={project.workspace_id} projectId={project.id} snapshot={executionSnapshot} financeAllowed={financeAllowed} canManageFinance={canManageFinance} warehouseAllowed={warehouseAllowed} canManageInvestments={canManageInvestments} />
+    <section className="project-module-heading"><div><p className="eyebrow">Kosztorys do odbioru</p><h2>Kontrola 360° inwestycji</h2><p>Jeden widok łączący zakres, wymagania, harmonogram, materiały, postęp, dowody, zmiany, cash flow i forecast. Każdy blok działa niezależnie — awaria jednego źródła nie blokuje pozostałych.</p></div></section>
+    <Suspense fallback={<PanelLoading label="Command Center" />}><CommandCenterPanel workspaceId={project.workspace_id} projectId={project.id} canManageInvestments={canManageInvestments} /></Suspense>
+    <Suspense fallback={<PanelLoading label="Investment Autopilot" />}><AutopilotPanel {...shared} /></Suspense>
+    <Suspense fallback={<PanelLoading label="Reconciliation" />}><ReconciliationPanel {...shared} /></Suspense>
+    <Suspense fallback={<PanelLoading label="Execution Layer" />}><ExecutionPanel {...shared} /></Suspense>
   </div>;
 }
