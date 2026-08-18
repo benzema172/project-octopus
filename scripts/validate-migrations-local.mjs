@@ -18,7 +18,8 @@ const migrations = [
   "supabase/migrations/20260817241000_095_analysis_retry_capture.sql",
   "supabase/migrations/20260817250000_100_command_center.sql",
   "supabase/migrations/20260817250500_100_boq_scope.sql",
-  "supabase/migrations/20260817251000_100_command_center_nullsafe.sql"
+  "supabase/migrations/20260817251000_100_command_center_nullsafe.sql",
+  "supabase/migrations/20260818073000_101_company_document_upload_fix.sql"
 ];
 
 function withoutPgcrypto(sql) {
@@ -83,8 +84,8 @@ try {
     if (result.rows[0]?.count < 1) throw new Error(`Missing database function: ${name}`);
   }
 
-  const markers = await database.query("select version from public.app_schema_versions where version like '20260817_%' order by version");
-  if (markers.rows.length < 10) throw new Error(`Expected 0.9.1–1.0 schema markers, received ${markers.rows.length}.`);
+  const markers = await database.query("select version from public.app_schema_versions where version like '20260817_%' or version like '20260818_%' order by version");
+  if (markers.rows.length < 11) throw new Error(`Expected 0.9.1–1.0.1 schema markers, received ${markers.rows.length}.`);
 
   const userId = "00000000-0000-4000-8000-000000000001";
   const workspaceId = "00000000-0000-4000-8000-000000000002";
@@ -100,6 +101,28 @@ try {
     insert into public.boq_items(id,project_id,item_number,description,quantity,unit,unit_price,total_price)
       values ('${boqId}','${projectId}','1.1','Rura testowa DN110',10,'m',40,400);
   `);
+
+  const companyDocumentId = "00000000-0000-4000-8000-000000000005";
+  const companyVersionId = "00000000-0000-4000-8000-000000000006";
+  const companyUpload = await database.query(
+    "select * from public.complete_document_upload($1,$2,$3,null,'instrukcja.pdf','general','application/pdf',128,'test','workspaces/test/company/instrukcja.pdf','etag',null,$4,now())",
+    [companyDocumentId, companyVersionId, workspaceId, userId]
+  );
+  if (companyUpload.rows[0]?.version_number !== 1) throw new Error("Company-level document upload did not create version 1.");
+  const companyDocument = await database.query("select project_id,current_version_id from public.documents where id=$1", [companyDocumentId]);
+  if (companyDocument.rows[0]?.project_id !== null || companyDocument.rows[0]?.current_version_id !== companyVersionId) {
+    throw new Error("Company-level document was not finalized without a project.");
+  }
+  let identityConflictRejected = false;
+  try {
+    await database.query(
+      "select * from public.complete_document_upload($1,$2,$3,$4,'instrukcja-v2.pdf','general','application/pdf',128,'test','workspaces/test/projects/mismatch.pdf','etag2',null,$5,now())",
+      [companyDocumentId, "00000000-0000-4000-8000-000000000007", workspaceId, projectId, userId]
+    );
+  } catch {
+    identityConflictRejected = true;
+  }
+  if (!identityConflictRejected) throw new Error("Company document could be rebound to a project through a later version.");
 
   const firstBudget = await database.query("select * from public.create_budget_version_atomic($1,$2,'Budżet',100000,70000,$3)", [workspaceId, projectId, userId]);
   const secondBudget = await database.query("select * from public.create_budget_version_atomic($1,$2,'Budżet korekta',100000,75000,$3)", [workspaceId, projectId, userId]);
@@ -138,7 +161,7 @@ try {
   if (!snapshot || !Array.isArray(snapshot.cashflow13w) || snapshot.cashflow13w.length !== 13) throw new Error("Command Center did not build a 13-week cash flow.");
 
   console.log(`OK   full migration chain: ${migrations.length} migrations`);
-  console.log("OK   atomic budget, warehouse ledger, MM, purchase order, search, anomalies and Command Center smoke tests");
+  console.log("OK   company-level upload, atomic budget, warehouse ledger, MM, purchase order, search, anomalies and Command Center smoke tests");
 } finally {
   await database.close();
 }
