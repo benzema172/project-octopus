@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { DocumentUpload } from "@/components/documents/document-upload";
+import { ServerPagination } from "@/components/system/server-pagination";
 import { requireCurrentUser } from "@/lib/auth";
-import { isDocumentStorageSchemaReady, listDocumentsForProject } from "@/lib/data/documents";
+import { isDocumentStorageSchemaReady, listDocumentsForProjectPage } from "@/lib/data/documents";
 import { getProjectForUser } from "@/lib/data/projects";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { hasDomainAccess } from "@/lib/authorization";
@@ -10,44 +11,22 @@ export const dynamic = "force-dynamic";
 
 type ProjectDocumentationPageProps = {
   params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ page?: string }>;
 };
 
-export default async function ProjectDocumentationPage({ params }: ProjectDocumentationPageProps) {
-  const { projectId } = await params;
+export default async function ProjectDocumentationPage({ params, searchParams }: ProjectDocumentationPageProps) {
+  const [{ projectId }, query] = await Promise.all([params, searchParams]);
+  const page=Math.max(1,Number.parseInt(query.page??"1",10)||1);
   const user = await requireCurrentUser();
   const project = await getProjectForUser(user, projectId);
+  if (!project) notFound();
+  if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id })) return <DomainAccessDenied workspaceId={project.workspace_id} area="Dokumentacja inwestycji" />;
 
-  if (!project) {
-    notFound();
-  }
-  if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id })) {
-    return <DomainAccessDenied workspaceId={project.workspace_id} area="Dokumentacja inwestycji" />;
-  }
-
-  const [documents, trashedDocuments, storageSchemaReady] = await Promise.all([
-    listDocumentsForProject(project.id),
-    listDocumentsForProject(project.id, true),
+  const [documentsPage, trashPage, storageSchemaReady] = await Promise.all([
+    listDocumentsForProjectPage(project.id,{page,pageSize:50}),
+    listDocumentsForProjectPage(project.id,{trashed:true,page:1,pageSize:25}),
     isDocumentStorageSchemaReady()
   ]);
 
-  return (
-    <div className="project-tab-content">
-      <section className="section-band">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Dokumentacja</p>
-            <h2>Pliki inwestycji</h2>
-          </div>
-          <p>{documents.length} plików</p>
-        </div>
-        <DocumentUpload
-          workspaceId={project.workspace_id}
-          projectId={project.id}
-          documents={documents}
-          trashedDocuments={trashedDocuments}
-          storageReady={storageSchemaReady}
-        />
-      </section>
-    </div>
-  );
+  return <div className="project-tab-content"><section className="section-band"><div className="section-heading"><div><p className="eyebrow">Dokumentacja</p><h2>Pliki inwestycji</h2></div><p>{documentsPage.total} plików · strona {documentsPage.page}</p></div><DocumentUpload workspaceId={project.workspace_id} projectId={project.id} documents={documentsPage.items} trashedDocuments={trashPage.items} storageReady={storageSchemaReady}/><ServerPagination page={documentsPage.page} pageSize={documentsPage.pageSize} total={documentsPage.total} pathname={`/workspace/projects/${project.id}/documentation`}/></section></div>;
 }
