@@ -1,0 +1,23 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { APP_RELEASE, APP_RELEASE_LABEL } from "../lib/app-release";
+
+const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
+
+describe("application release badge", () => {
+  it("stays aligned with the package version and release date", () => {
+    expect(APP_RELEASE.version).toBe(packageJson.version);
+    expect(APP_RELEASE.introducedAt).toBe("18.08.2026");
+    expect(APP_RELEASE_LABEL).toContain(`v${packageJson.version}`);
+    expect(APP_RELEASE_LABEL).toContain(APP_RELEASE.introducedAt);
+  });
+
+  it("is mounted globally and styled for login and workspace screens", () => {
+    const layout = readFileSync("app/layout.tsx", "utf8");
+    const css = readFileSync("app/release-badge.css", "utf8");
+    expect(layout).toContain("<AppReleaseBadge />");
+    expect(layout).toContain('import "./release-badge.css"');
+    expect(css).toContain("body:has(.octopus-login) .app-release-badge");
+    expect(css).toContain(".app-release-badge");
+  });
+});

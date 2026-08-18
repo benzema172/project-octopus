@@ -1,0 +1,6 @@
+export const APP_RELEASE = {
+  version: "1.0.1",
+  introducedAt: "18.08.2026"
+} as const;
+
+export const APP_RELEASE_LABEL = `Project Octopus v${APP_RELEASE.version} • wdrożono ${APP_RELEASE.introducedAt}`;

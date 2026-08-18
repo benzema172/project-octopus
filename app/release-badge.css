@@ -1,0 +1,92 @@
+.app-release-badge {
+  position: fixed;
+  right: 14px;
+  bottom: 12px;
+  z-index: 90;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 28px);
+  border: 1px solid rgba(132, 113, 151, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 8px 24px rgba(48, 33, 62, 0.08);
+  color: #716b79;
+  font-size: 10px;
+  line-height: 1;
+  padding: 7px 10px;
+  pointer-events: none;
+  user-select: none;
+  backdrop-filter: blur(12px);
+}
+
+.app-release-badge__product {
+  color: #4f4858;
+  font-weight: 750;
+}
+
+.app-release-badge__version {
+  color: #6d32cf;
+  font-weight: 900;
+}
+
+.app-release-badge__separator {
+  color: #aaa0b2;
+}
+
+.app-release-badge__date {
+  color: #827b89;
+}
+
+body:has(.octopus-login) {
+  position: relative;
+}
+
+body:has(.octopus-login) .octopus-login {
+  padding-bottom: 58px;
+}
+
+body:has(.octopus-login) .app-release-badge {
+  position: absolute;
+  right: auto;
+  bottom: 12px;
+  left: 50%;
+  border-color: rgba(112, 138, 195, 0.24);
+  background: rgba(3, 12, 29, 0.76);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.22);
+  color: #aebdd8;
+  transform: translateX(-50%);
+}
+
+body:has(.octopus-login) .app-release-badge__product {
+  color: #eef3fb;
+}
+
+body:has(.octopus-login) .app-release-badge__version {
+  color: #70eaff;
+}
+
+body:has(.octopus-login) .app-release-badge__separator,
+body:has(.octopus-login) .app-release-badge__date {
+  color: #8fa8c9;
+}
+
+@media (max-width: 640px) {
+  .app-release-badge {
+    right: 8px;
+    bottom: 8px;
+    gap: 4px;
+    font-size: 9px;
+    padding: 6px 8px;
+  }
+
+  .app-release-badge__product {
+    display: none;
+  }
+
+  body:has(.octopus-login) .app-release-badge {
+    right: auto;
+    bottom: 10px;
+    left: 50%;
+  }
+}

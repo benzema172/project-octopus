@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AppReleaseBadge } from "@/components/app-release-badge";
 import "./globals.css";
 import "./octopus-app.css";
 import "./company-selector-refinement.css";
@@ -13,6 +14,7 @@ import "./project-navigation-refinement.css";
 import "./project-modules-operational.css";
 import "./brain-knowledge.css";
 import "./octopus-1-release.css";
+import "./release-badge.css";
 
 export const metadata: Metadata = {
   title: "Project Octopus",
@@ -26,7 +28,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pl">
-      <body>{children}</body>
+      <body>
+        {children}
+        <AppReleaseBadge />
+      </body>
     </html>
   );
 }
