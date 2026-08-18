@@ -5,6 +5,7 @@ import { listProjectsForWorkspace } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { domainAccessPolicyAllows, domainAccessPolicyHasAnyScope, loadDomainAccessPolicy } from "@/lib/authorization";
+import "../../../../../investments-refinement.css";
 
 export const dynamic = "force-dynamic";
 
