@@ -1,6 +1,19 @@
 -- Project Octopus post-change performance hardening.
 -- Keeps production fixes reproducible for fresh environments.
 
+-- The production project already had profiles from an early bootstrap that was
+-- never captured in the repository migration chain. Backfill that dependency
+-- idempotently so a fresh database can reach the same schema.
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  full_name text,
+  company_name text,
+  phone text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.profiles enable row level security;
+
 create index if not exists financial_allocations_project_source_idx
   on public.financial_allocations(workspace_id, project_id, source_type, status, source_id);
 
