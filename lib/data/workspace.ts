@@ -10,9 +10,12 @@ type WorkspaceMemberRow = {
 };
 
 type CompanyRow = Pick<CompanyWorkspace, "id" | "name"> & Partial<CompanyWorkspace>;
+type RetryableResult = { error: { message?: string } | null };
 
 const COMPANY_COLUMNS =
   "id, name, tax_id, regon, street, postal_code, city, email, phone, contact_person, industry, notes, created_at, updated_at";
+const JWT_CLOCK_SKEW = "JWT issued at future";
+const JWT_RETRY_DELAYS_MS = [0, 250, 750, 1500];
 
 function normalizeCompany(row: CompanyRow, role?: string, projectCount?: number): CompanyWorkspace {
   return {
@@ -40,61 +43,58 @@ function isMissingOwnerId(message: string | undefined) {
 }
 
 function isMissingCompanyProfileColumn(message: string | undefined) {
-  if (!message) {
-    return false;
-  }
-
+  if (!message) return false;
   return ["tax_id", "regon", "street", "postal_code", "contact_person", "industry", "notes"].some(
     (column) => message.includes(column) && (message.includes("schema cache") || message.includes("does not exist"))
   );
 }
 
-async function readCompanyRows(ids: string[]) {
-  if (ids.length === 0) {
-    return [] as CompanyRow[];
+function isJwtClockSkew(message: string | undefined) {
+  return Boolean(message?.includes(JWT_CLOCK_SKEW));
+}
+
+async function withJwtClockSkewRetry<T extends RetryableResult>(label: string, operation: () => PromiseLike<T>): Promise<T> {
+  let lastResult: T | null = null;
+  for (const delay of JWT_RETRY_DELAYS_MS) {
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+    const result = await operation();
+    lastResult = result;
+    if (!isJwtClockSkew(result.error?.message)) return result;
   }
+  console.error("Project Octopus: JWT clock-skew retry exhausted", { label, attempts: JWT_RETRY_DELAYS_MS.length });
+  return lastResult!;
+}
+
+async function readCompanyRows(ids: string[]) {
+  if (ids.length === 0) return [] as CompanyRow[];
 
   const supabase = createServiceSupabaseClient();
-  let result = await supabase.from("workspaces").select(COMPANY_COLUMNS).in("id", ids).returns<CompanyRow[]>();
+  let result = await withJwtClockSkewRetry("company rows", () =>
+    supabase.from("workspaces").select(COMPANY_COLUMNS).in("id", ids).returns<CompanyRow[]>()
+  );
 
   if (isMissingCompanyProfileColumn(result.error?.message)) {
-    result = await supabase
-      .from("workspaces")
-      .select("id, name, created_at, updated_at")
-      .in("id", ids)
-      .returns<CompanyRow[]>();
+    result = await withJwtClockSkewRetry("company rows legacy", () =>
+      supabase.from("workspaces").select("id, name, created_at, updated_at").in("id", ids).returns<CompanyRow[]>()
+    );
   }
 
-  if (result.error) {
-    throw new Error(`Nie udało się pobrać firm: ${result.error.message}`);
-  }
-
+  if (result.error) throw new Error(`Nie udało się pobrać firm: ${result.error.message}`);
   return result.data ?? [];
 }
 
 async function listMemberships(user: AuthenticatedUser): Promise<WorkspaceMemberRow[]> {
   const supabase = createServiceSupabaseClient();
-  let result = await supabase
-    .from("workspace_members")
-    .select("workspace_id, role")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: true })
-    .returns<WorkspaceMemberRow[]>();
-
-  if (result.error?.message.includes("JWT issued at future")) {
-    await new Promise((resolve) => setTimeout(resolve, 900));
-    result = await supabase
+  const result = await withJwtClockSkewRetry("workspace memberships", () =>
+    supabase
       .from("workspace_members")
       .select("workspace_id, role")
       .eq("user_id", user.id)
       .order("created_at", { ascending: true })
-      .returns<WorkspaceMemberRow[]>();
-  }
+      .returns<WorkspaceMemberRow[]>()
+  );
 
-  if (result.error) {
-    throw new Error(`Nie udało się odczytać firm użytkownika: ${result.error.message}`);
-  }
-
+  if (result.error) throw new Error(`Nie udało się odczytać firm użytkownika: ${result.error.message}`);
   return result.data ?? [];
 }
 
@@ -106,10 +106,7 @@ export const ensureWorkspaceForUser = cache(async function ensureWorkspaceForUse
   if (memberships[0]) {
     const rows = await readCompanyRows([memberships[0].workspace_id]);
     const workspace = rows[0];
-
-    if (workspace) {
-      return { id: workspace.id, name: workspace.name };
-    }
+    if (workspace) return { id: workspace.id, name: workspace.name };
   }
 
   const supabase = createServiceSupabaseClient();
@@ -117,32 +114,21 @@ export const ensureWorkspaceForUser = cache(async function ensureWorkspaceForUse
 
   let workspaceResult = await supabase
     .from("workspaces")
-    .insert({
-      name: workspaceName,
-      owner_id: user.id
-    })
+    .insert({ name: workspaceName, owner_id: user.id })
     .select("id, name")
     .single<WorkspaceSummary>();
 
   if (isMissingOwnerId(workspaceResult.error?.message)) {
     const workspaceSlug = `workspace-${user.id}`;
-
     workspaceResult = await supabase
       .from("workspaces")
-      .insert({
-        name: workspaceName,
-        slug: workspaceSlug,
-        created_by: user.id
-      })
+      .insert({ name: workspaceName, slug: workspaceSlug, created_by: user.id })
       .select("id, name")
       .single<WorkspaceSummary>();
   }
 
   const { data: workspace, error: workspaceError } = workspaceResult;
-
-  if (workspaceError || !workspace) {
-    throw new Error(`Nie udało się utworzyć firmy: ${workspaceError?.message ?? "brak danych"}`);
-  }
+  if (workspaceError || !workspace) throw new Error(`Nie udało się utworzyć firmy: ${workspaceError?.message ?? "brak danych"}`);
 
   const { error: memberError } = await supabase.from("workspace_members").insert({
     workspace_id: workspace.id,
@@ -160,7 +146,6 @@ export const ensureWorkspaceForUser = cache(async function ensureWorkspaceForUse
 
 export async function listCompanyWorkspacesForUser(user: AuthenticatedUser): Promise<CompanyWorkspace[]> {
   let memberships = await listMemberships(user);
-
   if (memberships.length === 0) {
     await ensureWorkspaceForUser(user);
     memberships = await listMemberships(user);
@@ -170,23 +155,17 @@ export async function listCompanyWorkspacesForUser(user: AuthenticatedUser): Pro
   const rows = await readCompanyRows(workspaceIds);
   const roleByWorkspace = new Map(memberships.map((membership) => [membership.workspace_id, membership.role]));
   const supabase = createServiceSupabaseClient();
-  const { data: projects, error: projectsError } = await supabase
-    .from("projects")
-    .select("workspace_id")
-    .in("workspace_id", workspaceIds)
-    .returns<Array<{ workspace_id: string }>>();
-
-  if (projectsError) {
-    throw new Error(`Nie udało się policzyć inwestycji firm: ${projectsError.message}`);
-  }
+  const projectsResult = await withJwtClockSkewRetry("workspace project counts", () =>
+    supabase.from("projects").select("workspace_id").in("workspace_id", workspaceIds).returns<Array<{ workspace_id: string }>>()
+  );
+  if (projectsResult.error) throw new Error(`Nie udało się policzyć inwestycji firm: ${projectsResult.error.message}`);
 
   const projectCount = new Map<string, number>();
-  for (const project of projects ?? []) {
+  for (const project of projectsResult.data ?? []) {
     projectCount.set(project.workspace_id, (projectCount.get(project.workspace_id) ?? 0) + 1);
   }
 
   const rowById = new Map(rows.map((row) => [row.id, row]));
-
   return workspaceIds
     .map((workspaceId) => {
       const row = rowById.get(workspaceId);
@@ -200,39 +179,33 @@ export const getWorkspaceForUser = cache(async function getWorkspaceForUser(
   workspaceId: string
 ): Promise<CompanyWorkspace | null> {
   const supabase = createServiceSupabaseClient();
-  const { data: membership, error: membershipError } = await supabase
-    .from("workspace_members")
-    .select("workspace_id, role")
-    .eq("workspace_id", workspaceId)
-    .eq("user_id", user.id)
-    .maybeSingle<WorkspaceMemberRow>();
-
-  if (membershipError) {
-    throw new Error(`Nie udało się sprawdzić dostępu do firmy: ${membershipError.message}`);
-  }
-
-  if (!membership) {
-    return null;
-  }
+  const membershipResult = await withJwtClockSkewRetry("workspace access", () =>
+    supabase
+      .from("workspace_members")
+      .select("workspace_id, role")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", user.id)
+      .maybeSingle<WorkspaceMemberRow>()
+  );
+  if (membershipResult.error) throw new Error(`Nie udało się sprawdzić dostępu do firmy: ${membershipResult.error.message}`);
+  if (!membershipResult.data) return null;
 
   const rows = await readCompanyRows([workspaceId]);
-  return rows[0] ? normalizeCompany(rows[0], membership.role) : null;
+  return rows[0] ? normalizeCompany(rows[0], membershipResult.data.role) : null;
 });
 
 export async function getWorkspaceRoleForUser(user: AuthenticatedUser, workspaceId: string) {
   const supabase = createServiceSupabaseClient();
-  const { data, error } = await supabase
-    .from("workspace_members")
-    .select("role")
-    .eq("workspace_id", workspaceId)
-    .eq("user_id", user.id)
-    .maybeSingle<{ role: string }>();
-
-  if (error) {
-    throw new Error(`Nie udało się sprawdzić roli w firmie: ${error.message}`);
-  }
-
-  return data?.role ?? null;
+  const result = await withJwtClockSkewRetry("workspace role", () =>
+    supabase
+      .from("workspace_members")
+      .select("role")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", user.id)
+      .maybeSingle<{ role: string }>()
+  );
+  if (result.error) throw new Error(`Nie udało się sprawdzić roli w firmie: ${result.error.message}`);
+  return result.data?.role ?? null;
 }
 
 export async function userHasWorkspaceAccess(user: AuthenticatedUser, workspaceId: string) {
@@ -246,6 +219,5 @@ export async function isCompanyProfileSchemaReady() {
     .select("version")
     .eq("version", "20260812_company_workspace_shell")
     .maybeSingle<{ version: string }>();
-
   return !error && data?.version === "20260812_company_workspace_shell";
 }

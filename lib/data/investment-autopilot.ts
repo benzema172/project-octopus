@@ -5,9 +5,22 @@ import { buildInvestmentAutopilotSnapshot, type AutopilotDecision, type Autopilo
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 type Result<T> = { data: T[] | null; error: { message: string } | null };
-function rows<T>(result: Result<T>, label: string): T[] { if (result.error) { console.error("Project Octopus: investment autopilot query fallback", { label, message: result.error.message }); return []; } return result.data ?? []; }
+function rows<T>(result: Result<T>, label: string): T[] {
+  if (result.error) {
+    console.error("Project Octopus: investment autopilot query fallback", { label, message: result.error.message });
+    return [];
+  }
+  return result.data ?? [];
+}
 
-export type InvestmentAutopilotSummary = { attentionCount: number; aiCanDoCount: number; blockerCount: number; healthScore: number; nextTitle: string | null };
+export type InvestmentAutopilotSummary = {
+  attentionCount: number;
+  aiCanDoCount: number;
+  blockerCount: number;
+  healthScore: number;
+  nextTitle: string | null;
+  degraded: boolean;
+};
 
 export async function getInvestmentAutopilotSummary(projectId: string): Promise<InvestmentAutopilotSummary> {
   const supabase = createServiceSupabaseClient();
@@ -16,16 +29,33 @@ export async function getInvestmentAutopilotSummary(projectId: string): Promise<
     supabase.from("protocol_requirements").select("id,title,status").eq("project_id", projectId).in("status", ["required", "draft"]).limit(30),
     supabase.from("document_change_impacts").select("id,summary,risk_level,status").eq("project_id", projectId).eq("status", "proposed").order("created_at", { ascending: false }).limit(20),
     supabase.from("evidence_requirements").select("id,title,status,due_at").eq("project_id", projectId).in("status", ["missing", "submitted"]).order("due_at", { ascending: true }).limit(30),
-    supabase.from("ai_findings").select("id,title,severity").eq("project_id", projectId).in("severity", ["critical", "warning", "high"]).limit(30)
+    // Do not send hard-coded enum literals here. Production installations may expose
+    // finding_severity as an enum whose values differ from older text-based schemas.
+    // We fetch a bounded set and classify severities in application code instead.
+    supabase.from("ai_findings").select("id,title,severity").eq("project_id", projectId).order("created_at", { ascending: false }).limit(100)
   ]);
-  const requirementRows = requirements.data ?? [], protocolRows = protocols.data ?? [], impactRows = impacts.data ?? [], evidenceRows = evidence.data ?? [], findingRows = findings.data ?? [];
-  const errors = [requirements.error, protocols.error, impacts.error, evidence.error, findings.error].filter(Boolean); if (errors.length) console.error("Project Octopus: autopilot summary partial fallback", errors.map((error) => error?.message));
+  const requirementRows = requirements.data ?? [];
+  const protocolRows = protocols.data ?? [];
+  const impactRows = impacts.data ?? [];
+  const evidenceRows = evidence.data ?? [];
+  const findingRows = (findings.data ?? []).filter((row) => {
+    const severity = String(row.severity ?? "").toLowerCase();
+    return ["critical", "high", "medium", "warning"].includes(severity);
+  });
+  const errors = [requirements.error, protocols.error, impacts.error, evidence.error, findings.error].filter(Boolean);
+  const degraded = errors.length > 0;
+  if (degraded) console.error("Project Octopus: autopilot summary partial fallback", errors.map((error) => error?.message));
+
   const aiCanDoCount = requirementRows.filter((row) => ["material_application", "work_stage"].includes(String(row.requirement_type))).length + protocolRows.length;
   const blockerCount = impactRows.filter((row) => ["high", "critical"].includes(String(row.risk_level).toLowerCase())).length + findingRows.filter((row) => String(row.severity).toLowerCase() === "critical").length;
   const attentionCount = requirementRows.length + protocolRows.length + impactRows.length + evidenceRows.length + findingRows.length;
-  const healthScore = Math.max(0, Math.min(100, 100 - blockerCount * 10 - Math.max(0, attentionCount - aiCanDoCount) * 2));
-  const nextTitle = impactRows[0]?.summary ?? findingRows[0]?.title ?? evidenceRows[0]?.title ?? requirementRows[0]?.title ?? protocolRows[0]?.title ?? null;
-  return { attentionCount, aiCanDoCount, blockerCount, healthScore, nextTitle };
+  const calculatedHealth = Math.max(0, Math.min(100, 100 - blockerCount * 10 - Math.max(0, attentionCount - aiCanDoCount) * 2));
+  // A partial query must never make the project look healthier than it really is.
+  const healthScore = degraded ? Math.min(calculatedHealth, 60) : calculatedHealth;
+  const nextTitle = degraded
+    ? "Autopilot ma niepełne dane — odśwież stan przed podjęciem decyzji."
+    : impactRows[0]?.summary ?? findingRows[0]?.title ?? evidenceRows[0]?.title ?? requirementRows[0]?.title ?? protocolRows[0]?.title ?? null;
+  return { attentionCount, aiCanDoCount, blockerCount, healthScore, nextTitle, degraded };
 }
 
 export async function getInvestmentAutopilotSnapshot(workspaceId: string, projectId: string, options: { includeFinance?: boolean; includeWarehouse?: boolean } = {}): Promise<InvestmentAutopilotSnapshot> {

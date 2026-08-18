@@ -8,27 +8,21 @@ type FlexibleDocumentRow = FlexibleRow & {
   document_versions?: FlexibleRow[] | null;
 };
 
+type ServiceClient = ReturnType<typeof createServiceSupabaseClient>;
+
 function stringValue(row: FlexibleRow, ...keys: string[]) {
   for (const key of keys) {
     const value = row[key];
-
-    if (typeof value === "string") {
-      return value;
-    }
+    if (typeof value === "string") return value;
   }
-
   return null;
 }
 
 function numberValue(row: FlexibleRow, ...keys: string[]) {
   for (const key of keys) {
     const value = row[key];
-
-    if (typeof value === "number") {
-      return value;
-    }
+    if (typeof value === "number") return value;
   }
-
   return 0;
 }
 
@@ -79,37 +73,64 @@ function normalizeDocuments(rows: FlexibleDocumentRow[], fallbackProjectId: stri
   });
 }
 
+async function hydrateVersions(supabase: ServiceClient, documentRows: FlexibleDocumentRow[]) {
+  const ids = documentRows.map((row) => stringValue(row, "id")).filter((id): id is string => Boolean(id));
+  if (ids.length === 0) return documentRows;
+
+  const versionsByDocument = new Map<string, FlexibleRow[]>();
+  const batchSize = 100;
+  for (let offset = 0; offset < ids.length; offset += batchSize) {
+    const batch = ids.slice(offset, offset + batchSize);
+    const { data, error } = await supabase
+      .from("document_versions")
+      .select("*")
+      .in("document_id", batch)
+      .order("version_number", { ascending: false })
+      .returns<FlexibleRow[]>();
+    if (error) throw new Error(`Nie udało się pobrać wersji dokumentów: ${error.message}`);
+    for (const version of data ?? []) {
+      const documentId = stringValue(version, "document_id");
+      if (!documentId) continue;
+      const existing = versionsByDocument.get(documentId) ?? [];
+      existing.push(version);
+      versionsByDocument.set(documentId, existing);
+    }
+  }
+
+  return documentRows.map((row) => {
+    const documentId = stringValue(row, "id");
+    return { ...row, document_versions: documentId ? versionsByDocument.get(documentId) ?? [] : [] };
+  });
+}
+
 export async function listDocumentsForProject(projectId: string, trashed = false): Promise<DocumentSummary[]> {
   const supabase = createServiceSupabaseClient();
-
   const { data, error } = await supabase
     .from("documents")
-    .select("*, document_versions(*)")
+    .select("*")
     .eq("project_id", projectId)
     .filter("deleted_at", trashed ? "not.is" : "is", null)
     .order("updated_at", { ascending: false })
     .returns<FlexibleDocumentRow[]>();
 
-  if (error) {
-    throw new Error(`Nie udało się pobrać dokumentów: ${error.message}`);
-  }
-
-  return normalizeDocuments(data ?? [], projectId);
+  if (error) throw new Error(`Nie udało się pobrać dokumentów: ${error.message}`);
+  const hydrated = await hydrateVersions(supabase, data ?? []);
+  return normalizeDocuments(hydrated, projectId);
 }
 
 export async function listDocumentsForWorkspace(workspaceId: string, trashed = false): Promise<DocumentSummary[]> {
   const supabase = createServiceSupabaseClient();
   const { data, error } = await supabase
     .from("documents")
-    .select("*, document_versions(*)")
+    .select("*")
     .eq("workspace_id", workspaceId)
     .filter("deleted_at", trashed ? "not.is" : "is", null)
     .order("updated_at", { ascending: false })
     .returns<FlexibleDocumentRow[]>();
 
   if (error) throw new Error(`Nie udało się pobrać dokumentów firmy: ${error.message}`);
-
-  return normalizeDocuments(data ?? [], null);
+  const hydrated = await hydrateVersions(supabase, data ?? []);
+  return normalizeDocuments(hydrated, null);
 }
 
 export async function safeListDocumentsForProject(projectId: string): Promise<DocumentSummary[]> {

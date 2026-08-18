@@ -1,5 +1,5 @@
 export const APP_RELEASE = {
-  version: "1.0.1",
+  version: "1.0.2",
   introducedAt: "18.08.2026"
 } as const;
 
