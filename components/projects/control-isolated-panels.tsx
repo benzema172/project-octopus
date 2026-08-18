@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { AlertTriangle } from "lucide-react";
 import { InvestmentAutopilotCenter } from "@/components/projects/investment-autopilot-center";
 import { ProjectCommandCenter } from "@/components/projects/project-command-center";
@@ -18,6 +19,8 @@ type AccessProps = BaseProps & {
   warehouseAllowed: boolean;
   canManageWarehouse: boolean;
 };
+type CommandCenterData = ComponentProps<typeof ProjectCommandCenter>["data"];
+type ReconciliationData = ComponentProps<typeof ProjectReconciliationGraph>["data"];
 
 function PanelFailure({ title, error }: { title: string; error: unknown }) {
   const detail = error instanceof Error ? error.message : "Nieznany błąd modułu.";
@@ -35,7 +38,7 @@ function PanelFailure({ title, error }: { title: string; error: unknown }) {
 
 export async function CommandCenterPanel({ workspaceId, projectId, canManageInvestments }: BaseProps & { canManageInvestments: boolean }) {
   try {
-    const data = await getControlCommandCenterData(workspaceId, projectId);
+    const data = await getControlCommandCenterData(workspaceId, projectId) as CommandCenterData;
     return <ProjectCommandCenter projectId={projectId} data={data} canManage={canManageInvestments} />;
   } catch (error) {
     return <PanelFailure title="Command Center" error={error} />;
@@ -54,7 +57,7 @@ export async function AutopilotPanel({ workspaceId, projectId, canManageInvestme
 export async function ReconciliationPanel({ workspaceId, projectId, canManageInvestments, financeAllowed, canManageFinance, warehouseAllowed, canManageWarehouse }: AccessProps) {
   if (!financeAllowed && !warehouseAllowed) return null;
   try {
-    const data = await getControlReconciliationData(workspaceId, projectId);
+    const data = await getControlReconciliationData(workspaceId, projectId) as ReconciliationData;
     return <ProjectReconciliationGraph projectId={projectId} data={data} canManage={canManageInvestments && (canManageFinance || canManageWarehouse)} canOrder={canManageInvestments && canManageWarehouse} />;
   } catch (error) {
     return <PanelFailure title="Reconciliation" error={error} />;
