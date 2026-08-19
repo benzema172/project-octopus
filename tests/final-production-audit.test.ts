@@ -52,6 +52,15 @@ describe("final production audit contract", () => {
     expect(liveAudit).toContain("octopus-live-audit.xlsx");
   });
 
+  it("repairs the deterministic guest workspace before seeding legacy demo rows", () => {
+    const guestServer = read("lib/demo/guest-server.ts");
+
+    expect(guestServer).toContain("DEMO_WORKSPACE_ID");
+    expect(guestServer).toContain("created_by: guest.id");
+    expect(guestServer).toContain("owner_id: guest.id");
+    expect(guestServer.indexOf("workspaceBootstrapError")).toBeLessThan(guestServer.indexOf("seedGuestDemoData(guest.id)"));
+  });
+
   it("aligns legacy project RLS with investments domain access without depending on schema drift", () => {
     const migration = read("supabase/migrations/20260819100451_final_audit_project_access.sql");
 
