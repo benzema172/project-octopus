@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { ArrowRight, Building2, FileText, MapPin, Plus, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowRight, Building2, FileText, MapPin, Plus, Search, X } from "lucide-react";
 import { CreateProjectForm } from "@/components/projects/create-project-form";
 import type { ProjectSummary } from "@/lib/types";
 
@@ -14,6 +14,18 @@ type CompanyInvestmentsViewProps = {
 
 export function CompanyInvestmentsView({ workspaceId, projects, canCreate }: CompanyInvestmentsViewProps) {
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [query, setQuery] = useState("");
+  const normalized = query.trim().toLocaleLowerCase("pl-PL");
+  const filteredProjects = useMemo(() => {
+    if (!normalized) return projects;
+    return projects.filter((project) => [
+      project.name,
+      project.description,
+      project.investor_name,
+      project.location,
+      project.status
+    ].some((value) => String(value ?? "").toLocaleLowerCase("pl-PL").includes(normalized)));
+  }, [normalized, projects]);
 
   return (
     <main className="co-page co-investments-page">
@@ -21,46 +33,58 @@ export function CompanyInvestmentsView({ workspaceId, projects, canCreate }: Com
         <div>
           <p className="co-kicker">Inwestycje</p>
           <h1>Realizacje firmy</h1>
-          <p>Centralny punkt wejścia do dokumentacji, danych i obsługi każdej inwestycji.</p>
+          <p>Otwórz inwestycję, znajdź ją po nazwie, inwestorze lub lokalizacji albo dodaj nową realizację.</p>
         </div>
         <div className="co-investments-heading__actions">
           <strong className="co-count-badge">{projects.length} inwestycji</strong>
-          {canCreate ? <button
-            type="button"
-            className="co-primary-button co-new-project-toggle"
-            onClick={() => setShowCreateForm((value) => !value)}
-            aria-expanded={showCreateForm}
-            aria-controls="new-project-panel"
-          >
-            {showCreateForm ? <X size={17} aria-hidden="true" /> : <Plus size={17} aria-hidden="true" />}
-            {showCreateForm ? "Zamknij" : "Nowa inwestycja"}
-          </button> : null}
+          {canCreate ? (
+            <button
+              type="button"
+              className="co-primary-button co-new-project-toggle"
+              onClick={() => setShowCreateForm((value) => !value)}
+              aria-expanded={showCreateForm}
+              aria-controls="new-project-panel"
+            >
+              {showCreateForm ? <X size={17} aria-hidden="true" /> : <Plus size={17} aria-hidden="true" />}
+              {showCreateForm ? "Zamknij formularz" : "Nowa inwestycja"}
+            </button>
+          ) : null}
         </div>
       </header>
 
       {canCreate && showCreateForm ? (
-        <section className="co-section co-section--form co-new-project-panel" id="new-project-panel">
+        <section className="co-section co-section--form co-new-project-panel" id="new-project-panel" aria-labelledby="new-project-heading">
           <div className="co-section-heading">
             <div>
               <p className="co-kicker">Nowa realizacja</p>
-              <h2>Dodaj inwestycję</h2>
+              <h2 id="new-project-heading">Dodaj inwestycję</h2>
             </div>
           </div>
           <CreateProjectForm workspaceId={workspaceId} />
         </section>
       ) : null}
 
-      <section className="co-section co-investment-portfolio">
-        <div className="co-section-heading co-investment-portfolio__heading">
-          <div>
-            <p className="co-kicker">Portfel realizacji</p>
-            <h2>Wszystkie inwestycje</h2>
-          </div>
+      <section className="co-section co-investment-portfolio" aria-labelledby="investment-list-heading">
+        <div className="co-list-toolbar">
+          <label className="co-list-search">
+            <Search size={16} aria-hidden="true" />
+            <span className="ux-sr-only">Szukaj inwestycji</span>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Szukaj inwestycji…"
+              type="search"
+              autoComplete="off"
+            />
+          </label>
+          <small id="investment-list-heading" aria-live="polite">
+            {normalized ? `${filteredProjects.length} z ${projects.length}` : `${projects.length} wszystkich`}
+          </small>
         </div>
 
-        {projects.length > 0 ? (
+        {filteredProjects.length > 0 ? (
           <div className="co-investment-list" role="list">
-            {projects.map((project) => (
+            {filteredProjects.map((project) => (
               <article className="co-investment-row" key={project.id} role="listitem">
                 <div className="co-investment-row__main">
                   <span className="co-investment-status">{project.status}</span>
@@ -87,13 +111,19 @@ export function CompanyInvestmentsView({ workspaceId, projects, canCreate }: Com
                   </div>
                 </div>
 
-                <Link href={`/workspace/projects/${project.id}`} className="co-investment-row__open">
+                <Link href={`/workspace/projects/${project.id}`} className="co-investment-row__open" aria-label={`Otwórz inwestycję ${project.name}`}>
                   <FileText size={16} aria-hidden="true" />
                   Otwórz
                   <ArrowRight size={15} aria-hidden="true" />
                 </Link>
               </article>
             ))}
+          </div>
+        ) : projects.length ? (
+          <div className="co-empty-state">
+            <strong>Brak inwestycji pasujących do wyszukiwania.</strong>
+            <p>Zmień wpisaną frazę, aby zobaczyć pozostałe realizacje.</p>
+            <button type="button" className="co-secondary-button" onClick={() => setQuery("")}>Wyczyść wyszukiwanie</button>
           </div>
         ) : (
           <div className="co-empty-state">

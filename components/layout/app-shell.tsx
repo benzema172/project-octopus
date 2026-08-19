@@ -32,7 +32,7 @@ export function AppShell({ userEmail, children }: AppShellProps) {
         </nav>
 
         <div className="sidebar-footer">
-          <span>{userEmail}</span>
+          <span title={userEmail}>{userEmail}</span>
           <form action="/auth/sign-out" method="post">
             <button type="submit" className="ghost-icon-button" aria-label="Wyloguj">
               <LogOut size={18} aria-hidden="true" />
@@ -40,7 +40,7 @@ export function AppShell({ userEmail, children }: AppShellProps) {
           </form>
         </div>
       </aside>
-      <div className="app-content">{children}</div>
+      <div className="app-content" id="main-content" tabIndex={-1}>{children}</div>
     </div>
   );
 }
