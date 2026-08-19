@@ -20,6 +20,7 @@ describe("certified audit round 1", () => {
     const defaults = read("lib/demo/seed-defaults.ts");
     const seed = read("lib/demo/seed.ts");
     const guest = read("lib/demo/guest-server.ts");
+    const immutability = read("supabase/migrations/20260819123000_certified_guest_seed_idempotency.sql");
 
     expect(defaults).toContain('projects: ["status"]');
     expect(defaults).toContain('documents: ["ai_status", "effective_status", "review_status", "created_at", "updated_at"]');
@@ -28,5 +29,7 @@ describe("certified audit round 1", () => {
     expect(seed).toContain('if (table === "documents")');
     expect(guest).toContain("GUEST_DEMO_DATASET_VERSION");
     expect(guest).toContain("existingVersion === GUEST_DEMO_DATASET_VERSION");
+    expect(immutability).toContain("to_jsonb(new) is distinct from to_jsonb(old)");
+    expect(immutability).toContain("if tg_op = 'DELETE'");
   });
 });
