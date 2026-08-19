@@ -32,12 +32,11 @@ function endpointCandidates() {
   return [...candidates];
 }
 
-export function createR2Client(endpointOverride?: string) {
+function createFixedR2Client(endpoint: string) {
   const config = getR2Config();
-
   return new S3Client({
     region: "auto",
-    endpoint: endpointOverride ? normalizeEndpoint(endpointOverride) : config.endpoint,
+    endpoint: normalizeEndpoint(endpoint),
     credentials: {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey
@@ -45,17 +44,18 @@ export function createR2Client(endpointOverride?: string) {
   });
 }
 
-let resolvedClientPromise: Promise<S3Client> | null = null;
+let resolvedEndpointPromise: Promise<string> | null = null;
 
-async function resolveR2Client() {
+async function detectR2Endpoint() {
   const config = getR2Config();
   const failures: string[] = [];
 
   for (const endpoint of endpointCandidates()) {
-    const client = createR2Client(endpoint);
+    const client = createFixedR2Client(endpoint);
     try {
       await client.send(new ListObjectsV2Command({ Bucket: config.bucketName, MaxKeys: 1 }));
-      return client;
+      client.destroy();
+      return endpoint;
     } catch (error) {
       const status = typeof error === "object" && error && "$metadata" in error
         ? (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode
@@ -69,13 +69,34 @@ async function resolveR2Client() {
   throw new Error(`Nie udało się uzyskać dostępu do bucketu R2 ${config.bucketName}. Sprawdzone endpointy: ${failures.join(", ")}.`);
 }
 
-export async function createResolvedR2Client() {
-  if (!resolvedClientPromise) {
-    resolvedClientPromise = resolveR2Client().catch((error) => {
-      resolvedClientPromise = null;
+export async function resolveR2Endpoint() {
+  if (!resolvedEndpointPromise) {
+    resolvedEndpointPromise = detectR2Endpoint().catch((error) => {
+      resolvedEndpointPromise = null;
       throw error;
     });
   }
 
-  return resolvedClientPromise;
+  return resolvedEndpointPromise;
+}
+
+export function createR2Client() {
+  const config = getR2Config();
+
+  return new S3Client({
+    region: "auto",
+    endpoint: async () => {
+      const url = new URL(await resolveR2Endpoint());
+      return {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port ? Number(url.port) : undefined,
+        path: url.pathname || "/"
+      };
+    },
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey
+    }
+  });
 }
