@@ -58,15 +58,21 @@ describe("Project Octopus operational metrics", () => {
 describe("Project Octopus 1.0 functional contract", () => {
   const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
   const layout = readFileSync("app/workspace/companies/[workspaceId]/[section]/layout.tsx", "utf8");
+  const deferred = readFileSync("components/company/company-power-tools-deferred.tsx", "utf8");
   const route = readFileSync("app/api/company/power/route.ts", "utf8");
   const reliability = readFileSync("supabase/migrations/20260817210000_091_reliability_core.sql", "utf8");
   const exportRoute = readFileSync("app/api/company/export/route.ts", "utf8");
   const component = readFileSync("components/company/company-power-tools.tsx", "utf8");
 
-  it("publishes version 1.0.1 and keeps tools in all five operational tabs", () => {
+  it("publishes version 1.0.1 and keeps advanced tools available without eager layout loading", () => {
     expect(packageJson.version).toBe("1.0.1");
-    for (const section of ["finances", "hr", "warehouse", "fleet", "reports"]) expect(layout).toContain(`${section}:`);
-    expect(layout).toContain("CompanyPowerTools");
+    expect(layout).not.toContain("CompanyPowerTools");
+    expect(layout).not.toContain("getCompanyPowerToolsData");
+    expect(deferred).toContain("CompanyPowerTools");
+    expect(deferred).toContain("/api/company/power-data");
+    expect(deferred).toContain('kind: Exclude<CompanyPowerKind, "reports">');
+    expect(deferred).toContain("kind=${encodeURIComponent(kind)}");
+    expect(deferred).toContain("CompanyPowerTools workspaceId={workspaceId} kind={kind}");
   });
 
   it("contains write actions for finance, HR, warehouse, fleet and reports", () => {

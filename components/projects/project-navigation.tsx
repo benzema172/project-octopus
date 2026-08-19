@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   Archive,
@@ -24,8 +25,12 @@ import {
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useRef, useState } from "react";
-import { ProjectIntake } from "@/components/projects/project-intake";
 import type { Domain } from "@/lib/authorization";
+
+const ProjectIntake = dynamic(
+  () => import("@/components/projects/project-intake-pipeline").then((module) => module.ProjectIntake),
+  { ssr: false, loading: () => <span className="pw-intake-placeholder" aria-hidden="true" /> }
+);
 
 type ProjectNavigationProps = {
   projectId: string;
@@ -171,7 +176,7 @@ export function ProjectNavigation({ projectId, allowedDomains, canUpload }: Proj
                 const active = isItemActive(pathname, item);
                 const Icon = item.icon;
                 return (
-                  <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} onClick={closeMobileNav}>
+                  <Link key={item.href} href={item.href} prefetch={false} aria-current={active ? "page" : undefined} onClick={closeMobileNav}>
                     <Icon size={16} aria-hidden="true" />
                     <span>{item.label}</span>
                   </Link>
@@ -231,6 +236,7 @@ export function ProjectNavigation({ projectId, allowedDomains, canUpload }: Proj
                     <Link
                       key={item.href}
                       href={item.href}
+                      prefetch={false}
                       role="menuitem"
                       aria-current={active ? "page" : undefined}
                       onClick={() => setOpenGroup(null)}
