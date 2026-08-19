@@ -9,7 +9,8 @@ describe("certified audit round 1", () => {
     const upload = read("app/api/storage/upload-url/route.ts");
 
     expect(client).toContain('region: "auto"');
-    expect(client).toContain("endpoint: config.endpoint");
+    expect(client).toContain("endpoint: async () =>");
+    expect(client).toContain("resolveR2Endpoint");
     expect(client).not.toContain("forcePathStyle");
     expect(upload).toContain("PutObjectCommand");
     expect(upload).toContain("ContentType: mimeType");
