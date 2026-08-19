@@ -1,4 +1,6 @@
 import { requireCurrentUser } from "@/lib/auth";
+import "../octopus-app.css";
+import "../octopus-1-release.css";
 import "../company-switcher-refinement.css";
 import "../ux-system.css";
 import "../workspace-experience.css";

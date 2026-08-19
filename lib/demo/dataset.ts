@@ -9,9 +9,65 @@ import { extendDemoDataset } from "./extended-blueprint";
 
 export { demoId, type DemoRow };
 
+function normalizeReviewStatus(status: unknown) {
+  if (status === "review") return "in_review";
+  if (status === "closed") return "approved";
+  return status;
+}
+
+function normalizeCurrentSchema(dataset: DemoBlueprint, userId: string) {
+  dataset.workspace = {
+    ...dataset.workspace,
+    created_by: dataset.workspace.created_by ?? userId,
+    owner_id: dataset.workspace.owner_id ?? userId
+  };
+
+  dataset.projects = dataset.projects.map((row) => ({
+    ...row,
+    status: row.status === "planned" ? "preparation" : row.status,
+    created_by: row.created_by ?? userId
+  }));
+
+  dataset.projectFacts = dataset.projectFacts.map((row) => {
+    if (row.fact_type !== "project_profile" || !row.value_json || typeof row.value_json !== "object" || Array.isArray(row.value_json)) {
+      return row;
+    }
+    const profile = row.value_json as Record<string, unknown>;
+    return profile.status === "planned"
+      ? { ...row, value_json: { ...profile, status: "preparation" } }
+      : row;
+  });
+
+  dataset.materialRequests = dataset.materialRequests.map((row) => ({
+    ...row,
+    status: normalizeReviewStatus(row.status)
+  }));
+
+  dataset.protocols = dataset.protocols.map((row) => ({
+    ...row,
+    status: normalizeReviewStatus(row.status)
+  }));
+
+  dataset.materials = dataset.materials.map((row) => ({
+    ...row,
+    status: normalizeReviewStatus(row.status)
+  }));
+
+  dataset.devices = dataset.devices.map((row) => ({
+    ...row,
+    status: normalizeReviewStatus(row.status)
+  }));
+
+  dataset.aiFindings = dataset.aiFindings.map((row) => ({
+    ...row,
+    status: normalizeReviewStatus(row.status)
+  }));
+}
+
 export function buildDemoDataset(userId: string, referenceDate = new Date()): DemoBlueprint {
   const dataset = buildDemoBlueprint(userId, referenceDate);
   extendDemoDataset(dataset, userId, referenceDate);
+  normalizeCurrentSchema(dataset, userId);
 
   const boqById = new Map(dataset.boqItems.map((row) => [String(row.id), row]));
   dataset.boqItems = dataset.boqItems.map((row) => {

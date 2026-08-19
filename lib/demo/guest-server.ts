@@ -4,6 +4,7 @@ import {
   GUEST_AUTH_EMAIL,
   GUEST_AUTH_PASSWORD
 } from "@/lib/demo/guest-constants";
+import { DEMO_WORKSPACE_ID } from "@/lib/demo/blueprint";
 import { seedGuestDemoData } from "@/lib/demo/seed";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
@@ -46,6 +47,20 @@ export async function ensureGuestDemoAccount() {
       throw new Error(`Nie udało się odświeżyć konta gościa: ${error?.message ?? "brak użytkownika"}`);
     }
     guest = data.user;
+  }
+
+  // The current workspace schema requires created_by. Older demo blueprints only
+  // carried owner_id, so create/repair the deterministic demo workspace first.
+  // The regular seed then upserts the full descriptive profile into this row.
+  const { error: workspaceBootstrapError } = await db.from("workspaces").upsert({
+    id: DEMO_WORKSPACE_ID,
+    name: "Octopus Demo – Instalacje i Realizacja Sp. z o.o.",
+    created_by: guest.id,
+    owner_id: guest.id
+  }, { onConflict: "id" });
+
+  if (workspaceBootstrapError) {
+    throw new Error(`Nie udało się przygotować firmy demonstracyjnej: ${workspaceBootstrapError.message}`);
   }
 
   const seeded = await seedGuestDemoData(guest.id);

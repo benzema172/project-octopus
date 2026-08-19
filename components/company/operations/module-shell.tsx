@@ -26,6 +26,8 @@ export type FormSpec = { title: string; entity: string; success: string; fields:
 export type MetricSpec = { label: string; value: ReactNode; caption: string };
 export type ColumnSpec = { label: string; value: (row: Row) => ReactNode };
 
+const ATOMIC_WAREHOUSE_ENTITIES = new Set(["ai_warehouse_import", "reservation", "stock_movement_approve", "stock_movement_destination"]);
+
 type Props = {
   workspaceId: string;
   data: Data;
@@ -100,22 +102,27 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
     event.preventDefault();
     const form = event.currentTarget;
     const payload = Object.fromEntries(new FormData(form).entries());
+    const endpoint = ATOMIC_WAREHOUSE_ENTITIES.has(entity) ? "/api/company/warehouse-atomic" : "/api/company/records";
     setMessage(null);
     setError(null);
     startTransition(async () => {
-      const response = await fetch("/api/company/records", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, entity, payload })
-      });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) {
-        setError(result.error ?? "Nie udało się zapisać danych.");
-        return;
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ workspaceId, entity, payload })
+        });
+        const result = await response.json().catch(() => ({})) as { error?: string };
+        if (!response.ok) {
+          setError(result.error ?? "Nie udało się zapisać danych.");
+          return;
+        }
+        form.reset();
+        setMessage(success);
+        router.refresh();
+      } catch {
+        setError("Nie udało się połączyć z modułem operacyjnym.");
       }
-      form.reset();
-      setMessage(success);
-      router.refresh();
     });
   };
 

@@ -73,7 +73,7 @@ describe("coherent full-application demo dataset", () => {
     expect(new Set(demo.projects.map((row) => row.name)).size).toBe(demo.projects.length);
     expect(demo.projects.some((row) => row.status === "active")).toBe(true);
     expect(demo.projects.some((row) => row.status === "completed")).toBe(true);
-    expect(demo.projects.some((row) => row.status === "planned")).toBe(true);
+    expect(demo.projects.some((row) => row.status === "preparation")).toBe(true);
     expect(demo.projects.some((row) => row.status === "paused")).toBe(true);
     expect(demo.projects.some((row) => row.status === "tender")).toBe(true);
     expect(demo.documents.some((row) => String(row.name).endsWith(".doc"))).toBe(true);

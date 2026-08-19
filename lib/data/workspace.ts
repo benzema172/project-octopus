@@ -35,8 +35,16 @@ function normalizeCompany(row: CompanyRow, role?: string, projectCount?: number)
   };
 }
 
+function isMissingColumn(message: string | undefined, column: string) {
+  return Boolean(message?.includes(column) && (message.includes("schema cache") || message.includes("does not exist")));
+}
+
 function isMissingOwnerId(message: string | undefined) {
-  return Boolean(message?.includes("owner_id") && (message.includes("schema cache") || message.includes("does not exist")));
+  return isMissingColumn(message, "owner_id");
+}
+
+function isMissingCreatedBy(message: string | undefined) {
+  return isMissingColumn(message, "created_by");
 }
 
 function isMissingCompanyProfileColumn(message: string | undefined) {
@@ -119,6 +127,7 @@ export const ensureWorkspaceForUser = cache(async function ensureWorkspaceForUse
     .from("workspaces")
     .insert({
       name: workspaceName,
+      created_by: user.id,
       owner_id: user.id
     })
     .select("id, name")
@@ -133,6 +142,15 @@ export const ensureWorkspaceForUser = cache(async function ensureWorkspaceForUse
         name: workspaceName,
         slug: workspaceSlug,
         created_by: user.id
+      })
+      .select("id, name")
+      .single<WorkspaceSummary>();
+  } else if (isMissingCreatedBy(workspaceResult.error?.message)) {
+    workspaceResult = await supabase
+      .from("workspaces")
+      .insert({
+        name: workspaceName,
+        owner_id: user.id
       })
       .select("id, name")
       .single<WorkspaceSummary>();
