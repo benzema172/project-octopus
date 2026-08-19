@@ -20,7 +20,7 @@ export function CompanySelector({ companies, schemaReady, userEmail }: CompanySe
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   return (
-    <main className="co-selector-page">
+    <main className="co-selector-page" id="main-content" tabIndex={-1}>
       <header className="co-selector-topbar">
         <div className="co-wordmark" aria-label="Project Octopus">
           <strong>OCTOPUS</strong>
@@ -34,9 +34,9 @@ export function CompanySelector({ companies, schemaReady, userEmail }: CompanySe
           </div>
         </div>
         <div className="co-selector-account">
-          <span>{userEmail}</span>
+          <span title={userEmail}>{userEmail}</span>
           <form action="/auth/sign-out" method="post">
-            <button type="submit" className="co-logout-button">Wyloguj</button>
+            <button type="submit" className="co-logout-button" aria-label="Wyloguj z Project Octopus">Wyloguj</button>
           </form>
         </div>
       </header>
@@ -80,6 +80,7 @@ export function CompanySelector({ companies, schemaReady, userEmail }: CompanySe
           className="co-company-card co-company-card--add"
           onClick={() => dialogRef.current?.showModal()}
           disabled={!schemaReady}
+          aria-haspopup="dialog"
         >
           <span className="co-company-add-icon"><Plus size={30} aria-hidden="true" /></span>
           <span>
@@ -89,18 +90,23 @@ export function CompanySelector({ companies, schemaReady, userEmail }: CompanySe
         </button>
       </section>
 
-      <dialog ref={dialogRef} className="co-company-dialog" onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          dialogRef.current?.close();
-        }
-      }}>
+      <dialog
+        ref={dialogRef}
+        className="co-company-dialog"
+        aria-labelledby="new-company-title"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            dialogRef.current?.close();
+          }
+        }}
+      >
         <form action={createCompanyAction} className="co-company-form">
           <div className="co-company-form__head">
             <div>
               <p className="co-kicker">Nowa organizacja</p>
-              <h2>Dodaj firmę</h2>
+              <h2 id="new-company-title">Dodaj firmę</h2>
             </div>
-            <button type="button" className="co-icon-button" onClick={() => dialogRef.current?.close()} aria-label="Zamknij">
+            <button type="button" className="co-icon-button" onClick={() => dialogRef.current?.close()} aria-label="Zamknij formularz dodawania firmy">
               <X size={20} aria-hidden="true" />
             </button>
           </div>
@@ -108,7 +114,7 @@ export function CompanySelector({ companies, schemaReady, userEmail }: CompanySe
           <div className="co-form-grid">
             <label className="co-field co-field--wide">
               <span>Nazwa firmy *</span>
-              <input name="name" required minLength={2} placeholder="np. PureInvest Sp. z o.o." />
+              <input name="name" required minLength={2} placeholder="np. PureInvest Sp. z o.o." autoComplete="organization" />
             </label>
             <label className="co-field">
               <span>NIP</span>
@@ -124,27 +130,27 @@ export function CompanySelector({ companies, schemaReady, userEmail }: CompanySe
             </label>
             <label className="co-field co-field--wide">
               <span>Ulica i numer</span>
-              <input name="street" />
+              <input name="street" autoComplete="street-address" />
             </label>
             <label className="co-field">
               <span>Kod pocztowy</span>
-              <input name="postal_code" placeholder="00-000" />
+              <input name="postal_code" placeholder="00-000" autoComplete="postal-code" />
             </label>
             <label className="co-field">
               <span>Miasto</span>
-              <div className="co-input-icon"><MapPin size={16} aria-hidden="true" /><input name="city" /></div>
+              <div className="co-input-icon"><MapPin size={16} aria-hidden="true" /><input name="city" autoComplete="address-level2" /></div>
             </label>
             <label className="co-field">
               <span>E-mail</span>
-              <input name="email" type="email" />
+              <input name="email" type="email" autoComplete="email" />
             </label>
             <label className="co-field">
               <span>Telefon</span>
-              <input name="phone" type="tel" />
+              <input name="phone" type="tel" autoComplete="tel" />
             </label>
             <label className="co-field co-field--wide">
               <span>Osoba kontaktowa</span>
-              <input name="contact_person" />
+              <input name="contact_person" autoComplete="name" />
             </label>
             <label className="co-field co-field--wide">
               <span>Notatka</span>

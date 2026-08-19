@@ -15,6 +15,7 @@ import {
   FileText,
   Gauge,
   LayoutDashboard,
+  Menu,
   PackageCheck,
   ShieldCheck,
   UsersRound,
@@ -22,7 +23,7 @@ import {
   Warehouse
 } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ProjectIntake } from "@/components/projects/project-intake";
 import type { Domain } from "@/lib/authorization";
 
@@ -54,6 +55,7 @@ function isItemActive(pathname: string, item: ProjectNavItem) {
 export function ProjectNavigation({ projectId, allowedDomains, canUpload }: ProjectNavigationProps) {
   const pathname = usePathname();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const mobileNavRef = useRef<HTMLDetailsElement>(null);
   const base = `/workspace/projects/${projectId}`;
 
   const dashboard: ProjectNavItem = {
@@ -133,10 +135,54 @@ export function ProjectNavigation({ projectId, allowedDomains, canUpload }: Proj
     .filter((group) => group.items.length > 0);
 
   const showDashboard = allowedDomains.includes(dashboard.domain);
+  const activeItem = showDashboard && isItemActive(pathname, dashboard)
+    ? dashboard
+    : groups.flatMap((group) => group.items).find((item) => isItemActive(pathname, item));
+
+  const closeMobileNav = () => {
+    mobileNavRef.current?.removeAttribute("open");
+  };
 
   return (
     <nav className="project-navigation project-navigation--v3" aria-label="Menu inwestycji">
-      <div className="project-navigation__groups">
+      <details className="pw-mobile-nav" ref={mobileNavRef}>
+        <summary>
+          <Menu size={17} aria-hidden="true" />
+          <span>
+            <small>Menu inwestycji</small>
+            <strong>{activeItem?.label ?? "Wybierz sekcję"}</strong>
+          </span>
+          <ChevronDown className="pw-mobile-nav__chevron" size={15} aria-hidden="true" />
+        </summary>
+        <div className="pw-mobile-nav__content">
+          {showDashboard ? (
+            <div className="pw-mobile-nav__group">
+              <small>Start</small>
+              <Link href={dashboard.href} aria-current={isItemActive(pathname, dashboard) ? "page" : undefined} onClick={closeMobileNav}>
+                <LayoutDashboard size={16} aria-hidden="true" />
+                <span>Dashboard</span>
+              </Link>
+            </div>
+          ) : null}
+          {groups.map((group) => (
+            <div className="pw-mobile-nav__group" key={group.key}>
+              <small>{group.label}</small>
+              {group.items.map((item) => {
+                const active = isItemActive(pathname, item);
+                const Icon = item.icon;
+                return (
+                  <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} onClick={closeMobileNav}>
+                    <Icon size={16} aria-hidden="true" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </details>
+
+      <div className="project-navigation__desktop project-navigation__groups">
         {showDashboard ? (
           <Link
             className="pw-nav-dashboard"
@@ -149,16 +195,14 @@ export function ProjectNavigation({ projectId, allowedDomains, canUpload }: Proj
         ) : null}
 
         {groups.map((group) => {
-          const activeItem = group.items.find((item) => isItemActive(pathname, item));
+          const currentItem = group.items.find((item) => isItemActive(pathname, item));
           const GroupIcon = group.icon;
           const open = openGroup === group.key;
 
           return (
             <div
-              className={`pw-nav-group ${activeItem ? "is-active" : ""} ${open ? "is-open" : ""}`}
+              className={`pw-nav-group ${currentItem ? "is-active" : ""} ${open ? "is-open" : ""}`}
               key={group.key}
-              onMouseEnter={() => setOpenGroup(group.key)}
-              onMouseLeave={() => setOpenGroup((current) => current === group.key ? null : current)}
               onFocus={() => setOpenGroup(group.key)}
               onBlur={(event) => {
                 if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpenGroup(null);
@@ -174,7 +218,7 @@ export function ProjectNavigation({ projectId, allowedDomains, canUpload }: Proj
                 <GroupIcon size={16} aria-hidden="true" />
                 <span className="pw-nav-group__label">
                   <strong>{group.label}</strong>
-                  {activeItem ? <small>{activeItem.label}</small> : null}
+                  {currentItem ? <small>{currentItem.label}</small> : null}
                 </span>
                 <ChevronDown className="pw-nav-group__chevron" size={13} aria-hidden="true" />
               </button>

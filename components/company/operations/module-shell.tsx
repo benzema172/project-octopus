@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import type { FormEvent, ReactNode } from "react";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Search } from "lucide-react";
+import { AlertTriangle, ChevronDown, Plus, Save, Search } from "lucide-react";
 import { ServerPagination } from "@/components/system/server-pagination";
 
 export type Row = Record<string, unknown>;
@@ -45,11 +46,47 @@ function optionLabel(row: Row, key = "name") {
 }
 
 function RecordForm({ form, pending, onSubmit }: { form: FormSpec; pending: boolean; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
-  return <form className={`ops-form-card${form.wide ? " ops-form-card--wide" : ""}`} onSubmit={onSubmit}>
-    <h3>{form.title}</h3>
-    <div className="ops-form-fields">{form.fields.map((field) => <label key={field.name}><span>{field.label}</span>{field.rows || field.options || field.type === "select" ? <select name={field.name} required={field.required} defaultValue={field.defaultValue ?? ""}><option value="">{field.placeholder ?? (field.required ? "Wybierz" : "—")}</option>{field.options?.map(([value,label]) => <option key={value} value={value}>{label}</option>)}{field.rows?.map((row) => <option key={String(row.id)} value={String(row.id)}>{optionLabel(row, field.labelKey)}</option>)}</select> : <input name={field.name} type={field.type ?? "text"} required={field.required} placeholder={field.placeholder} defaultValue={field.defaultValue} step={field.type === "number" ? "any" : undefined} />}</label>)}</div>
-    <button className="primary-button" type="submit" disabled={pending}>{pending ? "Zapisywanie…" : "Zapisz"}</button>
-  </form>;
+  return (
+    <details className={`ops-form-card${form.wide ? " ops-form-card--wide" : ""}`}>
+      <summary>
+        <span className="ops-form-card__summary-icon"><Plus size={15} aria-hidden="true" /></span>
+        <span>
+          <strong>{form.title}</strong>
+          <small>Rozwiń formularz tylko wtedy, gdy go potrzebujesz</small>
+        </span>
+        <ChevronDown className="ops-form-card__chevron" size={15} aria-hidden="true" />
+      </summary>
+      <form className="ops-form-card__body" onSubmit={onSubmit}>
+        <div className="ops-form-fields">
+          {form.fields.map((field) => (
+            <label key={field.name}>
+              <span>{field.label}</span>
+              {field.rows || field.options || field.type === "select" ? (
+                <select name={field.name} required={field.required} defaultValue={field.defaultValue ?? ""}>
+                  <option value="">{field.placeholder ?? (field.required ? "Wybierz" : "—")}</option>
+                  {field.options?.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  {field.rows?.map((row) => <option key={String(row.id)} value={String(row.id)}>{optionLabel(row, field.labelKey)}</option>)}
+                </select>
+              ) : (
+                <input
+                  name={field.name}
+                  type={field.type ?? "text"}
+                  required={field.required}
+                  placeholder={field.placeholder}
+                  defaultValue={field.defaultValue}
+                  step={field.type === "number" ? "any" : undefined}
+                />
+              )}
+            </label>
+          ))}
+        </div>
+        <button className="primary-button" type="submit" disabled={pending}>
+          <Save size={15} aria-hidden="true" />
+          {pending ? "Zapisywanie…" : "Zapisz"}
+        </button>
+      </form>
+    </details>
+  );
 }
 
 export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, query, metrics, forms, rows, columns, emptyLabel, tableTitle, children }: Props) {
@@ -63,23 +100,99 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
     event.preventDefault();
     const form = event.currentTarget;
     const payload = Object.fromEntries(new FormData(form).entries());
-    setMessage(null); setError(null);
+    setMessage(null);
+    setError(null);
     startTransition(async () => {
-      const response = await fetch("/api/company/records", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, entity, payload }) });
+      const response = await fetch("/api/company/records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId, entity, payload })
+      });
       const result = await response.json() as { error?: string };
-      if (!response.ok) { setError(result.error ?? "Nie udało się zapisać danych."); return; }
-      form.reset(); setMessage(success); router.refresh();
+      if (!response.ok) {
+        setError(result.error ?? "Nie udało się zapisać danych.");
+        return;
+      }
+      form.reset();
+      setMessage(success);
+      router.refresh();
     });
   };
 
-  return <div className="ops-workspace ops-workspace--paged">
-    <form className="ops-search" method="get" action={pathname}><Search size={17}/><input name="q" defaultValue={query} placeholder="Szukaj w module…"/><button className="secondary-button" type="submit">Szukaj</button>{query ? <a className="secondary-button" href={pathname}>Wyczyść</a> : null}</form>
-    {!canWrite ? <div className="pw-protected-data"><AlertTriangle size={19}/><div><strong>Dostęp tylko do odczytu</strong><p>Administrator może nadać uprawnienie zapisu.</p></div></div> : null}
-    {message ? <p className="ops-feedback ops-feedback--success">{message}</p> : null}
-    {error ? <p className="ops-feedback ops-feedback--error">{error}</p> : null}
-    <section className="ops-metrics">{metrics.map((metric) => <article className="ops-metric" key={metric.label}><small>{metric.label}</small><strong>{metric.value}</strong><p>{metric.caption}</p></article>)}</section>
-    {canWrite ? <section className="ops-form-grid">{forms.map((form) => <RecordForm key={form.entity} form={form} pending={pending} onSubmit={submit(form.entity, form.success)} />)}</section> : null}
-    <section className="ops-panel ops-panel--wide" data-open="true"><div className="ops-panel__heading"><div><small>Stronicowanie serwerowe</small><h2>{tableTitle}</h2></div><span>{page.total} rekordów</span></div><div className="ops-table"><div className="ops-table__head">{columns.map((column) => <span key={column.label}>{column.label}</span>)}</div>{rows.map((row) => <div key={String(row.id)}>{columns.map((column) => <span key={column.label}>{column.value(row)}</span>)}</div>)}{!rows.length ? <p className="empty-copy">{emptyLabel}</p> : null}</div><ServerPagination page={page.page} pageSize={page.pageSize} total={page.total} pathname={pathname} query={{ q: query || undefined }} /></section>
-    {children}
-  </div>;
+  return (
+    <div className="ops-workspace ops-workspace--paged">
+      <form className="ops-search" method="get" action={pathname} role="search">
+        <label className="ops-search__field">
+          <Search size={17} aria-hidden="true" />
+          <span className="ux-sr-only">Szukaj w module</span>
+          <input name="q" defaultValue={query} placeholder="Szukaj po nazwie, numerze lub opisie…" />
+        </label>
+        <button className="secondary-button" type="submit">Szukaj</button>
+        {query ? <Link className="secondary-button" href={pathname}>Wyczyść filtr</Link> : null}
+      </form>
+
+      {!canWrite ? (
+        <div className="pw-protected-data" role="note">
+          <AlertTriangle size={19} aria-hidden="true" />
+          <div><strong>Dostęp tylko do odczytu</strong><p>Administrator może nadać uprawnienie zapisu.</p></div>
+        </div>
+      ) : null}
+
+      <div className="ops-feedback-stack" aria-live="polite">
+        {message ? <p className="ops-feedback ops-feedback--success" role="status">{message}</p> : null}
+        {error ? <p className="ops-feedback ops-feedback--error" role="alert">{error}</p> : null}
+      </div>
+
+      <section className="ops-metrics" aria-label="Podsumowanie modułu">
+        {metrics.map((metric) => (
+          <article className="ops-metric" key={metric.label}>
+            <small>{metric.label}</small>
+            <strong>{metric.value}</strong>
+            <p>{metric.caption}</p>
+          </article>
+        ))}
+      </section>
+
+      {canWrite && forms.length ? (
+        <section className="ops-quick-actions" aria-label="Dodawanie danych">
+          <div className="ops-quick-actions__heading">
+            <div>
+              <small>Szybkie akcje</small>
+              <h2>Dodaj dane</h2>
+            </div>
+            <span>{forms.length} {forms.length === 1 ? "formularz" : "formularze"}</span>
+          </div>
+          <div className="ops-form-grid">
+            {forms.map((form) => <RecordForm key={`${form.entity}-${form.title}`} form={form} pending={pending} onSubmit={submit(form.entity, form.success)} />)}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="ops-panel ops-panel--wide" data-open="true" aria-labelledby="ops-records-heading">
+        <div className="ops-panel__heading">
+          <div>
+            <small>Rejestr</small>
+            <h2 id="ops-records-heading">{tableTitle}</h2>
+          </div>
+          <span>{page.total} rekordów</span>
+        </div>
+        <div className="ops-table" role="table" aria-label={tableTitle}>
+          <div className="ops-table__head" role="row">
+            {columns.map((column) => <span key={column.label} role="columnheader">{column.label}</span>)}
+          </div>
+          {rows.map((row) => (
+            <div className="ops-table__row" role="row" key={String(row.id)}>
+              {columns.map((column) => (
+                <span className="ops-table__cell" role="cell" data-label={column.label} key={column.label}>{column.value(row)}</span>
+              ))}
+            </div>
+          ))}
+          {!rows.length ? <p className="empty-copy">{emptyLabel}</p> : null}
+        </div>
+        <ServerPagination page={page.page} pageSize={page.pageSize} total={page.total} pathname={pathname} query={{ q: query || undefined }} />
+      </section>
+
+      {children}
+    </div>
+  );
 }
