@@ -34,3 +34,5 @@ jobs:
         run: npm run build
       - name: Black-box production integration audit
         run: node scripts/e2e-live-audit.mjs
+      - name: Black-box tenant isolation and IDOR audit
+        run: node scripts/e2e-live-security.mjs
