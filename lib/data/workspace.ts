@@ -158,7 +158,9 @@ export const ensureWorkspaceForUser = cache(async function ensureWorkspaceForUse
   return workspace;
 });
 
-export async function listCompanyWorkspacesForUser(user: AuthenticatedUser): Promise<CompanyWorkspace[]> {
+export const listCompanyWorkspacesForUser = cache(async function listCompanyWorkspacesForUser(
+  user: AuthenticatedUser
+): Promise<CompanyWorkspace[]> {
   let memberships = await listMemberships(user);
 
   if (memberships.length === 0) {
@@ -193,7 +195,7 @@ export async function listCompanyWorkspacesForUser(user: AuthenticatedUser): Pro
       return row ? normalizeCompany(row, roleByWorkspace.get(workspaceId), projectCount.get(workspaceId) ?? 0) : null;
     })
     .filter((workspace): workspace is CompanyWorkspace => workspace !== null);
-}
+});
 
 export const getWorkspaceForUser = cache(async function getWorkspaceForUser(
   user: AuthenticatedUser,
@@ -239,7 +241,7 @@ export async function userHasWorkspaceAccess(user: AuthenticatedUser, workspaceI
   return (await getWorkspaceForUser(user, workspaceId)) !== null;
 }
 
-export async function isCompanyProfileSchemaReady() {
+export const isCompanyProfileSchemaReady = cache(async function isCompanyProfileSchemaReady() {
   const supabase = createServiceSupabaseClient();
   const { data, error } = await supabase
     .from("app_schema_versions")
@@ -248,4 +250,4 @@ export async function isCompanyProfileSchemaReady() {
     .maybeSingle<{ version: string }>();
 
   return !error && data?.version === "20260812_company_workspace_shell";
-}
+});
