@@ -41,9 +41,11 @@ describe("final production audit contract", () => {
     const ci = read(".github/workflows/ci.yml");
     const e2e = read(".github/workflows/e2e-staging.yml");
     const liveAudit = read("scripts/e2e-live-audit.mjs");
+    const packageJson = read("package.json");
 
     expect(ci).toContain("node-version: 24");
     expect(e2e).toContain("node-version: 24");
+    expect(packageJson).toContain('"node": "24.x"');
     expect(ci).toContain("npm audit --omit=dev --audit-level=high");
     expect(e2e).toContain("node scripts/e2e-live-audit.mjs");
     expect(e2e).not.toContain("secrets.");
@@ -52,13 +54,19 @@ describe("final production audit contract", () => {
     expect(liveAudit).toContain("octopus-live-audit.xlsx");
   });
 
-  it("repairs the deterministic guest workspace before seeding legacy demo rows", () => {
+  it("keeps current and legacy workspace creation compatible with the required creator", () => {
     const guestServer = read("lib/demo/guest-server.ts");
+    const workspace = read("lib/data/workspace.ts");
+    const migration = read("supabase/migrations/20260819102823_workspace_creator_compatibility.sql");
 
     expect(guestServer).toContain("DEMO_WORKSPACE_ID");
     expect(guestServer).toContain("created_by: guest.id");
     expect(guestServer).toContain("owner_id: guest.id");
     expect(guestServer.indexOf("workspaceBootstrapError")).toBeLessThan(guestServer.indexOf("seedGuestDemoData(guest.id)"));
+    expect(workspace).toContain("created_by: user.id");
+    expect(workspace).toContain("owner_id: user.id");
+    expect(migration).toContain("before insert on public.workspaces");
+    expect(migration).toContain("coalesce(new.owner_id, (select auth.uid()))");
   });
 
   it("aligns legacy project RLS with investments domain access without depending on schema drift", () => {
