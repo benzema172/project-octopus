@@ -17,7 +17,7 @@ type ClaimedJob = {
   document_version_id: string | null;
 };
 
-function safeSecretEqual(expected: string | null, received: string | undefined) {
+function safeSecretEqual(expected: string | null, received: string | null | undefined) {
   if (!expected || !received) return false;
   const a = Buffer.from(expected);
   const b = Buffer.from(received);
