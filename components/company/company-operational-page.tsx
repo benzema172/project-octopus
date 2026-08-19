@@ -30,10 +30,11 @@ export async function CompanyOperationalPage({workspaceId,page,query,domain,kind
   const canRead=await hasDomainAccess({workspaceId:workspace.id,userId:user.id,domain,level:"read"});
   if(!canRead)return <DomainAccessDenied workspaceId={workspace.id} area={kicker}/>;
   const referenceDate=new Date().toISOString().slice(0,10);
-  const [data,canWrite]=await Promise.all([
+  const [data,canWrite,canApprove]=await Promise.all([
     loader(workspace.id,{page:Number(page??1),query,referenceDate}),
-    hasDomainAccess({workspaceId:workspace.id,userId:user.id,domain,level:"write"})
+    hasDomainAccess({workspaceId:workspace.id,userId:user.id,domain,level:"write"}),
+    hasDomainAccess({workspaceId:workspace.id,userId:user.id,domain,level:"approve"})
   ]);
   const pathname=`/workspace/companies/${workspace.id}/${kind==="finance"?"finances":kind}`;
-  return <main className="co-page"><header className="co-page-heading"><div><p className="co-kicker">{kicker}</p><h1>{title}</h1><p>{description}</p></div></header><CompanyOperationsLazy workspaceId={workspace.id} kind={kind} data={data} canWrite={canWrite} pathname={pathname} query={query??""}/><CompanyPowerToolsDeferred workspaceId={workspace.id} kind={kind} canWrite={canWrite} referenceDate={referenceDate}/></main>;
+  return <main className="co-page"><header className="co-page-heading"><div><p className="co-kicker">{kicker}</p><h1>{title}</h1><p>{description}</p></div></header><CompanyOperationsLazy workspaceId={workspace.id} kind={kind} data={data} canWrite={canWrite} canApprove={canApprove} pathname={pathname} query={query??""}/><CompanyPowerToolsDeferred workspaceId={workspace.id} kind={kind} canWrite={canWrite} referenceDate={referenceDate}/></main>;
 }

@@ -10,8 +10,8 @@ const FleetOperations=dynamic(()=>import("@/components/company/operations/fleet-
 
 type Kind="finance"|"hr"|"warehouse"|"fleet";
 
-export function CompanyOperationsLazy({workspaceId,kind,data,canWrite,pathname,query}:{workspaceId:string;kind:Kind;data:Data;canWrite:boolean;pathname:string;query:string}){
-  const props={workspaceId,data,canWrite,pathname,query};
+export function CompanyOperationsLazy({workspaceId,kind,data,canWrite,canApprove,pathname,query}:{workspaceId:string;kind:Kind;data:Data;canWrite:boolean;canApprove:boolean;pathname:string;query:string}){
+  const props={workspaceId,data,canWrite,canApprove,pathname,query};
   if(kind==="finance")return <FinanceOperations {...props}/>;
   if(kind==="hr")return <HrOperations {...props}/>;
   if(kind==="warehouse")return <WarehouseOperations {...props}/>;
