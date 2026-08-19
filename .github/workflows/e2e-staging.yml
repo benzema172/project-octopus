@@ -24,8 +24,8 @@ jobs:
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_GKNVG1MgDSyYhfhMn4um4g_GonPEXAE
       E2E_BASE_URL: https://project-octopus-alpha.vercel.app
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
