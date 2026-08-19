@@ -75,52 +75,19 @@ export async function POST(request: Request) {
 
     if (body.action === "approve_link" || body.action === "reject_link") {
       if (!body.linkId) throw new Error("Brakuje powiązania.");
-      const { data: link } = await db.from("entity_links").select("id,source_type,source_id,target_id").eq("id", body.linkId).eq("workspace_id", project.workspace_id).maybeSingle<{ id: string; source_type: string; source_id: string; target_id: string }>();
+      const { data: link } = await db.from("entity_links").select("id,source_type").eq("id", body.linkId).eq("workspace_id", project.workspace_id).maybeSingle<{ id: string; source_type: string }>();
       if (!link) throw new Error("Powiązanie nie należy do firmy.");
-      const { data: boq } = await db.from("boq_items").select("id,wbs_node_id,cost_code").eq("id", link.target_id).eq("project_id", project.id).maybeSingle<{ id: string; wbs_node_id: string | null; cost_code: string | null }>();
-      if (!boq) throw new Error("Powiązanie nie należy do tej inwestycji.");
-      const domain = link.source_type === "invoice_line" ? "finance" : "warehouse";
-      if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain, level: "write", projectId: project.id })) throw new Error("Brak uprawnienia do źródłowego modułu.");
-      const status = body.action === "approve_link" ? "approved" : "rejected";
-      const { error } = await db.from("entity_links").update({ status, approved_by: status === "approved" ? user.id : null, approved_at: status === "approved" ? new Date().toISOString() : null }).eq("id", link.id);
-      if (error) throw error;
-
-      if (status === "approved" && link.source_type === "invoice_line") {
-        const { data: allocation, error: allocationError } = await db.from("financial_allocations")
-          .select("id,amount")
-          .eq("workspace_id", project.workspace_id)
-          .eq("project_id", project.id)
-          .eq("source_type", "invoice")
-          .eq("source_line_id", link.source_id)
-          .eq("allocation_scope", "project")
-          .eq("status", "approved")
-          .order("amount", { ascending: false })
-          .limit(1)
-          .maybeSingle<{ id: string; amount: number }>();
-        if (allocationError) throw new Error(allocationError.message);
-        if (allocation) {
-          const { error: applyError } = await db.rpc("set_invoice_line_scope_atomic", {
-            p_workspace_id: project.workspace_id,
-            p_invoice_line_id: link.source_id,
-            p_scope: "project",
-            p_project_id: project.id,
-            p_boq_item_id: boq.id,
-            p_wbs_node_id: boq.wbs_node_id,
-            p_cost_code: boq.cost_code ?? "",
-            p_amount: allocation.amount,
-            p_actor_id: user.id
-          });
-          if (applyError) throw new Error(`Powiązanie zatwierdzono, ale nie udało się przenieść BOQ/WBS do kosztu: ${applyError.message}`);
-        }
-      }
-
-      if (status === "approved" && link.source_type === "stock_item") {
-        await Promise.all([
-          db.from("procurement_traces").update({ boq_item_id: boq.id, wbs_node_id: boq.wbs_node_id, updated_at: new Date().toISOString() }).eq("workspace_id", project.workspace_id).eq("project_id", project.id).eq("stock_item_id", link.source_id).is("boq_item_id", null),
-          db.from("material_requests").update({ boq_item_id: boq.id, wbs_node_id: boq.wbs_node_id, updated_at: new Date().toISOString() }).eq("project_id", project.id).eq("stock_item_id", link.source_id).is("boq_item_id", null)
-        ]);
-      }
-      return NextResponse.json({ ok: true, id: link.id, status, propagated: status === "approved" });
+      const sourceDomain = link.source_type === "invoice_line" ? "finance" : "warehouse";
+      if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: sourceDomain, level: "write", projectId: project.id })) throw new Error("Brak uprawnienia do źródłowego modułu.");
+      const { data, error } = await db.rpc("decide_entity_link_atomic", {
+        p_workspace_id: project.workspace_id,
+        p_project_id: project.id,
+        p_link_id: link.id,
+        p_decision: body.action === "approve_link" ? "approved" : "rejected",
+        p_actor_id: user.id
+      });
+      if (error) throw new Error(error.message);
+      return NextResponse.json({ ok: true, result: data });
     }
 
     const [boqResult, allocResult, stockEventsResult] = await Promise.all([
