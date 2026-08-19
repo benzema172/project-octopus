@@ -2,6 +2,10 @@ name: Staging E2E
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/e2e-live-trigger.txt"
   push:
     branches: [main]
     paths:
@@ -11,8 +15,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: staging-e2e
-  cancel-in-progress: false
+  group: staging-e2e-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   e2e:
