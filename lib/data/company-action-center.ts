@@ -34,11 +34,11 @@ type RpcRow = {
   created_at: string;
 };
 
-export async function getCompanyActionCenter(workspaceId: string, limit = 80): Promise<CompanyActionItem[]> {
+export async function getCompanyActionCenter(workspaceId: string, limit = 100): Promise<CompanyActionItem[]> {
   const db = createServiceSupabaseClient();
-  const { data, error } = await db.rpc("get_company_action_center", {
+  const { data, error } = await db.rpc("get_company_action_center_v2", {
     p_workspace_id: workspaceId,
-    p_limit: Math.min(200, Math.max(1, limit))
+    p_limit: Math.min(250, Math.max(1, limit))
   });
   if (error) throw new Error(`Nie udało się pobrać kolejki działań: ${error.message}`);
   return ((data ?? []) as RpcRow[]).map((row) => ({
