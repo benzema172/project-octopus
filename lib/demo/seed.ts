@@ -1,6 +1,7 @@
 import "server-only";
 
 import { buildDemoDataset, demoId, type DemoRow } from "@/lib/demo/dataset";
+import { omitNullDatabaseDefaults } from "@/lib/demo/seed-defaults";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 const TABLE_COLUMNS: Record<string, string[]> = {
@@ -79,40 +80,41 @@ function pick(row: DemoRow, columns: string[]) {
 function normalizeRows(table: string, rows: DemoRow[]) {
   const columns = TABLE_COLUMNS[table];
   if (!columns) throw new Error(`Brak mapy kolumn demo dla tabeli ${table}.`);
+  const select = (row: DemoRow) => omitNullDatabaseDefaults(table, pick(row, columns));
 
   if (table === "vehicle_allocations") {
-    return rows.map((row) => pick({
+    return rows.map((row) => select({
       ...row,
       date_from: row.date_from ?? row.allocated_from,
       date_to: row.date_to ?? row.allocated_to,
       allocation_method: row.allocation_method ?? row.allocation_type ?? "time"
-    }, columns));
+    }));
   }
 
   if (table === "project_facts") {
-    return rows.map((row) => pick({
+    return rows.map((row) => select({
       ...row,
       subject: row.subject ?? row.value_text ?? row.fact_type
-    }, columns));
+    }));
   }
 
   if (table === "documents") {
-    return rows.map((row) => pick({
+    return rows.map((row) => select({
       ...row,
       title: row.title ?? row.name ?? "Dokument demonstracyjny",
       document_type: row.document_type ?? row.category ?? "other",
       deleted_at: null
-    }, columns));
+    }));
   }
 
   if (table === "commitments") {
-    return rows.map((row) => pick({
+    return rows.map((row) => select({
       ...row,
       original_amount: row.original_amount ?? row.amount
-    }, columns));
+    }));
   }
 
-  return rows.map((row) => pick(row, columns));
+  return rows.map((row) => select(row));
 }
 
 async function upsertRows(
