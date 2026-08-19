@@ -71,6 +71,22 @@ async function request(path, { token, body, method } = {}) {
   return { response, payload };
 }
 
+async function reportFailure(token, { stage, status, message, fileName }) {
+  try {
+    await request("/api/system/live-e2e-report", {
+      token,
+      body: {
+        stage,
+        status,
+        message: String(message ?? "").slice(0, 1200),
+        fileName
+      }
+    });
+  } catch {
+    // Reporting must never hide the original E2E failure.
+  }
+}
+
 async function ensureStableDocument(projectId, workspaceId, token, fileName) {
   const { data, error } = await supabase
     .from("documents")
@@ -101,12 +117,32 @@ async function uploadAndAnalyze({ projectId, workspaceId, token, fileName, mimeT
   });
   if (!uploadUrl.response.ok) throw new Error(`${fileName}: upload-url ${uploadUrl.response.status} ${JSON.stringify(uploadUrl.payload)}`);
 
-  const put = await fetch(uploadUrl.payload.uploadUrl, {
-    method: "PUT",
-    headers: uploadUrl.payload.headers,
-    body: bytes
-  });
-  if (!put.ok) throw new Error(`${fileName}: R2 PUT HTTP ${put.status} ${await put.text()}`);
+  let put;
+  try {
+    put = await fetch(uploadUrl.payload.uploadUrl, {
+      method: "PUT",
+      headers: uploadUrl.payload.headers,
+      body: bytes
+    });
+  } catch (error) {
+    await reportFailure(token, {
+      stage: "R2_FETCH_ERROR",
+      status: "network_error",
+      message: error instanceof Error ? error.message : String(error),
+      fileName
+    });
+    throw error;
+  }
+  if (!put.ok) {
+    const responseText = await put.text();
+    await reportFailure(token, {
+      stage: "R2_PUT_HTTP",
+      status: put.status,
+      message: responseText,
+      fileName
+    });
+    throw new Error(`${fileName}: R2 PUT HTTP ${put.status} ${responseText}`);
+  }
 
   const complete = await request("/api/storage/complete", {
     token,
