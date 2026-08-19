@@ -14,13 +14,20 @@ import {
   UsersRound,
   WalletCards
 } from "lucide-react";
+import { CompanyActionCenter } from "@/components/company/company-action-center";
 import { requireCurrentUser } from "@/lib/auth";
-import { listAiInbox } from "@/lib/data/operations";
+import {
+  domainAccessPolicyAllows,
+  domainAccessPolicyHasAnyScope,
+  domainForDocumentCategory,
+  loadDomainAccessPolicy,
+  type Domain
+} from "@/lib/authorization";
+import { getCompanyActionCenter, refreshOperationalNotifications } from "@/lib/data/company-action-center";
 import { listProjectsForWorkspace } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
-import { createServiceSupabaseClient } from "@/lib/supabase/service";
-import { domainAccessPolicyAllows, domainAccessPolicyHasAnyScope, domainForDocumentCategory, loadDomainAccessPolicy, type Domain } from "@/lib/authorization";
 import { getAiRuntimeStatus } from "@/lib/env";
+import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 
@@ -28,30 +35,50 @@ type CompanyDashboardProps = {
   params: Promise<{ workspaceId: string }>;
 };
 
+function actionDomain(domain: string): Domain {
+  if (domain === "finance" || domain === "hr" || domain === "warehouse" || domain === "fleet") return domain;
+  return "investments";
+}
+
 export default async function CompanyDashboard({ params }: CompanyDashboardProps) {
   const { workspaceId } = await params;
   const user = await requireCurrentUser();
   const workspace = await getWorkspaceForUser(user, workspaceId);
 
-  if (!workspace) {
-    notFound();
-  }
+  if (!workspace) notFound();
 
   const accessPolicy = await loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id });
   const projects = (await listProjectsForWorkspace(user, workspace.id)).filter((project) =>
     domainAccessPolicyAllows(accessPolicy, { domain: "investments", level: "read", projectId: project.id })
   );
   const supabase = createServiceSupabaseClient();
-  const { data: documentRows } = await supabase
-    .from("documents")
-    .select("id,category,project_id")
-    .eq("workspace_id", workspace.id)
-    .is("deleted_at", null);
-  const documentCount = (documentRows ?? []).filter((document) => domainAccessPolicyAllows(accessPolicy, {
+
+  const [documentResult, actionItems] = await Promise.all([
+    supabase
+      .from("documents")
+      .select("id,category,project_id")
+      .eq("workspace_id", workspace.id)
+      .is("deleted_at", null),
+    getCompanyActionCenter(workspace.id, 80).catch(() => [])
+  ]);
+
+  // Alert materialization is synchronous on purpose: when the command center loads,
+  // the notification ledger is guaranteed to reflect the same operational state.
+  await refreshOperationalNotifications(workspace.id).catch(() => null);
+
+  const documentCount = (documentResult.data ?? []).filter((document) => domainAccessPolicyAllows(accessPolicy, {
     domain: domainForDocumentCategory(document.category),
     level: "read",
     projectId: document.project_id
   })).length;
+
+  const visibleActions = actionItems.filter((item) => {
+    const domain = actionDomain(item.domain);
+    if (domain === "investments") {
+      return domainAccessPolicyAllows(accessPolicy, { domain, level: "read", projectId: item.projectId });
+    }
+    return domainAccessPolicyAllows(accessPolicy, { domain, level: "read", projectId: item.projectId });
+  });
 
   const activeProjects = projects.filter((project) => project.status === "active").length;
   const completedProjects = projects.filter((project) => project.status === "completed").length;
@@ -72,88 +99,9 @@ export default async function CompanyDashboard({ params }: CompanyDashboardProps
     : module.domain === "investments"
       ? domainAccessPolicyHasAnyScope(accessPolicy, { domain: module.domain, level: "read" })
       : domainAccessPolicyAllows(accessPolicy, { domain: module.domain, level: "read", projectId: null }));
+
   const aiReady = getAiRuntimeStatus().ready;
   const canUploadCompany = domainAccessPolicyAllows(accessPolicy, { domain: "investments", level: "write", projectId: null });
-
-  const financeRead = domainAccessPolicyAllows(accessPolicy, { domain: "finance", level: "read", projectId: null });
-  const hrRead = domainAccessPolicyAllows(accessPolicy, { domain: "hr", level: "read", projectId: null });
-  const fleetRead = domainAccessPolicyAllows(accessPolicy, { domain: "fleet", level: "read", projectId: null });
-  const settingsRead = domainAccessPolicyAllows(accessPolicy, { domain: "settings", level: "read", projectId: null });
-  const referenceDate = new Date();
-  const today = referenceDate.toISOString().slice(0, 10);
-  const in14Days = new Date(referenceDate.getTime() + 14 * 86_400_000).toISOString().slice(0, 10);
-  const in30Days = new Date(referenceDate.getTime() + 30 * 86_400_000).toISOString().slice(0, 10);
-
-  const [aiInbox, commitmentsResult, qualificationsResult, examsResult, fleetDocumentsResult, notificationsResult] = await Promise.all([
-    domainAccessPolicyHasAnyScope(accessPolicy, { domain: "investments", level: "read" })
-      ? listAiInbox(workspace.id).catch(() => [])
-      : Promise.resolve([]),
-    financeRead
-      ? supabase.from("commitments").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).in("status", ["open", "approved"]).gte("expected_date", today).lte("expected_date", in14Days)
-      : Promise.resolve({ count: 0, error: null }),
-    hrRead
-      ? supabase.from("qualifications").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).gte("valid_until", today).lte("valid_until", in30Days)
-      : Promise.resolve({ count: 0, error: null }),
-    hrRead
-      ? supabase.from("medical_exams").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).gte("valid_until", today).lte("valid_until", in30Days)
-      : Promise.resolve({ count: 0, error: null }),
-    fleetRead
-      ? supabase.from("vehicle_documents").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).gte("valid_until", today).lte("valid_until", in30Days)
-      : Promise.resolve({ count: 0, error: null }),
-    settingsRead
-      ? supabase.from("notifications").select("id", { count: "exact", head: true }).eq("workspace_id", workspace.id).is("read_at", null)
-      : Promise.resolve({ count: 0, error: null })
-  ]);
-
-  const visibleAiItems = aiInbox.filter((item) => {
-    const domain: Domain = item.entityType === "template_version"
-      ? "templates"
-      : item.entityType === "knowledge_entry"
-        ? "reports"
-        : item.entityType === "document"
-          ? domainForDocumentCategory(item.category)
-          : "investments";
-    return domainAccessPolicyAllows(accessPolicy, { domain, level: "read", projectId: item.projectId });
-  });
-  const aiDecisions = visibleAiItems.filter((item) => ["review", "error"].includes(item.status)).length;
-  const hrDeadlines = Number(qualificationsResult.count ?? 0) + Number(examsResult.count ?? 0);
-  const attentionItems = [
-    {
-      show: domainAccessPolicyHasAnyScope(accessPolicy, { domain: "investments", level: "read" }),
-      href: "ai-inbox",
-      label: "Decyzje i błędy AI",
-      value: aiDecisions,
-      detail: aiDecisions ? "Wymagają weryfikacji człowieka" : "Brak decyzji wymagających uwagi"
-    },
-    {
-      show: financeRead,
-      href: "finances",
-      label: "Zobowiązania do 14 dni",
-      value: Number(commitmentsResult.count ?? 0),
-      detail: "Otwarte i zatwierdzone płatności"
-    },
-    {
-      show: hrRead,
-      href: "hr",
-      label: "Terminy HR do 30 dni",
-      value: hrDeadlines,
-      detail: "Uprawnienia i badania medyczne"
-    },
-    {
-      show: fleetRead,
-      href: "fleet",
-      label: "Terminy floty do 30 dni",
-      value: Number(fleetDocumentsResult.count ?? 0),
-      detail: "Dokumenty pojazdów i maszyn"
-    },
-    {
-      show: settingsRead,
-      href: "settings#security-automation",
-      label: "Nieprzeczytane alerty",
-      value: Number(notificationsResult.count ?? 0),
-      detail: "Automatyzacje i wyjątki systemowe"
-    }
-  ].filter((item) => item.show);
 
   return (
     <main className="co-page">
@@ -182,9 +130,9 @@ export default async function CompanyDashboard({ params }: CompanyDashboardProps
           <small>aktywnych plików w firmie</small>
         </article>
         <article className="co-metric-card">
-          <span>Zakończone</span>
-          <strong>{completedProjects}</strong>
-          <small>inwestycji</small>
+          <span>Wymaga uwagi</span>
+          <strong>{visibleActions.length}</strong>
+          <small>{visibleActions.filter((item) => item.severity === "critical").length} krytycznych wyjątków</small>
         </article>
         <article className="co-metric-card co-metric-card--ai">
           <span>OctopusAI</span>
@@ -193,25 +141,7 @@ export default async function CompanyDashboard({ params }: CompanyDashboardProps
         </article>
       </section>
 
-      {attentionItems.length ? (
-        <section className="co-section">
-          <div className="co-section-heading">
-            <div>
-              <p className="co-kicker">Do zrobienia teraz</p>
-              <h2>Decyzje, terminy i wyjątki wymagające uwagi</h2>
-            </div>
-          </div>
-          <div className="co-project-strip">
-            {attentionItems.map((item) => (
-              <Link href={`/workspace/companies/${workspace.id}/${item.href}`} key={item.href}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-                <small>{item.detail}</small>
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      <CompanyActionCenter items={visibleActions} />
 
       <section className="co-section">
         <div className="co-section-heading">
