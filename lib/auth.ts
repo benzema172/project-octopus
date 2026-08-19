@@ -7,14 +7,19 @@ import { getPublicSupabaseConfig } from "@/lib/env";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { AuthenticatedUser } from "@/lib/types";
 
-function userFromClaims(claims: { sub?: string; email?: string } | null | undefined): AuthenticatedUser | null {
-  if (!claims?.sub) {
+function userFromClaims(claims: unknown): AuthenticatedUser | null {
+  if (!claims || typeof claims !== "object") {
+    return null;
+  }
+
+  const value = claims as { sub?: unknown; email?: unknown };
+  if (typeof value.sub !== "string" || !value.sub) {
     return null;
   }
 
   return {
-    id: claims.sub,
-    email: typeof claims.email === "string" ? claims.email : undefined
+    id: value.sub,
+    email: typeof value.email === "string" ? value.email : undefined
   };
 }
 
