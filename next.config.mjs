@@ -39,6 +39,7 @@ const contentSecurityPolicy = [
 const nextConfig = {
   agentRules: false,
   reactStrictMode: true,
+  poweredByHeader: false,
   experimental: {
     serverActions: {
       bodySizeLimit: "2mb"
