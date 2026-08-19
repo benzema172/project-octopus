@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { buildDemoDataset } from "@/lib/demo/dataset";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
@@ -67,6 +68,25 @@ describe("final production audit contract", () => {
     expect(workspace).toContain("owner_id: user.id");
     expect(migration).toContain("before insert on public.workspaces");
     expect(migration).toContain("coalesce(new.owner_id, (select auth.uid()))");
+  });
+
+  it("generates demo workspaces and projects that conform to the current schema", () => {
+    const userId = "11111111-1111-4111-8111-111111111111";
+    const dataset = buildDemoDataset(userId, new Date("2026-08-19T12:00:00Z"));
+    const allowedProjectStatuses = new Set(["tender", "preparation", "active", "paused", "completed", "archived"]);
+
+    expect(dataset.workspace.created_by).toBe(userId);
+    expect(dataset.workspace.owner_id).toBe(userId);
+    expect(dataset.projects.length).toBeGreaterThan(0);
+    for (const project of dataset.projects) {
+      expect(allowedProjectStatuses.has(String(project.status))).toBe(true);
+      expect(project.created_by).toBe(userId);
+    }
+    const projectProfiles = dataset.projectFacts.filter((row) => row.fact_type === "project_profile");
+    for (const fact of projectProfiles) {
+      if (!fact.value_json || typeof fact.value_json !== "object" || Array.isArray(fact.value_json)) continue;
+      expect((fact.value_json as Record<string, unknown>).status).not.toBe("planned");
+    }
   });
 
   it("aligns legacy project RLS with investments domain access without depending on schema drift", () => {
