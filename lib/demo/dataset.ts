@@ -9,9 +9,34 @@ import { extendDemoDataset } from "./extended-blueprint";
 
 export { demoId, type DemoRow };
 
+function normalizeCurrentSchema(dataset: DemoBlueprint, userId: string) {
+  dataset.workspace = {
+    ...dataset.workspace,
+    created_by: dataset.workspace.created_by ?? userId,
+    owner_id: dataset.workspace.owner_id ?? userId
+  };
+
+  dataset.projects = dataset.projects.map((row) => ({
+    ...row,
+    status: row.status === "planned" ? "preparation" : row.status,
+    created_by: row.created_by ?? userId
+  }));
+
+  dataset.projectFacts = dataset.projectFacts.map((row) => {
+    if (row.fact_type !== "project_profile" || !row.value_json || typeof row.value_json !== "object" || Array.isArray(row.value_json)) {
+      return row;
+    }
+    const profile = row.value_json as Record<string, unknown>;
+    return profile.status === "planned"
+      ? { ...row, value_json: { ...profile, status: "preparation" } }
+      : row;
+  });
+}
+
 export function buildDemoDataset(userId: string, referenceDate = new Date()): DemoBlueprint {
   const dataset = buildDemoBlueprint(userId, referenceDate);
   extendDemoDataset(dataset, userId, referenceDate);
+  normalizeCurrentSchema(dataset, userId);
 
   const boqById = new Map(dataset.boqItems.map((row) => [String(row.id), row]));
   dataset.boqItems = dataset.boqItems.map((row) => {
