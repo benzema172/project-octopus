@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { buildDemoDataset } from "../lib/demo/dataset";
+import { omitNullDatabaseDefaults } from "../lib/demo/seed-defaults";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
@@ -83,6 +84,31 @@ describe("final production audit contract", () => {
     expect(seed).toContain("original_amount: row.original_amount ?? row.amount");
     expect(seed).toContain('object_provider: "demo"');
     expect(seed).toContain('object_key: `demo/templates/${id}.json`');
+    expect(seed).toContain("omitNullDatabaseDefaults(table, pick(row, columns))");
+  });
+
+  it("lets PostgreSQL defaults replace only legacy nulls on NOT NULL default-backed fields", () => {
+    const document = omitNullDatabaseDefaults("documents", {
+      title: "Dokument audytowy",
+      created_at: null,
+      updated_at: null,
+      ai_status: null,
+      deleted_at: null
+    });
+    expect(document.title).toBe("Dokument audytowy");
+    expect(Object.prototype.hasOwnProperty.call(document, "created_at")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(document, "updated_at")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(document, "ai_status")).toBe(false);
+    expect(document.deleted_at).toBeNull();
+
+    const project = omitNullDatabaseDefaults("projects", { status: null, description: null });
+    expect(Object.prototype.hasOwnProperty.call(project, "status")).toBe(false);
+    expect(project.description).toBeNull();
+
+    const notification = omitNullDatabaseDefaults("notifications", { severity: null, created_at: null, read_at: null });
+    expect(Object.prototype.hasOwnProperty.call(notification, "severity")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(notification, "created_at")).toBe(false);
+    expect(notification.read_at).toBeNull();
   });
 
   it("generates demo data that conforms to every enum-backed production field", () => {
