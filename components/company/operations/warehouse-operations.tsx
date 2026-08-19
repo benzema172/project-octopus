@@ -1,5 +1,6 @@
 "use client";
 
+import { WarehouseFlowIntegrityPanel } from "@/components/company/warehouse-flow-integrity-panel";
 import { CompanyModuleShell, type Data, type FormSpec, type Row } from "@/components/company/operations/module-shell";
 
 function num(value: unknown) { const n=Number(value??0); return new Intl.NumberFormat("pl-PL",{maximumFractionDigits:2}).format(Number.isFinite(n)?n:0); }
@@ -11,7 +12,7 @@ export default function WarehouseOperations({ workspaceId,data,canWrite,pathname
   const forms:FormSpec[]=[
     {title:"Dodaj magazyn",entity:"warehouse",success:"Magazyn został utworzony.",fields:[{name:"name",label:"Nazwa",required:true},{name:"location",label:"Lokalizacja"},{name:"warehouseType",label:"Typ",type:"select",options:[["central","Centralny"],["project","Budowa"],["vehicle","Mobilny / pojazd"]]}]},
     {title:"Dodaj kartotekę",entity:"stock_item",success:"Kartoteka została dodana.",fields:[{name:"name",label:"Nazwa",required:true},{name:"sku",label:"SKU"},{name:"itemType",label:"Typ",type:"select",options:[["material","Materiał"],["device","Urządzenie"],["tool","Narzędzie"]]},{name:"unit",label:"Jednostka",required:true},{name:"minimumStock",label:"Stan minimalny",type:"number"}]},
-    {title:"Zarejestruj ruch",entity:"stock_movement",success:"Ruch został zatwierdzony.",wide:true,fields:[{name:"movementType",label:"Typ",type:"select",required:true,options:[["PZ","PZ"],["WZ","WZ"],["RW","RW"],["ZW","ZW"],["MM","MM"]]},{name:"warehouseId",label:"Magazyn",rows:warehouses,required:true},{name:"targetWarehouseId",label:"Magazyn docelowy",rows:warehouses,placeholder:"Tylko dla MM"},{name:"stockItemId",label:"Kartoteka z tej strony",rows:items,required:true},{name:"projectId",label:"Inwestycja",rows:projects,placeholder:"Ruch ogólnofirmowy"},{name:"quantity",label:"Ilość",type:"number",required:true},{name:"unitCost",label:"Koszt jednostkowy",type:"number"},{name:"documentNumber",label:"Numer dokumentu"},{name:"movementDate",label:"Data ruchu",type:"date"}]},
+    {title:"Zarejestruj ruch",entity:"stock_movement",success:"Ruch został zatwierdzony.",wide:true,fields:[{name:"movementType",label:"Typ",type:"select",required:true,options:[["PZ","PZ"],["WZ","WZ"],["RW","RW"],["ZW","ZW"],["MM","MM"]]},{name:"warehouseId",label:"Magazyn",rows:warehouses,required:true},{name:"targetWarehouseId",label:"Magazyn docelowy",rows:warehouses,placeholder:"Tylko dla MM"},{name:"stockItemId",label:"Kartoteka z tej strony",rows:items,required:true},{name:"projectId",label:"Inwestycja",rows:projects,placeholder:"Puste = magazyn centralny / ruch firmowy"},{name:"quantity",label:"Ilość",type:"number",required:true},{name:"unitCost",label:"Koszt jednostkowy",type:"number"},{name:"documentNumber",label:"Numer dokumentu"},{name:"movementDate",label:"Data ruchu",type:"date"}]},
     {title:"Zarezerwuj materiał",entity:"reservation",success:"Materiał został zarezerwowany.",fields:[{name:"projectId",label:"Inwestycja",rows:projects,required:true},{name:"warehouseId",label:"Magazyn",rows:warehouses,required:true},{name:"stockItemId",label:"Kartoteka z tej strony",rows:items,required:true},{name:"quantity",label:"Ilość",type:"number",required:true},{name:"requiredAt",label:"Potrzebne na",type:"date",required:true}]}
   ];
   const metrics=[
@@ -28,6 +29,7 @@ export default function WarehouseOperations({ workspaceId,data,canWrite,pathname
     {label:"Jednostka",value:row=>str(row.unit)},
     {label:"Minimum",value:row=>str(row.minimum_stock,"0")}
   ]}>
+    <WarehouseFlowIntegrityPanel workspaceId={workspaceId} movements={movements} projects={projects} canWrite={canWrite}/>
     <section className="ops-split-lists"><article className="ops-panel"><h3>Ostatnie ruchy</h3>{movements.slice(0,8).map(row=><p key={String(row.id)}><strong>{str(row.movement_type)} · {str(row.document_number,"bez numeru")}</strong><br/>{str(row.movement_date)} · {str(row.status)}</p>)}</article><article className="ops-panel"><h3>Rezerwacje bieżącej strony</h3>{reservations.slice(0,8).map(row=><p key={String(row.id)}><strong>{num(row.quantity)} · {str(row.status)}</strong><br/>{str(row.required_at,"bez terminu")}</p>)}</article></section>
   </CompanyModuleShell>;
 }

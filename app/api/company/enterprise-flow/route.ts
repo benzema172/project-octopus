@@ -13,7 +13,8 @@ type Action =
   | "invoice_line_allocate"
   | "document_orchestrate"
   | "deviation_close"
-  | "business_inbox_upsert";
+  | "business_inbox_upsert"
+  | "business_inbox_process";
 
 type Body = { workspaceId?: string; action?: Action; payload?: Record<string, unknown> };
 
@@ -28,6 +29,13 @@ function numeric(value: unknown, label: string) {
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`Nieprawidłowa wartość: ${label}.`);
   return parsed;
+}
+
+function canonicalPayload(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {} as Record<string, unknown>;
+  const payload = value as Record<string, unknown>;
+  const nested = payload.businessDocument;
+  return nested && typeof nested === "object" && !Array.isArray(nested) ? nested as Record<string, unknown> : payload;
 }
 
 export async function POST(request: Request) {
@@ -75,22 +83,28 @@ export async function POST(request: Request) {
     if (body.action === "invoice_line_allocate") {
       await requireFinance();
       const lineId = text(p.invoiceLineId, "pozycja faktury", true)!;
-      const projectId = text(p.projectId, "inwestycja", true)!;
-      if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "investments", level: "write", projectId })) {
+      const scope = (text(p.allocationScope, "zakres") ?? "project").toLowerCase();
+      if (!["project", "overhead", "unassigned", "inventory"].includes(scope)) throw new Error("Nieobsługiwany zakres kosztu.");
+      const projectId = scope === "project" ? text(p.projectId, "inwestycja", true)! : null;
+      if (projectId && !await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "investments", level: "write", projectId })) {
         throw new Error("Brak uprawnienia do przypisania kosztu do tej inwestycji.");
       }
-      const { data, error } = await db.rpc("set_invoice_line_allocation_atomic", {
+      if (scope === "inventory" && !await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "warehouse", level: "write" })) {
+        throw new Error("Brak uprawnienia do przypisania kosztu na magazyn centralny.");
+      }
+      const { data, error } = await db.rpc("set_invoice_line_scope_and_rebuild_atomic", {
         p_workspace_id: workspace.id,
         p_invoice_line_id: lineId,
+        p_scope: scope,
         p_project_id: projectId,
-        p_boq_item_id: text(p.boqItemId, "BOQ"),
-        p_wbs_node_id: text(p.wbsNodeId, "WBS"),
+        p_boq_item_id: scope === "project" ? text(p.boqItemId, "BOQ") : null,
+        p_wbs_node_id: scope === "project" ? text(p.wbsNodeId, "WBS") : null,
         p_cost_code: text(p.costCode, "kod kosztu") ?? "",
         p_amount: numeric(p.amount, "kwota netto"),
         p_actor_id: user.id
       });
       if (error) throw new Error(error.message);
-      return NextResponse.json({ ok: true, id: data });
+      return NextResponse.json({ ok: true, id: data, allocationScope: scope });
     }
 
     if (body.action === "document_orchestrate") {
@@ -119,6 +133,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, id: deviationId });
     }
 
+    if (body.action === "business_inbox_process") {
+      await requireFinance();
+      const inboxId = text(p.inboxId, "Business Inbox", true)!;
+      const { data, error } = await db.rpc("process_business_inbox_item_atomic", { p_workspace_id: workspace.id, p_inbox_id: inboxId, p_actor_id: user.id });
+      if (error) throw new Error(error.message);
+      const result = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {};
+      if (result.ok === false) throw new Error(String(result.error ?? "Przetwarzanie dokumentu nie powiodło się."));
+      return NextResponse.json({ ok: true, result });
+    }
+
     await requireFinance();
     const sourceChannel = text(p.sourceChannel, "kanał", true)!;
     const externalKey = text(p.externalKey, "identyfikator zewnętrzny", true)!;
@@ -131,18 +155,32 @@ export async function POST(request: Request) {
       const { data: doc } = await db.from("documents").select("id").eq("workspace_id", workspace.id).eq("id", documentId).maybeSingle();
       if (!doc) throw new Error("Dokument nie należy do firmy.");
     }
+    const payload = p.payload && typeof p.payload === "object" && !Array.isArray(p.payload) ? p.payload as Record<string, unknown> : {};
+    const canonical = canonicalPayload(payload);
     const { data, error } = await db.from("business_inbox_items").upsert({
       workspace_id: workspace.id,
       source_channel: sourceChannel.toLowerCase(),
       external_key: externalKey,
       document_id: documentId,
       project_id: projectId,
-      document_type: text(p.documentType, "typ dokumentu"),
-      status: documentId ? "processing" : "new",
-      payload: p.payload && typeof p.payload === "object" ? p.payload : {}
-    }, { onConflict: "workspace_id,source_channel,external_key" }).select("id").single<{ id: string }>();
-    if (error || !data) throw new Error(error?.message ?? "Nie utworzono elementu Inbox.");
-    return NextResponse.json({ ok: true, id: data.id });
+      document_type: text(p.documentType, "typ dokumentu") ?? (typeof canonical.documentType === "string" ? canonical.documentType : null),
+      status: "processing",
+      payload,
+      canonical_payload: canonical,
+      canonical_version: "business-document-v1",
+      processing_error: null
+    }, { onConflict: "workspace_id,source_channel,external_key", ignoreDuplicates: true }).select("id,status").maybeSingle<{ id: string; status: string }>();
+    if (error) throw new Error(error.message);
+    if (!data) {
+      const { data: existing } = await db.from("business_inbox_items").select("id,status").eq("workspace_id", workspace.id).eq("source_channel", sourceChannel.toLowerCase()).eq("external_key", externalKey).maybeSingle<{ id: string; status: string }>();
+      if (!existing) throw new Error("Nie udało się odczytać elementu Inbox.");
+      return NextResponse.json({ ok: true, id: existing.id, status: existing.status, duplicate: true });
+    }
+    const { data: processing, error: processingError } = await db.rpc("process_business_inbox_item_atomic", { p_workspace_id: workspace.id, p_inbox_id: data.id, p_actor_id: user.id });
+    if (processingError) throw new Error(processingError.message);
+    const processed = processing && typeof processing === "object" && !Array.isArray(processing) ? processing as Record<string, unknown> : {};
+    if (processed.ok === false) throw new Error(String(processed.error ?? "Przetwarzanie Inbox nie powiodło się."));
+    return NextResponse.json({ ok: true, id: data.id, processed, duplicate: false });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Operacja nie powiodła się." }, { status: 422 });
   }

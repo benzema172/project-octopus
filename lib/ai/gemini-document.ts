@@ -16,6 +16,8 @@ export type DocumentAnalysis = {
   businessDocument: {
     documentType: string;
     documentNumber: string;
+    ksefNumber: string;
+    purchaseOrderNumber: string;
     direction: string;
     issueDate: string;
     dueDate: string;
@@ -29,13 +31,19 @@ export type DocumentAnalysis = {
     grossAmount: number;
     lines: Array<{
       lineType: "material" | "service" | "other";
+      expenseCategory: string;
       sku: string;
       description: string;
       quantity: number;
       unit: string;
       unitPrice: number;
       netAmount: number;
+      taxRate: number;
       grossAmount: number;
+      purchaseOrderNumber: string;
+      vehicleRegistration: string;
+      liters: number;
+      mileage: number;
       confidence: number;
     }>;
   };
@@ -69,7 +77,7 @@ const RESPONSE_SCHEMA = {
     businessDocument: {
       type: "OBJECT",
       properties: {
-        documentType: { type: "STRING" }, documentNumber: { type: "STRING" }, direction: { type: "STRING" },
+        documentType: { type: "STRING" }, documentNumber: { type: "STRING" }, ksefNumber: { type: "STRING" }, purchaseOrderNumber: { type: "STRING" }, direction: { type: "STRING" },
         issueDate: { type: "STRING" }, dueDate: { type: "STRING" }, supplierName: { type: "STRING" },
         supplierTaxId: { type: "STRING" }, buyerName: { type: "STRING" }, buyerTaxId: { type: "STRING" },
         currency: { type: "STRING" }, netAmount: { type: "NUMBER" }, taxAmount: { type: "NUMBER" }, grossAmount: { type: "NUMBER" },
@@ -79,14 +87,16 @@ const RESPONSE_SCHEMA = {
             type: "OBJECT",
             properties: {
               lineType: { type: "STRING", enum: ["material", "service", "other"] },
+              expenseCategory: { type: "STRING", enum: ["", "material", "fuel", "transport", "equipment", "subcontract", "rental", "service", "other"] },
               sku: { type: "STRING" }, description: { type: "STRING" }, quantity: { type: "NUMBER" }, unit: { type: "STRING" },
-              unitPrice: { type: "NUMBER" }, netAmount: { type: "NUMBER" }, grossAmount: { type: "NUMBER" }, confidence: { type: "NUMBER" }
+              unitPrice: { type: "NUMBER" }, netAmount: { type: "NUMBER" }, taxRate: { type: "NUMBER" }, grossAmount: { type: "NUMBER" },
+              purchaseOrderNumber: { type: "STRING" }, vehicleRegistration: { type: "STRING" }, liters: { type: "NUMBER" }, mileage: { type: "NUMBER" }, confidence: { type: "NUMBER" }
             },
-            required: ["lineType", "sku", "description", "quantity", "unit", "unitPrice", "netAmount", "grossAmount", "confidence"]
+            required: ["lineType", "expenseCategory", "sku", "description", "quantity", "unit", "unitPrice", "netAmount", "taxRate", "grossAmount", "purchaseOrderNumber", "vehicleRegistration", "liters", "mileage", "confidence"]
           }
         }
       },
-      required: ["documentType", "documentNumber", "direction", "issueDate", "dueDate", "supplierName", "supplierTaxId", "buyerName", "buyerTaxId", "currency", "netAmount", "taxAmount", "grossAmount", "lines"]
+      required: ["documentType", "documentNumber", "ksefNumber", "purchaseOrderNumber", "direction", "issueDate", "dueDate", "supplierName", "supplierTaxId", "buyerName", "buyerTaxId", "currency", "netAmount", "taxAmount", "grossAmount", "lines"]
     },
     boqItems: {
       type: "ARRAY",
@@ -144,6 +154,8 @@ function normalizeAnalysis(value: unknown): DocumentAnalysis {
     businessDocument: {
       documentType: String(source.businessDocument?.documentType ?? ""),
       documentNumber: String(source.businessDocument?.documentNumber ?? ""),
+      ksefNumber: String(source.businessDocument?.ksefNumber ?? ""),
+      purchaseOrderNumber: String(source.businessDocument?.purchaseOrderNumber ?? ""),
       direction: String(source.businessDocument?.direction ?? "purchase"),
       issueDate: String(source.businessDocument?.issueDate ?? ""),
       dueDate: String(source.businessDocument?.dueDate ?? ""),
@@ -157,9 +169,13 @@ function normalizeAnalysis(value: unknown): DocumentAnalysis {
       grossAmount: Number(source.businessDocument?.grossAmount) || 0,
       lines: Array.isArray(source.businessDocument?.lines) ? source.businessDocument.lines.slice(0, 500).map((line) => ({
         lineType: ["material", "service", "other"].includes(String(line.lineType)) ? line.lineType as "material" | "service" | "other" : (String(line.sku ?? "").trim() ? "material" : "other"),
+        expenseCategory: String(line.expenseCategory ?? ""),
         sku: String(line.sku ?? ""), description: String(line.description ?? ""), quantity: Number(line.quantity) || 0,
         unit: String(line.unit ?? "szt."), unitPrice: Number(line.unitPrice) || 0, netAmount: Number(line.netAmount) || 0,
-        grossAmount: Number(line.grossAmount) || 0, confidence: Math.max(0, Math.min(1, Number(line.confidence) || 0))
+        taxRate: Number(line.taxRate) || 0, grossAmount: Number(line.grossAmount) || 0,
+        purchaseOrderNumber: String(line.purchaseOrderNumber ?? ""), vehicleRegistration: String(line.vehicleRegistration ?? ""),
+        liters: Number(line.liters) || 0, mileage: Number(line.mileage) || 0,
+        confidence: Math.max(0, Math.min(1, Number(line.confidence) || 0))
       })) : []
     },
     boqItems: Array.isArray(source.boqItems)
@@ -186,7 +202,7 @@ export async function analyzeDocumentWithGemini(input: AnalyzeInput) {
   const prompt = `Jesteś silnikiem analizy dokumentów w polskiej firmie wykonującej instalacje sanitarne, wentylację, klimatyzację i roboty budowlane.\n
 Przeanalizuj dokument ${input.fileName}. Rozpoznaj jego rzeczywisty kontekst, nie tylko rozszerzenie. Kosztorys traktuj jako źródło pozycji BOQ i etapów WBS. Jeżeli to kosztorys lub przedmiar, wypełnij boqItems rzeczywistymi wierszami tabeli; nie łącz pozycji i zachowaj numer, ilość, jednostkę oraz ceny. Jeżeli dokument nie jest kosztorysem, zwróć pustą tablicę boqItems. Dla dokumentacji wskaż instalacje, etapy, wymagane wnioski materiałowe i protokoły.
 
-Dla faktury, WZ, PZ lub dokumentu dostawy dokładnie wypełnij businessDocument: numer, daty, strony, NIP-y, kwoty i każdą pozycję. Dla każdej pozycji ustaw lineType: material wyłącznie dla fizycznych materiałów/towarów/urządzeń, service dla robocizny, usług, transportu, najmu, podwykonawstwa i innych świadczeń niematerialnych, a other dla rabatów, korekt i pozycji niejednoznacznych. Nie oznaczaj usługi jako materiał tylko dlatego, że ma ilość i cenę. documentType ustaw na invoice, WZ, PZ albo delivery. direction ustaw na purchase lub sale. Jeżeli dokument nie jest dokumentem handlowym/magazynowym, zwróć puste pola i pustą tablicę lines. Nie utożsamiaj zakupu materiału z wykonaniem robót.
+Dla faktury, WZ, PZ lub dokumentu dostawy dokładnie wypełnij businessDocument: numer dokumentu, numer KSeF jeżeli faktycznie występuje, daty, strony, NIP-y, kwoty, numer zamówienia/PO jeżeli widnieje w dokumencie i każdą pozycję. Dla każdej pozycji ustaw lineType: material wyłącznie dla fizycznych materiałów/towarów/urządzeń, service dla robocizny, usług, transportu, najmu, podwykonawstwa i innych świadczeń niematerialnych, a other dla rabatów, korekt i pozycji niejednoznacznych. expenseCategory ustaw tylko gdy wynika z dokumentu: fuel dla paliwa/AdBlue, transport dla transportu/spedycji, equipment dla narzędzi/wyposażenia, subcontract dla podwykonawstwa, rental dla najmu, service dla pozostałych usług, material dla materiałów, other dla pozostałych; w razie braku pewności zwróć pusty string. Z każdej pozycji odczytaj stawkę VAT. Jeżeli dokument podaje numer PO/zamówienia przy pozycji, wpisz purchaseOrderNumber; jeśli jest tylko jeden numer dla całej faktury, wpisz go w businessDocument.purchaseOrderNumber. Dla pozycji paliwowej odczytaj vehicleRegistration, liters i mileage wyłącznie wtedy, gdy te dane są widoczne; w przeciwnym razie zwróć pusty string i 0. Nie wymyślaj numeru rejestracyjnego, PO, litrów ani przebiegu. Nie oznaczaj usługi jako materiał tylko dlatego, że ma ilość i cenę. documentType ustaw na invoice, WZ, PZ albo delivery. direction ustaw na purchase lub sale. Jeżeli dokument nie jest dokumentem handlowym/magazynowym, zwróć puste pola i pustą tablicę lines. Nie utożsamiaj zakupu materiału z wykonaniem robót. Nie próbuj wymyślać identyfikatorów bazy, BOQ, WBS ani projektu — ich twarde powiązanie wykona Octopus po analizie.
 
 Spróbuj dopasować dokument do jednej inwestycji z katalogu poniżej. W projectHint zwróć dokładnie pełny wiersz najlepszego dopasowania albo OGÓLNE, gdy dokument dotyczy całej firmy lub brak wiarygodnych wskazówek. Nie zgaduj.
 KATALOG INWESTYCJI:

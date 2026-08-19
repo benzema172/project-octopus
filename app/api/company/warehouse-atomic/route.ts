@@ -24,12 +24,25 @@ export async function POST(request:Request){
  const user=await getRequestUser(request);if(!user)return NextResponse.json({error:"Brak aktywnej sesji."},{status:401});
  let body:Body;try{body=await request.json() as Body;}catch{return NextResponse.json({error:"Nieprawidłowe dane formularza."},{status:400});}
  if(!body.workspaceId||!body.entity||!body.payload)return NextResponse.json({error:"Brakuje firmy, operacji lub danych."},{status:400});
- if(!["ai_warehouse_import","reservation"].includes(body.entity))return NextResponse.json({error:"Ta operacja nie jest obsługiwana przez atomowy moduł magazynu."},{status:400});
+ if(!["ai_warehouse_import","reservation","stock_movement_destination","stock_movement_approve"].includes(body.entity))return NextResponse.json({error:"Ta operacja nie jest obsługiwana przez atomowy moduł magazynu."},{status:400});
  const workspace=await getWorkspaceForUser(user,body.workspaceId);if(!workspace)return NextResponse.json({error:"Brak dostępu do firmy."},{status:403});
  const p=body.payload;const projectId=nullable(p.projectId);
- if(!await hasDomainAccess({workspaceId:workspace.id,userId:user.id,domain:"warehouse",level:"write",projectId}))return NextResponse.json({error:"Brak uprawnienia do zapisu w Magazynie."},{status:403});
+ const level=body.entity==="stock_movement_approve"?"approve":"write";
+ if(!await hasDomainAccess({workspaceId:workspace.id,userId:user.id,domain:"warehouse",level,projectId}))return NextResponse.json({error:"Brak uprawnienia do tej operacji Magazynu."},{status:403});
  const db=createServiceSupabaseClient();
  try{
+   if(body.entity==="stock_movement_destination"){
+     const movementId=await ownedId("stock_movements",p.movementId,workspace.id,"Ruch magazynowy");
+     const destinationMode=clean(p.destinationMode);
+     const targetProject=destinationMode==="direct_project"?await ownedId("projects",p.projectId,workspace.id,"Inwestycja"):null;
+     const{data,error}=await db.rpc("set_stock_movement_destination_atomic",{p_workspace_id:workspace.id,p_movement_id:movementId,p_destination_mode:destinationMode,p_project_id:targetProject,p_actor_id:user.id});
+     if(error)throw new Error(error.message);return NextResponse.json({ok:true,id:String(data),destinationMode});
+   }
+   if(body.entity==="stock_movement_approve"){
+     const movementId=await ownedId("stock_movements",p.movementId,workspace.id,"Ruch magazynowy");
+     const{data,error}=await db.rpc("approve_stock_movement_atomic",{p_workspace_id:workspace.id,p_movement_id:movementId,p_actor_id:user.id});
+     if(error)throw new Error(error.message);return NextResponse.json({ok:true,id:String(data)});
+   }
    if(body.entity==="reservation"){
      const verifiedProject=await ownedId("projects",p.projectId,workspace.id,"Inwestycja");const warehouseId=await ownedId("warehouses",p.warehouseId,workspace.id,"Magazyn");const stockItemId=await ownedId("stock_items",p.stockItemId,workspace.id,"Kartoteka");
      const{data,error}=await db.rpc("create_reservation_atomic",{p_workspace_id:workspace.id,p_project_id:verifiedProject,p_warehouse_id:warehouseId,p_stock_item_id:stockItemId,p_quantity:parseLocalizedNumber(p.quantity),p_required_at:date(p.requiredAt),p_actor_id:user.id}).single<{result_id:string}>();

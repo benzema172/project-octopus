@@ -17,6 +17,10 @@ type Body = {
   model?: string;
   proposedUse?: string;
   complianceSummary?: string;
+  stockItemId?: string | null;
+  boqItemId?: string | null;
+  wbsNodeId?: string | null;
+  requestOrigin?: "planned" | "retroactive";
   sentTo?: string;
   note?: string;
 };
@@ -36,7 +40,7 @@ export async function POST(request: Request) {
   const db = createServiceSupabaseClient();
   try {
     if (body.action === "save") {
-      const { data, error } = await db.rpc("save_material_request_atomic", {
+      const { data, error } = await db.rpc("save_material_request_v2_atomic", {
         p_workspace_id: project.workspace_id,
         p_project_id: project.id,
         p_request_id: nullable(body.requestId),
@@ -47,6 +51,10 @@ export async function POST(request: Request) {
         p_model: clean(body.model),
         p_proposed_use: clean(body.proposedUse),
         p_compliance_summary: clean(body.complianceSummary),
+        p_stock_item_id: nullable(body.stockItemId),
+        p_boq_item_id: nullable(body.boqItemId),
+        p_wbs_node_id: nullable(body.wbsNodeId),
+        p_request_origin: body.requestOrigin === "retroactive" ? "retroactive" : "planned",
         p_actor_id: user.id
       });
       if (error) throw new Error(error.message);

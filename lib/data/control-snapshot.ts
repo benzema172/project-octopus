@@ -37,14 +37,23 @@ const getExecutionRaw = cache(async (workspaceId: string, projectId: string) => 
 });
 
 const getAutopilotRaw = cache(async (workspaceId: string, projectId: string, includeFinance: boolean, includeWarehouse: boolean) => {
-  const { data, error } = await createServiceSupabaseClient().rpc("get_project_autopilot_compact_snapshot", {
-    p_workspace_id: workspaceId,
-    p_project_id: projectId,
-    p_include_finance: includeFinance,
-    p_include_warehouse: includeWarehouse
-  });
-  if (error) throw new Error(`Investment Autopilot nie może odczytać kompaktowego stanu inwestycji: ${error.message}`);
-  return record(data);
+  const db=createServiceSupabaseClient();
+  const [snapshotResult,ledgerResult]=await Promise.all([
+    db.rpc("get_project_autopilot_compact_snapshot", {p_workspace_id:workspaceId,p_project_id:projectId,p_include_finance:includeFinance,p_include_warehouse:includeWarehouse}),
+    includeFinance?db.rpc("get_project_cost_ledger",{p_workspace_id:workspaceId,p_project_id:projectId}):Promise.resolve({data:null,error:null})
+  ]);
+  if (snapshotResult.error) throw new Error(`Investment Autopilot nie może odczytać kompaktowego stanu inwestycji: ${snapshotResult.error.message}`);
+  if (ledgerResult.error) throw new Error(`Investment Autopilot nie może odczytać kanonicznego kosztu inwestycji: ${ledgerResult.error.message}`);
+  const raw=record(snapshotResult.data);
+  if(includeFinance){
+    const ledger=record(ledgerResult.data),reconciliation=record(raw.reconciliation);
+    reconciliation.purchaseNet=Number(ledger.invoiceNet??0)+Number(ledger.inventoryIssuedCost??0);
+    reconciliation.salesNet=Number(ledger.salesAllocatedNet??0);
+    reconciliation.actualNet=Number(ledger.actualNet??0);
+    reconciliation.committedNet=Number(ledger.committedNet??0);
+    raw.reconciliation=reconciliation;
+  }
+  return raw;
 });
 
 export async function getControlCommandCenterData(workspaceId:string,projectId:string){
