@@ -32,4 +32,26 @@ describe("certified audit round 1", () => {
     expect(immutability).toContain("to_jsonb(new) is distinct from to_jsonb(old)");
     expect(immutability).toContain("if tg_op = 'DELETE'");
   });
+
+  it("keeps privileged RLS helpers and pgvector out of the exposed schema", () => {
+    const vector = read("supabase/migrations/20260819124500_certified_move_vector_extension.sql");
+    const helpers = read("supabase/migrations/20260819130000_certified_private_rls_helpers.sql");
+    const internal = read("supabase/migrations/20260819131500_certified_internal_table_grants.sql");
+    const legacy = read("supabase/migrations/20260819133000_certified_drop_legacy_project_members.sql");
+
+    expect(vector).toContain("alter extension vector set schema extensions");
+    expect(helpers).toContain("alter function public.is_workspace_member(uuid) set schema private");
+    expect(helpers).toContain("security invoker");
+    expect(helpers).toContain("alter function public.match_document_chunks");
+    expect(internal).toContain("revoke all privileges on table public.app_schema_versions from anon, authenticated");
+    expect(legacy).toContain("drop table if exists public.project_members cascade");
+  });
+
+  it("keeps the daily operations cron bounded instead of serial or unbounded", () => {
+    const cron = read("app/api/cron/operations/route.ts");
+    expect(cron).toContain("const WORKSPACE_CONCURRENCY = 8");
+    expect(cron).toContain("offset += WORKSPACE_CONCURRENCY");
+    expect(cron).toContain("Promise.all(batch.map");
+    expect(cron).toContain("timingSafeEqual");
+  });
 });
