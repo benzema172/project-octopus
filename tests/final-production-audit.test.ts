@@ -70,18 +70,34 @@ describe("final production audit contract", () => {
     expect(migration).toContain("coalesce(new.owner_id, (select auth.uid()))");
   });
 
-  it("generates demo workspaces and projects that conform to the current schema", () => {
+  it("generates demo data that conforms to every enum-backed production field", () => {
     const userId = "11111111-1111-4111-8111-111111111111";
     const dataset = buildDemoDataset(userId, new Date("2026-08-19T12:00:00Z"));
-    const allowedProjectStatuses = new Set(["tender", "preparation", "active", "paused", "completed", "archived"]);
+    const projectStatuses = new Set(["tender", "preparation", "active", "paused", "completed", "archived"]);
+    const reviewStatuses = new Set(["draft", "ai_ready", "in_review", "sent", "approved", "rejected", "archived"]);
+    const workspaceRoles = new Set(["owner", "admin", "manager", "member", "viewer"]);
+    const severities = new Set(["info", "low", "medium", "high", "critical", "warning"]);
 
     expect(dataset.workspace.created_by).toBe(userId);
     expect(dataset.workspace.owner_id).toBe(userId);
     expect(dataset.projects.length).toBeGreaterThan(0);
+
     for (const project of dataset.projects) {
-      expect(allowedProjectStatuses.has(String(project.status))).toBe(true);
+      expect(projectStatuses.has(String(project.status))).toBe(true);
       expect(project.created_by).toBe(userId);
     }
+    for (const member of dataset.workspaceMembers) {
+      expect(workspaceRoles.has(String(member.role))).toBe(true);
+    }
+    for (const row of [...dataset.materialRequests, ...dataset.protocols, ...dataset.materials, ...dataset.devices]) {
+      if (row.status == null) continue;
+      expect(reviewStatuses.has(String(row.status))).toBe(true);
+    }
+    for (const finding of dataset.aiFindings) {
+      expect(severities.has(String(finding.severity))).toBe(true);
+      if (finding.status != null) expect(reviewStatuses.has(String(finding.status))).toBe(true);
+    }
+
     const projectProfiles = dataset.projectFacts.filter((row) => row.fact_type === "project_profile");
     for (const fact of projectProfiles) {
       if (!fact.value_json || typeof fact.value_json !== "object" || Array.isArray(fact.value_json)) continue;
