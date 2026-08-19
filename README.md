@@ -87,7 +87,7 @@ npm run build
 
 ## Live E2E Audit
 
-Workflow `.github/workflows/e2e-staging.yml` nie przechowuje prywatnych kluczy Supabase, R2 ani Gemini. Buduje audytowaną gałąź, a następnie traktuje publiczną aplikację jak zewnętrzny klient:
+Workflow `.github/workflows/e2e-staging.yml` nie przechowuje prywatnych kluczy Supabase, R2 ani Gemini. Uruchamia się dla wdrożonego `main` i traktuje publiczną aplikację jak zewnętrzny klient:
 
 1. przygotowuje izolowane konto demonstracyjne przez publiczny endpoint,
 2. loguje się przez Supabase Auth/RLS,
@@ -106,8 +106,8 @@ Dzięki temu test przechodzi przez te same endpointy, autoryzację i integracje,
 - gałęzie robocze nie tworzą automatycznie preview na Vercelu,
 - pełne CI musi być zielone przed merge,
 - `main` jest jedyną gałęzią automatycznie publikowaną na produkcję,
-- większy audyt zmienia `scripts/e2e-live-trigger.txt`, co wymusza Live E2E Audit przed merge i po publikacji,
-- po wdrożeniu produkcyjnym wynik live E2E należy ponownie potwierdzić na gotowym deploymentcie,
+- większy audyt zmienia `scripts/e2e-live-trigger.txt`, co uruchamia Live E2E Audit po publikacji `main`,
+- po wdrożeniu produkcyjnym wynik Live E2E należy potwierdzić na gotowym deploymentcie i w razie wyścigu z Vercel ponowić ręcznie,
 - zmiany w RLS i operacjach atomowych muszą mieć test regresyjny lub kontrakt migracyjny.
 
 Historyczne opisy wersji i audytów pozostają w Git i dokumentach projektu; ten README opisuje wyłącznie bieżący stan aplikacji.
