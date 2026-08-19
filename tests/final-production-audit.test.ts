@@ -37,13 +37,19 @@ describe("final production audit contract", () => {
     expect(adapter.length).toBeLessThan(4_000);
   });
 
-  it("keeps CI and E2E on the same Node runtime with a dependency security gate", () => {
+  it("keeps CI and E2E on Node 24 with dependency and black-box integration gates", () => {
     const ci = read(".github/workflows/ci.yml");
     const e2e = read(".github/workflows/e2e-staging.yml");
+    const liveAudit = read("scripts/e2e-live-audit.mjs");
 
     expect(ci).toContain("node-version: 24");
     expect(e2e).toContain("node-version: 24");
     expect(ci).toContain("npm audit --omit=dev --audit-level=high");
+    expect(e2e).toContain("node scripts/e2e-live-audit.mjs");
+    expect(e2e).not.toContain("secrets.");
+    expect(liveAudit).toContain("/api/storage/upload-url");
+    expect(liveAudit).toContain("/api/brain/process-document");
+    expect(liveAudit).toContain("octopus-live-audit.xlsx");
   });
 
   it("aligns legacy project RLS with investments domain access without depending on schema drift", () => {
