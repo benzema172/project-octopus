@@ -7,19 +7,32 @@ import { getPublicSupabaseConfig } from "@/lib/env";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { AuthenticatedUser } from "@/lib/types";
 
+function userFromClaims(claims: unknown): AuthenticatedUser | null {
+  if (!claims || typeof claims !== "object") {
+    return null;
+  }
+
+  const value = claims as { sub?: unknown; email?: unknown };
+  if (typeof value.sub !== "string" || !value.sub) {
+    return null;
+  }
+
+  return {
+    id: value.sub,
+    email: typeof value.email === "string" ? value.email : undefined
+  };
+}
+
 export const getCurrentUser = cache(async function getCurrentUser(): Promise<AuthenticatedUser | null> {
   try {
     const supabase = await createServerSupabaseClient();
-    const { data, error } = await supabase.auth.getUser();
+    const { data, error } = await supabase.auth.getClaims();
 
-    if (error || !data.user) {
+    if (error) {
       return null;
     }
 
-    return {
-      id: data.user.id,
-      email: data.user.email ?? undefined
-    };
+    return userFromClaims(data?.claims);
   } catch {
     return null;
   }
@@ -53,16 +66,13 @@ export async function getRequestUser(request: Request): Promise<AuthenticatedUse
       }
     });
 
-    const { data, error } = await supabase.auth.getUser(token);
+    const { data, error } = await supabase.auth.getClaims(token);
 
-    if (error || !data.user) {
+    if (error) {
       return null;
     }
 
-    return {
-      id: data.user.id,
-      email: data.user.email ?? undefined
-    };
+    return userFromClaims(data?.claims);
   }
 
   return getCurrentUser();

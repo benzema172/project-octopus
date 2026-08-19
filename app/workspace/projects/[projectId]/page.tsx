@@ -21,6 +21,9 @@ import { getProjectDashboardSnapshot, type ProjectDashboardSnapshot } from "@/li
 import { getProjectProfile } from "@/lib/data/project-profile";
 import { getProjectForUser } from "@/lib/data/projects";
 import { parseLocalizedNumber } from "@/lib/numbers/parse-localized-number";
+import "../../../project-dashboard-combined.css";
+import "../../../project-dashboard-compact.css";
+import "../../../project-dashboard-layout-refinement.css";
 
 export const dynamic = "force-dynamic";
 

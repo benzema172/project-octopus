@@ -3,7 +3,7 @@ import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import { getPublicSupabaseConfig, requireServerEnv } from "@/lib/env";
 
-export function createServiceSupabaseClient() {
+function buildServiceSupabaseClient() {
   const config = getPublicSupabaseConfig();
 
   if (!config) {
@@ -13,7 +13,20 @@ export function createServiceSupabaseClient() {
   return createClient(config.url, requireServerEnv("SUPABASE_SECRET_KEY"), {
     auth: {
       autoRefreshToken: false,
-      persistSession: false
+      persistSession: false,
+      detectSessionInUrl: false
     }
   });
+}
+
+type ServiceSupabaseClient = ReturnType<typeof buildServiceSupabaseClient>;
+
+let serviceClient: ServiceSupabaseClient | null = null;
+
+export function createServiceSupabaseClient(): ServiceSupabaseClient {
+  if (!serviceClient) {
+    serviceClient = buildServiceSupabaseClient();
+  }
+
+  return serviceClient;
 }
