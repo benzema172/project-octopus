@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(path, "utf8");
@@ -28,8 +28,13 @@ describe("final production audit contract", () => {
     expect(proxy).not.toContain("NextResponse.rewrite");
   });
 
-  it("removes the obsolete monolithic company workspace", () => {
-    expect(existsSync("components/company/company-operations-workspace.tsx")).toBe(false);
+  it("replaces the legacy company monolith with a thin lazy compatibility adapter", () => {
+    const adapter = read("components/company/company-operations-workspace.tsx");
+
+    expect(adapter).toContain("dynamic(() => import");
+    expect(adapter).toContain("reports-operations");
+    expect(adapter).not.toContain("function Finance(");
+    expect(adapter.length).toBeLessThan(4_000);
   });
 
   it("keeps CI and E2E on the same Node runtime with a dependency security gate", () => {
