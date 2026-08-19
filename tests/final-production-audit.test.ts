@@ -46,12 +46,13 @@ describe("final production audit contract", () => {
     expect(ci).toContain("npm audit --omit=dev --audit-level=high");
   });
 
-  it("aligns legacy project RLS with investments domain access", () => {
-    const migration = read("supabase/migrations/20260819115000_final_audit_project_access.sql");
+  it("aligns legacy project RLS with investments domain access without depending on schema drift", () => {
+    const migration = read("supabase/migrations/20260819100451_final_audit_project_access.sql");
 
     expect(migration).toContain("has_domain_access(p.workspace_id, 'investments', 'read', p.id)");
     expect(migration).toContain("has_domain_access(workspace_id, 'investments', 'write', id)");
     expect(migration).not.toContain("join public.workspace_members wm");
+    expect(migration).toContain("to_regclass('public.project_systems') is not null");
     expect(migration).toContain("project_tasks_delete");
     expect(migration).toContain("boq_imports_delete");
   });
