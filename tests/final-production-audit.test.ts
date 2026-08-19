@@ -70,6 +70,21 @@ describe("final production audit contract", () => {
     expect(migration).toContain("coalesce(new.owner_id, (select auth.uid()))");
   });
 
+  it("keeps the guest seed aligned with current required production columns", () => {
+    const seed = read("lib/demo/seed.ts");
+
+    expect(seed).toContain('project_facts: ["id", "project_id", "fact_type", "subject"');
+    expect(seed).toContain('documents: ["id", "workspace_id", "project_id", "title", "document_type"');
+    expect(seed).toContain('"amount", "original_amount"');
+    expect(seed).toContain('templates: ["id", "workspace_id", "name", "template_type", "object_provider", "object_key"');
+    expect(seed).toContain("subject: row.subject ?? row.value_text ?? row.fact_type");
+    expect(seed).toContain('title: row.title ?? row.name ?? "Dokument demonstracyjny"');
+    expect(seed).toContain('document_type: row.document_type ?? row.category ?? "other"');
+    expect(seed).toContain("original_amount: row.original_amount ?? row.amount");
+    expect(seed).toContain('object_provider: "demo"');
+    expect(seed).toContain('object_key: `demo/templates/${id}.json`');
+  });
+
   it("generates demo data that conforms to every enum-backed production field", () => {
     const userId = "11111111-1111-4111-8111-111111111111";
     const dataset = buildDemoDataset(userId, new Date("2026-08-19T12:00:00Z"));

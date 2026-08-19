@@ -4,11 +4,11 @@ import { buildDemoDataset, demoId, type DemoRow } from "@/lib/demo/dataset";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 const TABLE_COLUMNS: Record<string, string[]> = {
-  workspaces: ["id", "name", "owner_id", "tax_id", "regon", "street", "postal_code", "city", "email", "phone", "contact_person", "industry", "notes"],
+  workspaces: ["id", "name", "created_by", "owner_id", "tax_id", "regon", "street", "postal_code", "city", "email", "phone", "contact_person", "industry", "notes"],
   workspace_members: ["workspace_id", "user_id", "role"],
   projects: ["id", "workspace_id", "name", "description", "investor_name", "general_contractor", "location", "status", "created_by"],
-  project_facts: ["id", "project_id", "fact_type", "value_text", "value_json", "confidence", "status", "approved_by", "approved_at"],
-  documents: ["id", "workspace_id", "project_id", "name", "category", "ai_status", "ai_confidence", "review_status", "effective_status", "created_by", "deleted_at", "created_at", "updated_at"],
+  project_facts: ["id", "project_id", "fact_type", "subject", "value_text", "value_json", "confidence", "status", "approved_by", "approved_at"],
+  documents: ["id", "workspace_id", "project_id", "title", "document_type", "name", "category", "ai_status", "ai_confidence", "review_status", "effective_status", "created_by", "deleted_at", "created_at", "updated_at"],
   document_intakes: ["id", "workspace_id", "document_id", "proposed_project_id", "channel", "status", "suggested_category", "confidence", "decision_note", "created_by", "created_at"],
   materials: ["id", "project_id", "name", "installation", "specification"],
   devices: ["id", "project_id", "name", "installation", "parameters"],
@@ -34,7 +34,7 @@ const TABLE_COLUMNS: Record<string, string[]> = {
   invoices: ["id", "workspace_id", "legal_entity_id", "counterparty_id", "document_id", "invoice_number", "direction", "issue_date", "sale_date", "due_date", "currency", "net_amount", "tax_amount", "gross_amount", "paid_amount", "status"],
   invoice_lines: ["id", "workspace_id", "invoice_id", "line_number", "description", "quantity", "unit", "unit_price", "net_amount", "tax_rate", "gross_amount"],
   payments: ["id", "workspace_id", "invoice_id", "payment_date", "amount", "currency", "bank_reference", "status"],
-  commitments: ["id", "workspace_id", "project_id", "counterparty_id", "source_type", "source_id", "description", "amount", "currency", "expected_date", "status"],
+  commitments: ["id", "workspace_id", "project_id", "counterparty_id", "source_type", "source_id", "description", "amount", "original_amount", "currency", "expected_date", "status"],
   financial_allocations: ["id", "workspace_id", "project_id", "source_type", "source_id", "source_line_id", "boq_item_id", "wbs_node_id", "cost_code", "amount", "status"],
   employees: ["id", "workspace_id", "employee_number", "first_name", "last_name", "email", "phone", "status", "hired_at", "terminated_at"],
   employments: ["id", "workspace_id", "employee_id", "employment_type", "position", "valid_from", "valid_to", "full_time_equivalent", "monthly_cost", "hourly_cost", "currency"],
@@ -64,7 +64,7 @@ const TABLE_COLUMNS: Record<string, string[]> = {
   integration_connections: ["id", "workspace_id", "integration_type", "display_name", "status", "configuration", "last_sync_at", "created_by"],
   notification_rules: ["id", "workspace_id", "project_id", "event_type", "channels", "recipients", "lead_time_days", "active"],
   ksef_connections: ["id", "workspace_id", "environment", "status", "nip", "inbound_enabled", "sales_enabled", "last_successful_sync_at", "configured_by"],
-  templates: ["id", "workspace_id", "name", "template_type", "owner_id", "status", "description"],
+  templates: ["id", "workspace_id", "name", "template_type", "object_provider", "object_key", "schema_json", "is_active", "created_by", "quarantine_status"],
   template_versions: ["id", "workspace_id", "template_id", "document_version_id", "version_number", "status", "valid_from", "valid_to"]
 };
 
@@ -89,8 +89,27 @@ function normalizeRows(table: string, rows: DemoRow[]) {
     }, columns));
   }
 
+  if (table === "project_facts") {
+    return rows.map((row) => pick({
+      ...row,
+      subject: row.subject ?? row.value_text ?? row.fact_type
+    }, columns));
+  }
+
   if (table === "documents") {
-    return rows.map((row) => pick({ ...row, deleted_at: null }, columns));
+    return rows.map((row) => pick({
+      ...row,
+      title: row.title ?? row.name ?? "Dokument demonstracyjny",
+      document_type: row.document_type ?? row.category ?? "other",
+      deleted_at: null
+    }, columns));
+  }
+
+  if (table === "commitments") {
+    return rows.map((row) => pick({
+      ...row,
+      original_amount: row.original_amount ?? row.amount
+    }, columns));
   }
 
   return rows.map((row) => pick(row, columns));
@@ -116,14 +135,36 @@ async function upsertRows(
 }
 
 function demoTemplates(userId: string, workspaceId: string) {
+  const template = (index: number, name: string, templateType: string, description: string): DemoRow => {
+    const id = demoId(1080, index);
+    return {
+      id,
+      workspace_id: workspaceId,
+      name,
+      template_type: templateType,
+      object_provider: "demo",
+      object_key: `demo/templates/${id}.json`,
+      schema_json: { description, demo: true },
+      is_active: true,
+      created_by: userId,
+      quarantine_status: "internal"
+    };
+  };
+
   const templates: DemoRow[] = [
-    { id: demoId(1080, 1), workspace_id: workspaceId, name: "Protokół próby szczelności instalacji", template_type: "protocol", owner_id: userId, status: "active", description: "Wzór demonstracyjny protokołu ciśnieniowego z polami projektu, instalacji, ciśnienia i wyniku." },
-    { id: demoId(1080, 2), workspace_id: workspaceId, name: "Wniosek materiałowy – urządzenie HVAC", template_type: "material_request", owner_id: userId, status: "active", description: "Wzór demonstracyjny z producentem, modelem, parametrami i źródłami dokumentacji." },
-    { id: demoId(1080, 3), workspace_id: workspaceId, name: "Raport tygodniowy kierownika projektu", template_type: "report", owner_id: userId, status: "active", description: "Wzór raportu postępu, ryzyk, finansów, dostaw i decyzji." }
+    template(1, "Protokół próby szczelności instalacji", "protocol", "Wzór demonstracyjny protokołu ciśnieniowego z polami projektu, instalacji, ciśnienia i wyniku."),
+    template(2, "Wniosek materiałowy – urządzenie HVAC", "material_request", "Wzór demonstracyjny z producentem, modelem, parametrami i źródłami dokumentacji."),
+    template(3, "Raport tygodniowy kierownika projektu", "report", "Wzór raportu postępu, ryzyk, finansów, dostaw i decyzji.")
   ];
-  const versions = templates.map((template, index) => ({
-    id: demoId(1090, index + 1), workspace_id: workspaceId, template_id: template.id,
-    document_version_id: null, version_number: 1, status: index === 2 ? "draft" : "approved", valid_from: "2026-01-01", valid_to: null
+  const versions = templates.map((templateRow, index) => ({
+    id: demoId(1090, index + 1),
+    workspace_id: workspaceId,
+    template_id: templateRow.id,
+    document_version_id: null,
+    version_number: 1,
+    status: index === 2 ? "draft" : "approved",
+    valid_from: "2026-01-01",
+    valid_to: null
   }));
   return { templates, versions };
 }
