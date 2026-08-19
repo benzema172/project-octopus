@@ -32,6 +32,14 @@ function optionalId(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function canonicalPayload(payload: Record<string, unknown> | undefined) {
+  if (!payload || typeof payload !== "object") return {};
+  const nested = payload.businessDocument;
+  return nested && typeof nested === "object" && !Array.isArray(nested)
+    ? nested as Record<string, unknown>
+    : payload;
+}
+
 export async function POST(request: Request) {
   const auth = authorized(request);
   if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
@@ -66,16 +74,20 @@ export async function POST(request: Request) {
     if (!document) return Response.json({ error: "Dokument nie należy do firmy." }, { status: 422 });
   }
 
-  const status = documentId ? "processing" : "new";
+  const canonical = canonicalPayload(body.payload);
+  if (documentType && !canonical.documentType) canonical.documentType = documentType;
   const { data: inserted, error } = await db.from("business_inbox_items").upsert({
     workspace_id: workspaceId,
     source_channel: sourceChannel,
     external_key: externalKey,
     document_id: documentId,
     project_id: projectId,
-    document_type: documentType,
-    status,
+    document_type: documentType ?? (typeof canonical.documentType === "string" ? canonical.documentType : null),
+    status: "processing",
     payload: body.payload && typeof body.payload === "object" ? body.payload : {},
+    canonical_payload: canonical,
+    canonical_version: "business-document-v1",
+    processing_error: null,
     received_at: new Date().toISOString()
   }, { onConflict: "workspace_id,source_channel,external_key", ignoreDuplicates: true })
     .select("id,status")
@@ -84,13 +96,13 @@ export async function POST(request: Request) {
 
   if (!inserted) {
     const { data: existing, error: existingError } = await db.from("business_inbox_items")
-      .select("id,status")
+      .select("id,status,invoice_id")
       .eq("workspace_id", workspaceId)
       .eq("source_channel", sourceChannel)
       .eq("external_key", externalKey)
-      .maybeSingle<{ id: string; status: string }>();
+      .maybeSingle<{ id: string; status: string; invoice_id: string | null }>();
     if (existingError || !existing) return Response.json({ error: existingError?.message ?? "Nie udało się potwierdzić istniejącego elementu integracji." }, { status: 422 });
-    return Response.json({ ok: true, id: existing.id, status: existing.status, duplicate: true }, { status: 200 });
+    return Response.json({ ok: true, id: existing.id, status: existing.status, invoiceId: existing.invoice_id, duplicate: true }, { status: 200 });
   }
 
   await db.from("audit_events").insert({
@@ -100,8 +112,17 @@ export async function POST(request: Request) {
     event_type: "business_inbox.external_received",
     entity_type: "business_inbox_item",
     entity_id: inserted.id,
-    after_value: { sourceChannel, externalKey, documentType, hasDocument: Boolean(documentId) }
+    after_value: { sourceChannel, externalKey, documentType, hasDocument: Boolean(documentId), canonicalVersion: "business-document-v1" }
   });
 
-  return Response.json({ ok: true, id: inserted.id, status: inserted.status, duplicate: false }, { status: 202 });
+  const { data: processing, error: processingError } = await db.rpc("process_business_inbox_item_atomic", {
+    p_workspace_id: workspaceId,
+    p_inbox_id: inserted.id,
+    p_actor_id: null
+  });
+  if (processingError) return Response.json({ ok: false, id: inserted.id, status: "error", error: processingError.message }, { status: 422 });
+  const result = processing && typeof processing === "object" && !Array.isArray(processing) ? processing as Record<string, unknown> : {};
+  if (result.ok === false) return Response.json({ ok: false, id: inserted.id, status: result.status ?? "error", error: result.error ?? "Przetwarzanie dokumentu nie powiodło się." }, { status: 422 });
+
+  return Response.json({ ok: true, id: inserted.id, status: "processed", result: result.result, duplicate: false }, { status: 202 });
 }
