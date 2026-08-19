@@ -126,7 +126,10 @@ async function upsertRows(
   if (!rows.length) return 0;
   const db = createServiceSupabaseClient();
   const normalized = normalizeRows(table, rows);
-  const { error } = await db.from(table).upsert(normalized, { onConflict: options.onConflict ?? "id" });
+  const { error } = await db.from(table).upsert(normalized, {
+    onConflict: options.onConflict ?? "id",
+    defaultToNull: false
+  });
   if (error) {
     const message = `${table}: ${error.message}`;
     if (options.required !== false) throw new Error(`Nie udało się przygotować danych demonstracyjnych (${message}).`);
