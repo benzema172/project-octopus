@@ -92,7 +92,7 @@ export async function POST(request: Request) {
       if (scope === "inventory" && !await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "warehouse", level: "write" })) {
         throw new Error("Brak uprawnienia do przypisania kosztu na magazyn centralny.");
       }
-      const { data, error } = await db.rpc("set_invoice_line_scope_atomic", {
+      const { data, error } = await db.rpc("set_invoice_line_scope_and_rebuild_atomic", {
         p_workspace_id: workspace.id,
         p_invoice_line_id: lineId,
         p_scope: scope,
