@@ -2,10 +2,6 @@ name: Live E2E Audit
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - "scripts/e2e-live-trigger.txt"
   push:
     branches: [main]
     paths:
@@ -34,7 +30,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - name: Build audited branch
+      - name: Build deployed main
         run: npm run build
       - name: Black-box production integration audit
         run: node scripts/e2e-live-audit.mjs
