@@ -4,10 +4,12 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("R2 jurisdiction resolution contract", () => {
-  it("probes supported Cloudflare R2 jurisdiction endpoints before signing requests", () => {
+  it("probes real write permission on supported Cloudflare R2 jurisdiction endpoints", () => {
     const client = read("lib/r2/client.ts");
 
-    expect(client).toContain("ListObjectsV2Command");
+    expect(client).toContain("PutObjectCommand");
+    expect(client).toContain("WRITE_PROBE_KEY");
+    expect(client).toContain("Object Read & Write");
     expect(client).toContain(".eu.r2.cloudflarestorage.com");
     expect(client).toContain(".fedramp.r2.cloudflarestorage.com");
     expect(client).toContain("resolveR2Endpoint");
