@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { buildDemoDataset } from "@/lib/demo/dataset";
+import { buildDemoDataset } from "../lib/demo/dataset";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
