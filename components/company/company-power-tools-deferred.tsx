@@ -50,6 +50,7 @@ export function CompanyPowerToolsDeferred({ workspaceId, kind, canWrite, referen
         onClick={load}
         aria-expanded={open}
         aria-controls={regionId}
+        title="Narzędzia zaawansowane"
       >
         {pending ? <LoaderCircle className="spin" size={16} aria-hidden="true" /> : <SlidersHorizontal size={16} aria-hidden="true" />}
         <span>

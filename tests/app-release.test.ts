@@ -7,7 +7,7 @@ const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { versio
 describe("application release badge", () => {
   it("stays aligned with the package version and release date", () => {
     expect(APP_RELEASE.version).toBe(packageJson.version);
-    expect(APP_RELEASE.introducedAt).toBe("18.08.2026");
+    expect(APP_RELEASE.introducedAt).toBe("19.08.2026");
     expect(APP_RELEASE_LABEL).toContain(`v${packageJson.version}`);
     expect(APP_RELEASE_LABEL).toContain(APP_RELEASE.introducedAt);
   });
