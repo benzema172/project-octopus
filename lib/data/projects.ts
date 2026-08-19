@@ -7,6 +7,9 @@ import { listCompanyWorkspacesForUser, userHasWorkspaceAccess } from "@/lib/data
 
 type ProjectRow = Pick<ProjectSummary, "id" | "workspace_id" | "name"> & Partial<ProjectSummary>;
 
+const PROJECT_COLUMNS =
+  "id, workspace_id, name, description, investor_name, general_contractor, location, status, created_at, updated_at";
+
 function normalizeProject(row: ProjectRow): ProjectSummary {
   return {
     id: row.id,
@@ -22,7 +25,7 @@ function normalizeProject(row: ProjectRow): ProjectSummary {
   };
 }
 
-export async function listProjectsForWorkspace(
+export const listProjectsForWorkspace = cache(async function listProjectsForWorkspace(
   user: AuthenticatedUser,
   workspaceId: string
 ): Promise<ProjectSummary[]> {
@@ -33,7 +36,7 @@ export async function listProjectsForWorkspace(
   const supabase = createServiceSupabaseClient();
   const { data, error } = await supabase
     .from("projects")
-    .select("*")
+    .select(PROJECT_COLUMNS)
     .eq("workspace_id", workspaceId)
     .order("updated_at", { ascending: false })
     .returns<ProjectRow[]>();
@@ -43,9 +46,11 @@ export async function listProjectsForWorkspace(
   }
 
   return (data ?? []).map(normalizeProject);
-}
+});
 
-export async function listProjectsForUser(user: AuthenticatedUser): Promise<ProjectSummary[]> {
+export const listProjectsForUser = cache(async function listProjectsForUser(
+  user: AuthenticatedUser
+): Promise<ProjectSummary[]> {
   const workspaces = await listCompanyWorkspacesForUser(user);
   const workspaceIds = workspaces.map((workspace) => workspace.id);
 
@@ -56,7 +61,7 @@ export async function listProjectsForUser(user: AuthenticatedUser): Promise<Proj
   const supabase = createServiceSupabaseClient();
   const { data, error } = await supabase
     .from("projects")
-    .select("*")
+    .select(PROJECT_COLUMNS)
     .in("workspace_id", workspaceIds)
     .order("updated_at", { ascending: false })
     .returns<ProjectRow[]>();
@@ -66,7 +71,7 @@ export async function listProjectsForUser(user: AuthenticatedUser): Promise<Proj
   }
 
   return (data ?? []).map(normalizeProject);
-}
+});
 
 export const getProjectForUser = cache(async function getProjectForUser(
   user: AuthenticatedUser,
@@ -75,7 +80,7 @@ export const getProjectForUser = cache(async function getProjectForUser(
   const supabase = createServiceSupabaseClient();
   const { data, error } = await supabase
     .from("projects")
-    .select("*")
+    .select(PROJECT_COLUMNS)
     .eq("id", projectId)
     .maybeSingle<ProjectRow>();
 
