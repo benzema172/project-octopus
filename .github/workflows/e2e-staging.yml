@@ -1,4 +1,4 @@
-name: Staging E2E
+name: Live E2E Audit
 
 on:
   workflow_dispatch:
@@ -15,26 +15,18 @@ permissions:
   contents: read
 
 concurrency:
-  group: staging-e2e-${{ github.ref }}
+  group: live-e2e-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     env:
       NEXT_TELEMETRY_DISABLED: "1"
-      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
-      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
-      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
-      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      AI_PROVIDER: gemini
-      E2E_BASE_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_SUPABASE_URL: https://tlbqwbdfoeuvwdlmdzhd.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_GKNVG1MgDSyYhfhMn4um4g_GonPEXAE
+      E2E_BASE_URL: https://project-octopus-alpha.vercel.app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,23 +34,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - run: npm run build
-      - name: Start application
-        run: |
-          npm start > /tmp/octopus-e2e.log 2>&1 &
-          echo $! > /tmp/octopus-e2e.pid
-          for i in {1..30}; do
-            curl -fsS http://127.0.0.1:3000/ >/dev/null && exit 0
-            sleep 2
-          done
-          cat /tmp/octopus-e2e.log
-          exit 1
-      - name: Real PDF + XLSX R2 to Gemini/Brain E2E
-        run: npm run test:e2e-upload
-      - name: Core data integrity E2E
-        run: npm run test:e2e-core
-      - name: Full investment lifecycle E2E
-        run: npm run test:e2e-lifecycle
-      - name: Server log on failure
-        if: failure()
-        run: cat /tmp/octopus-e2e.log || true
+      - name: Build audited branch
+        run: npm run build
+      - name: Black-box production integration audit
+        run: node scripts/e2e-live-audit.mjs
