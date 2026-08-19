@@ -7,6 +7,7 @@ import { getProjectForUser } from "@/lib/data/projects";
 import { getAiRuntimeStatus } from "@/lib/env";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { hasDomainAccess } from "@/lib/authorization";
+import "../../../../brain-knowledge.css";
 
 export const dynamic = "force-dynamic";
 
