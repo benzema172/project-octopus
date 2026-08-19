@@ -1,115 +1,53 @@
-# Project Octopus 0.7.0
+# Project Octopus 1.0.1
 
-System operacyjny firmy wykonawczej, w którym dokument źródłowy zasila Project DNA, kosztorys/BOQ, WBS, harmonogram, materiały, protokoły, przerób, finanse i raportowanie.
+Project Octopus to operacyjny system firmy wykonawczej i inwestycji, w którym dokumenty źródłowe zasilają wspólny model danych: Project DNA, kosztorys/BOQ, WBS, harmonogram, materiały, protokoły, przerób, finanse, magazyn, kadry, flotę i raportowanie.
 
 ## Zasady produktu
 
 - jeden fizyczny dokument może mieć wiele powiązań bez kopiowania pliku,
 - kosztorys i WBS są kręgosłupem inwestycji,
-- każdy fakt AI zachowuje dokument, wersję, lokalizator i cytowany fragment,
-- AI proponuje, reguły walidują, a człowiek zatwierdza operacje formalne, finansowe, kadrowe i magazynowe,
-- liczby finansowe pochodzą wyłącznie z rekordów źródłowych i jawnych założeń forecastu,
-- dane HR, finansowe i techniczne są rozdzielone rolami domenowymi.
+- AI klasyfikuje i proponuje, ale operacje formalne, finansowe, kadrowe i magazynowe pozostają kontrolowane przez reguły i uprawnienia,
+- fakty AI zachowują źródło, wersję dokumentu, lokalizator i ślad audytowy,
+- dane domenowe są rozdzielone uprawnieniami `read / write / approve / admin`, także z zakresem pojedynczej inwestycji,
+- zapis magazynowy i kluczowe operacje finansowe używają ścieżek atomowych zamiast luźnych aktualizacji klienta.
 
-## Wersja 0.7.0
-
-### Sterowanie inwestycją i rejestr zmian
-
-- zespół inwestycji można budować z aktywnych pracowników wraz z rolą, okresem i procentem zaangażowania,
-- budżety są wersjonowane i zapisują planowany przychód oraz koszt wykorzystywany przez forecast,
-- zmiany kontraktowe mają numer, opis, wpływ na wartość i termin oraz trwały ślad audytowy,
-- magazyn inwestycji obsługuje rezerwację istniejącej kartoteki w konkretnym magazynie i terminie,
-- widoki finansów, magazynu i zespołu pokazują rzeczywiste rekordy zamiast wyłącznie opisów docelowych możliwości.
-
-## Wersja 0.6.0
-
-### Operacyjne moduły realizacji
-
-- wnioski materiałowe pozwalają ręcznie tworzyć wymagania obok propozycji pochodzących z Brain,
-- protokoły mają działający rejestr wymaganych prób, pomiarów, robót zanikowych i odbiorów,
-- harmonogram pozwala tworzyć zadania z kodem, terminami i flagą ścieżki krytycznej,
-- przerób obsługuje okresy oraz wpisy wykonania i odbioru dla pozycji BOQ,
-- wartości przerobu są obliczane z ceny jednostkowej BOQ, a ilości zbiorcze wracają do pozycji kosztorysu,
-- kosztorys udostępnia kolejkę importów do zatwierdzenia oraz rejestr zmian kontraktowych.
-
-## Wersja 0.5.2
-
-### Domknięcie operacji przedsiębiorstwa
-
-- Kadry: badania medyczne, rozdzielone terminy przyszłe i wygasłe, decyzje urlopowe i czasu pracy oraz aktywacja/dezaktywacja pracownika,
-- Magazyn: rezerwacje materiałowe i bieżąca wartość zapasu liczona jako stan razy ostatni koszt,
-- Flota: przejazdy, koszt na kilometr, szkody, aktualizacja przebiegu z tankowania, zamykanie serwisów i status pojazdu,
-- Raporty: zakres okresu i inwestycji jest respektowany, a zamknięty snapshot można pobrać jako CSV lub JSON,
-- Dokumenty: upload wielu plików, podgląd, stabilne odnośniki do rekordu i czytelny postęp paczki.
-
-## Naprawy wersji 0.5.1
-
-- filtry pustych wyników nie pokazują już błędnego stanu listy,
-- faktura ręczna może zawierać pozycję i zatwierdzoną alokację na inwestycję,
-- suma zapłacona jest przeliczana z potwierdzonych płatności,
-- alerty 30-dniowe nie mieszają przyszłych terminów z dokumentami już wygasłymi,
-- tankowanie aktualizuje przebieg pojazdu i zapisuje odczyt licznika,
-- snapshot raportu filtruje dane według definicji inwestycji oraz wybranego okresu.
-
-## Wersja 0.5.1
-
-### Automatyczna dekretacja i rejestry rozwijane
-
-- Gemini odczytuje z faktur, WZ/PZ i dokumentów dostaw numery, daty, NIP-y, kwoty oraz pozycje materiałowe,
-- AI porównuje wskazówki z dokumentu z katalogiem aktywnych inwestycji; brak pewnego dopasowania pozostawia dokument w rozrachunku ogólnym firmy,
-- Finanse zaczytują fakturę wraz z kontrahentem, pozycjami i alokacją na inwestycję,
-- Magazyn tworzy kontrolowany szkic PZ z faktury/WZ; stan zmienia się dopiero po zatwierdzeniu,
-- wszystkie kafle Finansów, Kadr, Magazynu, Floty i Raportów są rozwijane do prostych list,
-- każda z tych sekcji ma wyszukiwarkę filtrującą rekordy, statusy, dokumenty i przypisania.
-
-## Wersja 0.5.0
-
-### Operacyjne centrum przedsiębiorstwa
-
-- Finanse: działające formularze kontrahentów, faktur, płatności i zobowiązań oraz bieżące KPI,
-- Kadry: dodawanie pracowników wraz z zatrudnieniem i kosztami, czas pracy, urlopy i kwalifikacje,
-- Magazyn: magazyny, kartoteki oraz zatwierdzane ruchy PZ/WZ/RW/ZW/MM z wyliczaniem stanów,
-- Flota: pojazdy, tankowania, serwis i terminy dokumentów wraz z kosztami,
-- Raporty: definicje raportów i generowanie zamkniętych snapshotów danych firmy,
-- Centrum AI: jedna przestrzeń łącząca Wzory, Pamięć firmy i Octopus Brain,
-- Dokumenty: stabilna biblioteka centralna, ręczny kontekst uploadu i klasyfikacja AI.
-
-## Fundament wersji 0.4.1
-
-### Dokumenty i AI
-
-- jedna Wrzutnia na poziomie firmy i inwestycji,
-- upload do prywatnego R2, wersjonowanie, kosz i przywracanie,
-- trwała kolejka z atomowym claim, retry, dead-letter i ręcznym ponowieniem,
-- przetwarzanie PDF/obrazu, DOCX, XLSX, ZIP i tekstu,
-- Gemini Files API dla PDF/obrazów większych niż limit inline, do 50 MB na pojedynczy plik,
-- Skrzynka AI: Nowe / Przetwarzane / Wymaga decyzji / Błąd / Gotowe / Odrzucone,
-- zatwierdzanie dokumentów, faktów, kosztorysów, wzorów, zmian i zdarzeń budowy,
-- wyszukiwarka pełnotekstowa dokumentów, faktów i zatwierdzonej wiedzy firmy,
-- radar skutków nowej rewizji dla zakresu, BOQ, wniosków i protokołów.
-
-### Pion „Kosztorys do odbioru”
-
-- rozpoznawanie pozycji kosztorysu przez AI,
-- import roboczy z kontrolą pozycji i błędów,
-- zatwierdzenie tworzące wersję BOQ, WBS i szkic harmonogramu,
-- matryca wniosków materiałowych oraz wymaganych protokołów,
-- wymagania dowodowe dla protokołów i odbiorów,
-- łańcuch materiału od wniosku do zużycia na WBS,
-- okresy przerobowe rozdzielające wykonanie, odbiór, fakturę i płatność,
-- Kontrola 360°, forecast EAC/marży/terminu i paczka zamknięcia inwestycji.
+## Aktualny zakres 1.0.1
 
 ### Firma
 
-- Wzory: automatyczna rejestracja, pola, wersje, kwarantanna, zatwierdzanie i kontrolowany szkic dokumentu,
-- Pamięć firmy: lekcje, rozwiązania, wydajności i ryzyka wymagające zatwierdzenia,
-- Finanse: faktury, zobowiązania, alokacje, forecast i staging KSeF inbound,
-- Kadry: zatrudnienie, badania, kwalifikacje, urlopy, czas i przypisania,
-- Magazyn: PZ/WZ/RW/ZW/MM, rezerwacje, narzędzia i materiałowy ślad inwestycji,
-- Flota: pojazdy, terminy, paliwo, przejazdy, serwis, szkody i alokacje,
-- Raporty: definicje, uruchomienia, snapshoty, alerty i dystrybucja,
-- role domenowe: odczyt / zapis / zatwierdzanie / administracja, opcjonalnie dla jednej inwestycji,
-- mobilne zdarzenia z budowy z lokalizacją i kontrolą kierownika.
+- centrum działań i alertów wymagających uwagi,
+- Finanse: faktury, płatności, zobowiązania, alokacje, przypisanie do inwestycji i przepływ dokumentów,
+- Kadry: pracownicy, zatrudnienie, czas pracy, urlopy, badania, kwalifikacje i przypisania,
+- Magazyn: kartoteki, PZ/WZ/RW/ZW/MM, rezerwacje, kontrolowane przyjęcia z dokumentów i stany,
+- Flota: pojazdy, paliwo, przejazdy, serwis, szkody i terminy dokumentów,
+- Raporty i snapshoty operacyjne,
+- centralna biblioteka dokumentów, wyszukiwanie i Wrzutnia AI.
+
+### Inwestycja
+
+- Project DNA i dane kontraktowe,
+- kosztorys/BOQ, WBS i wersjonowanie,
+- harmonogram, przerób i Kontrola 360°,
+- wnioski materiałowe oraz protokoły z workflow zatwierdzania,
+- dokumenty, Brain i źródła wiedzy,
+- forecast finansowy, rozliczenie, closeout i Project Command Center.
+
+### Dokumenty i AI
+
+Docelowy obieg jest spójny z architekturą:
+
+`Wrzutnia → Cloudflare R2 → ekstrakcja PDF/DOCX/XLSX → Gemini → klasyfikacja i ekstrakcja → Brain → moduły`
+
+Pliki są przechowywane prywatnie w R2, a baza przechowuje metadane, wersje, wyniki ekstrakcji, powiązania i ślad audytowy.
+
+## Architektura
+
+- Next.js 16 / React 19,
+- Supabase: PostgreSQL, Auth, RLS i funkcje RPC,
+- Cloudflare R2: pliki źródłowe,
+- Gemini: klasyfikacja i ekstrakcja dokumentów,
+- Vercel: hosting i Functions; produkcja pracuje w regionie `dub1`,
+- GitHub Actions: CI oraz osobny pełny workflow E2E.
 
 ## Zmienne środowiskowe
 
@@ -123,42 +61,46 @@ R2_ACCESS_KEY_ID
 R2_SECRET_ACCESS_KEY
 R2_ENDPOINT
 AI_PROVIDER=gemini
-GEMINI_MODEL=gemini-3.5-flash
+GEMINI_MODEL
 GEMINI_API_KEY
 CRON_SECRET
 ```
 
-`CRON_SECRET` chroni automatyczne wywołanie `/api/brain/worker`. Sekrety nie są zapisywane w tabelach biznesowych.
+Sekretów nie zapisujemy w tabelach biznesowych ani w repozytorium.
 
 ## Migracje
 
-Na aktualnej bazie produkcyjnej zastosuj kolejno:
+Migracje znajdują się w `supabase/migrations` i muszą być wykonywane chronologicznie. Nie należy ręcznie wybierać historycznej podlisty migracji z tego README — kontrakt migracyjny w CI sprawdza pełny aktualny łańcuch.
 
-```text
-supabase/migrations/20260814090000_octopus_operating_system.sql
-supabase/migrations/20260814130000_octopus_execution_layer.sql
-supabase/migrations/20260814170000_atomic_estimate_approval.sql
-supabase/migrations/20260814180000_domain_access_hardening.sql
-```
-
-Na pustej bazie uruchom wszystkie migracje chronologicznie. Interfejs operacyjny wymaga markera `20260814_domain_access_hardening`.
-
-## Walidacja
+## Walidacja lokalna
 
 ```bash
-npm install
-npm run lint
+npm ci
+npm audit --omit=dev --audit-level=high
+npm run check:stability
+npm run typecheck
 npm run test
 npm run test:migrations
-npm run typecheck
+npm run lint
 npm run build
 ```
 
-Po ustawieniu środowiska:
+## Pełny E2E
 
-```bash
-npm run check:schema
-npm run test:e2e-upload
-```
+Workflow `.github/workflows/e2e-staging.yml` wykonuje trzy testy na rzeczywistych integracjach testowych:
 
-Szczegóły wdrożenia znajdują się w `DEPLOYMENT.md`, zakres bazowy w `IMPLEMENTATION_0.4.0.md`, a wyniki przeglądu technicznego i produktowego w `AUDIT_2026-08-14.md`.
+1. PDF + XLSX → R2 → Gemini → Brain,
+2. integralność danych i operacji atomowych,
+3. pełny cykl inwestycji: dokument → wymagania → WM → protokół → magazyn → closeout.
+
+Testy tworzą dane tymczasowe i sprzątają użytkowników/workspace po wykonaniu. Pełny E2E uruchamiamy przed uznaniem większego pakietu za produkcyjnie zamknięty.
+
+## Zasady wydania
+
+- gałęzie robocze nie tworzą automatycznie preview na Vercelu,
+- pełne CI musi być zielone przed merge,
+- `main` jest jedyną gałęzią automatycznie publikowaną na produkcję,
+- po większym audycie lub zmianie integracji uruchamiamy pełny E2E,
+- zmiany w RLS i operacjach atomowych muszą mieć test regresyjny lub kontrakt migracyjny.
+
+Historyczne opisy wersji i audytów pozostają w Git i dokumentach projektu; ten README opisuje wyłącznie bieżący stan aplikacji.
