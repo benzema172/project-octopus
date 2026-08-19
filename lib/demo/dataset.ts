@@ -9,6 +9,12 @@ import { extendDemoDataset } from "./extended-blueprint";
 
 export { demoId, type DemoRow };
 
+function normalizeReviewStatus(status: unknown) {
+  if (status === "review") return "in_review";
+  if (status === "closed") return "approved";
+  return status;
+}
+
 function normalizeCurrentSchema(dataset: DemoBlueprint, userId: string) {
   dataset.workspace = {
     ...dataset.workspace,
@@ -31,6 +37,31 @@ function normalizeCurrentSchema(dataset: DemoBlueprint, userId: string) {
       ? { ...row, value_json: { ...profile, status: "preparation" } }
       : row;
   });
+
+  dataset.materialRequests = dataset.materialRequests.map((row) => ({
+    ...row,
+    status: normalizeReviewStatus(row.status)
+  }));
+
+  dataset.protocols = dataset.protocols.map((row) => ({
+    ...row,
+    status: normalizeReviewStatus(row.status)
+  }));
+
+  dataset.materials = dataset.materials.map((row) => ({
+    ...row,
+    status: normalizeReviewStatus(row.status)
+  }));
+
+  dataset.devices = dataset.devices.map((row) => ({
+    ...row,
+    status: normalizeReviewStatus(row.status)
+  }));
+
+  dataset.aiFindings = dataset.aiFindings.map((row) => ({
+    ...row,
+    status: normalizeReviewStatus(row.status)
+  }));
 }
 
 export function buildDemoDataset(userId: string, referenceDate = new Date()): DemoBlueprint {
