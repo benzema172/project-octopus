@@ -54,19 +54,19 @@ export function WarehouseFlowIntegrityPanel({ workspaceId, movements, projects, 
         <p className="empty-copy"><PackageCheck size={15} aria-hidden="true" /> Brak oczekujących szkiców PZ.</p>
       ) : (
         <div className="live-record-list">
-          {drafts.map((row, index) => <DraftRow key={String(row.id)} row={row} projects={projects} canWrite={canWrite} pending={pending} onAct={act} defaultOpen={index === 0} />)}
+          {drafts.map((row) => <DraftRow key={String(row.id)} row={row} projects={projects} canWrite={canWrite} pending={pending} onAct={act} />)}
         </div>
       )}
     </section>
   );
 }
 
-function DraftRow({ row, projects, canWrite, pending, onAct, defaultOpen }: { row: Row; projects: Row[]; canWrite: boolean; pending: boolean; onAct: (entity: string, payload: Record<string, unknown>) => void; defaultOpen: boolean }) {
+function DraftRow({ row, projects, canWrite, pending, onAct }: { row: Row; projects: Row[]; canWrite: boolean; pending: boolean; onAct: (entity: string, payload: Record<string, unknown>) => void }) {
   const [mode, setMode] = useState(String(row.project_id ?? "") ? "direct_project" : "central_stock");
   const [projectId, setProjectId] = useState(String(row.project_id ?? ""));
 
   return (
-    <details className="ops-task-disclosure" defaultOpen={defaultOpen}>
+    <details className="ops-task-disclosure">
       <summary>
         <Route size={17} aria-hidden="true" />
         <span>

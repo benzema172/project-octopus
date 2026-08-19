@@ -50,7 +50,7 @@ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomai
   const [mobileOpen, setMobileOpen] = useState(false);
   const base = `/workspace/companies/${workspaceId}`;
 
-  const items: NavItem[] = [
+  const allItems: NavItem[] = [
     { href: base, label: "Dashboard", icon: LayoutDashboard, exact: true, group: "primary" },
     { href: `${base}/investments`, label: "Inwestycje", icon: FolderKanban, projectRoutes: true, domain: "investments", group: "primary" },
     { href: `${base}/finances`, label: "Finanse", icon: WalletCards, domain: "finance", group: "primary" },
@@ -63,7 +63,8 @@ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomai
     { href: `${base}/search`, label: "Wyszukiwarka", icon: Search, domain: "investments", group: "tools" },
     { href: `${base}/reports`, label: "Raporty", icon: ChartNoAxesCombined, domain: "reports", group: "tools" },
     { href: `${base}/settings`, label: "Ustawienia", icon: Settings, domain: "settings", group: "tools" }
-  ].filter((item) => (!item.domain || allowedDomains.includes(item.domain)) && (!item.domains || item.domains.some((domain) => allowedDomains.includes(domain))));
+  ];
+  const items = allItems.filter((item) => (!item.domain || allowedDomains.includes(item.domain)) && (!item.domains || item.domains.some((domain) => allowedDomains.includes(domain))));
 
   const isActive = (item: NavItem) => item.exact
     ? pathname === item.href
@@ -72,6 +73,7 @@ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomai
   const primaryItems = items.filter((item) => item.group === "primary");
   const toolItems = items.filter((item) => item.group === "tools");
   const toolsActive = toolItems.some(isActive);
+  const [toolsOpen, setToolsOpen] = useState(toolsActive);
 
   const renderLink = (item: NavItem) => {
     const active = isActive(item);
@@ -116,6 +118,7 @@ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomai
         type="button"
         className={`co-sidebar-backdrop${mobileOpen ? " is-visible" : ""}`}
         aria-label="Zamknij menu"
+        aria-hidden={!mobileOpen}
         onClick={() => setMobileOpen(false)}
         tabIndex={mobileOpen ? 0 : -1}
       />
@@ -153,7 +156,11 @@ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomai
         </nav>
 
         {toolItems.length ? (
-          <details className="co-sidebar-tools" defaultOpen={toolsActive}>
+          <details
+            className="co-sidebar-tools"
+            open={toolsActive || toolsOpen}
+            onToggle={(event) => setToolsOpen(event.currentTarget.open)}
+          >
             <summary>
               <Wrench size={17} aria-hidden="true" />
               <span>Narzędzia</span>

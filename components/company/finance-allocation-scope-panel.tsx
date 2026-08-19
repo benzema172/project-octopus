@@ -80,7 +80,7 @@ export function FinanceAllocationScopePanel({ workspaceId, invoiceLines, allocat
       </div>
 
       {canWrite && invoiceLines.length ? (
-        <details className="ops-action-disclosure" defaultOpen={allocations.length === 0}>
+        <details className="ops-action-disclosure">
           <summary>
             <Split size={17} aria-hidden="true" />
             <span><strong>Przypisz koszt</strong><small>Otwórz tylko, gdy chcesz zmienić zakres konkretnej pozycji faktury.</small></span>
