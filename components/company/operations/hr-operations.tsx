@@ -7,7 +7,7 @@ function money(value: unknown) { const n=Number(value??0); return new Intl.Numbe
 function str(value: unknown,fallback="—") { return value == null || value === "" ? fallback : String(value); }
 
 export default function HrOperations({ workspaceId,data,canWrite,canApprove,pathname,query }: { workspaceId:string; data:Data; canWrite:boolean; canApprove:boolean; pathname:string; query:string }) {
-  const employees=(data.employees??[]) as Row[], employments=(data.employments??[]) as Row[], qualifications=(data.qualifications??[]) as Row[], exams=(data.exams??[]) as Row[], leaves=(data.leaves??[]) as Row[], timesheets=(data.timesheets??[]) as Row[], projects=(data.projects??[]) as Row[], summary=(data.summary??{}) as Row;
+  const employees=(data.employees??[]) as Row[], employments=(data.employments??[]) as Row[], leaves=(data.leaves??[]) as Row[], timesheets=(data.timesheets??[]) as Row[], projects=(data.projects??[]) as Row[], summary=(data.summary??{}) as Row;
   const names=new Map(employees.map(row=>[String(row.id),`${str(row.first_name,"")} ${str(row.last_name,"")}`.trim()]));
   const employeeOptions=employees.map(row=>({...row,name:names.get(String(row.id))}));
   const employmentByEmployee=new Map<string,Row>(); employments.forEach(row=>{const id=String(row.employee_id);if(!employmentByEmployee.has(id))employmentByEmployee.set(id,row);});

@@ -19,21 +19,34 @@ function href(workspaceId: string, row: SearchResult) {
 
 const labels: Record<string, string> = { project: "Inwestycja", document: "Dokument", invoice: "Faktura", employee: "Pracownik", stock_item: "Magazyn", vehicle: "Pojazd", boq_item: "BOQ" };
 
+function initialRecent(workspaceId: string) {
+  if (typeof window === "undefined") return [] as string[];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(`octopus-search:${workspaceId}`) ?? "[]") as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string").slice(0, 6) : [];
+  } catch {
+    return [] as string[];
+  }
+}
+
 export function CompanySearch({ workspaceId }: { workspaceId: string }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [saved, setSaved] = useState<SavedSearch[]>([]);
-  const [recent, setRecent] = useState<string[]>([]);
+  const [recent, setRecent] = useState<string[]>(() => initialRecent(workspaceId));
   const [saveName, setSaveName] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    try { setRecent(JSON.parse(localStorage.getItem(`octopus-search:${workspaceId}`) ?? "[]") as string[]); } catch { setRecent([]); }
-    fetch(`/api/company/saved-searches?workspaceId=${encodeURIComponent(workspaceId)}`, { cache: "no-store" })
+    const controller = new AbortController();
+    fetch(`/api/company/saved-searches?workspaceId=${encodeURIComponent(workspaceId)}`, { cache: "no-store", signal: controller.signal })
       .then((response) => response.ok ? response.json() : { searches: [] })
       .then((payload: { searches?: SavedSearch[] }) => setSaved(payload.searches ?? []))
-      .catch(() => setSaved([]));
+      .catch((fetchError: unknown) => {
+        if (!(fetchError instanceof DOMException && fetchError.name === "AbortError")) setSaved([]);
+      });
+    return () => controller.abort();
   }, [workspaceId]);
 
   async function runSearch(value: string) {
@@ -45,8 +58,11 @@ export function CompanySearch({ workspaceId }: { workspaceId: string }) {
       const payload = await response.json() as { results?: SearchResult[]; error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Wyszukiwanie nie powiodło się.");
       setResults(payload.results ?? []);
-      const next = [normalized, ...recent.filter((item) => item !== normalized)].slice(0, 6);
-      setRecent(next); localStorage.setItem(`octopus-search:${workspaceId}`, JSON.stringify(next));
+      setRecent((current) => {
+        const next = [normalized, ...current.filter((item) => item !== normalized)].slice(0, 6);
+        localStorage.setItem(`octopus-search:${workspaceId}`, JSON.stringify(next));
+        return next;
+      });
     } catch (searchError) {
       setError(searchError instanceof Error ? searchError.message : "Wyszukiwanie nie powiodło się.");
     } finally { setPending(false); }

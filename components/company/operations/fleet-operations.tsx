@@ -7,7 +7,7 @@ function num(value: unknown) { const n=Number(value??0); return new Intl.NumberF
 function str(value: unknown,fallback="—") { return value == null || value === "" ? fallback : String(value); }
 
 export default function FleetOperations({ workspaceId,data,canWrite,canApprove,pathname,query }: { workspaceId:string; data:Data; canWrite:boolean; canApprove:boolean; pathname:string; query:string }) {
-  const vehicles=(data.vehicles??[]) as Row[], fuel=(data.fuel??[]) as Row[], trips=(data.trips??[]) as Row[], service=(data.service??[]) as Row[], documents=(data.documents??[]) as Row[], damages=(data.damages??[]) as Row[], projects=(data.projects??[]) as Row[], employees=(data.employees??[]) as Row[], summary=(data.summary??{}) as Row;
+  const vehicles=(data.vehicles??[]) as Row[], service=(data.service??[]) as Row[], documents=(data.documents??[]) as Row[], projects=(data.projects??[]) as Row[], employees=(data.employees??[]) as Row[], summary=(data.summary??{}) as Row;
   const vehicleOptions=vehicles.map(row=>({...row,name:`${str(row.registration_number)} · ${str(row.make,"")} ${str(row.model,"")}`.trim()}));
   const employeeOptions=employees.map(row=>({...row,name:`${str(row.first_name,"")} ${str(row.last_name,"")}`.trim()}));
   const openService=service.filter(row=>!["closed","cancelled"].includes(String(row.status))).map(row=>({...row,name:`${str(row.service_type)} · ${str(row.opened_at,"bez daty")}`})) as Array<Row & {name:string}>;
