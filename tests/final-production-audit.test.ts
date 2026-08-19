@@ -85,6 +85,7 @@ describe("final production audit contract", () => {
     expect(seed).toContain('object_provider: "demo"');
     expect(seed).toContain('object_key: `demo/templates/${id}.json`');
     expect(seed).toContain("omitNullDatabaseDefaults(table, pick(row, columns))");
+    expect(seed).toContain("defaultToNull: false");
   });
 
   it("lets PostgreSQL defaults replace only legacy nulls on NOT NULL default-backed fields", () => {
