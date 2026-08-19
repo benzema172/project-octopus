@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { AppReleaseBadge } from "@/components/app-release-badge";
 import "./globals.css";
-import "./octopus-app.css";
-import "./octopus-1-release.css";
 import "./release-badge.css";
 
 export const metadata: Metadata = {
