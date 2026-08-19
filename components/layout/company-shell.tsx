@@ -1,7 +1,8 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   ArrowLeftRight,
@@ -23,8 +24,12 @@ import {
   Wrench,
   X
 } from "lucide-react";
-import { OctopusAssistant } from "@/components/ai/octopus-assistant";
 import type { Domain } from "@/lib/authorization";
+
+const OctopusAssistant = dynamic(
+  () => import("@/components/ai/octopus-assistant").then((module) => module.OctopusAssistant),
+  { ssr: false, loading: () => null }
+);
 
 type CompanyShellProps = {
   workspaceId: string;
@@ -48,7 +53,13 @@ type NavItem = {
 export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomains, children }: CompanyShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [assistantReady, setAssistantReady] = useState(false);
   const base = `/workspace/companies/${workspaceId}`;
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setAssistantReady(true), 650);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   const allItems: NavItem[] = [
     { href: base, label: "Dashboard", icon: LayoutDashboard, exact: true, group: "primary" },
@@ -82,6 +93,7 @@ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomai
       <Link
         href={item.href}
         key={item.href}
+        prefetch={item.group === "tools" ? false : undefined}
         className={active ? "is-active" : undefined}
         aria-current={active ? "page" : undefined}
         onClick={() => setMobileOpen(false)}
@@ -186,7 +198,7 @@ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomai
       </aside>
 
       <div className="co-main" id="main-content" tabIndex={-1}>{children}</div>
-      <OctopusAssistant workspaceId={workspaceId} companyName={companyName} />
+      {assistantReady ? <OctopusAssistant workspaceId={workspaceId} companyName={companyName} /> : null}
     </div>
   );
 }
