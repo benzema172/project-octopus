@@ -201,6 +201,11 @@ if (signInError || !session.session) throw new Error(`Guest sign-in failed: ${si
 const token = session.session.access_token;
 const workspaceId = guest.payload.workspaceId;
 
+const r2Health = await request("/api/system/r2-health", { token, method: "POST" });
+if (!r2Health.response.ok || r2Health.payload.ok !== true) {
+  throw new Error(`Server-side R2 health failed: ${r2Health.response.status} ${JSON.stringify(r2Health.payload)}`);
+}
+
 const unauthorized = await request(`/api/company/search?workspaceId=${encodeURIComponent(workspaceId)}&q=Octopus`);
 if (unauthorized.response.status !== 401) throw new Error(`Unauthenticated API guard failed: expected 401, got ${unauthorized.response.status}`);
 
