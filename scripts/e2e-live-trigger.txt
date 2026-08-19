@@ -1,1 +1,1 @@
-2026-08-19 certified audit round 1: verify Guest/Auth/RLS -> API -> R2 -> Gemini -> Brain after R2 client alignment
+2026-08-19 R2 jurisdiction resolution: verify Guest/Auth/RLS -> presigned PUT -> complete -> Gemini -> Brain on production
