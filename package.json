@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test:migrations": "node scripts/validate-migrations-local.mjs && node scripts/validate-all-migrations-local.mjs",
     "check:schema": "node scripts/check-schema.mjs",
+    "check:stability": "node scripts/check-stability-core.mjs",
     "test:e2e-upload": "node scripts/e2e-upload.mjs",
     "test:e2e-core": "node scripts/e2e-core.mjs",
     "test:e2e-lifecycle": "node scripts/e2e-investment-lifecycle.mjs",
