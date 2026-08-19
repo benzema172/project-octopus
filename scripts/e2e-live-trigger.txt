@@ -1,1 +1,1 @@
-2026-08-19 final production audit diagnostics: capture exact presigned R2 PUT failure before continuing to Gemini/Brain
+2026-08-19 final production audit: verify versioned Guest seed then Auth/RLS -> API -> R2 -> Gemini -> Brain

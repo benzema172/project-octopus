@@ -6,3 +6,8 @@ export const GUEST_PUBLIC_PASSWORD = "gosc";
 // users still enter gosc / gosc on the Project Octopus login screen.
 export const GUEST_AUTH_EMAIL = "gosc@demo.project-octopus.local";
 export const GUEST_AUTH_PASSWORD = "Octopus-demo-gosc-2026!";
+
+// Bump only when the deterministic demo blueprint intentionally changes.
+// A matching marker means login may reuse the existing dataset instead of
+// rewriting hundreds of operational rows and immutable warehouse history.
+export const GUEST_DEMO_DATASET_VERSION = "2026-08-19-final-audit-v1";
