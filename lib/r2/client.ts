@@ -1,7 +1,9 @@
 import "server-only";
 
-import { ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getOptionalEnv, getR2Config } from "@/lib/env";
+
+const WRITE_PROBE_KEY = "_system/project-octopus-r2-write-probe";
 
 function normalizeEndpoint(endpoint: string) {
   return endpoint.trim().replace(/\/+$/, "");
@@ -53,7 +55,13 @@ async function detectR2Endpoint() {
   for (const endpoint of endpointCandidates()) {
     const client = createFixedR2Client(endpoint);
     try {
-      await client.send(new ListObjectsV2Command({ Bucket: config.bucketName, MaxKeys: 1 }));
+      await client.send(new PutObjectCommand({
+        Bucket: config.bucketName,
+        Key: WRITE_PROBE_KEY,
+        Body: "ok",
+        ContentType: "text/plain"
+      }));
+      await client.send(new DeleteObjectCommand({ Bucket: config.bucketName, Key: WRITE_PROBE_KEY })).catch(() => undefined);
       client.destroy();
       return endpoint;
     } catch (error) {
@@ -66,7 +74,7 @@ async function detectR2Endpoint() {
     }
   }
 
-  throw new Error(`Nie udało się uzyskać dostępu do bucketu R2 ${config.bucketName}. Sprawdzone endpointy: ${failures.join(", ")}.`);
+  throw new Error(`Brak zapisu do bucketu R2 ${config.bucketName}. Wymagany token Object Read & Write. Sprawdzone endpointy: ${failures.join(", ")}.`);
 }
 
 export async function resolveR2Endpoint() {
