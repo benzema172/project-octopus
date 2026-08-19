@@ -15,11 +15,13 @@ describe("post-merge performance contract", () => {
     expect(proxy).not.toContain("auth.getUser(");
   });
 
-  it("reuses the stateless service client instead of recreating it for every loader", () => {
+  it("reuses the stateless service client without weakening its inferred database types", () => {
     const service = read("lib/supabase/service.ts");
 
-    expect(service).toContain("let serviceClient");
-    expect(service).toContain("if (serviceClient)");
+    expect(service).toContain("buildServiceSupabaseClient");
+    expect(service).toContain("type ServiceSupabaseClient = ReturnType<typeof buildServiceSupabaseClient>");
+    expect(service).toContain("let serviceClient: ServiceSupabaseClient | null");
+    expect(service).toContain("if (!serviceClient)");
     expect(service).toContain("detectSessionInUrl: false");
   });
 
