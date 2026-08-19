@@ -47,7 +47,7 @@ Pliki są przechowywane prywatnie w R2, a baza przechowuje metadane, wersje, wyn
 - Cloudflare R2: pliki źródłowe,
 - Gemini: klasyfikacja i ekstrakcja dokumentów,
 - Vercel: hosting i Functions; produkcja pracuje w regionie `dub1`,
-- GitHub Actions: CI oraz osobny pełny workflow E2E.
+- GitHub Actions: pełne CI oraz osobny black-box audyt produkcyjnych integracji.
 
 ## Zmienne środowiskowe
 
@@ -66,11 +66,11 @@ GEMINI_API_KEY
 CRON_SECRET
 ```
 
-Sekretów nie zapisujemy w tabelach biznesowych ani w repozytorium.
+Sekretów nie zapisujemy w tabelach biznesowych ani w repozytorium. Publiczny URL Supabase i klucz `sb_publishable_*` nie są sekretami; aplikacja kliencka używa ich jawnie do Auth/RLS.
 
 ## Migracje
 
-Migracje znajdują się w `supabase/migrations` i muszą być wykonywane chronologicznie. Nie należy ręcznie wybierać historycznej podlisty migracji z tego README — kontrakt migracyjny w CI sprawdza pełny aktualny łańcuch.
+Migracje znajdują się w `supabase/migrations` i muszą być wykonywane chronologicznie. Nie należy ręcznie wybierać historycznej podlisty migracji z tego README — kontrakt migracyjny w CI sprawdza pełny aktualny łańcuch od pustej bazy.
 
 ## Walidacja lokalna
 
@@ -85,22 +85,29 @@ npm run lint
 npm run build
 ```
 
-## Pełny E2E
+## Live E2E Audit
 
-Workflow `.github/workflows/e2e-staging.yml` wykonuje trzy testy na rzeczywistych integracjach testowych:
+Workflow `.github/workflows/e2e-staging.yml` nie przechowuje prywatnych kluczy Supabase, R2 ani Gemini. Buduje audytowaną gałąź, a następnie traktuje publiczną aplikację jak zewnętrzny klient:
 
-1. PDF + XLSX → R2 → Gemini → Brain,
-2. integralność danych i operacji atomowych,
-3. pełny cykl inwestycji: dokument → wymagania → WM → protokół → magazyn → closeout.
+1. przygotowuje izolowane konto demonstracyjne przez publiczny endpoint,
+2. loguje się przez Supabase Auth/RLS,
+3. sprawdza blokadę niezalogowanego API,
+4. sprawdza wyszukiwanie firmy i Project Command Center,
+5. wysyła realny PDF i XLSX przez `/api/storage/upload-url`,
+6. zapisuje plik przez presigned URL w Cloudflare R2,
+7. kończy upload i uruchamia `/api/brain/process-document`,
+8. potwierdza klasyfikację Gemini, ekstrakcję Brain, job pipeline, tekst i źródła,
+9. przenosi dokument audytowy do kosza, żeby nie mieszał się z aktywnymi danymi demonstracyjnymi.
 
-Testy tworzą dane tymczasowe i sprzątają użytkowników/workspace po wykonaniu. Pełny E2E uruchamiamy przed uznaniem większego pakietu za produkcyjnie zamknięty.
+Dzięki temu test przechodzi przez te same endpointy, autoryzację i integracje, z których korzysta aplikacja, zamiast omijać je kluczem `service_role`. Historyczne uprzywilejowane skrypty E2E pozostają w `scripts/` do diagnostyki środowiska developerskiego, ale nie są traktowane jako zielona bramka, dopóki nie mają jawnie skonfigurowanych sekretów.
 
 ## Zasady wydania
 
 - gałęzie robocze nie tworzą automatycznie preview na Vercelu,
 - pełne CI musi być zielone przed merge,
 - `main` jest jedyną gałęzią automatycznie publikowaną na produkcję,
-- po większym audycie lub zmianie integracji uruchamiamy pełny E2E,
+- większy audyt zmienia `scripts/e2e-live-trigger.txt`, co wymusza Live E2E Audit przed merge i po publikacji,
+- po wdrożeniu produkcyjnym wynik live E2E należy ponownie potwierdzić na gotowym deploymentcie,
 - zmiany w RLS i operacjach atomowych muszą mieć test regresyjny lub kontrakt migracyjny.
 
 Historyczne opisy wersji i audytów pozostają w Git i dokumentach projektu; ten README opisuje wyłącznie bieżący stan aplikacji.
