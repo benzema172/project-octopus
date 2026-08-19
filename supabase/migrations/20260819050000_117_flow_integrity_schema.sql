@@ -86,11 +86,27 @@ alter table public.purchase_order_lines add column if not exists procurement_tra
 create index if not exists purchase_orders_trace_idx on public.purchase_orders(procurement_trace_id);
 create index if not exists purchase_order_lines_trace_idx on public.purchase_order_lines(procurement_trace_id);
 
+do $$ begin
+  alter table public.purchase_orders add constraint purchase_orders_destination_mode_check
+    check (destination_mode in ('direct_project','central_stock'));
+exception when duplicate_object then null; end $$;
+
 alter table public.stock_movements add column if not exists procurement_trace_id uuid references public.procurement_traces(id) on delete set null;
 alter table public.stock_movements add column if not exists destination_mode text not null default 'unassigned';
+alter table public.stock_movements add column if not exists source_group_key text;
 alter table public.stock_movement_lines add column if not exists procurement_trace_id uuid references public.procurement_traces(id) on delete set null;
 create index if not exists stock_movements_trace_idx on public.stock_movements(procurement_trace_id);
 create index if not exists stock_movement_lines_trace_idx on public.stock_movement_lines(procurement_trace_id);
+create unique index if not exists stock_movements_source_group_uidx
+  on public.stock_movements(workspace_id,source_document_id,source_group_key)
+  where source_document_id is not null and source_group_key is not null;
+do $$ begin
+  alter table public.stock_movements add constraint stock_movements_destination_mode_check
+    check (destination_mode in ('direct_project','central_stock','unassigned'));
+exception when duplicate_object then null; end $$;
+
+alter table public.material_chain_events add column if not exists procurement_trace_id uuid references public.procurement_traces(id) on delete set null;
+create index if not exists material_chain_events_trace_idx on public.material_chain_events(procurement_trace_id,stage,occurred_at desc);
 
 alter table public.invoice_lines add column if not exists procurement_trace_id uuid references public.procurement_traces(id) on delete set null;
 alter table public.invoice_lines add column if not exists expense_category text;
