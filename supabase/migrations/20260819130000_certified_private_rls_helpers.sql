@@ -168,8 +168,16 @@ grant execute on function public.is_workspace_admin(uuid) to authenticated, serv
 grant execute on function public.has_domain_access(uuid, text, text, uuid) to authenticated, service_role;
 grant execute on function public.can_access_project(uuid) to authenticated, service_role;
 
-alter function public.match_document_chunks(uuid, extensions.vector, integer, real)
-  security invoker;
+-- The local PGlite migration harness does not ship pgvector. Use dynamic SQL
+-- only in environments where the extension exists so the clean-room chain is
+-- portable without weakening the production hardening.
+do $do$
+begin
+  if exists (select 1 from pg_extension where extname = 'vector') then
+    execute 'alter function public.match_document_chunks(uuid, extensions.vector, integer, real) security invoker';
+  end if;
+end
+$do$;
 
 notify pgrst, 'reload schema';
 
