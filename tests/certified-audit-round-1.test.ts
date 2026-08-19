@@ -12,7 +12,8 @@ describe("certified audit round 1", () => {
     expect(client).toContain("endpoint: config.endpoint");
     expect(client).not.toContain("forcePathStyle");
     expect(upload).toContain("PutObjectCommand");
-    expect(upload).toContain("ContentType: parsed.data.mimeType");
+    expect(upload).toContain("ContentType: mimeType");
+    expect(upload).toContain('"Content-Type": mimeType');
   });
 
   it("keeps fixes for every guest seed schema mismatch observed in production", () => {
