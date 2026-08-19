@@ -1,4 +1,5 @@
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
+import { FinanceAllocationScopePanel } from "@/components/company/finance-allocation-scope-panel";
 import { FinanceEnterpriseFlow } from "@/components/company/finance-enterprise-flow";
 import { requireCurrentUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
@@ -26,8 +27,17 @@ export async function FinanceEnterpriseFlowSection({ workspaceId }: { workspaceI
 
   return <>
     <FinanceEnterpriseFlow workspaceId={workspace.id} data={{ ...data, stockItems: [] }} canWrite={canWrite} canApprove={canApprove} />
+    <FinanceAllocationScopePanel
+      workspaceId={workspace.id}
+      invoiceLines={data.invoiceLines}
+      allocations={data.invoiceAllocations}
+      projects={data.projects}
+      accountingRules={data.accountingRules}
+      summary={data.summary}
+      canWrite={canWrite}
+    />
     {canWrite && approvedEntries.length > 0 ? <section className="ops-panel ops-panel--wide" aria-label="Eksport zatwierdzonych dekretów">
-      <div className="section-heading"><div><p className="eyebrow">Eksport księgowy</p><h2>Zatwierdzone dekrety gotowe do przekazania</h2><p>Każdy plik korzysta z wersjonowanego kontraktu <code>octopus-accounting-export-v1</code> i zawiera Wn/Ma, VAT, kontrahenta oraz MPK inwestycji.</p></div></div>
+      <div className="section-heading"><div><p className="eyebrow">Eksport księgowy</p><h2>Zatwierdzone dekrety gotowe do przekazania</h2><p>Każdy plik korzysta z wersjonowanego kontraktu <code>octopus-accounting-export-v1</code> i zawiera Wn/Ma, VAT, kontrahenta oraz MPK inwestycji. Po pierwszym eksporcie źródłowa prawda księgowa jest zamrażana i może być zmieniana wyłącznie korektą lub stornem.</p></div></div>
       <div className="ops-simple-list">
         {approvedEntries.map((entry) => <div key={String(entry.id)}>
           <span>{formatDate(entry.entry_date)}</span>
