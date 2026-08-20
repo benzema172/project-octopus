@@ -7,8 +7,9 @@ const migration = readFileSync(
 );
 
 describe("project_facts subject compatibility", () => {
-  it("derives the required subject from the AI fact label before insert", () => {
-    expect(migration).toContain("before insert or update of subject, value_json, fact_type");
+  it("derives the required subject from the AI fact label on legacy schemas", () => {
+    expect(migration).toContain("column_name = 'subject'");
+    expect(migration).toContain("create trigger project_facts_subject_compat before insert or update");
     expect(migration).toContain("new.value_json ->> 'label'");
     expect(migration).toContain("new.fact_type");
   });
