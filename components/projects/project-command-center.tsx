@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowDown, ArrowUp, CalendarClock, CheckCircle2, CircleDollarSign, HeartPulse, RefreshCcw } from "lucide-react";
+import { CompactDisclosureGroup } from "@/components/ui/compact-disclosure-group";
 
 type Row = Record<string, unknown>;
 type Data = { snapshot: Record<string, unknown>; anomalies: Row[]; correspondence: Row[]; resources: Row[]; employees: Row[] };
@@ -71,12 +72,18 @@ export function ProjectCommandCenter({ projectId, data, canManage }: { projectId
       </div>)}
     </section> : <div className="control360-ok"><CheckCircle2 size={15} /> Brak aktywnych anomalii i pilnych sygnałów</div>}
 
-    <details className="control360-details">
-      <summary>Finanse i cash flow <span>EAC {money(forecast.eac)} · marża {money(forecast.margin)} · {String(quality.missingEvidence ?? 0)} braków dowodowych</span></summary>
+    <CompactDisclosureGroup
+      className="compact-disclosure-group--control"
+      items={[{
+        id: "control360-cashflow",
+        label: "Finanse i cash flow",
+        meta: `EAC ${money(forecast.eac)} · ${String(quality.missingEvidence ?? 0)} braków`
+      }]}
+    >
       <div className="control360-cashflow">
         {cash.map((week) => <article key={String(week.weekStart)}><small>{String(week.weekStart)}</small><span><ArrowUp size={12} /> {money(week.inflow)}</span><span><ArrowDown size={12} /> {money(week.outflow)}</span><b>{money(week.net)}</b></article>)}
         {!cash.length ? <p className="empty-copy">Brak danych cash flow.</p> : null}
       </div>
-    </details>
+    </CompactDisclosureGroup>
   </section>;
 }
