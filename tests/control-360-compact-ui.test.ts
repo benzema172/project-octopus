@@ -14,25 +14,26 @@ describe("Control 360 compact decision workspace", () => {
     expect(page).toContain("control-360-compact.css");
   });
 
-  it("reduces Command Center to health, priority, KPIs, actionable anomalies and collapsed cash flow", () => {
+  it("reduces Command Center to health, priority, KPIs, actionable anomalies and compact cash flow", () => {
     const command = read("components/projects/project-command-center.tsx");
     expect(command).toContain("Aktualny priorytet");
     expect(command).toContain("Brak aktywnych anomalii i pilnych sygnałów");
     expect(command).toContain("Finanse i cash flow");
+    expect(command).toContain("CompactDisclosureGroup");
     expect(command).not.toContain("Resource Planner");
     expect(command).not.toContain("Rejestr komunikacji");
     expect(command).not.toContain("Doświadczenia z innych inwestycji");
-    expect(command).not.toContain('<details className="module-panel" open>');
   });
 
-  it("keeps reconciliation decisions visible while hiding procurement tools and technical data by default", () => {
+  it("keeps reconciliation decisions available while grouping secondary tools into compact controls", () => {
     const graph = read("components/projects/project-reconciliation-graph.tsx");
-    expect(graph).toContain("Elementy wymagające decyzji");
+    expect(graph).toContain("Elementy do decyzji");
     expect(graph).toContain("Operacje zakupowe");
     expect(graph).toContain("Dane techniczne");
+    expect(graph).toContain("CompactDisclosureGroup");
+    expect(graph).toContain("defaultOpenId");
     expect(graph).not.toContain("Enterprise reconciliation");
     expect(graph).not.toContain("command-kpis--secondary");
-    expect(graph).not.toContain('className="control360-details control360-details--advanced" open');
   });
 
   it("turns execution into compact checkpoints instead of six descriptive stage cards", () => {
