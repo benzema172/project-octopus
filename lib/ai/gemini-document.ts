@@ -87,7 +87,7 @@ const RESPONSE_SCHEMA = {
             type: "OBJECT",
             properties: {
               lineType: { type: "STRING", enum: ["material", "service", "other"] },
-              expenseCategory: { type: "STRING", enum: ["", "material", "fuel", "transport", "equipment", "subcontract", "rental", "service", "other"] },
+              expenseCategory: { type: "STRING" },
               sku: { type: "STRING" }, description: { type: "STRING" }, quantity: { type: "NUMBER" }, unit: { type: "STRING" },
               unitPrice: { type: "NUMBER" }, netAmount: { type: "NUMBER" }, taxRate: { type: "NUMBER" }, grossAmount: { type: "NUMBER" },
               purchaseOrderNumber: { type: "STRING" }, vehicleRegistration: { type: "STRING" }, liters: { type: "NUMBER" }, mileage: { type: "NUMBER" }, confidence: { type: "NUMBER" }
