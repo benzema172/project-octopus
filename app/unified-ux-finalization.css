@@ -1,0 +1,149 @@
+/* Project Octopus — final operational UX layer, 2026-08-20 */
+
+.ops-table__row--interactive {
+  cursor: pointer;
+  transition: background-color .16s ease, box-shadow .16s ease;
+}
+
+.ops-table__row--interactive:hover {
+  background: rgba(124, 58, 237, .035);
+}
+
+.ops-table__row--interactive:focus-visible {
+  outline: 2px solid rgba(124, 58, 237, .42);
+  outline-offset: -2px;
+  background: rgba(124, 58, 237, .045);
+}
+
+.ops-record-drawer-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  pointer-events: none;
+}
+
+.ops-record-drawer__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(23, 17, 28, .26);
+  backdrop-filter: blur(2px);
+  cursor: default;
+  pointer-events: auto;
+}
+
+.ops-record-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(460px, 92vw);
+  height: 100%;
+  overflow: auto;
+  padding: 0 18px 24px;
+  background: #fff;
+  box-shadow: -18px 0 54px rgba(28, 18, 36, .18);
+  pointer-events: auto;
+  animation: ops-drawer-in .18s ease-out both;
+}
+
+@keyframes ops-drawer-in {
+  from { transform: translateX(20px); opacity: .55; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.ops-record-drawer > header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 70px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--ux-border, #e8e3ec);
+  background: rgba(255, 255, 255, .96);
+  backdrop-filter: blur(12px);
+}
+
+.ops-record-drawer > header > div { min-width: 0; }
+.ops-record-drawer > header small { color: var(--ux-muted, #716b78); }
+.ops-record-drawer > header h2 {
+  margin: 2px 0 0;
+  font-size: 20px;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+
+.ops-record-drawer__summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 14px 0;
+}
+
+.ops-record-drawer__summary > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 10px 11px;
+  border: 1px solid var(--ux-border, #e8e3ec);
+  border-radius: 10px;
+  background: var(--ux-soft, #f8f6fa);
+}
+
+.ops-record-drawer__summary small {
+  color: var(--ux-muted, #716b78);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.ops-record-drawer__summary strong {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.ops-record-drawer__summary strong > * { max-width: 100%; }
+
+.ops-record-drawer__content {
+  display: grid;
+  gap: 12px;
+}
+
+.ops-record-drawer__content section {
+  padding-top: 12px;
+  border-top: 1px solid var(--ux-border, #e8e3ec);
+}
+
+.ops-record-drawer__content h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.ops-record-drawer__content p {
+  margin: 0 0 8px;
+  color: var(--ux-muted, #716b78);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ops-record-drawer__content p strong { color: inherit; }
+.ops-panel--compact-list p { margin-block: 5px !important; }
+
+@media (max-width: 560px) {
+  .ops-record-drawer {
+    width: 100%;
+    padding-inline: 14px;
+  }
+
+  .ops-record-drawer__summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-record-drawer { animation: none; }
+  .ops-table__row--interactive { transition: none; }
+}
