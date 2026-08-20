@@ -271,3 +271,69 @@
     display: none !important;
   }
 }
+
+/* Combined project header + navigation shell — one compact surface instead of two stacked cards. */
+.pw-project-top-shell {
+  position: relative;
+  z-index: 90;
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: 0;
+  overflow: visible;
+  border: 1px solid #e6dfea;
+  border-radius: 22px;
+  background: rgba(255,255,255,.95);
+  box-shadow: 0 12px 34px rgba(52,40,70,.055);
+}
+
+.pw-project-top-shell > .pw-project-header.pw-project-header--contract.pw-project-header--compact.pw-project-header--with-intake {
+  min-height: 68px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 21px 21px 0 0 !important;
+  background: transparent !important;
+  padding: 8px 14px !important;
+  box-shadow: none !important;
+}
+
+.pw-project-top-shell > .project-navigation--v5 {
+  margin: 0 !important;
+  border: 0 !important;
+  border-top: 1px solid #eee8f1 !important;
+  border-radius: 0 0 21px 21px !important;
+  background: rgba(250,249,252,.78) !important;
+  padding: 5px 7px 6px !important;
+  box-shadow: none !important;
+}
+
+.pw-project-top-shell > .project-navigation--v5 .pw-nav-dashboard,
+.pw-project-top-shell > .project-navigation--v5 .pw-nav-group__trigger {
+  min-height: 42px !important;
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+}
+
+.pw-project-top-shell .pw-project-header__intake {
+  z-index: 200;
+}
+
+@media (max-width: 900px) {
+  .pw-project-top-shell > .pw-project-header.pw-project-header--contract.pw-project-header--compact.pw-project-header--with-intake {
+    min-height: 0 !important;
+    padding: 10px 12px !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .pw-project-top-shell {
+    border-radius: 18px;
+  }
+
+  .pw-project-top-shell > .pw-project-header.pw-project-header--contract.pw-project-header--compact.pw-project-header--with-intake {
+    border-radius: 17px 17px 0 0 !important;
+  }
+
+  .pw-project-top-shell > .project-navigation--v5 {
+    border-radius: 0 0 17px 17px !important;
+  }
+}
