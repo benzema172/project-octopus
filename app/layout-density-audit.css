@@ -1,0 +1,418 @@
+/*
+ * Workspace layout density audit.
+ * Imported last so legacy visual systems converge on one safe, compact layout.
+ */
+
+.octopus-app-light {
+  --audit-gap-xs: 5px;
+  --audit-gap-sm: 8px;
+  --audit-gap-md: 12px;
+  --audit-panel-pad: 14px;
+}
+
+/* Core overflow contract: every major grid/flex child may actually shrink. */
+.octopus-app-light :is(
+  .co-main,
+  .co-page,
+  .co-page-heading,
+  .co-page-heading > div,
+  .co-section,
+  .section-band,
+  .project-workspace,
+  .project-card,
+  .ops-workspace,
+  .ops-panel,
+  .ops-panel__summary,
+  .ops-panel__summary > div,
+  .ops-panel__content,
+  .ops-metrics,
+  .ops-metrics-grid,
+  .ops-metric,
+  .ops-metric-card,
+  .ops-quick-actions,
+  .ops-form-grid,
+  .ops-auto-form-grid,
+  .ops-simple-list,
+  .ops-import-list,
+  .ops-import-row,
+  .ops-split-lists,
+  .pw-dashboard--combined,
+  .pw-ops-grid,
+  .pw-ops-card,
+  .pw-finance-card,
+  .pw-finance-metrics
+) {
+  min-width: 0;
+}
+
+/* Remove the old 220px placeholder reservation from interactive workspace panels. */
+.octopus-app-light :is(.co-section, .ops-panel, .ops-quick-actions, .section-band, .project-card) {
+  min-height: 0 !important;
+  content-visibility: visible !important;
+  contain-intrinsic-size: none !important;
+}
+
+/* Overall workspace density. */
+.octopus-app-light .co-main {
+  padding: clamp(14px, 1.45vw, 22px) !important;
+}
+
+.octopus-app-light .co-page {
+  display: grid;
+  gap: var(--audit-gap-md);
+  margin: 0;
+}
+
+.octopus-app-light .ops-workspace--paged {
+  gap: 10px !important;
+}
+
+.octopus-app-light .co-page-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px !important;
+  margin: 0 !important;
+}
+
+.octopus-app-light .co-page-heading h1,
+.octopus-app-light .project-shell-heading h1 {
+  max-width: 980px;
+  margin: 0;
+  font-size: clamp(28px, 2.55vw, 40px) !important;
+  line-height: 1.08 !important;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+  overflow-wrap: break-word;
+}
+
+.octopus-app-light .co-kicker,
+.octopus-app-light .eyebrow {
+  margin: 0 0 4px;
+  line-height: 1.2;
+}
+
+.octopus-app-light .co-page-heading > div > p:last-child,
+.octopus-app-light .section-heading > div > p:last-child {
+  margin: 7px 0 0 !important;
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+}
+
+.octopus-app-light .co-count-badge {
+  align-self: end;
+  margin: 0 0 2px;
+  white-space: nowrap;
+}
+
+/* Enterprise/legacy KPI cards: fixed semantic grid, no text collisions. */
+.octopus-app-light .ops-metrics-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  margin: 0 !important;
+}
+
+.octopus-app-light .ops-metric-card {
+  display: grid !important;
+  grid-template-columns: 32px minmax(0, 1fr) auto !important;
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "icon label value"
+    "icon caption value";
+  align-items: center;
+  column-gap: 9px !important;
+  row-gap: 2px !important;
+  min-height: 68px !important;
+  height: auto !important;
+  overflow: hidden;
+  border-radius: 14px;
+  padding: 9px 11px !important;
+}
+
+.octopus-app-light .ops-metric-card__icon {
+  grid-area: icon;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  margin: 0 !important;
+  border-radius: 9px;
+}
+
+.octopus-app-light .ops-metric-card > span:not(.ops-metric-card__icon) {
+  grid-area: label;
+  min-width: 0;
+  margin: 0 !important;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.octopus-app-light .ops-metric-card > strong {
+  grid-area: value;
+  align-self: center;
+  margin: 0 !important;
+  font-size: clamp(18px, 1.7vw, 24px) !important;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.octopus-app-light .ops-metric-card > small {
+  grid-area: caption;
+  min-width: 0;
+  margin: 0 !important;
+  color: var(--ux-muted, #667085);
+  font-size: 10.5px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+/* Current KPI cards also lose unnecessary minimum height. */
+.octopus-app-light :is(.co-metric-card, .ops-metric) {
+  min-height: 88px !important;
+}
+
+.octopus-app-light :is(.co-metric-grid, .ops-metrics) {
+  margin-bottom: 0 !important;
+}
+
+/* Disclosure panels are measured from real content and keep a compact rhythm. */
+.octopus-app-light .ops-disclosure {
+  margin: 0 !important;
+  overflow: hidden;
+}
+
+.octopus-app-light .ops-panel__summary {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center !important;
+  gap: 8px !important;
+  min-height: 0 !important;
+  padding: 9px 13px !important;
+  list-style: none;
+}
+
+.octopus-app-light .ops-panel__summary::-webkit-details-marker {
+  display: none;
+}
+
+.octopus-app-light .ops-panel__summary .eyebrow {
+  font-size: 10px;
+  letter-spacing: .08em;
+}
+
+.octopus-app-light .ops-panel__summary h2 {
+  margin: 0 !important;
+  font-size: clamp(16px, 1.45vw, 20px) !important;
+  line-height: 1.18 !important;
+  overflow-wrap: anywhere;
+}
+
+.octopus-app-light .ops-panel__summary > span {
+  color: var(--ux-muted, #667085);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.octopus-app-light .ops-panel__content {
+  display: grid;
+  gap: 10px;
+  padding: 11px 13px 13px !important;
+}
+
+.octopus-app-light .ops-panel__content > p {
+  margin: 0;
+  max-width: 105ch;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* Dense operational lists without sacrificing readability. */
+.octopus-app-light :is(.ops-simple-list, .ops-import-list) {
+  display: grid;
+  gap: 6px !important;
+  margin: 0 !important;
+}
+
+.octopus-app-light .ops-simple-list > :is(div, p),
+.octopus-app-light .ops-import-row {
+  min-height: 0 !important;
+}
+
+.octopus-app-light .ops-simple-list > div {
+  padding-block: 7px !important;
+}
+
+.octopus-app-light .ops-simple-list__empty,
+.octopus-app-light .empty-copy {
+  margin: 0 !important;
+  padding: 9px 0 !important;
+  color: var(--ux-muted, #667085);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.octopus-app-light .ops-list-row__detail {
+  min-width: 0;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+/* Forms: compact controls, responsive columns, no collision on narrow widths. */
+.octopus-app-light .ops-form {
+  display: grid;
+  gap: 9px;
+  margin: 0 !important;
+}
+
+.octopus-app-light .ops-auto-form-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.octopus-app-light .ops-auto-form-grid label {
+  gap: 4px !important;
+  min-width: 0;
+}
+
+.octopus-app-light .ops-auto-form-grid :is(input, select, textarea) {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px !important;
+}
+
+.octopus-app-light .ops-form > :is(button, .primary-button, .secondary-button) {
+  justify-self: start;
+  min-height: 36px !important;
+  margin: 0;
+}
+
+/* Common section cards and empty-space reduction. */
+.octopus-app-light .co-section {
+  margin-top: 0 !important;
+  padding: 14px !important;
+}
+
+.octopus-app-light .section-heading,
+.octopus-app-light .co-section-heading,
+.octopus-app-light .ops-panel__heading {
+  margin-bottom: 10px !important;
+}
+
+.octopus-app-light .ops-split-lists {
+  gap: 8px !important;
+}
+
+.octopus-app-light .ops-split-lists .ops-panel {
+  min-height: 0 !important;
+  padding: 12px 13px !important;
+}
+
+.octopus-app-light .ops-split-lists h3,
+.octopus-app-light .ops-panel > h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.octopus-app-light .ops-split-lists p,
+.octopus-app-light .ops-panel > p {
+  margin: 4px 0;
+  line-height: 1.4;
+}
+
+/* Investment dashboard: remove decorative height that becomes empty space. */
+.octopus-app-light .pw-dashboard--combined {
+  gap: 10px !important;
+}
+
+.octopus-app-light .pw-ops-grid {
+  gap: 9px !important;
+}
+
+.octopus-app-light .pw-ops-card {
+  min-height: 0 !important;
+  gap: 10px !important;
+  padding: 14px !important;
+}
+
+.octopus-app-light .pw-finance-card {
+  padding: 16px 18px !important;
+}
+
+.octopus-app-light .pw-finance-metrics {
+  margin-top: 12px !important;
+  padding-bottom: 12px !important;
+}
+
+.octopus-app-light .pw-finance-metrics > div {
+  min-height: 82px !important;
+  padding-right: 14px !important;
+}
+
+.octopus-app-light :is(.pw-time-card__count, .pw-time-card__timeline, .pw-readiness-card) {
+  padding: 16px 18px !important;
+}
+
+.octopus-app-light .pw-time-card__count > strong {
+  font-size: clamp(50px, 5vw, 72px) !important;
+}
+
+.octopus-app-light .co-module-card {
+  min-height: 108px !important;
+  padding: 12px !important;
+}
+
+.octopus-app-light .co-feature-card {
+  min-height: 116px !important;
+  padding: 13px !important;
+}
+
+/* Responsive audit contracts. */
+@media (max-width: 1050px) {
+  .octopus-app-light .ops-metrics-grid,
+  .octopus-app-light .ops-auto-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .octopus-app-light .co-page-heading {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .octopus-app-light .co-count-badge {
+    justify-self: start;
+  }
+
+  .octopus-app-light .ops-metric-card {
+    grid-template-columns: 30px minmax(0, 1fr) auto !important;
+  }
+}
+
+@media (max-width: 620px) {
+  .octopus-app-light .co-main {
+    padding: 12px 10px 88px !important;
+  }
+
+  .octopus-app-light .ops-metrics-grid,
+  .octopus-app-light .ops-auto-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .octopus-app-light .ops-panel__summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .octopus-app-light .ops-panel__summary > span {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    white-space: normal;
+  }
+}
