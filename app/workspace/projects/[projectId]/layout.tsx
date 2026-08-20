@@ -19,6 +19,7 @@ import "../../../project-modules-operational.css";
 import "../../../layout-density-project-audit.css";
 import "../../../investment-ux-repair.css";
 import "../../../investment-content-refinement.css";
+import "../../../investment-card-typography.css";
 
 export const dynamic = "force-dynamic";
 type ProjectLayoutProps = { children: React.ReactNode; params: Promise<{ projectId: string }> };
