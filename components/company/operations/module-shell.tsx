@@ -40,6 +40,7 @@ type Props = {
   columns: ColumnSpec[];
   emptyLabel: string;
   tableTitle: string;
+  layoutVariant?: "default" | "finance";
   children?: ReactNode;
 };
 
@@ -91,7 +92,7 @@ function RecordForm({ form, pending, onSubmit }: { form: FormSpec; pending: bool
   );
 }
 
-export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, query, metrics, forms, rows, columns, emptyLabel, tableTitle, children }: Props) {
+export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, query, metrics, forms, rows, columns, emptyLabel, tableTitle, layoutVariant = "default", children }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -127,7 +128,7 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
   };
 
   return (
-    <div className="ops-workspace ops-workspace--paged">
+    <div className={`ops-workspace ops-workspace--paged${layoutVariant === "finance" ? " ops-workspace--finance" : ""}`}>
       <form className="ops-search" method="get" action={pathname} role="search">
         <label className="ops-search__field">
           <Search size={17} aria-hidden="true" />
