@@ -45,7 +45,7 @@ describe("unified operational UX", () => {
 
   it("restores complete investment workflow navigation without removing routes", () => {
     const nav = read("components/projects/project-navigation.tsx");
-    for (const label of ["Pulpit", "Projekt", "Plan", "Realizacja", "Zasoby", "Kontrola", "Zamknięcie"]) expect(nav).toContain(label);
+    for (const label of ["Pulpit", "Projekt", "Finanse", "Realizacja", "Zasoby", "Kontrola", "Zamknięcie"]) expect(nav).toContain(label);
     for (const route of ["/data", "/documentation", "/brain", "/cost-estimate", "/schedule", "/site", "/progress", "/requests", "/protocols", "/team", "/warehouse", "/finance", "/control", "/reports", "/closeout", "/outputs"]) expect(nav).toContain(route);
     expect(nav).toContain("project-navigation--v5");
     expect(nav).not.toContain("ProjectIntake");
