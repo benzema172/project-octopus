@@ -1,7 +1,8 @@
-import { CalendarDays, FileText, Plus } from "lucide-react";
+import { CalendarDays, FileText } from "lucide-react";
 import { notFound } from "next/navigation";
 import { ProjectLiveRecords } from "@/components/projects/project-live-records";
 import { ProjectOperationPanel } from "@/components/projects/project-operation-panel";
+import { CompactDisclosureGroup } from "@/components/ui/compact-disclosure-group";
 import { requireCurrentUser } from "@/lib/auth";
 import { listDocumentsForCategories } from "@/lib/data/documents";
 import { getProjectForUser } from "@/lib/data/projects";
@@ -39,15 +40,14 @@ export default async function SchedulePage({ params }: Props) {
         </span>
       </section>
 
-      <details id="schedule-add-task" className="pw-schedule-tool">
-        <summary><Plus size={17} aria-hidden="true" />Dodaj zadanie harmonogramu</summary>
+      <CompactDisclosureGroup
+        className="compact-disclosure-group--schedule"
+        items={[
+          { id: "schedule-add-task", label: "Dodaj zadanie harmonogramu" },
+          { id: "schedule-sources", label: "Źródła harmonogramu", meta: documents.length }
+        ]}
+      >
         <ProjectOperationPanel projectId={projectId} mode="schedule" />
-      </details>
-
-      <ProjectLiveRecords projectId={projectId} kind="schedule" />
-
-      <details className="pw-schedule-sources">
-        <summary><FileText size={16} aria-hidden="true" />Źródła harmonogramu <span>{documents.length}</span></summary>
         {documents.length ? (
           <div className="pw-schedule-sources__list">
             {documents.map((document) => (
@@ -58,9 +58,11 @@ export default async function SchedulePage({ params }: Props) {
             ))}
           </div>
         ) : (
-          <p>Brak przypisanych plików. Jeśli potrzebujesz, dodaj harmonogram przez Wrzutnię.</p>
+          <p className="pw-schedule-tool__empty">Brak przypisanych plików. Jeśli potrzebujesz, dodaj harmonogram przez Wrzutnię.</p>
         )}
-      </details>
+      </CompactDisclosureGroup>
+
+      <ProjectLiveRecords projectId={projectId} kind="schedule" />
     </div>
   );
 }
