@@ -93,24 +93,36 @@ export function FinanceEnterpriseFlow({ workspaceId, data, canWrite, canApprove 
     }, "Element został przyjęty do wspólnego Business Inbox.");
   };
 
-  return <section className="co-page" aria-label="Spójny obieg danych firmy">
-    <header className="co-page-heading">
-      <div><p className="co-kicker">Octopus Enterprise Flow</p><h1>Jeden obieg: dokument → koszt → materiał → inwestycja → księgowość</h1><p>Koszt inwestycji jest liczony netto. VAT i rozrachunek brutto są oddzielone, a zakup jest kontrolowany przez WM → PO → PZ → fakturę.</p></div>
-      <strong className="co-count-badge">{data.summary.matchingOk} uzgodnionych</strong>
+  return <section className="co-page enterprise-flow" aria-label="Obieg kosztu firmy">
+    <header className="enterprise-flow-overview">
+      <div className="enterprise-flow-overview__title">
+        <span>Finanse</span>
+        <h1>Obieg kosztu</h1>
+      </div>
+      <ol className="enterprise-flow-steps" aria-label="Cztery etapy obiegu kosztu">
+        <li><b>1</b><span><strong>Dokument</strong><small>Wrzutnia · KSeF · ERP</small></span></li>
+        <li><b>2</b><span><strong>Kontrola</strong><small>AI · WM/PO/PZ/FV</small></span></li>
+        <li><b>3</b><span><strong>Przypisanie</strong><small>inwestycja · firma</small></span></li>
+        <li><b>4</b><span><strong>Rozliczenie</strong><small>NET/VAT · dekret</small></span></li>
+      </ol>
+      <div className="enterprise-flow-overview__status" aria-label="Status obiegu">
+        <span><strong>{data.summary.matchingOk}</strong><small>zgodnych</small></span>
+        {data.summary.deviationsOpen > 0 ? <span className="enterprise-flow-overview__warning"><strong>{data.summary.deviationsOpen}</strong><small>wyjątków</small></span> : null}
+      </div>
     </header>
 
-    <section className="ops-metrics-grid">
-      <div className="ops-metric-card"><span className="ops-metric-card__icon"><FileInput size={18}/></span><span>Inbox do decyzji</span><strong>{data.summary.inboxOpen}</strong><small>PDF, KSeF, ERP, e-mail, API</small></div>
-      <div className="ops-metric-card"><span className="ops-metric-card__icon"><ArrowRightLeft size={18}/></span><span>3-way match</span><strong>{data.summary.matchingReview}</strong><small>wymaga kontroli</small></div>
-      <div className="ops-metric-card"><span className="ops-metric-card__icon"><BookOpenCheck size={18}/></span><span>Dekrety</span><strong>{data.summary.accountingProposed}</strong><small>propozycje Wn / Ma</small></div>
-      <div className="ops-metric-card"><span className="ops-metric-card__icon"><AlertTriangle size={18}/></span><span>Odstępstwa</span><strong>{data.summary.deviationsOpen}</strong><small>otwarte wyjątki procesu</small></div>
-    </section>
+    <div className="enterprise-flow-counters" aria-label="Bieżące zadania w obiegu">
+      <span><FileInput size={14}/><strong>{data.summary.inboxOpen}</strong> dokumentów do decyzji</span>
+      <span><ArrowRightLeft size={14}/><strong>{data.summary.matchingReview}</strong> kontroli zakupów</span>
+      <span><BookOpenCheck size={14}/><strong>{data.summary.accountingProposed}</strong> dekretów do zatwierdzenia</span>
+      <span><AlertTriangle size={14}/><strong>{data.summary.deviationsOpen}</strong> odstępstw</span>
+    </div>
 
     {message ? <p className="form-message form-message--success">{message}</p> : null}
     {error ? <p className="form-message form-message--error">{error}</p> : null}
 
-    <Panel title="Wspólny Business Inbox" eyebrow="Jedno wejście do firmy" meta={`${data.inbox.length} ostatnich`} open>
-      <p>Dokumenty z Wrzutni, KSeF i przyszłych integracji ERP trafiają do jednego bufora. Zatwierdzona faktura sama tworzy rekord finansowy, pozycje netto, kartoteki materiałowe, historię cen, szkic PZ, dekret i kontrolę 3-way.</p>
+    <Panel title="Dokumenty" eyebrow="1 · Wejście" meta={`${data.inbox.length} ostatnich`}>
+      <p>Wrzutnia, KSeF, ERP i e-mail trafiają do jednego Inbox. Octopus odczytuje dokument i uruchamia dalszy obieg.</p>
       <div className="ops-simple-list">
         {data.inbox.slice(0, 20).map((row) => <div key={String(row.id)}><span>{String(row.source_channel ?? "upload").toUpperCase()}</span><strong>{String(row.document_type ?? "dokument")} · {projectNames.get(String(row.project_id)) ?? "ogólne"}</strong><div className="ops-list-row__detail"><span className={statusClass(row.status)}>{String(row.status)}</span> · {date(row.received_at)}{row.invoice_id ? ` · faktura ${String(invoices.get(String(row.invoice_id))?.invoice_number ?? row.invoice_id)}` : ""}</div>{canWrite && row.document_id && ["error", "review"].includes(String(row.status)) ? <button className="secondary-button" disabled={pending} onClick={() => run("document_orchestrate", { documentId: row.document_id }, "Obieg dokumentu został przeliczony ponownie.")}><RefreshCw size={14}/>Ponów obieg</button> : null}</div>)}
         {!data.inbox.length ? <p className="ops-simple-list__empty">Brak dokumentów biznesowych. Pierwsza zatwierdzona faktura lub wpis integracyjny pojawi się tutaj automatycznie.</p> : null}
@@ -118,7 +130,7 @@ export function FinanceEnterpriseFlow({ workspaceId, data, canWrite, canApprove 
       {canWrite ? <form className="ops-form" onSubmit={submitInbox}><div className="ops-auto-form-grid"><label>Kanał<select name="sourceChannel" defaultValue="api"><option value="api">API</option><option value="ksef">KSeF</option><option value="subiekt">Subiekt</option><option value="comarch">Comarch</option><option value="symfonia">Symfonia</option><option value="enova">enova</option><option value="email">E-mail</option></select></label><label>Identyfikator źródła<input name="externalKey" required placeholder="np. ERP:FV/123/2026"/></label><label>Typ<input name="documentType" defaultValue="invoice"/></label><label>Inwestycja<select name="projectId" defaultValue=""><option value="">Ogólne / nierozpoznane</option>{data.projects.map((project) => <option key={String(project.id)} value={String(project.id)}>{String(project.name)}</option>)}</select></label></div><button className="secondary-button" disabled={pending}><Send size={15}/>Przyjmij do Inbox</button></form> : null}
     </Panel>
 
-    <Panel title="Kontrola zakupów 3-way" eyebrow="WM → PO → PZ → Faktura" meta={`${data.summary.matchingReview} do sprawdzenia`} open>
+    <Panel title="Kontrola zakupu" eyebrow="2 · WM → PO → PZ → FV" meta={`${data.summary.matchingReview} do sprawdzenia`}>
       <div className="ops-simple-list">
         {data.procurementMatches.slice(0, 30).map((row) => {
           const line = invoiceLines.get(String(row.invoice_line_id));
@@ -130,13 +142,13 @@ export function FinanceEnterpriseFlow({ workspaceId, data, canWrite, canApprove 
       </div>
     </Panel>
 
-    <Panel title="Alokacja kosztu po pozycjach" eyebrow="Jedna faktura może zasilać wiele inwestycji" meta="NETTO">
-      <p>Nie przypisujemy już całej faktury jako jednej kwoty brutto. Każda pozycja może trafić do innej inwestycji, a następnie do BOQ/WBS i kodu kosztu.</p>
+    <Panel title="Przypisanie kosztu" eyebrow="3 · Inwestycja / firma" meta="NETTO">
+      <p>Przypisz pozycję netto do inwestycji i kodu kosztu. Jedna faktura może zasilać kilka inwestycji.</p>
       {canWrite && data.invoiceLines.length && data.projects.length ? <form className="ops-form" onSubmit={submitAllocation}><div className="ops-auto-form-grid"><label>Pozycja faktury<select name="invoiceLineId" required defaultValue=""><option value="">Wybierz pozycję</option>{data.invoiceLines.map((line) => <option key={String(line.id)} value={String(line.id)}>{String(line.description)} · netto {money(line.net_amount)}</option>)}</select></label><label>Inwestycja<select name="projectId" required defaultValue=""><option value="">Wybierz inwestycję</option>{data.projects.map((project) => <option key={String(project.id)} value={String(project.id)}>{String(project.name)}</option>)}</select></label><label>Kwota netto<input name="amount" inputMode="decimal" required placeholder="0,00"/></label><label>Kod kosztu<input name="costCode" placeholder="np. MAT-WOD-KAN"/></label></div><button className="primary-button" disabled={pending}><Route size={15}/>Zapisz alokację netto</button></form> : <p className="ops-simple-list__empty">Formularz pojawi się po odczytaniu pozycji faktury i utworzeniu inwestycji.</p>}
     </Panel>
 
-    <Panel title="Dekretacja księgowa" eyebrow="Propozycja, nie ślepe księgowanie" meta={`${data.summary.accountingProposed} do zatwierdzenia`} open>
-      <p>Octopus rozdziela koszt netto, VAT i rozrachunek brutto. Dekret musi się bilansować; dopiero zatwierdzony może zostać przekazany do zewnętrznego systemu księgowego.</p>
+    <Panel title="Księgowość" eyebrow="4 · Dekret i rozliczenie" meta={`${data.summary.accountingProposed} do zatwierdzenia`}>
+      <p>Octopus rozdziela netto, VAT i rozrachunek brutto. Do eksportu przechodzi dopiero zatwierdzony, bilansujący się dekret.</p>
       <div className="ops-import-list">
         {data.accountingEntries.slice(0, 20).map((entry) => {
           const lines = linesByEntry.get(String(entry.id)) ?? [];
@@ -146,15 +158,15 @@ export function FinanceEnterpriseFlow({ workspaceId, data, canWrite, canApprove 
       </div>
     </Panel>
 
-    <Panel title="Historia cen i porównywarka" eyebrow="Price Intelligence" meta={`${data.priceObservations.length} obserwacji`}>
+    <Panel title="Historia cen" eyebrow="Analiza pomocnicza" meta={`${data.priceObservations.length} obserwacji`}>
       <div className="ops-simple-list">{data.priceObservations.slice(0, 40).map((row, index) => { const change = row.changePercent == null ? null : Number(row.changePercent); return <div key={`${String(row.sourceId)}-${index}`}><span>{date(row.date)}</span><strong>{String(row.stockName ?? "Materiał")} · {String(row.supplier ?? "dostawca nieznany")}</strong><div className="ops-list-row__detail">{money(row.unitPriceNet)} / {String(row.unit ?? "j.m.")} {change == null ? "" : <span className={change > 0 ? "status-chip status-chip--warning" : "status-chip status-chip--positive"}>{change > 0 ? <TrendingUp size={12}/> : <TrendingDown size={12}/>} {number(change)}%</span>}</div></div>;})}{!data.priceObservations.length ? <p className="ops-simple-list__empty">Historia cen zbuduje się automatycznie z faktur, zamówień i zatwierdzonych PZ.</p> : null}</div>
     </Panel>
 
-    <Panel title="Odstępstwa procesu" eyebrow="Kontrola zamiast udawania zgodności" meta={`${data.summary.deviationsOpen} otwartych`} open={data.summary.deviationsOpen > 0}>
+    <Panel title="Odstępstwa" eyebrow="Wyjątki wymagające decyzji" meta={`${data.summary.deviationsOpen} otwartych`} open={data.summary.deviationsOpen > 0}>
       <div className="ops-import-list">{data.deviations.slice(0, 40).map((row) => <details className="ops-import-row" key={String(row.id)}><summary><span className="ops-import-row__icon"><AlertTriangle size={17}/></span><div><strong>{String(row.title)}</strong><small>{projectNames.get(String(row.project_id)) ?? "firma"} · {date(row.created_at)}</small></div><span>{String(row.deviation_type)}</span><b className={statusClass(row.status)}>{String(row.status)}</b><ChevronDown size={16}/></summary><div className="ops-import-row__body"><p>{String(row.detail ?? "Brak dodatkowego opisu.")}</p>{row.resolution_note ? <p><strong>Rozwiązanie:</strong> {String(row.resolution_note)}</p> : null}{canWrite && row.status === "open" ? <form className="ops-form" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); run("deviation_close", { deviationId: row.id, resolution: form.get("resolution") }, "Odstępstwo zostało zamknięte z uzasadnieniem."); }}><label>Uzasadnienie zamknięcia<input name="resolution" required placeholder="np. zakup awaryjny zatwierdzony przez kierownika"/></label><button className="approve-button" disabled={pending}><Check size={14}/>Zamknij odstępstwo</button></form> : null}</div></details>)}{!data.deviations.length ? <p className="ops-simple-list__empty">Brak odstępstw. Zakupy bez WM/PO/PZ oraz różnice cen i ilości pojawią się tutaj automatycznie.</p> : null}</div>
     </Panel>
 
-    {pending ? <p className="form-message"><LoaderCircle className="spin" size={15}/> Aktualizuję spójny obieg danych…</p> : null}
-    <div className="co-category-strip"><span><Boxes size={14}/> koszt inwestycji = netto</span><span>VAT osobno</span><span>rozrachunek / cash = brutto</span><span>materiał nie zwiększa stanu bez PZ</span><span>WM → PO → PZ → FV</span></div>
+    {pending ? <p className="form-message"><LoaderCircle className="spin" size={15}/> Aktualizuję obieg danych…</p> : null}
+    <div className="co-category-strip enterprise-flow-rules"><span><Boxes size={14}/> koszt = netto</span><span>VAT osobno</span><span>rozrachunek = brutto</span><span>magazyn dopiero po PZ</span></div>
   </section>;
 }
