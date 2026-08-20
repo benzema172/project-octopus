@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { FormEvent, ReactNode } from "react";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ChevronDown, Plus, Save, Search } from "lucide-react";
+import { AlertTriangle, ChevronDown, MoreHorizontal, Plus, Save, Search, X } from "lucide-react";
 import { ServerPagination } from "@/components/system/server-pagination";
 
 export type Row = Record<string, unknown>;
@@ -41,6 +41,7 @@ type Props = {
   emptyLabel: string;
   tableTitle: string;
   layoutVariant?: "default" | "finance";
+  primaryMetricCount?: number;
   children?: ReactNode;
 };
 
@@ -59,10 +60,7 @@ function RecordForm({ form, pending, open, onToggle, onSubmit }: { form: FormSpe
         }}
       >
         <span className="ops-form-card__summary-icon"><Plus size={15} aria-hidden="true" /></span>
-        <span>
-          <strong>{form.title}</strong>
-          <small>Rozwiń formularz tylko wtedy, gdy go potrzebujesz</small>
-        </span>
+        <strong>{form.title}</strong>
         <ChevronDown className="ops-form-card__chevron" size={15} aria-hidden="true" />
       </summary>
       <form className="ops-form-card__body" onSubmit={onSubmit}>
@@ -98,13 +96,15 @@ function RecordForm({ form, pending, open, onToggle, onSubmit }: { form: FormSpe
   );
 }
 
-export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, query, metrics, forms, rows, columns, emptyLabel, tableTitle, layoutVariant = "default", children }: Props) {
+export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, query, metrics, forms, rows, columns, emptyLabel, tableTitle, layoutVariant = "default", primaryMetricCount = 3, children }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openFormKey, setOpenFormKey] = useState<string | null>(null);
   const page = data.page ?? { page: 1, pageSize: Math.max(rows.length, 1), total: rows.length };
+  const primaryMetrics = metrics.slice(0, primaryMetricCount);
+  const secondaryMetrics = metrics.slice(primaryMetricCount);
 
   const submit = (entity: string, success: string) => (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -127,6 +127,7 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
         }
         form.reset();
         setMessage(success);
+        setOpenFormKey(null);
         router.refresh();
       } catch {
         setError("Nie udało się połączyć z modułem operacyjnym.");
@@ -134,17 +135,49 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
     });
   };
 
+  const renderMetrics = (items: MetricSpec[]) => items.map((metric) => (
+    <article className="ops-metric" key={metric.label}>
+      <small>{metric.label}</small>
+      <strong>{metric.value}</strong>
+      <p>{metric.caption}</p>
+    </article>
+  ));
+
   return (
     <div className={`ops-workspace ops-workspace--paged${layoutVariant === "finance" ? " ops-workspace--finance" : ""}`}>
-      <form className="ops-search" method="get" action={pathname} role="search">
-        <label className="ops-search__field">
-          <Search size={17} aria-hidden="true" />
-          <span className="ux-sr-only">Szukaj w module</span>
-          <input name="q" defaultValue={query} placeholder="Szukaj po nazwie, numerze lub opisie…" />
-        </label>
-        <button className="secondary-button" type="submit">Szukaj</button>
-        {query ? <Link className="secondary-button" href={pathname}>Wyczyść filtr</Link> : null}
-      </form>
+      <div className="ops-action-bar">
+        <form className="ops-search" method="get" action={pathname} role="search">
+          <label className="ops-search__field">
+            <Search size={17} aria-hidden="true" />
+            <span className="ux-sr-only">Szukaj w module</span>
+            <input name="q" defaultValue={query} placeholder="Szukaj po nazwie, numerze lub opisie…" />
+            {query ? <Link className="ops-search__clear" href={pathname} aria-label="Wyczyść wyszukiwanie" title="Wyczyść"><X size={15} aria-hidden="true" /></Link> : null}
+          </label>
+        </form>
+        {canWrite && forms.length ? (
+          <details className="ops-add-menu ops-quick-actions">
+            <summary className="primary-button"><Plus size={16} aria-hidden="true" /> Dodaj <ChevronDown size={14} aria-hidden="true" /></summary>
+            <div className="ops-add-menu__panel">
+              <div className="ops-add-menu__heading"><strong>Dodaj lub zarejestruj</strong><small>Wybierz czynność</small></div>
+              <div className="ops-form-grid">
+                {forms.map((form) => {
+                  const formKey = `${form.entity}-${form.title}`;
+                  return (
+                    <RecordForm
+                      key={formKey}
+                      form={form}
+                      pending={pending}
+                      open={openFormKey === formKey}
+                      onToggle={() => setOpenFormKey((current) => current === formKey ? null : formKey)}
+                      onSubmit={submit(form.entity, form.success)}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </details>
+        ) : null}
+      </div>
 
       {!canWrite ? (
         <div className="pw-protected-data" role="note">
@@ -158,41 +191,12 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
         {error ? <p className="ops-feedback ops-feedback--error" role="alert">{error}</p> : null}
       </div>
 
-      <section className="ops-metrics" aria-label="Podsumowanie modułu">
-        {metrics.map((metric) => (
-          <article className="ops-metric" key={metric.label}>
-            <small>{metric.label}</small>
-            <strong>{metric.value}</strong>
-            <p>{metric.caption}</p>
-          </article>
-        ))}
-      </section>
-
-      {canWrite && forms.length ? (
-        <section className="ops-quick-actions" aria-label="Dodawanie danych">
-          <div className="ops-quick-actions__heading">
-            <div>
-              <small>Szybkie akcje</small>
-              <h2>Dodaj dane</h2>
-            </div>
-            <span>{forms.length} {forms.length === 1 ? "formularz" : "formularze"}</span>
-          </div>
-          <div className="ops-form-grid">
-            {forms.map((form) => {
-              const formKey = `${form.entity}-${form.title}`;
-              return (
-                <RecordForm
-                  key={formKey}
-                  form={form}
-                  pending={pending}
-                  open={openFormKey === formKey}
-                  onToggle={() => setOpenFormKey((current) => current === formKey ? null : formKey)}
-                  onSubmit={submit(form.entity, form.success)}
-                />
-              );
-            })}
-          </div>
-        </section>
+      {primaryMetrics.length ? <section className="ops-metrics ops-metrics--primary" aria-label="Najważniejsze informacje">{renderMetrics(primaryMetrics)}</section> : null}
+      {secondaryMetrics.length ? (
+        <details className="ops-secondary-metrics">
+          <summary><MoreHorizontal size={16} aria-hidden="true" /> Więcej wskaźników <span>{secondaryMetrics.length}</span></summary>
+          <section className="ops-metrics" aria-label="Dodatkowe wskaźniki">{renderMetrics(secondaryMetrics)}</section>
+        </details>
       ) : null}
 
       <section className="ops-panel ops-panel--wide" data-open="true" aria-labelledby="ops-records-heading">

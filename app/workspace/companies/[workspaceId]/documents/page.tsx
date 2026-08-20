@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, FileText, UploadCloud } from "lucide-react";
+import { AlertTriangle, ChevronDown, FileText, UploadCloud } from "lucide-react";
 import { notFound } from "next/navigation";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { DocumentUpload } from "@/components/documents/document-upload";
@@ -42,7 +42,6 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
   const workspace = await getWorkspaceForUser(user, workspaceId);
 
   if (!workspace) notFound();
-
   if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "investments", level: "read" })) {
     return <DomainAccessDenied workspaceId={workspace.id} area="Dokumenty" />;
   }
@@ -72,81 +71,40 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
   const uploadFocused = query.upload === "1";
 
   return (
-    <main className="co-page">
-      <header className="co-page-heading">
-        <div>
-          <p className="co-kicker">Dokumenty</p>
-          <h1>Centralne dokumenty firmy</h1>
-          <p>Wrzutnia, biblioteka i wersjonowanie plików całej firmy bez blokowania strony, gdy część warstwy AI lub magazynu nie jest jeszcze gotowa.</p>
-        </div>
-        <strong className="co-count-badge">{documents.length} plików</strong>
+    <main className="co-page co-documents-simplified">
+      <header className="co-page-heading co-page-heading--compact">
+        <div><p className="co-kicker">Dokumenty</p><h1>Biblioteka firmy</h1><p>Wszystkie pliki, ich przypisania i wynik analizy AI w jednym miejscu.</p></div>
+        <div className="co-heading-actions"><strong className="co-count-badge">{documents.length} plików</strong><Link href={`/workspace/companies/${workspace.id}/ai-inbox`} className="co-text-link">Do weryfikacji →</Link></div>
       </header>
 
       {!storageReady ? (
         <section className="co-schema-warning" role="status">
           <AlertTriangle size={17} aria-hidden="true" />
-          <div>
-            <strong>Biblioteka działa w trybie bezpiecznym, ale Wrzutnia jest chwilowo zablokowana.</strong>
-            <span>Brakuje kompletnej warstwy składowania dokumentów. Strona pozostaje dostępna zamiast kończyć się błędem serwera.</span>
-          </div>
+          <div><strong>Wrzutnia jest chwilowo zablokowana.</strong><span>Biblioteka pozostaje dostępna w trybie bezpiecznym.</span></div>
         </section>
       ) : null}
 
-      <section className="co-category-strip" aria-label="Główne kategorie dokumentów">
-        {["Umowy", "Faktury", "Dokumentacja techniczna", "Kosztorysy", "Protokoły", "WZ / PZ", "Załączniki", "OCR / AI"].map((label) => (
-          <span key={label}>{label}</span>
-        ))}
-      </section>
-
-      <section className="document-principles">
-        <div><strong>1. Wrzucasz</strong><span>PDF, Word, Excel, obraz, XML lub ZIP trafia do prywatnego R2.</span></div>
-        <div><strong>2. AI rozumie</strong><span>Ekstrakcja treści, klasyfikacja, dane handlowe i propozycja inwestycji.</span></div>
-        <div><strong>3. Weryfikujesz</strong><span>Niepewne decyzje pojawiają się w Skrzynce AI zamiast być zapisywane w ciemno.</span></div>
-        <div><strong>4. Moduły korzystają</strong><span>Faktury, WZ, kosztorysy i dokumentacja zasilają właściwe obszary systemu.</span></div>
-      </section>
-
-      <section id="wrzutnia" className="co-section">
-        <div className="co-section-heading">
-          <div>
-            <p className="co-kicker">Wrzutnia {uploadFocused ? "· szybkie dodawanie" : ""}</p>
-            <h2>Dodaj plik i pozwól Octopusowi go sklasyfikować</h2>
-          </div>
-          <span><UploadCloud size={17} aria-hidden="true" /> R2 → ekstrakcja → AI → moduł</span>
+      <details id="wrzutnia" className="co-upload-disclosure" open={uploadFocused}>
+        <summary><span><UploadCloud size={17} aria-hidden="true" /><strong>Wrzutnia</strong><small>PDF, Word, Excel, obraz, XML lub ZIP → AI → właściwy moduł</small></span><ChevronDown size={16} aria-hidden="true" /></summary>
+        <div className="co-upload-disclosure__body">
+          <DocumentUpload workspaceId={workspace.id} projects={projects} documents={documentSummaries} trashedDocuments={trashedDocuments} storageReady={storageReady} />
         </div>
-        <DocumentUpload
-          workspaceId={workspace.id}
-          projects={projects}
-          documents={documentSummaries}
-          trashedDocuments={trashedDocuments}
-          storageReady={storageReady}
-        />
-      </section>
+      </details>
 
-      <section className="co-section">
-        <div className="co-section-heading">
-          <div><p className="co-kicker">Biblioteka</p><h2>Ostatnio aktualizowane</h2></div>
-          <Link href={`/workspace/companies/${workspace.id}/ai-inbox`} className="co-text-link">Decyzje AI →</Link>
-        </div>
+      <section className="co-section co-section--compact">
+        <div className="co-section-heading"><div><p className="co-kicker">Biblioteka</p><h2>Ostatnio aktualizowane</h2></div><span>AI klasyfikuje i proponuje przypisanie automatycznie</span></div>
         {documents.length ? (
           <div className="co-document-table">
             {documents.map((document) => (
-              <article key={document.id}>
+              <article key={document.id} id={`document-${document.id}`}>
                 <span className="co-document-icon"><FileText size={18} aria-hidden="true" /></span>
-                <div>
-                  <strong>{document.name}</strong>
-                  <small>{document.category || "Dokument"} · {document.project_id ? projectNames.get(document.project_id) ?? "Inwestycja" : "Dokument firmowy"}</small>
-                </div>
+                <div><strong>{document.name}</strong><small>{document.category || "Dokument"} · {document.project_id ? projectNames.get(document.project_id) ?? "Inwestycja" : "Dokument firmowy"}</small></div>
                 <time>{document.updated_at ? new Date(document.updated_at).toLocaleDateString("pl-PL") : ""}</time>
                 <Link href={document.project_id ? `/workspace/projects/${document.project_id}/documentation#document-${document.id}` : `#document-${document.id}`}>Otwórz →</Link>
               </article>
             ))}
           </div>
-        ) : (
-          <div className="co-empty-state">
-            <strong>Brak dokumentów w firmie.</strong>
-            <p>Możesz korzystać z Wrzutni od razu po aktywacji warstwy składowania.</p>
-          </div>
-        )}
+        ) : <div className="co-empty-state"><strong>Brak dokumentów w firmie.</strong><p>Otwórz Wrzutnię i dodaj pierwszy plik.</p></div>}
       </section>
     </main>
   );
