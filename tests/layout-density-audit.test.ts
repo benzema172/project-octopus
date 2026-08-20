@@ -4,13 +4,15 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("workspace layout density audit", () => {
-  it("loads the audit layer after the legacy and finance layout systems", () => {
+  it("loads the audit layers after the legacy and finance layout systems", () => {
     const layout = read("app/workspace/layout.tsx");
     const financeIndex = layout.indexOf('import "../finance-compact.css"');
     const auditIndex = layout.indexOf('import "../layout-density-audit.css"');
+    const projectAuditIndex = layout.indexOf('import "../layout-density-project-audit.css"');
 
     expect(financeIndex).toBeGreaterThan(-1);
     expect(auditIndex).toBeGreaterThan(financeIndex);
+    expect(projectAuditIndex).toBeGreaterThan(auditIndex);
   });
 
   it("removes phantom panel height reservations and fixed decorative height", () => {
@@ -42,6 +44,32 @@ describe("workspace layout density audit", () => {
     expect(css).toContain("repeat(4, minmax(0, 1fr))");
     expect(css).toContain("@media (max-width: 620px)");
     expect(css).toContain("grid-template-columns: 1fr !important");
+  });
+
+  it("overrides the largest legacy project whitespace reservations", () => {
+    const css = read("app/layout-density-project-audit.css");
+
+    expect(css).toContain(".pw-status-strip > div");
+    expect(css).toContain("min-height: 76px !important");
+    expect(css).toContain(".pw-workflow-card");
+    expect(css).toContain("min-height: 74px !important");
+    expect(css).toContain(".pw-module-empty-input");
+    expect(css).toContain("min-height: 68px !important");
+    expect(css).toContain(".pw-module-feature-card");
+    expect(css).toContain("min-height: 102px !important");
+    expect(css).toContain(".pw-module-flow li");
+    expect(css).toContain("min-height: 66px !important");
+  });
+
+  it("keeps project cards and operational workbenches responsive", () => {
+    const css = read("app/layout-density-project-audit.css");
+
+    expect(css).toContain("@media (max-width: 1050px)");
+    expect(css).toContain(".pw-module-workbench");
+    expect(css).toContain("grid-template-columns: 1fr !important");
+    expect(css).toContain("@media (max-width: 760px)");
+    expect(css).toContain(".pw-status-strip");
+    expect(css).toContain(".pw-module-feature-grid");
   });
 
   it("does not render the large upcoming-commitments panel when it has no records", () => {
