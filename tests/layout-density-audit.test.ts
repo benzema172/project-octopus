@@ -55,6 +55,19 @@ describe("workspace layout density audit", () => {
     expect(css).toContain("grid-template-columns: 1fr !important");
   });
 
+  it("keeps quick action forms single-open and compacts the finance action rail", () => {
+    const shell = read("components/company/operations/module-shell.tsx");
+    const css = read("app/finance-compact.css");
+
+    expect(shell).toContain("const [openFormKey, setOpenFormKey] = useState<string | null>(null)");
+    expect(shell).toContain("open={openFormKey === formKey}");
+    expect(shell).toContain("current === formKey ? null : formKey");
+    expect(shell).toContain("event.preventDefault()");
+    expect(css).toContain("min-height: 38px");
+    expect(css).toContain("padding: 4px 6px 6px");
+    expect(css).toContain("padding: 6px 10px 4px");
+  });
+
   it("overrides the largest legacy project whitespace reservations", () => {
     const css = read("app/layout-density-project-audit.css");
 
