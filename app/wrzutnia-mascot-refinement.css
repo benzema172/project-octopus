@@ -1,0 +1,106 @@
+/* Wrzutnia mascot refinement — slimmer seated silhouette + one-line label. */
+
+/* Give the action enough real width so the label never has to wrap. */
+.pw-project-header.pw-project-header--contract.pw-project-header--compact.pw-project-header--with-intake {
+  grid-template-columns: minmax(250px,.75fr) minmax(360px,1.35fr) minmax(300px,.95fr) 178px !important;
+}
+
+.pw-project-header--with-intake > .pw-project-header__intake,
+.pw-project-header__intake {
+  width: 178px !important;
+  min-width: 178px !important;
+}
+
+.pw-project-header__intake .pw-intake-trigger--octopus,
+.pw-intake-trigger--octopus {
+  width: 100% !important;
+  min-width: 170px !important;
+  min-height: 48px !important;
+  justify-content: flex-end !important;
+  overflow: visible !important;
+  padding: 10px 15px 9px 84px !important;
+}
+
+.pw-intake-trigger__label {
+  position: relative;
+  z-index: 7;
+  display: inline-block;
+  min-width: max-content;
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+  hyphens: none !important;
+  font-size: 10.5px !important;
+  line-height: 1 !important;
+  letter-spacing: .015em;
+}
+
+/*
+  The mascot's seat line in the SVG is y≈37. With this box and top offset that
+  line lands almost exactly on the button's top edge. The head therefore stays
+  above the button while the front tentacles visibly drape across its face.
+*/
+.pw-intake-octopus {
+  top: -33px !important;
+  left: -3px !important;
+  width: 94px !important;
+  height: 74px !important;
+  filter: drop-shadow(0 4px 7px rgba(64,34,111,.24)) !important;
+  transform-origin: 46% 48%;
+}
+
+.pw-intake-trigger--octopus:hover .pw-intake-octopus {
+  transform: translateY(-1px) rotate(-.4deg) !important;
+  filter: drop-shadow(0 6px 10px rgba(71,38,127,.31)) !important;
+}
+
+@media (max-width: 1260px) {
+  .pw-project-header.pw-project-header--contract.pw-project-header--compact.pw-project-header--with-intake {
+    grid-template-columns: minmax(215px,.82fr) minmax(290px,1.25fr) minmax(245px,1fr) 166px !important;
+  }
+
+  .pw-project-header--with-intake > .pw-project-header__intake,
+  .pw-project-header__intake {
+    width: 166px !important;
+    min-width: 166px !important;
+  }
+
+  .pw-project-header__intake .pw-intake-trigger--octopus,
+  .pw-intake-trigger--octopus {
+    min-width: 160px !important;
+    padding-left: 78px !important;
+    padding-right: 12px !important;
+  }
+
+  .pw-intake-octopus {
+    left: -5px !important;
+    width: 89px !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .pw-project-header.pw-project-header--contract.pw-project-header--compact.pw-project-header--with-intake {
+    grid-template-columns: minmax(0,1fr) 166px !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .pw-project-header.pw-project-header--contract.pw-project-header--compact.pw-project-header--with-intake {
+    grid-template-columns: 1fr !important;
+  }
+
+  .pw-project-header--with-intake > .pw-project-header__intake,
+  .pw-project-header__intake {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .pw-project-header__intake .pw-intake-trigger--octopus,
+  .pw-intake-trigger--octopus {
+    width: 100% !important;
+    min-width: 0 !important;
+    justify-content: center !important;
+    padding-left: 90px !important;
+    padding-right: 18px !important;
+  }
+}
