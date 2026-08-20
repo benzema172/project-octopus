@@ -23,27 +23,50 @@ export default function FleetOperations({ workspaceId,data,canWrite,canApprove,p
   ];
   const totalCost=Number(summary.totalCost??0), distance=Number(summary.distanceKm??0);
   const metrics=[
-    {label:"Pojazdy aktywne",value:str(summary.activeVehicles,"0"),caption:`${str(summary.records,"0")} pojazdów i maszyn`},
-    {label:"Koszt floty",value:money(totalCost),caption:"Paliwo + serwis + szkody"},
-    {label:"Koszt / km",value:distance>0?`${money(summary.costPerKm)}/km`:"—",caption:`${num(distance)} km przejazdów`},
     {label:"Dokumenty do 30 dni",value:str(summary.due30,"0"),caption:`${str(summary.expired,"0")} już wygasłych`},
     {label:"Serwisy do 30 dni",value:str(summary.serviceDue30,"0"),caption:"Wymagają zaplanowania"},
     {label:"Otwarte szkody",value:str(summary.openDamages,"0"),caption:"Sprawy niezakończone"},
+    {label:"Pojazdy aktywne",value:str(summary.activeVehicles,"0"),caption:`${str(summary.records,"0")} pojazdów i maszyn`},
+    {label:"Koszt floty",value:money(totalCost),caption:"Paliwo + serwis + szkody"},
+    {label:"Koszt / km",value:distance>0?`${money(summary.costPerKm)}/km`:"—",caption:`${num(distance)} km przejazdów`},
     {label:"Brak przebiegu",value:str(summary.missingMileage,"0"),caption:"Aktywne pojazdy bez wiarygodnej bazy km"},
-    {label:"Uprawnienia",value:canApprove?"Zatwierdzanie":"Operacyjne",caption:"Zmiany nadal kontrolowane przez role domenowe"}
+    {label:"Uprawnienia",value:canApprove?"Zatwierdzanie":"Operacyjne",caption:"Zmiany kontrolowane przez role domenowe"}
   ];
-  return <CompanyModuleShell workspaceId={workspaceId} data={data} canWrite={canWrite} pathname={pathname} query={query} metrics={metrics} forms={forms} rows={vehicles} tableTitle="Pojazdy i maszyny" emptyLabel="Brak pojazdów dla bieżącego filtra." columns={[
-    {label:"Rejestracja",value:row=><strong>{str(row.registration_number)}</strong>},
-    {label:"Pojazd",value:row=>`${str(row.make,"")} ${str(row.model,"")}`.trim() || "—"},
-    {label:"Typ",value:row=>str(row.vehicle_type)},
-    {label:"Przebieg",value:row=>`${num(row.current_mileage)} km`},
-    {label:"Własność",value:row=>str(row.ownership_type)},
-    {label:"Status",value:row=><span className="status-chip">{str(row.status)}</span>}
-  ]}>
-    <section className="ops-split-lists">
-      <article className="ops-panel"><h3>Koszt i wykorzystanie</h3><p><strong>{money(summary.fuelCost)}</strong> paliwo · <strong>{money(summary.serviceCost)}</strong> serwis · <strong>{money(summary.damageCost)}</strong> szkody.</p><p>{num(distance)} km · średnio {distance>0?`${money(summary.costPerKm)}/km`:"brak danych do kosztu/km"}.</p><p>Po przypisaniu przejazdu/tankowania do inwestycji koszt zasila jej rzeczywisty ledger bez podwójnego naliczania faktury.</p></article>
+  return <CompanyModuleShell
+    workspaceId={workspaceId}
+    data={data}
+    canWrite={canWrite}
+    pathname={pathname}
+    query={query}
+    metrics={metrics}
+    forms={forms}
+    rows={vehicles}
+    tableTitle="Pojazdy i maszyny"
+    emptyLabel="Brak pojazdów dla bieżącego filtra."
+    detailTitle={row=>`${str(row.registration_number)} · ${`${str(row.make,"")} ${str(row.model,"")}`.trim() || "Pojazd"}`}
+    detailContent={row=>{
+      const vehicleId=String(row.id);
+      const vehicleDocuments=documents.filter(item=>String(item.vehicle_id ?? item.vehicleId)===vehicleId).slice(0,6);
+      const vehicleService=service.filter(item=>String(item.vehicle_id ?? item.vehicleId)===vehicleId).slice(0,6);
+      return <>
+        <section><h3>Dane pojazdu</h3><p>VIN: <strong>{str(row.vin)}</strong><br/>Przebieg: <strong>{num(row.current_mileage)} km</strong> · własność: <strong>{str(row.ownership_type)}</strong></p><p>Rok: {str(row.production_year)} · typ: {str(row.vehicle_type)} · status: {str(row.status)}</p></section>
+        <section><h3>Dokumenty i terminy</h3>{vehicleDocuments.map(item=><p key={String(item.id)}><strong>{str(item.document_type)}</strong> · {str(item.number,"bez numeru")}<br/>Ważne do {str(item.valid_until,"bez terminu")}</p>)}{!vehicleDocuments.length?<p>Brak dokumentów przypisanych do pojazdu.</p>:null}</section>
+        <section><h3>Serwis</h3>{vehicleService.map(item=><p key={String(item.id)}><strong>{str(item.service_type)}</strong> · {money(item.cost)}<br/>Otwarto {str(item.opened_at,"bez daty")} · następny termin {str(item.next_due_date,"—")} · {str(item.status)}</p>)}{!vehicleService.length?<p>Brak historii serwisowej.</p>:null}</section>
+      </>;
+    }}
+    columns={[
+      {label:"Rejestracja",value:row=><strong>{str(row.registration_number)}</strong>},
+      {label:"Pojazd",value:row=>`${str(row.make,"")} ${str(row.model,"")}`.trim() || "—"},
+      {label:"Typ",value:row=>str(row.vehicle_type)},
+      {label:"Przebieg",value:row=>`${num(row.current_mileage)} km`},
+      {label:"Własność",value:row=>str(row.ownership_type)},
+      {label:"Status",value:row=><span className="status-chip">{str(row.status)}</span>}
+    ]}
+  >
+    <section className="ops-split-lists ops-secondary-section">
+      <article className="ops-panel"><h3>Koszt i wykorzystanie</h3><p><strong>{money(summary.fuelCost)}</strong> paliwo · <strong>{money(summary.serviceCost)}</strong> serwis · <strong>{money(summary.damageCost)}</strong> szkody.</p><p>{num(distance)} km · średnio {distance>0?`${money(summary.costPerKm)}/km`:"brak danych do kosztu/km"}.</p></article>
       <article className="ops-panel"><h3>Terminy i ryzyka</h3><p>{str(summary.expired,"0")} wygasłych dokumentów · {str(summary.due30,"0")} w 30 dni.</p><p>{str(summary.serviceDue30,"0")} serwisów w 30 dni · {str(summary.openDamages,"0")} otwartych szkód.</p>{documents.slice(0,4).map(row=><p key={String(row.id)}><strong>{str(row.document_type)}</strong><br/>{str(row.valid_until,"bez terminu")}</p>)}</article>
     </section>
-    <section className="ops-panel"><h3>Otwarte serwisy</h3>{openService.slice(0,8).map(row=><p key={String(row.id)}><strong>{str(row.service_type)}</strong><br/>Otwarto {str(row.opened_at,"—")} · {money(row.cost)} · {str(row.status)}</p>)}{!openService.length?<p>Brak otwartych zleceń serwisowych na bieżącej stronie.</p>:null}</section>
+    {openService.length?<section className="ops-panel ops-panel--compact-list"><h3>Otwarte serwisy</h3>{openService.slice(0,8).map(row=><p key={String(row.id)}><strong>{str(row.service_type)}</strong> · otwarto {str(row.opened_at,"—")} · {money(row.cost)} · {str(row.status)}</p>)}</section>:null}
   </CompanyModuleShell>;
 }
