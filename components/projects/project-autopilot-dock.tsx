@@ -1,7 +1,8 @@
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import { Bot, ChevronRight, CircleAlert, ShieldCheck, Sparkles } from "lucide-react";
 import type { InvestmentAutopilotSummary } from "@/lib/data/investment-autopilot";
-import styles from "./investment-autopilot.module.css";
+import styles from "./project-autopilot-dock.module.css";
 
 export function ProjectAutopilotDock({ projectId, summary, canRun }: { projectId: string; summary: InvestmentAutopilotSummary; canRun: boolean }) {
   const state = summary.blockerCount > 0 || summary.healthScore < 55 ? "risk" : summary.attentionCount > 0 || summary.healthScore < 80 ? "attention" : "stable";
@@ -31,7 +32,7 @@ export function ProjectAutopilotDock({ projectId, summary, canRun }: { projectId
     </div>
 
     <div className={styles.dockHealth} aria-label={`Project Health ${summary.healthScore} na 100`}>
-      <div className={styles.dockHealthRing} style={{ "--health": `${summary.healthScore * 3.6}deg` } as React.CSSProperties}>
+      <div className={styles.dockHealthRing} style={{ "--health": `${summary.healthScore * 3.6}deg` } as CSSProperties}>
         <span><b>{summary.healthScore}</b><small>/100</small></span>
       </div>
       <div><small>Project Health</small><strong>{stateLabel}</strong></div>
