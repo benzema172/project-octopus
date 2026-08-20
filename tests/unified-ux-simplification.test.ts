@@ -53,11 +53,13 @@ describe("unified operational UX", () => {
 
   it("keeps project identity and restores Wrzutnia to the investment header", () => {
     const layout = read("app/workspace/projects/[projectId]/layout.tsx");
+    const slot = read("components/projects/project-intake-slot.tsx");
     expect(layout).toContain("pw-project-header--compact");
     expect(layout).toContain("pw-project-header--with-intake");
     expect(layout).toContain("pw-project-header__back");
     expect(layout).toContain("pw-project-header__intake");
-    expect(layout).toContain("<ProjectIntake projectId={project.id} />");
+    expect(layout).toContain("<ProjectIntakeSlot projectId={project.id} />");
+    expect(slot).toContain('import("@/components/projects/project-intake-pipeline")');
     expect(layout).toContain("Numer kontraktu:");
     expect(layout).toContain("investorName");
     expect(layout).toContain("location");
