@@ -1,0 +1,24 @@
+/* Investment dashboard — last-loaded rhythm guard.
+   Page-level dashboard styles load after the project layout, so this file is imported
+   last by the investment home page and guarantees the same 10px spacing there too. */
+
+.project-workspace-v2 {
+  --project-section-gap: 10px;
+  row-gap: var(--project-section-gap) !important;
+}
+
+.project-workspace-v2 > .project-tab-content.pw-dashboard--combined {
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: var(--project-section-gap) !important;
+  row-gap: var(--project-section-gap) !important;
+}
+
+.project-workspace-v2 > .project-tab-content.pw-dashboard--combined > section,
+.project-workspace-v2 > .project-tab-content.pw-dashboard--combined > .pw-ops-grid {
+  margin-block: 0 !important;
+}
+
+.project-workspace-v2 .pw-dashboard--combined > * + * {
+  margin-top: 0 !important;
+}
