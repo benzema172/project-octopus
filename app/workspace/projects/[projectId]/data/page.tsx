@@ -1,3 +1,4 @@
+import { ShieldCheck, Sparkles } from "lucide-react";
 import { notFound } from "next/navigation";
 import { ProjectProfileForm } from "@/components/projects/project-profile-form";
 import { requireCurrentUser } from "@/lib/auth";
@@ -5,6 +6,7 @@ import { getProjectProfile } from "@/lib/data/project-profile";
 import { getProjectForUser } from "@/lib/data/projects";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { hasDomainAccess } from "@/lib/authorization";
+import "../../../../project-profile-ai.css";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +30,14 @@ export default async function ProjectDataPage({ params, searchParams }: ProjectD
 
   return (
     <div className="project-tab-content pw-data-page">
+      <aside className="project-profile-ai-note" aria-label="Automatyczne uzupełnianie Karty inwestycji">
+        <span className="project-profile-ai-note__icon"><Sparkles size={18} aria-hidden="true" /></span>
+        <span className="project-profile-ai-note__copy">
+          <strong>Karta hybrydowa: ręcznie + OctopusAI</strong>
+          <span>Możesz wpisać dane samodzielnie. Po analizie plików z Wrzutni AI automatycznie uzupełnia rozpoznane pola Karty inwestycji na podstawie umów, dokumentacji, decyzji i danych projektowych.</span>
+        </span>
+        <span className="project-profile-ai-note__rule"><ShieldCheck size={14} aria-hidden="true" /> Ręczne dane mają pierwszeństwo</span>
+      </aside>
       <ProjectProfileForm projectId={project.id} profile={profile} saved={query.saved === "1"} />
     </div>
   );
