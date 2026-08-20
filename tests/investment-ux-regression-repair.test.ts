@@ -14,6 +14,19 @@ describe("investment UX regression repair", () => {
     expect(slot).toContain('import("@/components/projects/project-intake-pipeline")');
   });
 
+  it("combines the project header and investment navigation into one compact shell", () => {
+    const layout = read("app/workspace/projects/[projectId]/layout.tsx");
+    const css = read("app/investment-ux-repair.css");
+    expect(layout).toContain('className="pw-project-top-shell"');
+    expect(layout).toContain("<ProjectNavigation projectId={project.id} allowedDomains={allowedProjectDomains} />");
+    expect(css).toContain(".pw-project-top-shell {");
+    expect(css).toContain("grid-template-rows: auto auto");
+    expect(css).toContain("border-top: 1px solid #eee8f1 !important");
+    expect(css).toContain("border-radius: 21px 21px 0 0 !important");
+    expect(css).toContain("border-radius: 0 0 21px 21px !important");
+    expect(css).toContain("min-height: 42px !important");
+  });
+
   it("pins Wrzutnia to the fourth header column instead of letting compact UX wrap it under the project name", () => {
     const css = read("app/investment-ux-repair.css");
     expect(css).toContain(".pw-project-header.pw-project-header--contract.pw-project-header--compact.pw-project-header--with-intake");
