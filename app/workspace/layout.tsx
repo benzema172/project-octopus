@@ -5,6 +5,7 @@ import "../company-switcher-refinement.css";
 import "../ux-system.css";
 import "../workspace-experience.css";
 import "../finance-compact.css";
+import "../layout-density-audit.css";
 
 export const dynamic = "force-dynamic";
 
