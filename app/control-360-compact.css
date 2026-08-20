@@ -1,0 +1,304 @@
+.control360-compact {
+  display: grid;
+  gap: 10px !important;
+}
+
+.control360-compact__header,
+.control360-panel {
+  border: 1px solid #e8e1ed;
+  border-radius: 18px;
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 10px 28px rgba(52,40,70,.035);
+}
+
+.control360-compact__header {
+  min-height: 66px;
+  padding: 13px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.control360-compact__header .co-kicker,
+.control360-panel .co-kicker {
+  margin: 0 0 3px;
+  font-size: 9px !important;
+  line-height: 1.2;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.control360-compact__header h1 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.control360-compact__header > span {
+  font-size: 10px;
+  color: #777083;
+  white-space: nowrap;
+}
+
+.control360-panel {
+  padding: 13px 16px;
+}
+
+.control360-panel__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 10px;
+}
+
+.control360-panel__heading h2 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  line-height: 1.15;
+}
+
+.control360-panel__heading h2 span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #edf8f4;
+  color: #167c68;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.control360-live,
+.control360-clear,
+.control360-attention {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.control360-live,
+.control360-clear { background: #eef8f4; color: #167c68; }
+.control360-attention { background: #fff3e8; color: #a95e10; }
+
+.control360-priority {
+  min-height: 43px;
+  padding: 8px 11px;
+  border: 1px solid #ece5f1;
+  border-radius: 12px;
+  background: linear-gradient(90deg,#faf7ff,#f5fbff);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+
+.control360-priority span {
+  font-size: 9px;
+  color: #81798a;
+  text-transform: uppercase;
+  font-weight: 800;
+  letter-spacing: .07em;
+}
+
+.control360-priority strong { font-size: 12px; line-height: 1.3; }
+
+.control360-metrics {
+  display: grid;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 7px;
+}
+
+.control360-metrics article {
+  min-width: 0;
+  min-height: 54px;
+  padding: 8px 10px;
+  border: 1px solid #eee8f2;
+  border-radius: 12px;
+  background: #fcfbfd;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.control360-metrics article > svg { flex: 0 0 auto; width: 17px; height: 17px; color: #7750d8; }
+.control360-metrics article span { min-width: 0; display: grid; gap: 2px; }
+.control360-metrics article small { font-size: 9px; color: #7c7484; line-height: 1.1; }
+.control360-metrics article strong { min-width: 0; font-size: 13px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.control360-metrics article.is-warning { border-color: #f1c998; background: #fffaf4; }
+.control360-metrics article.is-warning > svg { color: #b86e18; }
+
+.control360-ok {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  margin-top: 9px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: #f0faf6;
+  color: #176f60;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.control360-alerts { margin-top: 9px; border-top: 1px solid #eee8f2; padding-top: 8px; }
+.control360-subheading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; font-size: 10px; }
+.control360-subheading span { min-width: 22px; text-align: center; padding: 2px 6px; border-radius: 999px; background: #fff0e9; color: #a34e24; font-weight: 800; }
+.control360-alert-row,
+.control360-review-row {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 8px;
+  border-radius: 9px;
+}
+.control360-alert-row + .control360-alert-row,
+.control360-review-row + .control360-review-row { border-top: 1px solid #f0ebf3; }
+.control360-alert-row > svg,
+.control360-review-row > svg { color: #a55d1f; }
+.control360-alert-row div,
+.control360-review-row div { min-width: 0; }
+.control360-alert-row strong,
+.control360-review-row strong { display: block; font-size: 10px; line-height: 1.25; }
+.control360-alert-row small,
+.control360-review-row small { display: block; margin-top: 2px; color: #7c7484; font-size: 9px; line-height: 1.3; }
+
+.control360-row-actions { display: flex; gap: 4px; }
+.control360-row-actions button,
+.control360-icon-action {
+  min-height: 28px;
+  border: 1px solid #e4dbea;
+  border-radius: 8px;
+  background: white;
+  padding: 5px 8px;
+  font-size: 9px;
+  font-weight: 750;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.control360-row-actions button:hover,
+.control360-icon-action:hover { background: #f8f5fb; }
+
+.control360-heading-actions { display: flex; align-items: center; gap: 6px; }
+
+.control360-details {
+  margin-top: 8px;
+  border: 1px solid #ece6f0;
+  border-radius: 11px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.control360-details > summary {
+  min-height: 37px;
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+  list-style-position: inside;
+}
+.control360-details > summary span { color: #847c8d; font-size: 9px; font-weight: 600; }
+.control360-details[open] > summary { border-bottom: 1px solid #eee8f2; }
+.control360-details--attention { border-color: #efcca1; background: #fffdf9; }
+.control360-details--advanced > summary { color: #6f6878; }
+
+.control360-cashflow {
+  display: grid;
+  grid-template-columns: repeat(13,minmax(80px,1fr));
+  gap: 5px;
+  padding: 8px;
+  overflow-x: auto;
+}
+.control360-cashflow article { min-width: 80px; padding: 6px; border-radius: 8px; background: #faf9fb; display: grid; gap: 3px; }
+.control360-cashflow small,.control360-cashflow span,.control360-cashflow b { font-size: 8px; }
+.control360-cashflow span { display: flex; align-items: center; gap: 3px; color: #7b7383; }
+
+.control360-review-stack { padding: 5px 8px; }
+.control360-detail-columns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; padding: 9px; }
+.control360-detail-columns h4 { margin: 0 0 6px; font-size: 10px; }
+.control360-detail-columns .command-row { min-height: 35px; padding: 5px 7px; }
+.control360-detail-columns .command-row strong { font-size: 9px; }
+.control360-detail-columns .command-row span { font-size: 8px; color: #7a7282; }
+
+.control360-details .reconciliation-order-form { padding: 10px; }
+.control360-details .reconciliation-order-form label { font-size: 9px; }
+.control360-technical-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 7px; padding: 9px; }
+.control360-technical-grid span { padding: 7px 8px; border-radius: 8px; background: #faf9fb; font-size: 9px; color: #756d7d; }
+.control360-technical-grid strong { display: block; margin-top: 2px; color: #28232d; font-size: 10px; }
+
+.control360-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(6,minmax(0,1fr));
+  gap: 6px;
+}
+.control360-stage {
+  min-width: 0;
+  min-height: 48px;
+  padding: 7px 8px;
+  border: 1px solid #eee8f2;
+  border-radius: 11px;
+  background: #fcfbfd;
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto;
+  align-items: center;
+  gap: 7px;
+  color: inherit;
+  text-decoration: none;
+}
+.control360-stage > svg:first-child { color: #7952d5; }
+.control360-stage span { min-width: 0; display: grid; gap: 1px; }
+.control360-stage small { font-size: 8.5px; color: #807789; }
+.control360-stage strong { font-size: 12px; }
+.control360-stage > svg:last-child { color: #a097a8; }
+.control360-stage:hover { background: #f8f5fc; border-color: #dcd2e6; }
+
+.control360-decision-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; margin-top: 7px; }
+.control360-decision-grid > article { min-height: 48px; padding: 7px 9px; border: 1px solid #eee8f2; border-radius: 11px; background: #fff; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 8px; }
+.control360-decision-grid > article.is-warning { border-color: #efc997; background: #fffaf3; }
+.control360-decision-grid > article > svg { color: #7952d5; }
+.control360-decision-grid small { display: block; font-size: 8.5px; color: #81798a; }
+.control360-decision-grid strong { display: block; margin-top: 1px; font-size: 11px; }
+.control360-decision-grid a { color: #7251c8; }
+.control360-mini-action { position: relative; }
+.control360-mini-action > summary { cursor: pointer; font-size: 8px; font-weight: 800; color: #7251c8; }
+.control360-mini-action[open] { grid-column: 1 / -1; width: 100%; }
+.control360-mini-action > :not(summary) { margin-top: 5px; }
+
+.control360-loading { min-height: 45px; padding: 12px 15px; border: 1px solid #ece6f0; border-radius: 14px; background: white; font-size: 10px; }
+
+@media (max-width: 1100px) {
+  .control360-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .control360-stage-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .control360-technical-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+
+@media (max-width: 760px) {
+  .control360-compact__header { align-items: flex-start; }
+  .control360-compact__header > span { display: none; }
+  .control360-panel { padding: 11px; }
+  .control360-panel__heading { align-items: flex-start; }
+  .control360-heading-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .control360-priority { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .control360-stage-grid,.control360-decision-grid,.control360-detail-columns { grid-template-columns: 1fr; }
+  .control360-alert-row,.control360-review-row { grid-template-columns: auto minmax(0,1fr); }
+  .control360-row-actions { grid-column: 2; }
+  .control360-details > summary { align-items: flex-start; flex-direction: column; gap: 2px; }
+}

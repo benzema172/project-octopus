@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import {
-  AutopilotPanel,
   CommandCenterPanel,
   ExecutionPanel,
   ReconciliationPanel
@@ -10,11 +9,12 @@ import {
 import { requireCurrentUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
 import { hasDomainAccess } from "@/lib/authorization";
+import "../../../../control-360-compact.css";
 
 export const dynamic = "force-dynamic";
 
 function PanelLoading({ label }: { label: string }) {
-  return <section className="execution-layer-notice" role="status"><div><strong>Ładowanie: {label}</strong><p>Ta część Kontroli 360 ładuje się niezależnie.</p></div></section>;
+  return <section className="control360-loading" role="status"><strong>Ładowanie: {label}</strong></section>;
 }
 
 export default async function ControlPage({ params }: { params: Promise<{ projectId: string }> }) {
@@ -34,11 +34,14 @@ export default async function ControlPage({ params }: { params: Promise<{ projec
 
   const shared = { workspaceId: project.workspace_id, projectId: project.id, canManageInvestments, financeAllowed, canManageFinance, warehouseAllowed, canManageWarehouse };
 
-  return <div className="project-tab-content">
-    <section className="project-module-heading"><div><p className="eyebrow">Kosztorys do odbioru</p><h2>Kontrola 360° inwestycji</h2><p>Jeden widok łączący zakres, wymagania, harmonogram, materiały, postęp, dowody, zmiany, cash flow i forecast. Każdy blok działa niezależnie — awaria jednego źródła nie blokuje pozostałych.</p></div></section>
-    <Suspense fallback={<PanelLoading label="Command Center" />}><CommandCenterPanel workspaceId={project.workspace_id} projectId={project.id} canManageInvestments={canManageInvestments} /></Suspense>
-    <Suspense fallback={<PanelLoading label="Investment Autopilot" />}><AutopilotPanel {...shared} /></Suspense>
-    <Suspense fallback={<PanelLoading label="Reconciliation" />}><ReconciliationPanel {...shared} /></Suspense>
-    <Suspense fallback={<PanelLoading label="Execution Layer" />}><ExecutionPanel {...shared} /></Suspense>
+  return <div className="project-tab-content control360-compact">
+    <header className="control360-compact__header">
+      <div><p className="co-kicker">Kontrola 360</p><h1>Stan i ryzyka inwestycji</h1></div>
+      <span>Tylko dane potrzebne do decyzji</span>
+    </header>
+
+    <Suspense fallback={<PanelLoading label="stan inwestycji" />}><CommandCenterPanel workspaceId={project.workspace_id} projectId={project.id} canManageInvestments={canManageInvestments} /></Suspense>
+    <Suspense fallback={<PanelLoading label="koszty i zgodność" />}><ReconciliationPanel {...shared} /></Suspense>
+    <Suspense fallback={<PanelLoading label="kompletność realizacji" />}><ExecutionPanel {...shared} /></Suspense>
   </div>;
 }

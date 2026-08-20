@@ -1,38 +1,82 @@
 "use client";
 
-import { FormEvent, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, CalendarClock, CheckCircle2, CircleDollarSign, HeartPulse, Mail, RefreshCcw, UsersRound } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, CalendarClock, CheckCircle2, CircleDollarSign, HeartPulse, RefreshCcw } from "lucide-react";
 
-type Row=Record<string,unknown>;
-type Data={snapshot:Record<string,unknown>;anomalies:Row[];correspondence:Row[];resources:Row[];employees:Row[]};
+type Row = Record<string, unknown>;
+type Data = { snapshot: Record<string, unknown>; anomalies: Row[]; correspondence: Row[]; resources: Row[]; employees: Row[] };
 
-const money=(v:unknown)=>new Intl.NumberFormat("pl-PL",{style:"currency",currency:"PLN",maximumFractionDigits:0}).format(Number(v??0));
-const num=(v:unknown)=>new Intl.NumberFormat("pl-PL",{maximumFractionDigits:1}).format(Number(v??0));
-function obj(v:unknown){return v&&typeof v==="object"&&!Array.isArray(v)?v as Record<string,unknown>:{};}
-function arr(v:unknown){return Array.isArray(v)?v as Row[]:[];}
+const money = (value: unknown) => new Intl.NumberFormat("pl-PL", { style: "currency", currency: "PLN", maximumFractionDigits: 0 }).format(Number(value ?? 0));
+function obj(value: unknown) { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
+function arr(value: unknown) { return Array.isArray(value) ? value as Row[] : []; }
 
-export function ProjectCommandCenter({projectId,data,canManage}:{projectId:string;data:Data;canManage:boolean}){
- const router=useRouter(); const [pending,startTransition]=useTransition(); const [message,setMessage]=useState<string|null>(null); const s=data.snapshot;
- const forecast=obj(s.forecast),schedule=obj(s.schedule),anomalyStats=obj(s.anomalies),quality=obj(s.quality),health=obj(s.projectHealth),cash=arr(s.cashflow13w),lessons=arr(s.crossProjectKnowledge);
- async function action(actionName:string,payload:Record<string,unknown>){setMessage(null);const response=await fetch("/api/projects/command-center",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({projectId,action:actionName,payload})});const result=await response.json() as {error?:string};if(!response.ok)throw new Error(result.error??"Operacja nie powiodła się.");setMessage("Zapisano. Command Center został odświeżony.");startTransition(()=>router.refresh());}
- function submit(actionName:string){return async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();const form=new FormData(event.currentTarget);try{await action(actionName,Object.fromEntries(form.entries()));event.currentTarget.reset();}catch(error){setMessage(error instanceof Error?error.message:"Błąd zapisu.");}};}
- return <section className="section-band project-command-center">
-  <div className="section-heading"><div><p className="eyebrow">Project Octopus 1.0</p><h2>Command Center</h2><p>Cash flow, zasoby, korespondencja, anomalie, Project Health i prognoza w jednym operacyjnym widoku.</p></div><span>{pending?<RefreshCcw size={16}/>:<CheckCircle2 size={16}/>} stan na żywo</span></div>
-  {message?<p className="command-message">{message}</p>:null}
-  <div className="command-next-action"><HeartPulse size={21}/><div><small>Project Health · {String(health.status??"—")}</small><strong>{String(health.score??"—")}/100</strong><p>{String(s.nextAction??"Brak wyznaczonego następnego kroku.")}</p></div><ArrowRight size={20}/></div>
-  <div className="command-kpis">
-   <article><CircleDollarSign/><small>Kontrakt</small><strong>{money(s.contractValue)}</strong><span>Koszt {money(s.actualCost)} · zobowiązania {money(s.committedCost)}</span></article>
-   <article><CalendarClock/><small>Prognoza końca</small><strong>{String(forecast.finishDate??schedule.latestOpenFinish??"—")}</strong><span>EAC {money(forecast.eac)} · marża {money(forecast.margin)}</span></article>
-   <article><AlertTriangle/><small>Anomalie</small><strong>{String(anomalyStats.open??0)}</strong><span>{String(anomalyStats.critical??0)} krytycznych · {String(quality.missingEvidence??0)} braków dowodowych</span></article>
-   <article><CheckCircle2/><small>Odebrany przerób</small><strong>{money(s.acceptedProgressValue)}</strong><span>{String(schedule.overdueCritical??0)} opóźnionych zadań krytycznych</span></article>
-  </div>
-  <details className="module-panel" open><summary><strong>13-tygodniowy cash flow</strong></summary><div className="command-cashflow">{cash.map((w)=><article key={String(w.weekStart)}><small>{String(w.weekStart)}</small><span><ArrowUp size={14}/> {money(w.inflow)}</span><span><ArrowDown size={14}/> {money(w.outflow)}</span><b>{money(w.net)}</b></article>)}</div></details>
-  <div className="control-dashboard-grid">
-   <article className="module-panel"><div className="module-panel__heading"><AlertTriangle size={20}/><div><p className="eyebrow">Anomaly Engine</p><h3>Odchylenia wymagające uwagi</h3></div></div><div className="live-record-list">{data.anomalies.filter(a=>a.status!=="resolved").map(a=><div key={String(a.id)} className="command-row"><div><small>{String(a.category)} · {String(a.severity)}</small><strong>{String(a.title)}</strong><span>{String(a.detail??"")}</span></div>{canManage?<span><button onClick={()=>action("anomaly_acknowledge",{anomalyId:a.id})}>Przyjmij</button><button onClick={()=>action("anomaly_resolve",{anomalyId:a.id})}>Rozwiąż</button></span>:null}</div>)}{!data.anomalies.some(a=>a.status!=="resolved")?<p className="empty-copy">Brak aktywnych anomalii.</p>:null}</div></article>
-   <article className="module-panel"><div className="module-panel__heading"><UsersRound size={20}/><div><p className="eyebrow">Resource Planner</p><h3>Plan zasobów</h3></div></div>{canManage?<form onSubmit={submit("resource_plan_create")} className="command-form"><select name="employeeId" defaultValue=""><option value="">Rola bez wskazanej osoby</option>{data.employees.map(e=><option key={String(e.id)} value={String(e.id)}>{String(e.first_name)} {String(e.last_name)}</option>)}</select><input name="role" placeholder="Rola" required/><input type="date" name="weekStart" required/><input name="plannedHours" inputMode="decimal" placeholder="Godziny"/><input name="allocationPercent" inputMode="decimal" placeholder="%"/><button>Zaplanuj</button></form>:null}<div className="live-record-list">{data.resources.slice(0,12).map(r=><div key={String(r.id)} className="command-row"><div><strong>{String(r.role)}</strong><span>{String(r.week_start)} · {num(r.planned_hours)} h · {num(r.allocation_percent)}%</span></div></div>)}</div></article>
-   <article className="module-panel"><div className="module-panel__heading"><Mail size={20}/><div><p className="eyebrow">Korespondencja i rewizje</p><h3>Rejestr komunikacji</h3></div></div>{canManage?<form onSubmit={submit("correspondence_create")} className="command-form"><select name="direction" defaultValue="incoming"><option value="incoming">Przychodząca</option><option value="outgoing">Wychodząca</option><option value="internal">Wewnętrzna</option></select><input name="subject" placeholder="Temat" required/><input name="counterparty" placeholder="Strona / kontrahent"/><input name="referenceNumber" placeholder="Nr pisma / RFI / rewizji"/><input type="datetime-local" name="dueAt"/><button>Dodaj</button></form>:null}<div className="live-record-list">{data.correspondence.slice(0,10).map(c=><div key={String(c.id)} className="command-row"><div><small>{String(c.direction)} · {String(c.correspondence_type)}</small><strong>{String(c.subject)}</strong><span>{String(c.reference_number??"")} {c.due_at?`· termin ${String(c.due_at).slice(0,10)}`:""}</span></div></div>)}</div></article>
-   <article className="module-panel"><div className="module-panel__heading"><CheckCircle2 size={20}/><div><p className="eyebrow">Wiedza firmy</p><h3>Doświadczenia z innych inwestycji</h3></div></div><div className="live-record-list">{lessons.map(l=><div key={String(l.id)} className="command-row"><div><small>{String(l.entry_type)}</small><strong>{String(l.title)}</strong><span>{String(l.summary)}</span></div></div>)}{lessons.length===0?<p className="empty-copy">Brak zatwierdzonej wiedzy międzyprojektowej.</p>:null}</div></article>
-  </div>
- </section>;
+export function ProjectCommandCenter({ projectId, data, canManage }: { projectId: string; data: Data; canManage: boolean }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [message, setMessage] = useState<string | null>(null);
+  const snapshot = data.snapshot;
+  const forecast = obj(snapshot.forecast);
+  const schedule = obj(snapshot.schedule);
+  const anomalyStats = obj(snapshot.anomalies);
+  const quality = obj(snapshot.quality);
+  const health = obj(snapshot.projectHealth);
+  const cash = arr(snapshot.cashflow13w);
+  const activeAnomalies = data.anomalies.filter((row) => row.status !== "resolved");
+  const healthScore = String(health.score ?? "—");
+  const healthStatus = String(health.status ?? "—");
+
+  async function action(actionName: string, payload: Record<string, unknown>) {
+    setMessage(null);
+    const response = await fetch("/api/projects/command-center", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId, action: actionName, payload })
+    });
+    const result = await response.json() as { error?: string };
+    if (!response.ok) throw new Error(result.error ?? "Operacja nie powiodła się.");
+    setMessage("Zapisano.");
+    startTransition(() => router.refresh());
+  }
+
+  return <section className="control360-panel control360-command">
+    <header className="control360-panel__heading">
+      <div>
+        <p className="co-kicker">Stan inwestycji</p>
+        <h2><HeartPulse size={20} /> {healthScore}/100 <span>{healthStatus}</span></h2>
+      </div>
+      <span className="control360-live">{pending ? <RefreshCcw size={14} /> : <CheckCircle2 size={14} />} na żywo</span>
+    </header>
+
+    {message ? <p className="command-message">{message}</p> : null}
+
+    <div className="control360-priority">
+      <span>Aktualny priorytet</span>
+      <strong>{String(snapshot.nextAction ?? "Brak pilnych czynności")}</strong>
+    </div>
+
+    <div className="control360-metrics">
+      <article><CircleDollarSign /><span><small>Kontrakt</small><strong>{money(snapshot.contractValue)}</strong></span></article>
+      <article><CalendarClock /><span><small>Prognoza końca</small><strong>{String(forecast.finishDate ?? schedule.latestOpenFinish ?? "—")}</strong></span></article>
+      <article className={Number(anomalyStats.open ?? 0) > 0 ? "is-warning" : ""}><AlertTriangle /><span><small>Do uwagi</small><strong>{String(anomalyStats.open ?? 0)}</strong></span></article>
+      <article><CheckCircle2 /><span><small>Odebrany przerób</small><strong>{money(snapshot.acceptedProgressValue)}</strong></span></article>
+    </div>
+
+    {activeAnomalies.length ? <section className="control360-alerts">
+      <div className="control360-subheading"><strong>Wymaga uwagi</strong><span>{activeAnomalies.length}</span></div>
+      {activeAnomalies.slice(0, 5).map((anomaly) => <div key={String(anomaly.id)} className="control360-alert-row">
+        <AlertTriangle size={15} />
+        <div><strong>{String(anomaly.title)}</strong><small>{String(anomaly.detail ?? anomaly.category ?? "")}</small></div>
+        {canManage ? <div className="control360-row-actions"><button onClick={() => action("anomaly_acknowledge", { anomalyId: anomaly.id })}>Przyjmij</button><button onClick={() => action("anomaly_resolve", { anomalyId: anomaly.id })}>Zamknij</button></div> : null}
+      </div>)}
+    </section> : <div className="control360-ok"><CheckCircle2 size={15} /> Brak aktywnych anomalii i pilnych sygnałów</div>}
+
+    <details className="control360-details">
+      <summary>Finanse i cash flow <span>EAC {money(forecast.eac)} · marża {money(forecast.margin)} · {String(quality.missingEvidence ?? 0)} braków dowodowych</span></summary>
+      <div className="control360-cashflow">
+        {cash.map((week) => <article key={String(week.weekStart)}><small>{String(week.weekStart)}</small><span><ArrowUp size={12} /> {money(week.inflow)}</span><span><ArrowDown size={12} /> {money(week.outflow)}</span><b>{money(week.net)}</b></article>)}
+        {!cash.length ? <p className="empty-copy">Brak danych cash flow.</p> : null}
+      </div>
+    </details>
+  </section>;
 }
