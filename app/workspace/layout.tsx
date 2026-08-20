@@ -6,6 +6,7 @@ import "../ux-system.css";
 import "../workspace-experience.css";
 import "../finance-compact.css";
 import "../layout-density-audit.css";
+import "../layout-density-project-audit.css";
 
 export const dynamic = "force-dynamic";
 
