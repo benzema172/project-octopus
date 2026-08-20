@@ -3,6 +3,7 @@
 import { FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, GitBranch, Link2, LoaderCircle, PackageCheck, PackagePlus, RefreshCcw, ShoppingCart, X } from "lucide-react";
+import { CompactDisclosureGroup } from "@/components/ui/compact-disclosure-group";
 
 type Row = Record<string, unknown>;
 type ReconciliationData = { graph: Record<string, unknown>; links: Row[]; orders: Row[]; requests: Row[]; counterparties: Row[]; stockItems: Row[]; boqItems: Row[]; matches: Row[]; deviations: Row[]; prices: Row[] };
@@ -43,6 +44,13 @@ export function ProjectReconciliationGraph({ projectId, data, canManage, canOrde
     catch (error) { setMessage(error instanceof Error ? error.message : "Nie udało się utworzyć zamówienia."); }
   }
 
+  const disclosureItems = [
+    ...(needsDecision > 0 ? [{ id: "control360-decisions", label: "Elementy do decyzji", meta: needsDecision, attention: true }] : []),
+    { id: "control360-purchases", label: "Zakupy i historia", meta: `${data.orders.length} zam.` },
+    ...(canOrder ? [{ id: "control360-purchase-actions", label: "Operacje zakupowe" }] : []),
+    { id: "control360-technical", label: "Dane techniczne" }
+  ];
+
   return <section className="control360-panel reconciliation-graph control360-reconciliation">
     <header className="control360-panel__heading">
       <div><p className="co-kicker">Koszty i zgodność</p><h2>BOQ ↔ koszt ↔ zakup</h2></div>
@@ -61,26 +69,25 @@ export function ProjectReconciliationGraph({ projectId, data, canManage, canOrde
       <article className={needsDecision > 0 ? "is-warning" : ""}><PackageCheck /><span><small>Do kontroli</small><strong>{needsDecision}</strong></span></article>
     </div>
 
-    {needsDecision > 0 ? <details className="control360-details control360-details--attention" open>
-      <summary>Elementy wymagające decyzji <span>{reviewMatches.length} match · {openDeviations.length} odstępstw · {proposedLinks.length} BOQ</span></summary>
-      <div className="control360-review-stack">
+    {needsDecision === 0 ? <div className="control360-ok"><Check size={15} /> Brak otwartych niezgodności między BOQ, zakupami i kosztami</div> : null}
+
+    <CompactDisclosureGroup
+      className="compact-disclosure-group--control"
+      items={disclosureItems}
+      defaultOpenId={needsDecision > 0 ? "control360-decisions" : null}
+    >
+      {needsDecision > 0 ? <div className="control360-review-stack">
         {reviewMatches.slice(0, 10).map((row) => { const warnings = Array.isArray(row.warnings) ? row.warnings.map(String) : []; return <div key={String(row.id)} className="control360-review-row"><AlertTriangle size={14} /><div><strong>3-way match: PO {num(row.ordered_quantity)} / PZ {num(row.received_quantity)} / FV {num(row.invoiced_quantity)}</strong><small>{warnings.join(" · ") || `Cena PO ${money(row.ordered_unit_price)} → FV ${money(row.invoiced_unit_price)}`}</small></div></div>; })}
         {openDeviations.slice(0, 10).map((row) => <div key={String(row.id)} className="control360-review-row"><AlertTriangle size={14} /><div><strong>{String(row.title)}</strong><small>{String(row.detail ?? row.deviation_type ?? "Odstępstwo procesu")}</small></div></div>)}
         {proposedLinks.slice(0, 10).map((row) => <div key={String(row.id)} className="control360-review-row"><GitBranch size={14} /><div><strong>Dopasowanie BOQ · {Math.round(Number(row.confidence ?? 0) * 100)}%</strong><small>{String(row.source_type)} → {String(row.target_type)}</small></div>{canManage ? <div className="control360-row-actions"><button onClick={() => call("approve_link", { linkId: row.id }).catch((error) => setMessage(error.message))}><Check size={13} /> Zatwierdź</button><button onClick={() => call("reject_link", { linkId: row.id }).catch((error) => setMessage(error.message))}><X size={13} /> Odrzuć</button></div> : null}</div>)}
-      </div>
-    </details> : <div className="control360-ok"><Check size={15} /> Brak otwartych niezgodności między BOQ, zakupami i kosztami</div>}
+      </div> : null}
 
-    <details className="control360-details">
-      <summary>Zakupy i historia <span>{data.orders.length} zamówień · {data.prices.length} obserwacji cen</span></summary>
       <div className="control360-detail-columns">
         <div><h4>Aktywne zamówienia</h4>{data.orders.slice(0, 12).map((row) => <div key={String(row.id)} className="command-row"><div><strong>{String(row.order_number)}</strong><span>{money(row.total_amount)} · {String(row.status)}</span></div></div>)}{!data.orders.length ? <p className="empty-copy">Brak zamówień.</p> : null}</div>
         <div><h4>Ostatnie ceny</h4>{data.prices.slice(0, 12).map((row, index) => <div key={`${String(row.sourceId)}-${index}`} className="command-row"><div><strong>{String(row.stockName ?? "Materiał")}</strong><span>{money(row.unitPriceNet)} / {String(row.unit ?? "j.m.")} · {String(row.supplier ?? "dostawca nieznany")}</span></div></div>)}{!data.prices.length ? <p className="empty-copy">Brak historii cen.</p> : null}</div>
       </div>
-    </details>
 
-    {canOrder ? <details className="control360-details control360-details--advanced">
-      <summary>Operacje zakupowe <span>narzędzia dodatkowe</span></summary>
-      <form className="command-form reconciliation-order-form" onSubmit={createOrder}>
+      {canOrder ? <form className="command-form reconciliation-order-form" onSubmit={createOrder}>
         <label>Zatwierdzony WM<select name="sourceRequestId" defaultValue=""><option value="">Zakup awaryjny bez WM</option>{approvedRequests.map((row) => <option key={String(row.id)} value={String(row.id)}>{String(row.title)}</option>)}</select></label>
         <label>Cel dostawy<select name="destinationMode" defaultValue="direct_project"><option value="direct_project">Bezpośrednio na inwestycję</option><option value="central_stock">Magazyn centralny</option></select></label>
         <label>Dostawca<select name="counterpartyId" defaultValue=""><option value="">Bez wskazanego dostawcy</option>{data.counterparties.map((row) => <option key={String(row.id)} value={String(row.id)}>{String(row.name)}</option>)}</select></label>
@@ -91,14 +98,12 @@ export function ProjectReconciliationGraph({ projectId, data, canManage, canOrde
         <label>Pozycja BOQ<select name="boqItemId" defaultValue=""><option value="">Bez powiązania BOQ</option>{data.boqItems.map((row) => <option key={String(row.id)} value={String(row.id)}>{String(row.item_number ?? "BOQ")} · {String(row.description)}</option>)}</select></label>
         <label>Opis<input name="description" required /></label><label>Ilość<input name="quantity" inputMode="decimal" required /></label><label>Jednostka<input name="unit" /></label><label>Cena netto<input name="unitPrice" inputMode="decimal" /></label>
         <button disabled={pending}><PackagePlus size={15} /> Utwórz zamówienie</button>
-      </form>
-    </details> : null}
+      </form> : null}
 
-    <details className="control360-details control360-details--advanced">
-      <summary>Dane techniczne <span>{String(match.matched ?? 0)} uzgodnionych · {String(graphDeviations.open ?? 0)} odstępstw · {String(graphLinks.approved ?? 0)} powiązań</span></summary>
       <div className="control360-technical-grid">
         <span>FV bezpośrednie <strong>{money(costs.invoiceNet)}</strong></span><span>RW magazyn <strong>{money(costs.inventoryIssuedCost)}</strong></span><span>Robocizna <strong>{money(costs.laborCost)}</strong></span><span>Rozpoznane zobowiązania <strong>{money(commitments.recognizedCost)}</strong></span>
+        <span>3-way match <strong>{String(match.matched ?? 0)}</strong></span><span>Odstępstwa <strong>{String(graphDeviations.open ?? 0)}</strong></span><span>Powiązania BOQ <strong>{String(graphLinks.approved ?? 0)}</strong></span>
       </div>
-    </details>
+    </CompactDisclosureGroup>
   </section>;
 }
