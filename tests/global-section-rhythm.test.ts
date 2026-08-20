@@ -20,6 +20,28 @@ describe("global authenticated section rhythm", () => {
     expect(css).toContain(".project-workspace-v2 > *");
   });
 
+  it("loads an investment-specific rhythm guard after every project layout style", () => {
+    const layout = read("app/workspace/projects/[projectId]/layout.tsx");
+    const mascot = layout.indexOf('import "../../../wrzutnia-mascot-refinement.css"');
+    const rhythm = layout.indexOf('import "../../../project-section-rhythm-final.css"');
+    expect(mascot).toBeGreaterThan(-1);
+    expect(rhythm).toBeGreaterThan(mascot);
+
+    const css = read("app/project-section-rhythm-final.css");
+    expect(css).toContain("--project-section-gap: 10px");
+    expect(css).toContain("row-gap: var(--project-section-gap) !important");
+    expect(css).toContain(".project-workspace-v2 > .project-tab-content");
+    expect(css).toContain("padding-block: 0 !important");
+  });
+
+  it("keeps the investment home dashboard on the same 10px rhythm after its page-level CSS", () => {
+    const css = read("app/project-dashboard-layout-refinement.css");
+    expect(css).toContain("gap: 10px !important");
+    expect(css).toContain("row-gap: 10px !important");
+    expect(css).toContain(".project-workspace-v2 > .project-tab-content.pw-dashboard--combined");
+    expect(css).toContain("padding: 0 !important");
+  });
+
   it("removes competing margins from top-level sections without changing login", () => {
     const css = read("app/global-section-rhythm.css");
     expect(css).toContain("margin-block: 0 !important");

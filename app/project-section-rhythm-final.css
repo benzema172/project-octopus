@@ -1,0 +1,93 @@
+/* Project Octopus — final investment section rhythm.
+   This layer is loaded at the end of the project layout so every investment subpage
+   inherits one vertical 10px spacing contract, regardless of legacy/project-specific CSS. */
+
+.project-workspace-v2 {
+  --project-section-gap: 10px;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  row-gap: var(--project-section-gap) !important;
+}
+
+.project-workspace-v2 > * {
+  min-width: 0;
+  margin-block: 0 !important;
+}
+
+/* Header/navigation shell, Autopilot and routed project content are peer sections.
+   Their own outer margins must never add to the workspace row-gap. */
+.project-workspace-v2 > .pw-project-top-shell,
+.project-workspace-v2 > .project-tab-content,
+.project-workspace-v2 > [class*="autopilot" i] {
+  margin-block: 0 !important;
+}
+
+/* Routed project pages occasionally inherit historical page padding. Keep their
+   interior card padding intact, but remove only the outer page padding. */
+.project-workspace-v2 > .project-tab-content {
+  padding-block: 0 !important;
+}
+
+/* Every main vertical stack inside Investments uses the exact same rhythm. */
+.project-workspace-v2 :is(
+  .pw-dashboard,
+  .pw-dashboard--combined,
+  .pw-dashboard--decision,
+  .pw-module-page,
+  .pw-module-page--operational,
+  .project-command-center,
+  .reconciliation-graph,
+  .brain-panel--workspace,
+  .ops-workspace,
+  .ops-workspace--paged
+) {
+  row-gap: var(--project-section-gap) !important;
+}
+
+.project-workspace-v2 :is(
+  .pw-dashboard,
+  .pw-dashboard--combined,
+  .pw-dashboard--decision,
+  .pw-module-page,
+  .pw-module-page--operational,
+  .project-command-center,
+  .reconciliation-graph,
+  .brain-panel--workspace,
+  .ops-workspace,
+  .ops-workspace--paged
+) > * {
+  margin-block: 0 !important;
+}
+
+/* Dashboard sections visible on the investment home page. */
+.project-workspace-v2 .pw-dashboard--combined {
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: var(--project-section-gap) !important;
+}
+
+.project-workspace-v2 .pw-dashboard--combined > :is(
+  .pw-time-card,
+  .pw-finance-card,
+  .pw-ops-grid,
+  .pw-ops-grid--primary,
+  .pw-ops-grid--two
+) {
+  margin-block: 0 !important;
+}
+
+/* Older layers add explicit bottom margins to navigation/header variants. */
+.project-workspace-v2 :is(
+  .pw-project-header--compact,
+  .project-navigation--v4,
+  .project-navigation--v5
+) {
+  margin-block: 0 !important;
+}
+
+@media (max-width: 760px) {
+  .project-workspace-v2 {
+    --project-section-gap: 10px;
+  }
+}

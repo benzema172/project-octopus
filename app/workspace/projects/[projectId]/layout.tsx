@@ -22,6 +22,7 @@ import "../../../investment-content-refinement.css";
 import "../../../investment-card-typography.css";
 import "../../../investment-menu-toggle-fix.css";
 import "../../../wrzutnia-mascot-refinement.css";
+import "../../../project-section-rhythm-final.css";
 
 export const dynamic = "force-dynamic";
 type ProjectLayoutProps = { children: React.ReactNode; params: Promise<{ projectId: string }> };
