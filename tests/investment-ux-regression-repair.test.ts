@@ -22,6 +22,28 @@ describe("investment UX regression repair", () => {
     expect(css).toContain("grid-row: 1 !important");
   });
 
+  it("opens Wrzutnia in a body portal below the actual investment navigation", () => {
+    const intake = read("components/projects/project-intake-pipeline.tsx");
+    const css = read("app/project-intake.css");
+    expect(intake).toContain('import { createPortal } from "react-dom"');
+    expect(intake).toContain('document.querySelector<HTMLElement>(".project-navigation--v5")');
+    expect(intake).toContain("navigationBottom + 12");
+    expect(intake).toContain("createPortal(dialog, document.body)");
+    expect(css).toContain(".pw-intake-popover--portal");
+    expect(css).toContain("position: fixed");
+    expect(css).toContain("z-index: 1200");
+  });
+
+  it("renders a soft eight-tentacle octopus mascot instead of a radial spider-like mark", () => {
+    const intake = read("components/projects/project-intake-pipeline.tsx");
+    const css = read("app/project-navigation-refinement.css");
+    expect(intake.match(/pw-octo-tentacle--\d/g)?.length).toBe(8);
+    expect(intake).toContain('d="M39 24C39 11 45 5 56 5s17 6 17 19');
+    expect(intake).toContain("pw-octo-pupil");
+    expect(css).toContain("stroke-width: 4.6");
+    expect(css).toContain("top: -10px");
+  });
+
   it("uses seven stable desktop navigation cells and no horizontal overflow", () => {
     const css = read("app/investment-ux-repair.css");
     expect(css).toContain("grid-template-columns: repeat(7,minmax(0,1fr))");
