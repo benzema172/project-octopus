@@ -40,8 +40,8 @@ export default function FinanceOperations({ workspaceId, data, canWrite, canAppr
   ]}>
     <section className="ops-split-lists">
       <article className="ops-panel"><h3>Kontrola obiegu finansowego</h3><p><strong>{money(summary.unallocatedNet)}</strong> kosztu netto nie ma jeszcze pełnego przypisania.</p><p>{str(summary.matchReview,"0")} pozycji wymaga kontroli PO–PZ–FV · {str(summary.accountingPending,"0")} dekretów czeka w warstwie księgowej.</p><p>{lines.length} pozycji · {payments.length} płatności · {allocations.length} alokacji dla bieżącej strony.</p></article>
-      <article className="ops-panel"><h3>Najwięksi dostawcy</h3>{supplierSpend.length?supplierSpend.map((row,index)=><p key={String(row.id??index)}><strong>{str(row.name)}</strong><br/>{money(row.spend)}</p>):<p>Historia zakupów zbuduje ranking automatycznie.</p>}</article>
+      <article className="ops-panel"><h3>Najwięksi dostawcy</h3>{supplierSpend.length?supplierSpend.slice(0,5).map((row,index)=><p key={String(row.id??index)}><strong>{str(row.name)}</strong> · {money(row.spend)}</p>):<p>Ranking pojawi się automatycznie po pierwszych zakupach.</p>}</article>
     </section>
-    <section className="ops-panel"><h3>Najbliższe zobowiązania</h3>{commitments.slice(0,8).map(row=><p key={String(row.id)}><strong>{str(row.description)}</strong><br/>{money(row.amount)} · {str(row.expected_date,"bez terminu")} · {str(row.status)}</p>)}</section>
+    {commitments.length ? <section className="ops-panel ops-panel--compact-list"><h3>Najbliższe zobowiązania</h3>{commitments.slice(0,8).map(row=><p key={String(row.id)}><strong>{str(row.description)}</strong> · {money(row.amount)} · {str(row.expected_date,"bez terminu")} · {str(row.status)}</p>)}</section> : null}
   </CompanyModuleShell>;
 }

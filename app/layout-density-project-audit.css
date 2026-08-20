@@ -1,0 +1,287 @@
+/* Project/investment density audit — overrides legacy decorative heights safely. */
+
+.octopus-app-light :is(
+  .project-workspace-v2,
+  .pw-dashboard,
+  .pw-dashboard-grid,
+  .pw-status-strip,
+  .pw-section-card,
+  .pw-source-grid,
+  .pw-workflow-grid,
+  .pw-module-page,
+  .pw-module-page--operational,
+  .pw-module-metrics,
+  .pw-module-workbench,
+  .pw-module-flow,
+  .pw-module-inputs,
+  .pw-module-knowledge,
+  .pw-module-feature-grid,
+  .pw-module-feature-card,
+  .pw-module-empty-input,
+  .pw-module-knowledge-list,
+  .brain-panel--workspace,
+  .brain-review-queue,
+  .brain-next-stage
+) {
+  min-width: 0;
+}
+
+.octopus-app-light .project-workspace-v2,
+.octopus-app-light .pw-dashboard,
+.octopus-app-light .pw-module-page,
+.octopus-app-light .pw-module-page--operational {
+  gap: 10px !important;
+}
+
+.octopus-app-light .pw-status-strip {
+  gap: 8px !important;
+}
+
+.octopus-app-light .pw-status-strip > div {
+  min-height: 76px !important;
+  height: auto !important;
+  padding: 10px 12px !important;
+}
+
+.octopus-app-light .pw-status-strip strong {
+  font-size: 18px !important;
+}
+
+.octopus-app-light .pw-section-card {
+  min-height: 0 !important;
+  padding: 14px !important;
+}
+
+.octopus-app-light .pw-section-heading {
+  gap: 12px !important;
+}
+
+.octopus-app-light .pw-section-heading h2,
+.octopus-app-light .pw-brain-card h2,
+.octopus-app-light .pw-principle-card h2,
+.octopus-app-light .pw-module-intro h2 {
+  font-size: 18px !important;
+  line-height: 1.2;
+}
+
+.octopus-app-light .pw-section-lead {
+  margin: 6px 0 10px !important;
+  line-height: 1.45 !important;
+}
+
+.octopus-app-light .pw-source-grid,
+.octopus-app-light .pw-workflow-grid,
+.octopus-app-light .pw-module-feature-grid {
+  gap: 8px !important;
+}
+
+.octopus-app-light .pw-workflow-grid {
+  margin-top: 10px !important;
+}
+
+.octopus-app-light :is(.pw-source-card, .pw-workflow-card) {
+  min-height: 0 !important;
+  height: auto !important;
+  gap: 9px !important;
+  padding: 10px 11px !important;
+}
+
+.octopus-app-light .pw-workflow-card {
+  min-height: 74px !important;
+}
+
+.octopus-app-light :is(.pw-source-card p, .pw-workflow-card p) {
+  line-height: 1.35 !important;
+}
+
+.octopus-app-light .pw-module-intro {
+  min-height: 0 !important;
+  gap: 14px !important;
+  padding: 14px !important;
+}
+
+.octopus-app-light .pw-module-intro > div > p:last-child {
+  margin-top: 6px !important;
+  line-height: 1.45 !important;
+}
+
+.octopus-app-light .pw-module-metrics {
+  gap: 8px !important;
+}
+
+.octopus-app-light .pw-module-metrics > div {
+  min-height: 0 !important;
+  gap: 2px !important;
+  padding: 9px 11px !important;
+}
+
+.octopus-app-light .pw-module-metrics strong {
+  font-size: 18px !important;
+}
+
+.octopus-app-light .pw-module-workbench {
+  gap: 8px !important;
+}
+
+.octopus-app-light :is(.pw-module-flow, .pw-module-inputs, .pw-module-knowledge) {
+  min-height: 0 !important;
+  padding: 12px !important;
+}
+
+.octopus-app-light .pw-module-flow ol {
+  gap: 5px !important;
+  margin-top: 10px !important;
+}
+
+.octopus-app-light .pw-module-flow li {
+  min-height: 66px !important;
+  height: auto !important;
+  gap: 4px !important;
+  padding: 7px 8px !important;
+}
+
+.octopus-app-light .pw-module-document-list {
+  margin-top: 8px !important;
+}
+
+.octopus-app-light .pw-module-empty-input {
+  min-height: 68px !important;
+  height: auto !important;
+  gap: 4px !important;
+  margin-top: 8px !important;
+  padding: 9px 10px !important;
+}
+
+.octopus-app-light .pw-module-empty-input p {
+  max-width: 620px;
+  line-height: 1.4 !important;
+}
+
+.octopus-app-light .pw-module-knowledge {
+  gap: 8px !important;
+}
+
+.octopus-app-light .pw-module-knowledge-list {
+  gap: 6px !important;
+}
+
+.octopus-app-light .pw-module-knowledge-list article {
+  min-height: 0 !important;
+  padding: 8px 9px !important;
+}
+
+.octopus-app-light .pw-module-feature-card {
+  min-height: 102px !important;
+  height: auto !important;
+  padding: 12px !important;
+}
+
+.octopus-app-light .pw-module-feature-card h3 {
+  margin: 11px 0 5px !important;
+}
+
+.octopus-app-light .pw-module-feature-card p {
+  line-height: 1.4 !important;
+}
+
+.octopus-app-light .pw-module-principle {
+  min-height: 0 !important;
+  padding: 11px 12px !important;
+}
+
+.octopus-app-light :is(.brain-review-queue, .brain-next-stage) {
+  min-height: 0 !important;
+  padding: 12px !important;
+}
+
+.octopus-app-light .brain-panel--workspace {
+  gap: 10px !important;
+}
+
+/* Project header/navigation: compact but still readable. */
+.octopus-app-light .pw-project-header--contract {
+  gap: 14px !important;
+  padding: 10px 14px !important;
+}
+
+.octopus-app-light .pw-project-header__identity h1 {
+  font-size: clamp(28px, 2.65vw, 38px) !important;
+  overflow-wrap: anywhere;
+}
+
+.octopus-app-light .pw-project-contract {
+  padding-inline: 18px !important;
+}
+
+.octopus-app-light .pw-project-contract strong {
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+}
+
+.octopus-app-light .pw-project-meta--header {
+  gap: 12px !important;
+}
+
+.octopus-app-light :is(.project-navigation--v2, .project-navigation--v3) {
+  min-height: 0 !important;
+  padding: 5px !important;
+}
+
+.octopus-app-light .project-navigation--v2 a {
+  padding: 7px 9px !important;
+}
+
+/* Compact common project cards that historically held decorative empty space. */
+.octopus-app-light :is(.pw-principle-card, .pw-brain-card) {
+  min-height: 0 !important;
+}
+
+.octopus-app-light .pw-budget-row {
+  margin-top: 9px !important;
+}
+
+.octopus-app-light .pw-finance-metrics > div {
+  min-height: 74px !important;
+}
+
+.octopus-app-light .pw-time-card__count > small {
+  margin-top: 6px !important;
+}
+
+@media (max-width: 1050px) {
+  .octopus-app-light .pw-module-workbench {
+    grid-template-columns: 1fr !important;
+  }
+
+  .octopus-app-light .pw-module-feature-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .octopus-app-light .pw-status-strip,
+  .octopus-app-light .pw-module-metrics,
+  .octopus-app-light .pw-module-feature-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .octopus-app-light .pw-status-strip > div,
+  .octopus-app-light .pw-module-feature-card {
+    min-height: 0 !important;
+  }
+
+  .octopus-app-light .pw-module-flow ol {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .octopus-app-light .pw-module-flow ol,
+  .octopus-app-light .pw-module-knowledge-list {
+    grid-template-columns: 1fr !important;
+  }
+
+  .octopus-app-light .pw-project-header--contract {
+    padding: 9px 11px !important;
+  }
+}

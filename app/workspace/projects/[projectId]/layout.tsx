@@ -15,6 +15,7 @@ import "../../../project-workspace-v2.css";
 import "../../../project-intake.css";
 import "../../../project-navigation-refinement.css";
 import "../../../project-modules-operational.css";
+import "../../../layout-density-project-audit.css";
 
 export const dynamic = "force-dynamic";
 
