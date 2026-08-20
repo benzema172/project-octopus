@@ -30,6 +30,36 @@ const getReconciliationRaw = cache(async (workspaceId: string, projectId: string
   return record(data);
 });
 
+const getReconciliationExtensionsRaw = cache(async (workspaceId: string, projectId: string) => {
+  const db = createServiceSupabaseClient();
+  const [matchesResult, deviationsResult, pricesResult] = await Promise.all([
+    db.from("procurement_matches")
+      .select("id,invoice_line_id,purchase_order_line_id,receipt_line_id,ordered_quantity,received_quantity,invoiced_quantity,ordered_unit_price,invoiced_unit_price,quantity_variance,price_variance_percent,status,warnings,updated_at")
+      .eq("workspace_id", workspaceId)
+      .eq("project_id", projectId)
+      .order("updated_at", { ascending: false })
+      .limit(100),
+    db.from("process_deviations")
+      .select("id,deviation_type,severity,source_type,source_id,title,detail,status,resolution_note,created_at,closed_at")
+      .eq("workspace_id", workspaceId)
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false })
+      .limit(100),
+    db.rpc("get_price_intelligence", { p_workspace_id: workspaceId, p_project_id: projectId, p_limit: 60 })
+  ]);
+
+  if (matchesResult.error) console.error("Project Octopus: Control 360 3-way match unavailable", matchesResult.error.message);
+  if (deviationsResult.error) console.error("Project Octopus: Control 360 deviations unavailable", deviationsResult.error.message);
+  if (pricesResult.error) console.error("Project Octopus: Control 360 price intelligence unavailable", pricesResult.error.message);
+
+  const priceData = pricesResult.error ? {} : record(pricesResult.data);
+  return {
+    matches: matchesResult.error ? [] : (matchesResult.data ?? []),
+    deviations: deviationsResult.error ? [] : (deviationsResult.data ?? []),
+    prices: array(priceData.observations)
+  };
+});
+
 const getExecutionRaw = cache(async (workspaceId: string, projectId: string) => {
   const { data, error } = await createServiceSupabaseClient().rpc("get_project_execution_snapshot", { p_workspace_id: workspaceId, p_project_id: projectId });
   if (error) throw new Error(`Execution Layer nie może odczytać stanu inwestycji: ${error.message}`);
@@ -82,8 +112,22 @@ export async function getControlAutopilotSnapshot(workspaceId:string,projectId:s
 }
 
 export async function getControlReconciliationData(workspaceId:string,projectId:string){
-  const raw=await getReconciliationRaw(workspaceId,projectId);
-  return {graph:record(raw.costGraph),links:array(raw.entityLinks),orders:array(raw.purchaseOrders),requests:array(raw.materialRequests),counterparties:array(raw.counterparties),stockItems:array(raw.stockItems),boqItems:array(raw.boqItems)};
+  const [raw, extensions] = await Promise.all([
+    getReconciliationRaw(workspaceId,projectId),
+    getReconciliationExtensionsRaw(workspaceId,projectId)
+  ]);
+  return {
+    graph:record(raw.costGraph),
+    links:array(raw.entityLinks),
+    orders:array(raw.purchaseOrders),
+    requests:array(raw.materialRequests),
+    counterparties:array(raw.counterparties),
+    stockItems:array(raw.stockItems),
+    boqItems:array(raw.boqItems),
+    matches:extensions.matches,
+    deviations:extensions.deviations,
+    prices:extensions.prices
+  };
 }
 
 export async function getControlExecutionSnapshot(workspaceId:string,projectId:string):Promise<ProjectExecutionSnapshot>{

@@ -1,5 +1,6 @@
 import type { ComponentProps } from "react";
 import { AlertTriangle } from "lucide-react";
+import { ControlPanelErrorBoundary } from "@/components/projects/control-panel-error-boundary";
 import { InvestmentAutopilotCenter } from "@/components/projects/investment-autopilot-center";
 import { ProjectCommandCenter } from "@/components/projects/project-command-center";
 import { ProjectExecutionCenter } from "@/components/projects/project-execution-center";
@@ -49,13 +50,21 @@ export async function CommandCenterPanel({ workspaceId, projectId, canManageInve
   const result = await safeLoad(() => getControlCommandCenterData(workspaceId, projectId));
   if (!result.ok) return <PanelFailure title="Command Center" error={result.error} />;
   const data = result.data as CommandCenterData;
-  return <ProjectCommandCenter projectId={projectId} data={data} canManage={canManageInvestments} />;
+  return (
+    <ControlPanelErrorBoundary title="Command Center">
+      <ProjectCommandCenter projectId={projectId} data={data} canManage={canManageInvestments} />
+    </ControlPanelErrorBoundary>
+  );
 }
 
 export async function AutopilotPanel({ workspaceId, projectId, canManageInvestments, financeAllowed, warehouseAllowed }: AccessProps) {
   const result = await safeLoad(() => getControlAutopilotSnapshot(workspaceId, projectId, { includeFinance: financeAllowed, includeWarehouse: warehouseAllowed }));
   if (!result.ok) return <PanelFailure title="Investment Autopilot" error={result.error} />;
-  return <InvestmentAutopilotCenter projectId={projectId} workspaceId={workspaceId} snapshot={result.data} canRun={canManageInvestments} financeAllowed={financeAllowed} warehouseAllowed={warehouseAllowed} />;
+  return (
+    <ControlPanelErrorBoundary title="Investment Autopilot">
+      <InvestmentAutopilotCenter projectId={projectId} workspaceId={workspaceId} snapshot={result.data} canRun={canManageInvestments} financeAllowed={financeAllowed} warehouseAllowed={warehouseAllowed} />
+    </ControlPanelErrorBoundary>
+  );
 }
 
 export async function ReconciliationPanel({ workspaceId, projectId, canManageInvestments, financeAllowed, canManageFinance, warehouseAllowed, canManageWarehouse }: AccessProps) {
@@ -63,11 +72,19 @@ export async function ReconciliationPanel({ workspaceId, projectId, canManageInv
   const result = await safeLoad(() => getControlReconciliationData(workspaceId, projectId));
   if (!result.ok) return <PanelFailure title="Reconciliation" error={result.error} />;
   const data = result.data as ReconciliationData;
-  return <ProjectReconciliationGraph projectId={projectId} data={data} canManage={canManageInvestments && (canManageFinance || canManageWarehouse)} canOrder={canManageInvestments && canManageWarehouse} />;
+  return (
+    <ControlPanelErrorBoundary title="Reconciliation">
+      <ProjectReconciliationGraph projectId={projectId} data={data} canManage={canManageInvestments && (canManageFinance || canManageWarehouse)} canOrder={canManageInvestments && canManageWarehouse} />
+    </ControlPanelErrorBoundary>
+  );
 }
 
 export async function ExecutionPanel({ workspaceId, projectId, canManageInvestments, financeAllowed, canManageFinance, warehouseAllowed }: AccessProps) {
   const result = await safeLoad(() => getControlExecutionSnapshot(workspaceId, projectId));
   if (!result.ok) return <PanelFailure title="Execution Layer" error={result.error} />;
-  return <ProjectExecutionCenter workspaceId={workspaceId} projectId={projectId} snapshot={result.data} financeAllowed={financeAllowed} canManageFinance={canManageFinance} warehouseAllowed={warehouseAllowed} canManageInvestments={canManageInvestments} />;
+  return (
+    <ControlPanelErrorBoundary title="Execution Layer">
+      <ProjectExecutionCenter workspaceId={workspaceId} projectId={projectId} snapshot={result.data} financeAllowed={financeAllowed} canManageFinance={canManageFinance} warehouseAllowed={warehouseAllowed} canManageInvestments={canManageInvestments} />
+    </ControlPanelErrorBoundary>
+  );
 }
