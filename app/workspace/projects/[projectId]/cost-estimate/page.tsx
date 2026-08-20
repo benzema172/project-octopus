@@ -1,7 +1,8 @@
-import { FileSpreadsheet, FileText, History, Plus } from "lucide-react";
+import { FileSpreadsheet, FileText } from "lucide-react";
 import { notFound } from "next/navigation";
 import { ProjectLiveRecords } from "@/components/projects/project-live-records";
 import { ProjectOperationPanel } from "@/components/projects/project-operation-panel";
+import { CompactDisclosureGroup } from "@/components/ui/compact-disclosure-group";
 import { requireCurrentUser } from "@/lib/auth";
 import { listDocumentsForCategories } from "@/lib/data/documents";
 import { getBoqKnowledge } from "@/lib/data/module-knowledge";
@@ -96,13 +97,15 @@ export default async function CostEstimatePage({ params }: Props) {
         )}
       </section>
 
-      <details className="pw-boq-tool">
-        <summary><History size={16} aria-hidden="true" />Importy i analiza kosztorysu</summary>
+      <CompactDisclosureGroup
+        className="compact-disclosure-group--boq"
+        items={[
+          { id: "boq-imports", label: "Importy i analiza kosztorysu" },
+          { id: "boq-sources", label: "Źródła kosztorysu", meta: documents.length },
+          { id: "boq-change-order", label: "Zmiana zakresu / kontraktu" }
+        ]}
+      >
         <ProjectLiveRecords projectId={projectId} kind="estimate" />
-      </details>
-
-      <details className="pw-boq-tool">
-        <summary><FileText size={16} aria-hidden="true" />Źródła kosztorysu <span>{documents.length}</span></summary>
         {documents.length ? (
           <div className="pw-boq-sources">
             {documents.map((document) => (
@@ -113,12 +116,8 @@ export default async function CostEstimatePage({ params }: Props) {
             ))}
           </div>
         ) : <p className="pw-boq-tool__empty">Brak przypisanych plików kosztorysowych.</p>}
-      </details>
-
-      <details id="boq-change-order" className="pw-boq-tool">
-        <summary><Plus size={16} aria-hidden="true" />Zmiana zakresu / kontraktu</summary>
         <ProjectOperationPanel projectId={projectId} mode="change_order" />
-      </details>
+      </CompactDisclosureGroup>
     </div>
   );
 }
