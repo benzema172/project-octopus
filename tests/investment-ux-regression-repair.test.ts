@@ -34,24 +34,26 @@ describe("investment UX regression repair", () => {
     expect(css).toContain("z-index: 1200");
   });
 
-  it("renders a soft eight-tentacle octopus mascot instead of a radial spider-like mark", () => {
-    const intake = read("components/projects/project-intake-pipeline.tsx");
-    const css = read("app/project-navigation-refinement.css");
-    expect(intake.match(/pw-octo-tentacle--\d/g)?.length).toBe(8);
-    expect(intake).toContain('d="M39 24C39 11 45 5 56 5s17 6 17 19');
-    expect(intake).toContain("pw-octo-pupil");
-    expect(css).toContain("stroke-width: 5.2");
+  it("uses a dedicated seated octopus silhouette with eight asymmetrical tentacles", () => {
+    const asset = read("public/octopus-intake-sitting.svg");
+    expect(asset.match(/class="tentacle[^\"]*t\d"/g)?.length).toBe(8);
+    expect(asset).toContain("Korpus zachodzi na górną krawędź przycisku");
+    expect(asset).toContain('rx="4.6" ry="6.6" fill="#21152e"');
   });
 
-  it("seats the octopus on top of the Wrzutnia button and makes tentacle tips move energetically", () => {
+  it("seats the octopus on the left edge of Wrzutnia and animates the tentacles quickly", () => {
     const css = read("app/project-navigation-refinement.css");
-    expect(css).toContain("top: -32px");
-    expect(css).toContain("left: 50%");
-    expect(css).toContain("width: 142px");
-    expect(css).toContain("transform: translateX(-50%)");
-    expect(css).toContain("transform-origin: 50% 12%");
-    expect(css).toContain("animation: pw-octo-tip-b .68s");
-    expect(css).toContain("animation-duration: .52s");
+    const asset = read("public/octopus-intake-sitting.svg");
+    expect(css).toContain('background: url("/octopus-intake-sitting.svg")');
+    expect(css).toContain("top: -35px");
+    expect(css).toContain("left: -8px");
+    expect(css).toContain("width: 112px");
+    expect(css).toContain("height: 86px");
+    expect(css).toContain(".pw-intake-octopus > svg");
+    expect(css).toContain("display: none !important");
+    expect(asset).toContain("animation:w2 .62s");
+    expect(asset).toContain("transform-origin:50% 8%");
+    expect(asset).toContain("M48 51C45 61 46 71 50 80");
   });
 
   it("uses seven stable desktop navigation cells and no horizontal overflow", () => {
