@@ -155,7 +155,7 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
           </label>
         </form>
         {canWrite && forms.length ? (
-          <details className="ops-add-menu">
+          <details className="ops-add-menu ops-quick-actions">
             <summary className="primary-button"><Plus size={16} aria-hidden="true" /> Dodaj <ChevronDown size={14} aria-hidden="true" /></summary>
             <div className="ops-add-menu__panel">
               <div className="ops-add-menu__heading"><strong>Dodaj lub zarejestruj</strong><small>Wybierz czynność</small></div>
