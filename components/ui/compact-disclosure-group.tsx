@@ -20,11 +20,17 @@ type Props = {
 export function CompactDisclosureGroup({ items, children, defaultOpenId = null, className = "" }: Props) {
   const [openId, setOpenId] = useState<string | null>(defaultOpenId);
   const panels = Children.toArray(children);
+  const itemKey = items.map((item) => item.id).join("|");
 
   useEffect(() => {
+    const validIds = itemKey.split("|").filter(Boolean);
     const hash = window.location.hash.replace(/^#/, "");
-    if (hash && items.some((item) => item.id === hash)) setOpenId(hash);
-  }, [items]);
+    setOpenId((current) => {
+      if (hash && validIds.includes(hash)) return hash;
+      if (current && validIds.includes(current)) return current;
+      return defaultOpenId && validIds.includes(defaultOpenId) ? defaultOpenId : null;
+    });
+  }, [defaultOpenId, itemKey]);
 
   return (
     <section className={`compact-disclosure-group ${className}`.trim()}>
