@@ -168,116 +168,54 @@
   align-self: center;
 }
 
-/* Wrzutnia mascot — octopus sits on the button and drapes eight tentacles over its front/sides. */
+/*
+  Wrzutnia mascot — real "sitting" silhouette.
+  The body rests on the top edge while front tentacles hang down over the button face.
+  The old inline fan-shaped SVG remains only as a semantic fallback and is visually replaced
+  by the dedicated animated asset below.
+*/
 .pw-intake-trigger--octopus {
   position: relative;
   isolation: isolate;
-  min-width: 148px;
+  min-width: 150px;
   min-height: 46px;
   justify-content: flex-end;
   overflow: visible;
-  padding: 10px 13px 9px 78px;
+  padding: 10px 13px 9px 82px;
 }
 
 .pw-intake-trigger__label {
   position: relative;
-  z-index: 5;
+  z-index: 6;
   text-shadow: 0 1px 7px rgba(27,12,61,.28);
 }
 
 .pw-intake-octopus {
   position: absolute;
-  z-index: 3;
-  top: -32px;
-  left: 50%;
-  width: 142px;
-  height: 78px;
+  z-index: 4;
+  top: -35px;
+  left: -8px;
+  width: 112px;
+  height: 86px;
   pointer-events: none;
-  filter: drop-shadow(0 5px 9px rgba(64,34,111,.28));
-  transform: translateX(-50%);
+  filter: drop-shadow(0 5px 9px rgba(64,34,111,.3));
+  transition: filter .16s ease, transform .16s ease;
 }
 
-.pw-intake-octopus svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
+.pw-intake-octopus > svg {
+  display: none !important;
 }
 
-.pw-octo-head {
-  fill: url(#pw-intake-octo-gradient);
-  stroke: rgba(255,255,255,.84);
-  stroke-width: 1.15;
-  transform-origin: 56px 24px;
-  animation: pw-octo-breathe 2.2s ease-in-out infinite;
-}
-
-.pw-octo-eye {
-  fill: rgba(255,255,255,.96);
-  stroke: rgba(255,255,255,.45);
-  stroke-width: .4;
-}
-.pw-octo-pupil { fill: #42236f; }
-.pw-octo-smile {
-  fill: none;
-  stroke: rgba(255,255,255,.9);
-  stroke-width: 1.45;
-  stroke-linecap: round;
-}
-
-/* Keep the tentacle roots visually planted on the button; short rotations read mostly at the tips. */
-.pw-octo-tentacle {
-  transform-box: fill-box;
-  transform-origin: 50% 12%;
-  will-change: transform;
-}
-
-.pw-octo-tentacle path {
-  fill: none;
-  stroke: url(#pw-intake-octo-gradient);
-  stroke-width: 5.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.pw-octo-tentacle--1 { animation: pw-octo-tip-a .82s cubic-bezier(.45,.02,.55,.98) -.14s infinite; }
-.pw-octo-tentacle--2 { animation: pw-octo-tip-b .68s cubic-bezier(.45,.02,.55,.98) -.37s infinite; }
-.pw-octo-tentacle--3 { animation: pw-octo-tip-c .94s cubic-bezier(.45,.02,.55,.98) -.51s infinite; }
-.pw-octo-tentacle--4 { animation: pw-octo-tip-b .76s cubic-bezier(.45,.02,.55,.98) -.21s infinite reverse; }
-.pw-octo-tentacle--5 { animation: pw-octo-tip-a .88s cubic-bezier(.45,.02,.55,.98) -.43s infinite reverse; }
-.pw-octo-tentacle--6 { animation: pw-octo-tip-c .72s cubic-bezier(.45,.02,.55,.98) -.18s infinite reverse; }
-.pw-octo-tentacle--7 { animation: pw-octo-tip-b .98s cubic-bezier(.45,.02,.55,.98) -.62s infinite; }
-.pw-octo-tentacle--8 { animation: pw-octo-tip-a .74s cubic-bezier(.45,.02,.55,.98) -.29s infinite reverse; }
-
-@keyframes pw-octo-tip-a {
-  0%,100% { transform: rotate(-3deg) translateY(0); }
-  32% { transform: rotate(8deg) translateY(1px); }
-  68% { transform: rotate(-7deg) translateY(0); }
-}
-
-@keyframes pw-octo-tip-b {
-  0%,100% { transform: rotate(4deg) translateX(0); }
-  38% { transform: rotate(-10deg) translateX(1px); }
-  74% { transform: rotate(7deg) translateX(-1px); }
-}
-
-@keyframes pw-octo-tip-c {
-  0%,100% { transform: rotate(-2deg) scaleY(1); }
-  35% { transform: rotate(9deg) scaleY(1.055); }
-  70% { transform: rotate(-8deg) scaleY(.985); }
-}
-
-@keyframes pw-octo-breathe {
-  0%,100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(1px) scale(1.025,.985); }
+.pw-intake-octopus::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("/octopus-intake-sitting.svg") center / contain no-repeat;
 }
 
 .pw-intake-trigger--octopus:hover .pw-intake-octopus {
-  filter: drop-shadow(0 6px 12px rgba(71,38,127,.34));
-}
-
-.pw-intake-trigger--octopus:hover .pw-octo-tentacle {
-  animation-duration: .52s;
+  filter: drop-shadow(0 7px 13px rgba(71,38,127,.38));
+  transform: translateY(-1px);
 }
 
 @media (max-width: 1220px) {
@@ -317,10 +255,6 @@
 @media (max-width: 470px) {
   .project-navigation__groups { grid-template-columns: 1fr; }
   .project-navigation--v3 .pw-intake { justify-self: stretch; }
-  .pw-intake-trigger--octopus { width: 100%; justify-content: center; padding-left: 76px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pw-octo-head,
-  .pw-octo-tentacle { animation: none !important; }
+  .pw-intake-trigger--octopus { width: 100%; justify-content: center; padding-left: 78px; }
+  .pw-intake-octopus { left: 2px; }
 }
