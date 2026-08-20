@@ -41,10 +41,11 @@ describe("premium workspace experience", () => {
   it("keeps secondary navigation from prefetching every heavy route and splits optional UI", () => {
     const shell = read("components/layout/company-shell.tsx");
     const navigation = read("components/projects/project-navigation.tsx");
+    const intakeSlot = read("components/projects/project-intake-slot.tsx");
     expect(shell).toContain('prefetch={item.group === "tools" ? false : undefined}');
     expect(shell).toContain('import("@/components/ai/octopus-assistant")');
     expect(shell).toContain("assistantReady");
-    expect(navigation).toContain('import("@/components/projects/project-intake-pipeline")');
+    expect(intakeSlot).toContain('import("@/components/projects/project-intake-pipeline")');
     expect(navigation).toContain("prefetch={false}");
   });
 });
