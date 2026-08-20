@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { processDocumentVersion } from "@/lib/ai/process-document";
 import { getRequestUser } from "@/lib/auth";
+import { syncProjectProfileFromAiFacts } from "@/lib/data/project-profile-ai";
 import { getProjectForUser } from "@/lib/data/projects";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
@@ -64,6 +65,23 @@ export async function POST(request: Request) {
       await supabase.from("documents").update({ category: finalCategory }).eq("id", sourceDocument.id);
     }
 
+    let profileSync: Awaited<ReturnType<typeof syncProjectProfileFromAiFacts>> | null = null;
+    try {
+      profileSync = await syncProjectProfileFromAiFacts({
+        project,
+        facts: analysis.facts,
+        documentId: sourceDocument.id,
+        documentVersionId: body.versionId,
+        userId: user.id
+      });
+    } catch (profileError) {
+      console.error("Project Octopus: automatic Project Profile sync after document analysis failed", {
+        projectId: project.id,
+        documentId: sourceDocument.id,
+        message: profileError instanceof Error ? profileError.message : String(profileError)
+      });
+    }
+
     let autopilot: Awaited<ReturnType<typeof runInvestmentAutopilot>> | null = null;
     try {
       autopilot = await runInvestmentAutopilot({ workspaceId: project.workspace_id, projectId: project.id, userId: user.id });
@@ -81,13 +99,15 @@ export async function POST(request: Request) {
       ai_category: analysis.category,
       confidence: analysis.confidence,
       summary: analysis.summary,
+      profile_sync: profileSync,
       autopilot,
       counts: {
         facts: analysis.facts.length,
         materials: analysis.requiredApplications.length,
         devices: analysis.installations.length,
         boq_items: analysis.boqItems.length,
-        findings: analysis.warnings.length
+        findings: analysis.warnings.length,
+        profile_fields: profileSync?.updatedFields.length ?? 0
       }
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
