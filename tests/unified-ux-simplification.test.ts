@@ -43,28 +43,37 @@ describe("unified operational UX", () => {
     expect(finance).not.toContain("Najwięksi dostawcy");
   });
 
-  it("uses six top-level investment navigation concepts without removing detail routes", () => {
+  it("restores complete investment workflow navigation without removing routes", () => {
     const nav = read("components/projects/project-navigation.tsx");
-    for (const label of ["Pulpit", "Plan", "Realizacja", "Koszty", "Dokumenty", "Więcej"]) expect(nav).toContain(label);
-    for (const route of ["/cost-estimate", "/schedule", "/site", "/progress", "/requests", "/protocols", "/brain", "/team", "/warehouse", "/control", "/reports", "/closeout", "/outputs"]) expect(nav).toContain(route);
+    for (const label of ["Pulpit", "Projekt", "Plan", "Realizacja", "Zasoby", "Kontrola", "Zamknięcie"]) expect(nav).toContain(label);
+    for (const route of ["/data", "/documentation", "/brain", "/cost-estimate", "/schedule", "/site", "/progress", "/requests", "/protocols", "/team", "/warehouse", "/finance", "/control", "/reports", "/closeout", "/outputs"]) expect(nav).toContain(route);
+    expect(nav).toContain("project-navigation--v5");
+    expect(nav).not.toContain("ProjectIntake");
   });
 
-  it("keeps project identity data while moving back navigation into the compact header", () => {
+  it("keeps project identity and restores Wrzutnia to the investment header", () => {
     const layout = read("app/workspace/projects/[projectId]/layout.tsx");
     expect(layout).toContain("pw-project-header--compact");
+    expect(layout).toContain("pw-project-header--with-intake");
     expect(layout).toContain("pw-project-header__back");
+    expect(layout).toContain("pw-project-header__intake");
+    expect(layout).toContain("<ProjectIntake projectId={project.id} />");
     expect(layout).toContain("Numer kontraktu:");
     expect(layout).toContain("investorName");
     expect(layout).toContain("location");
   });
 
-  it("turns the investment dashboard into a decision surface", () => {
+  it("keeps the investment dashboard information-rich and operational", () => {
     const dashboard = read("app/workspace/projects/[projectId]/page.tsx");
-    expect(dashboard).toContain("pw-decision-grid");
-    expect(dashboard).toContain("Rzeczy wymagające reakcji");
+    expect(dashboard).toContain("pw-dashboard--combined");
+    expect(dashboard).toContain("pw-time-card__timeline");
+    expect(dashboard).toContain("Finanse inwestycji");
+    expect(dashboard).toContain("Gotowość do odbioru");
+    expect(dashboard).toContain("Postęp robót");
+    expect(dashboard).toContain("Alerty OctopusAI");
     expect(dashboard).toContain("Kamienie milowe");
-    expect(dashboard).toContain("Więcej danych inwestycji");
-    expect(dashboard).not.toContain("pw-time-card__timeline");
+    expect(dashboard).toContain("Ryzyka zmian");
+    expect(dashboard).not.toContain("pw-dashboard-more");
   });
 
   it("makes Documents library-first and OctopusAI task-first", () => {
@@ -81,13 +90,17 @@ describe("unified operational UX", () => {
     expect(ai).not.toContain("ai-center-flow");
   });
 
-  it("loads the unified UX stylesheet globally and keeps responsive rules", () => {
-    const layout = read("app/layout.tsx");
+  it("loads the unified UX stylesheet globally and investment repair locally", () => {
+    const rootLayout = read("app/layout.tsx");
+    const projectLayout = read("app/workspace/projects/[projectId]/layout.tsx");
     const css = read("app/unified-ux-simplification.css");
-    expect(layout).toContain('import "./unified-ux-simplification.css"');
+    const repair = read("app/investment-ux-repair.css");
+    expect(rootLayout).toContain('import "./unified-ux-simplification.css"');
+    expect(projectLayout).toContain('import "../../../investment-ux-repair.css"');
     expect(css).toContain(".ops-action-bar");
-    expect(css).toContain(".pw-decision-grid");
     expect(css).toContain(".co-ai-tabs");
-    expect(css).toContain("@media (max-width: 560px)");
+    expect(repair).toContain(".project-navigation--v5");
+    expect(repair).toContain(".pw-project-header__intake");
+    expect(repair).toContain("@media (max-width: 760px)");
   });
 });
