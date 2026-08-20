@@ -40,7 +40,7 @@ export default function FinanceOperations({ workspaceId, data, canWrite, canAppr
   ]}>
     <section className="ops-split-lists ops-secondary-section">
       <article className="ops-panel"><h3>Kontrola obiegu</h3><p><strong>{money(summary.unallocatedNet)}</strong> kosztu netto wymaga jeszcze przypisania.</p><p>{str(summary.matchReview,"0")} pozycji wymaga kontroli zgodności zakupu · {str(summary.accountingPending,"0")} dekretów czeka w księgowości.</p><p>{lines.length} pozycji · {payments.length} płatności · {allocations.length} alokacji dla bieżącej strony.</p></article>
-      {commitments.length ? <article className="ops-panel"><h3>Najbliższe zobowiązania</h3>{commitments.slice(0,5).map(row=><p key={String(row.id)}><strong>{str(row.description)}</strong><br/>{money(row.amount)} · {str(row.expected_date,"bez terminu")}</p>)}</article> : <article className="ops-panel"><h3>Najbliższe zobowiązania</h3><p>Brak dodatkowych zobowiązań poza fakturami.</p></article>}
     </section>
+    {commitments.length ? <section className="ops-panel ops-panel--compact-list"><h3>Najbliższe zobowiązania</h3>{commitments.slice(0,5).map(row=><p key={String(row.id)}><strong>{str(row.description)}</strong> · {money(row.amount)} · {str(row.expected_date,"bez terminu")}</p>)}</section> : null}
   </CompanyModuleShell>;
 }
