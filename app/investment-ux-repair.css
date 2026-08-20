@@ -1,12 +1,40 @@
 /* Investment UX regression repair — 2026-08-20
    Keeps Wrzutnia outside navigation, restores full investment navigation and the richer dashboard. */
 
-.pw-project-header--with-intake {
-  grid-template-columns: minmax(230px,.8fr) minmax(340px,1.35fr) minmax(310px,1fr) auto !important;
+/*
+   The global compact UX layer still defines the project header as a 3-column grid.
+   This selector is deliberately more specific so the fourth Wrzutnia slot can never
+   auto-flow into a second row under the project name.
+*/
+.pw-project-header.pw-project-header--contract.pw-project-header--compact.pw-project-header--with-intake {
+  grid-template-columns: minmax(250px,.75fr) minmax(360px,1.35fr) minmax(310px,.95fr) 150px !important;
   min-height: 78px !important;
   overflow: visible !important;
   gap: 16px !important;
   padding: 11px 14px !important;
+}
+
+.pw-project-header--with-intake > .pw-project-header__identity {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  min-width: 0;
+}
+
+.pw-project-header--with-intake > .pw-project-contract {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  min-width: 0;
+}
+
+.pw-project-header--with-intake > .pw-project-meta--header {
+  grid-column: 3 !important;
+  grid-row: 1 !important;
+  min-width: 0;
+}
+
+.pw-project-header--with-intake > .pw-project-header__intake {
+  grid-column: 4 !important;
+  grid-row: 1 !important;
 }
 
 .pw-project-header--with-intake .pw-project-header__identity h1 {
@@ -30,9 +58,11 @@
 .pw-project-header__intake {
   position: relative;
   z-index: 180;
+  width: 150px;
+  min-width: 150px;
   align-self: center;
   justify-self: end;
-  padding-left: 8px;
+  padding-left: 0;
 }
 
 .pw-project-header__intake .pw-intake {
@@ -40,8 +70,10 @@
 }
 
 .pw-project-header__intake .pw-intake-trigger--octopus {
+  width: 100%;
   min-width: 136px;
   min-height: 46px;
+  justify-content: center;
 }
 
 .pw-project-header__intake .pw-intake-popover {
@@ -137,13 +169,18 @@
 }
 
 @media (max-width: 1260px) {
-  .pw-project-header--with-intake {
-    grid-template-columns: minmax(220px,.85fr) minmax(300px,1.3fr) minmax(260px,1fr) auto !important;
+  .pw-project-header.pw-project-header--contract.pw-project-header--compact.pw-project-header--with-intake {
+    grid-template-columns: minmax(220px,.85fr) minmax(300px,1.3fr) minmax(260px,1fr) 142px !important;
     gap: 10px !important;
   }
 
   .pw-project-header--with-intake .pw-project-meta--header {
     grid-template-columns: 1fr !important;
+  }
+
+  .pw-project-header__intake {
+    width: 142px;
+    min-width: 142px;
   }
 
   .project-navigation--v5 .project-navigation__groups--rich {
@@ -152,22 +189,33 @@
 }
 
 @media (max-width: 900px) {
-  .pw-project-header--with-intake {
+  .pw-project-header.pw-project-header--contract.pw-project-header--compact.pw-project-header--with-intake {
     position: relative !important;
     grid-template-columns: 1fr auto !important;
     align-items: center !important;
   }
 
-  .pw-project-header--with-intake .pw-project-header__identity,
-  .pw-project-header--with-intake .pw-project-contract,
-  .pw-project-header--with-intake .pw-project-meta--header {
-    grid-column: 1;
+  .pw-project-header--with-intake > .pw-project-header__identity {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
     text-align: left;
   }
 
-  .pw-project-header--with-intake .pw-project-header__intake {
-    grid-column: 2;
-    grid-row: 1 / span 3;
+  .pw-project-header--with-intake > .pw-project-contract {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+    text-align: left;
+  }
+
+  .pw-project-header--with-intake > .pw-project-meta--header {
+    grid-column: 1 !important;
+    grid-row: 3 !important;
+    text-align: left;
+  }
+
+  .pw-project-header--with-intake > .pw-project-header__intake {
+    grid-column: 2 !important;
+    grid-row: 1 / span 3 !important;
   }
 
   .project-navigation--v5 .project-navigation__groups--rich {
@@ -176,14 +224,31 @@
 }
 
 @media (max-width: 760px) {
-  .pw-project-header--with-intake {
+  .pw-project-header.pw-project-header--contract.pw-project-header--compact.pw-project-header--with-intake {
     grid-template-columns: 1fr !important;
     padding: 12px !important;
   }
 
-  .pw-project-header--with-intake .pw-project-header__intake {
-    grid-column: 1;
-    grid-row: auto;
+  .pw-project-header--with-intake > .pw-project-header__identity {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+  }
+
+  .pw-project-header--with-intake > .pw-project-contract {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+  }
+
+  .pw-project-header--with-intake > .pw-project-meta--header {
+    grid-column: 1 !important;
+    grid-row: 3 !important;
+  }
+
+  .pw-project-header--with-intake > .pw-project-header__intake {
+    grid-column: 1 !important;
+    grid-row: 4 !important;
+    width: 100%;
+    min-width: 0;
     justify-self: stretch;
   }
 
