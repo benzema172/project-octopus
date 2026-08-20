@@ -4,6 +4,7 @@ import { ArrowLeft, Building2, MapPin } from "lucide-react";
 import { notFound } from "next/navigation";
 import { CompanyShell } from "@/components/layout/company-shell";
 import { ProjectAutopilotDock } from "@/components/projects/project-autopilot-dock";
+import { ProjectIntakeSlot } from "@/components/projects/project-intake-slot";
 import { ProjectNavigation } from "@/components/projects/project-navigation";
 import { requireCurrentUser } from "@/lib/auth";
 import { getReliableInvestmentAutopilotSummary } from "@/lib/data/investment-autopilot-summary";
@@ -16,6 +17,7 @@ import "../../../project-intake.css";
 import "../../../project-navigation-refinement.css";
 import "../../../project-modules-operational.css";
 import "../../../layout-density-project-audit.css";
+import "../../../investment-ux-repair.css";
 
 export const dynamic = "force-dynamic";
 type ProjectLayoutProps = { children: React.ReactNode; params: Promise<{ projectId: string }> };
@@ -63,7 +65,7 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
   return (
     <CompanyShell workspaceId={workspace.id} companyName={workspace.name} userEmail={user.email ?? "Project Octopus"} allowedDomains={allowedCompanyDomains}>
       <main className="workspace-page project-workspace co-project-workspace project-workspace-v2">
-        <header className="pw-project-header pw-project-header--contract pw-project-header--compact">
+        <header className="pw-project-header pw-project-header--contract pw-project-header--compact pw-project-header--with-intake">
           <div className="pw-project-header__identity">
             <Link href={`/workspace/companies/${workspace.id}/investments`} className="pw-project-header__back" aria-label="Wszystkie inwestycje" title="Wszystkie inwestycje"><ArrowLeft size={15} aria-hidden="true" /></Link>
             <div><span className="pw-project-status">{STATUS_LABELS[profile.status] ?? profile.status}</span><h1>„{shortName}”</h1></div>
@@ -78,9 +80,11 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
             <div><Building2 size={16} aria-hidden="true" /><span><small>Inwestor</small><strong title={investorName}>{investorName}</strong></span></div>
             <div><MapPin size={16} aria-hidden="true" /><span><small>Lokalizacja</small><strong title={location}>{location}</strong></span></div>
           </div>
+
+          {canUpload ? <div className="pw-project-header__intake"><ProjectIntakeSlot projectId={project.id} /></div> : null}
         </header>
 
-        <ProjectNavigation projectId={project.id} allowedDomains={allowedProjectDomains} canUpload={canUpload} />
+        <ProjectNavigation projectId={project.id} allowedDomains={allowedProjectDomains} />
         {allowedProjectDomains.includes("investments") ? <Suspense fallback={null}><AsyncProjectAutopilotDock projectId={project.id} canRun={canUpload} /></Suspense> : null}
         {children}
       </main>

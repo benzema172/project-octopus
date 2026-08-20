@@ -3,6 +3,7 @@ import { AppReleaseBadge } from "@/components/app-release-badge";
 import "./globals.css";
 import "./release-badge.css";
 import "./unified-ux-simplification.css";
+import "./unified-ux-finalization.css";
 
 export const metadata: Metadata = {
   title: "Project Octopus",

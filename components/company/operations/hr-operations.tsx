@@ -13,6 +13,7 @@ export default function HrOperations({ workspaceId,data,canWrite,canApprove,path
   const employmentByEmployee=new Map<string,Row>(); employments.forEach(row=>{const id=String(row.employee_id);if(!employmentByEmployee.has(id))employmentByEmployee.set(id,row);});
   const pendingLeaves=leaves.filter(row=>["pending","submitted","review"].includes(String(row.status))).map(row=>({...row,name:`${names.get(String(row.employee_id))??"Pracownik"} · ${str(row.date_from)}–${str(row.date_to)}`})) as Array<Row & {name:string}>;
   const pendingTimesheets=timesheets.filter(row=>["draft","submitted","pending"].includes(String(row.status))).map(row=>({...row,name:`${names.get(String(row.employee_id))??"Pracownik"} · ${str(row.work_date)} · ${num(row.hours)} h`})) as Array<Row & {name:string}>;
+  const pendingDecisions=Number(summary.pendingLeaves??0)+Number(summary.pendingTimesheets??0);
   const forms:FormSpec[]=[
     {title:"Dodaj pracownika",entity:"employee",success:"Pracownik i zatrudnienie zostały zapisane.",wide:true,fields:[{name:"firstName",label:"Imię",required:true},{name:"lastName",label:"Nazwisko",required:true},{name:"employeeNumber",label:"Numer pracownika"},{name:"email",label:"E-mail",type:"email"},{name:"phone",label:"Telefon"},{name:"employmentType",label:"Forma zatrudnienia",type:"select",options:[["employment_contract","Umowa o pracę"],["contract","Umowa cywilna"],["b2b","B2B"]]},{name:"position",label:"Stanowisko"},{name:"hiredAt",label:"Data zatrudnienia",type:"date"},{name:"monthlyCost",label:"Koszt miesięczny",type:"number"},{name:"hourlyCost",label:"Koszt godzinowy",type:"number"}]},
     {title:"Dodaj uprawnienie",entity:"qualification",success:"Uprawnienie zostało zapisane.",fields:[{name:"employeeId",label:"Pracownik z tej strony",rows:employeeOptions,required:true},{name:"qualificationType",label:"Rodzaj",required:true,placeholder:"SEP, UDT, F-gazy"},{name:"number",label:"Numer"},{name:"validUntil",label:"Ważne do",type:"date"}]},
@@ -25,24 +26,48 @@ export default function HrOperations({ workspaceId,data,canWrite,canApprove,path
   ];
   const metrics=[
     {label:"Pracownicy aktywni",value:str(summary.activeEmployees,"0"),caption:`${str(summary.records,"0")} osób w kartotece`},
+    {label:"Terminy do 30 dni",value:str(summary.expiring30,"0"),caption:`${str(summary.expired,"0")} już wygasłych`},
+    {label:"Do zatwierdzenia",value:String(pendingDecisions),caption:`${str(summary.pendingLeaves,"0")} urlopów · ${str(summary.pendingTimesheets,"0")} kart czasu`},
     {label:"Godziny",value:`${num(summary.hours)} h`,caption:"Łączny zarejestrowany czas pracy"},
     {label:"Koszt pracy",value:money(summary.approvedLaborCost),caption:"Zatwierdzone godziny × koszt godzinowy"},
-    {label:"Terminy do 30 dni",value:str(summary.expiring30,"0"),caption:`${str(summary.expired,"0")} już wygasłych`},
     {label:"Urlopy oczekujące",value:str(summary.pendingLeaves,"0"),caption:canApprove?"Możesz podjąć decyzję":"Wymagają zatwierdzenia"},
     {label:"Czas do zatwierdzenia",value:str(summary.pendingTimesheets,"0"),caption:"Wpływa na koszt inwestycji po akceptacji"},
     {label:"Wydany sprzęt",value:str(summary.issuedAssets,"0"),caption:"Aktywnie przypisane zasoby"}
   ];
-  return <CompanyModuleShell workspaceId={workspaceId} data={data} canWrite={canWrite} pathname={pathname} query={query} metrics={metrics} forms={forms} rows={employees} tableTitle="Pracownicy" emptyLabel="Brak pracowników dla bieżącego filtra." columns={[
-    {label:"Pracownik",value:row=><strong>{names.get(String(row.id))}</strong>},
-    {label:"Numer",value:row=>str(row.employee_number)},
-    {label:"Stanowisko",value:row=>str(employmentByEmployee.get(String(row.id))?.position,"Bez stanowiska")},
-    {label:"Kontakt",value:row=><span>{str(row.email)}<br/>{str(row.phone)}</span>},
-    {label:"Od",value:row=>str(employmentByEmployee.get(String(row.id))?.valid_from ?? row.hired_at)},
-    {label:"Status",value:row=><span className="status-chip">{str(row.status)}</span>}
-  ]}>
-    <section className="ops-split-lists">
-      <article className="ops-panel"><h3>Kontrola zgodności HR</h3><p><strong>{str(summary.expired,"0")}</strong> wygasłych badań/uprawnień · <strong>{str(summary.expiring30,"0")}</strong> terminów w 30 dni.</p><p>{str(summary.pendingTimesheets,"0")} kart czasu i {str(summary.pendingLeaves,"0")} urlopów oczekuje na decyzję.</p><p>Zatwierdzony czas automatycznie zasila rzeczywisty koszt robocizny inwestycji.</p></article>
-      <article className="ops-panel"><h3>Oczekujące decyzje</h3>{pendingLeaves.slice(0,4).map(row=><p key={`l-${String(row.id)}`}><strong>{str(row.name)}</strong><br/>Urlop · {str(row.status)}</p>)}{pendingTimesheets.slice(0,4).map(row=><p key={`t-${String(row.id)}`}><strong>{str(row.name)}</strong><br/>Czas pracy · {str(row.status)}</p>)}{!pendingLeaves.length&&!pendingTimesheets.length?<p>Brak zaległych decyzji kadrowych.</p>:null}</article>
+  return <CompanyModuleShell
+    workspaceId={workspaceId}
+    data={data}
+    canWrite={canWrite}
+    pathname={pathname}
+    query={query}
+    metrics={metrics}
+    forms={forms}
+    rows={employees}
+    tableTitle="Pracownicy"
+    emptyLabel="Brak pracowników dla bieżącego filtra."
+    detailTitle={row=>names.get(String(row.id)) ?? "Pracownik"}
+    detailContent={row=>{
+      const employment=employmentByEmployee.get(String(row.id));
+      const employeeLeaves=leaves.filter(item=>String(item.employee_id)===String(row.id)).slice(0,4);
+      const employeeTimesheets=timesheets.filter(item=>String(item.employee_id)===String(row.id)).slice(0,5);
+      return <>
+        <section><h3>Zatrudnienie</h3><p><strong>{str(employment?.position,"Bez stanowiska")}</strong><br/>{str(employment?.employment_type,"Forma nieuzupełniona")} · od {str(employment?.valid_from ?? row.hired_at)}</p><p>Koszt miesięczny: <strong>{money(employment?.monthly_cost)}</strong> · godzinowy: <strong>{money(employment?.hourly_cost)}</strong></p></section>
+        <section><h3>Ostatnie urlopy</h3>{employeeLeaves.map(item=><p key={String(item.id)}><strong>{str(item.date_from)}–{str(item.date_to)}</strong> · {str(item.leave_type)} · {str(item.status)}</p>)}{!employeeLeaves.length?<p>Brak wpisów urlopowych.</p>:null}</section>
+        <section><h3>Ostatni czas pracy</h3>{employeeTimesheets.map(item=><p key={String(item.id)}><strong>{str(item.work_date)}</strong> · {num(item.hours)} h · {str(item.status)}</p>)}{!employeeTimesheets.length?<p>Brak zarejestrowanego czasu.</p>:null}</section>
+      </>;
+    }}
+    columns={[
+      {label:"Pracownik",value:row=><strong>{names.get(String(row.id))}</strong>},
+      {label:"Numer",value:row=>str(row.employee_number)},
+      {label:"Stanowisko",value:row=>str(employmentByEmployee.get(String(row.id))?.position,"Bez stanowiska")},
+      {label:"Kontakt",value:row=><span>{str(row.email)}<br/>{str(row.phone)}</span>},
+      {label:"Od",value:row=>str(employmentByEmployee.get(String(row.id))?.valid_from ?? row.hired_at)},
+      {label:"Status",value:row=><span className="status-chip">{str(row.status)}</span>}
+    ]}
+  >
+    <section className="ops-split-lists ops-secondary-section">
+      <article className="ops-panel"><h3>Kontrola zgodności HR</h3><p><strong>{str(summary.expired,"0")}</strong> wygasłych badań/uprawnień · <strong>{str(summary.expiring30,"0")}</strong> terminów w 30 dni.</p><p>{str(summary.pendingTimesheets,"0")} kart czasu i {str(summary.pendingLeaves,"0")} urlopów oczekuje na decyzję.</p></article>
+      {pendingDecisions ? <article className="ops-panel"><h3>Oczekujące decyzje</h3>{pendingLeaves.slice(0,4).map(row=><p key={`l-${String(row.id)}`}><strong>{str(row.name)}</strong><br/>Urlop · {str(row.status)}</p>)}{pendingTimesheets.slice(0,4).map(row=><p key={`t-${String(row.id)}`}><strong>{str(row.name)}</strong><br/>Czas pracy · {str(row.status)}</p>)}</article> : <article className="ops-panel"><h3>Oczekujące decyzje</h3><p>Brak zaległych decyzji kadrowych.</p></article>}
     </section>
   </CompanyModuleShell>;
 }
