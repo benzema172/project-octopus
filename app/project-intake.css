@@ -63,20 +63,32 @@
 
 .pw-intake-trigger:hover { filter: brightness(1.03); transform: translateY(-1px); }
 
+/*
+  The intake panel is portalled to <body> and positioned from the real bottom edge
+  of the investment navigation. This prevents it from ever opening underneath or
+  across the Project / Plan / Realizacja navigation row.
+*/
 .pw-intake-popover {
-  position: absolute;
-  z-index: 80;
-  top: calc(100% + 10px);
-  right: 0;
-  width: min(760px, calc(100vw - 320px));
-  max-height: min(72vh, 720px);
+  position: fixed;
+  z-index: 1200;
   overflow: auto;
+  overscroll-behavior: contain;
   border: 1px solid #e7dfec;
   border-radius: 22px;
-  background: rgba(255,255,255,.97);
+  background: rgba(255,255,255,.985);
   padding: 18px;
-  box-shadow: 0 28px 80px rgba(43,31,61,.18);
-  backdrop-filter: blur(20px);
+  box-shadow: 0 28px 80px rgba(43,31,61,.19), 0 2px 12px rgba(43,31,61,.06);
+  backdrop-filter: blur(22px);
+  animation: pw-intake-enter .16s ease-out both;
+}
+
+.pw-intake-popover--portal {
+  isolation: isolate;
+}
+
+@keyframes pw-intake-enter {
+  from { opacity: 0; transform: translateY(-6px) scale(.992); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .pw-intake-head {
@@ -256,7 +268,6 @@
 .pw-intake-actions > button:disabled { opacity: .5; cursor: not-allowed; }
 
 @media (max-width: 1050px) {
-  .pw-intake-popover { width: min(700px, calc(100vw - 80px)); }
   .pw-intake-row { grid-template-columns: auto minmax(0,1fr); }
   .pw-intake-destination { grid-column: 2; }
   .pw-intake-remove,
@@ -265,7 +276,11 @@
 
 @media (max-width: 680px) {
   .pw-intake-trigger { padding: 9px 10px; }
-  .pw-intake-popover { position: fixed; top: 90px; right: 12px; left: 12px; width: auto; max-height: calc(100vh - 110px); }
+  .pw-intake-popover { border-radius: 18px; padding: 14px; }
   .pw-intake-actions { align-items: stretch; flex-direction: column; }
   .pw-intake-actions > button { justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pw-intake-popover { animation: none; }
 }
