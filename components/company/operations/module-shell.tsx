@@ -48,10 +48,16 @@ function optionLabel(row: Row, key = "name") {
   return String(row[key] ?? row.name ?? row.title ?? row.registration_number ?? row.employee_number ?? row.id ?? "—");
 }
 
-function RecordForm({ form, pending, onSubmit }: { form: FormSpec; pending: boolean; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function RecordForm({ form, pending, open, onToggle, onSubmit }: { form: FormSpec; pending: boolean; open: boolean; onToggle: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   return (
-    <details className={`ops-form-card${form.wide ? " ops-form-card--wide" : ""}`}>
-      <summary>
+    <details className={`ops-form-card${form.wide ? " ops-form-card--wide" : ""}`} open={open}>
+      <summary
+        aria-expanded={open}
+        onClick={(event) => {
+          event.preventDefault();
+          onToggle();
+        }}
+      >
         <span className="ops-form-card__summary-icon"><Plus size={15} aria-hidden="true" /></span>
         <span>
           <strong>{form.title}</strong>
@@ -97,6 +103,7 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [openFormKey, setOpenFormKey] = useState<string | null>(null);
   const page = data.page ?? { page: 1, pageSize: Math.max(rows.length, 1), total: rows.length };
 
   const submit = (entity: string, success: string) => (event: FormEvent<HTMLFormElement>) => {
@@ -171,7 +178,19 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
             <span>{forms.length} {forms.length === 1 ? "formularz" : "formularze"}</span>
           </div>
           <div className="ops-form-grid">
-            {forms.map((form) => <RecordForm key={`${form.entity}-${form.title}`} form={form} pending={pending} onSubmit={submit(form.entity, form.success)} />)}
+            {forms.map((form) => {
+              const formKey = `${form.entity}-${form.title}`;
+              return (
+                <RecordForm
+                  key={formKey}
+                  form={form}
+                  pending={pending}
+                  open={openFormKey === formKey}
+                  onToggle={() => setOpenFormKey((current) => current === formKey ? null : formKey)}
+                  onSubmit={submit(form.entity, form.success)}
+                />
+              );
+            })}
           </div>
         </section>
       ) : null}
