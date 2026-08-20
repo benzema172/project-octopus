@@ -1,7 +1,8 @@
 /* Project workspace refinement: contract-centered header, two primary cards and uniform vertical rhythm. */
 
 .project-workspace-v2 {
-  gap: 12px !important;
+  gap: 10px !important;
+  row-gap: 10px !important;
 }
 
 .project-navigation--v2 + .project-tab-content {
@@ -131,6 +132,7 @@
 @media (max-width: 860px) {
   .project-workspace-v2 {
     gap: 10px !important;
+    row-gap: 10px !important;
   }
 
   .pw-project-header--contract {
@@ -164,4 +166,23 @@
     grid-template-columns: 1fr;
     gap: 8px !important;
   }
+}
+
+/* Final home-dashboard spacing guard: this file is imported after the dashboard's older
+   combined/compact layers, so it is the last source of truth for visible section spacing. */
+.project-workspace-v2 > .project-tab-content.pw-dashboard--combined {
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 10px !important;
+  row-gap: 10px !important;
+}
+
+.project-workspace-v2 > .project-tab-content.pw-dashboard--combined > :is(
+  .pw-time-card,
+  .pw-finance-card,
+  .pw-ops-grid,
+  .pw-ops-grid--primary,
+  .pw-ops-grid--two
+) {
+  margin-block: 0 !important;
 }
