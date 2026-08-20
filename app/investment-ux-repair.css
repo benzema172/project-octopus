@@ -1,0 +1,208 @@
+/* Investment UX regression repair — 2026-08-20
+   Keeps Wrzutnia outside navigation, restores full investment navigation and the richer dashboard. */
+
+.pw-project-header--with-intake {
+  grid-template-columns: minmax(230px,.8fr) minmax(340px,1.35fr) minmax(310px,1fr) auto !important;
+  min-height: 78px !important;
+  overflow: visible !important;
+  gap: 16px !important;
+  padding: 11px 14px !important;
+}
+
+.pw-project-header--with-intake .pw-project-header__identity h1 {
+  font-size: clamp(24px,2vw,34px) !important;
+}
+
+.pw-project-header--with-intake .pw-project-contract strong {
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.pw-project-header--with-intake .pw-project-contract span {
+  margin-top: 4px;
+  font-size: 10px;
+}
+
+.pw-project-header--with-intake .pw-project-meta--header {
+  grid-template-columns: repeat(2,minmax(125px,1fr)) !important;
+}
+
+.pw-project-header__intake {
+  position: relative;
+  z-index: 180;
+  align-self: center;
+  justify-self: end;
+  padding-left: 8px;
+}
+
+.pw-project-header__intake .pw-intake {
+  margin: 0 !important;
+}
+
+.pw-project-header__intake .pw-intake-trigger--octopus {
+  min-width: 136px;
+  min-height: 46px;
+}
+
+.pw-project-header__intake .pw-intake-popover {
+  z-index: 420;
+  right: 0;
+  left: auto;
+}
+
+.project-navigation--v5 {
+  position: relative;
+  z-index: 80;
+  display: block !important;
+  overflow: visible !important;
+  border: 1px solid #e8e1ed;
+  border-radius: 18px;
+  background: rgba(255,255,255,.94);
+  padding: 7px;
+  box-shadow: 0 11px 30px rgba(52,40,70,.045);
+}
+
+.project-navigation--v5 .project-navigation__groups--rich {
+  display: grid !important;
+  grid-template-columns: repeat(7,minmax(0,1fr)) !important;
+  align-items: stretch;
+  gap: 5px !important;
+  min-width: 0;
+  overflow: visible !important;
+}
+
+.project-navigation--v5 .pw-nav-dashboard,
+.project-navigation--v5 .pw-nav-group__trigger {
+  min-height: 48px !important;
+  padding: 8px 11px !important;
+  justify-content: center;
+  border-radius: 12px;
+}
+
+.project-navigation--v5 .pw-nav-dashboard {
+  font-size: 11.5px !important;
+  font-weight: 850;
+}
+
+.project-navigation--v5 .pw-nav-group__label strong {
+  font-size: 11.5px !important;
+  font-weight: 850;
+}
+
+.project-navigation--v5 .pw-nav-group__label small {
+  max-width: 125px !important;
+  font-size: 9px !important;
+  line-height: 1.2;
+}
+
+.project-navigation--v5 .pw-nav-group__menu {
+  z-index: 360 !important;
+  min-width: 238px;
+  padding: 7px;
+}
+
+.project-navigation--v5 .pw-nav-group__menu a {
+  min-height: 40px;
+  font-size: 11px !important;
+  font-weight: 760;
+}
+
+.project-navigation--v5 .pw-nav-group:nth-last-child(-n+2) .pw-nav-group__menu {
+  right: 0;
+  left: auto;
+}
+
+.project-navigation--v5 .pw-nav-group__menu[aria-hidden="true"] {
+  pointer-events: none;
+}
+
+.project-navigation--v5 .pw-nav-group.is-open .pw-nav-group__menu {
+  pointer-events: auto;
+}
+
+/* Re-enable the information-rich investment overview. */
+.pw-dashboard--combined {
+  gap: 14px !important;
+}
+
+.pw-dashboard--combined .pw-time-card,
+.pw-dashboard--combined .pw-finance-card,
+.pw-dashboard--combined .pw-ops-card {
+  box-shadow: 0 10px 28px rgba(52,40,70,.04);
+}
+
+.pw-dashboard--combined .pw-time-card,
+.pw-dashboard--combined .pw-finance-card {
+  border-radius: 18px;
+}
+
+@media (max-width: 1260px) {
+  .pw-project-header--with-intake {
+    grid-template-columns: minmax(220px,.85fr) minmax(300px,1.3fr) minmax(260px,1fr) auto !important;
+    gap: 10px !important;
+  }
+
+  .pw-project-header--with-intake .pw-project-meta--header {
+    grid-template-columns: 1fr !important;
+  }
+
+  .project-navigation--v5 .project-navigation__groups--rich {
+    grid-template-columns: repeat(4,minmax(0,1fr)) !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .pw-project-header--with-intake {
+    position: relative !important;
+    grid-template-columns: 1fr auto !important;
+    align-items: center !important;
+  }
+
+  .pw-project-header--with-intake .pw-project-header__identity,
+  .pw-project-header--with-intake .pw-project-contract,
+  .pw-project-header--with-intake .pw-project-meta--header {
+    grid-column: 1;
+    text-align: left;
+  }
+
+  .pw-project-header--with-intake .pw-project-header__intake {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+  }
+
+  .project-navigation--v5 .project-navigation__groups--rich {
+    grid-template-columns: repeat(3,minmax(0,1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .pw-project-header--with-intake {
+    grid-template-columns: 1fr !important;
+    padding: 12px !important;
+  }
+
+  .pw-project-header--with-intake .pw-project-header__intake {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: stretch;
+  }
+
+  .pw-project-header__intake .pw-intake-trigger--octopus {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .project-navigation--v5 .project-navigation__desktop {
+    display: none !important;
+  }
+
+  .project-navigation--v5 .pw-mobile-nav {
+    display: block !important;
+  }
+}
+
+@media (min-width: 761px) {
+  .project-navigation--v5 .pw-mobile-nav {
+    display: none !important;
+  }
+}
