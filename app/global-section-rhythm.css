@@ -1,0 +1,92 @@
+/* Project Octopus — one vertical rhythm for the authenticated application.
+   Keep internal card spacing intact; normalize only the gaps between major page sections. */
+
+.octopus-app-light {
+  --app-section-gap: 10px;
+}
+
+/* Company shell can occasionally render more than one top-level page block (e.g. Finance + flow). */
+.octopus-app-light .co-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  row-gap: var(--app-section-gap) !important;
+}
+
+.octopus-app-light .co-main > * {
+  min-width: 0;
+  margin-block: 0 !important;
+}
+
+/* All primary authenticated page stacks use the same 10px vertical rhythm. */
+.octopus-app-light .co-main :is(.co-page, .workspace-page) {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  row-gap: var(--app-section-gap) !important;
+}
+
+.octopus-app-light .co-main :is(.co-page, .workspace-page) > * {
+  min-width: 0;
+  margin-block: 0 !important;
+}
+
+/* Older compact layers add their own top/bottom margins to these direct page sections.
+   The parent row-gap is now the single source of truth. */
+.octopus-app-light .co-main :is(
+  .co-page-heading--compact,
+  .co-section--compact,
+  .co-metric-grid--decision,
+  .co-ai-tabs,
+  .co-upload-disclosure,
+  .co-ai-disclosure,
+  .project-navigation--v4,
+  .project-navigation--v5
+) {
+  margin-block: 0 !important;
+}
+
+/* Project/investment and operational screens contain nested vertical stacks.
+   Normalize only row spacing so horizontal card/grid spacing remains unchanged. */
+.octopus-app-light .co-main :is(
+  .ops-workspace,
+  .ops-workspace--paged,
+  .pw-dashboard,
+  .pw-dashboard--decision,
+  .pw-dashboard--combined,
+  .pw-module-page,
+  .pw-module-page--operational,
+  .project-command-center,
+  .reconciliation-graph,
+  .brain-panel--workspace
+) {
+  row-gap: var(--app-section-gap) !important;
+}
+
+.octopus-app-light .co-main :is(
+  .ops-workspace,
+  .ops-workspace--paged,
+  .pw-dashboard,
+  .pw-dashboard--decision,
+  .pw-dashboard--combined,
+  .pw-module-page,
+  .pw-module-page--operational,
+  .project-command-center,
+  .reconciliation-graph,
+  .brain-panel--workspace
+) > * {
+  margin-block: 0 !important;
+}
+
+/* Project workspace top-level children include CSS-module components such as Autopilot Dock.
+   Generic direct-child reset prevents a local margin from doubling the global 10px gap. */
+.octopus-app-light .co-main .project-workspace-v2 > * {
+  margin-block: 0 !important;
+}
+
+/* Keep the rhythm identical on mobile/tablet: no hidden breakpoint-specific expansion. */
+@media (max-width: 760px) {
+  .octopus-app-light {
+    --app-section-gap: 10px;
+  }
+}
