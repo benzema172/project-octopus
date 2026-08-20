@@ -40,8 +40,18 @@ describe("investment UX regression repair", () => {
     expect(intake.match(/pw-octo-tentacle--\d/g)?.length).toBe(8);
     expect(intake).toContain('d="M39 24C39 11 45 5 56 5s17 6 17 19');
     expect(intake).toContain("pw-octo-pupil");
-    expect(css).toContain("stroke-width: 4.6");
-    expect(css).toContain("top: -10px");
+    expect(css).toContain("stroke-width: 5.2");
+  });
+
+  it("seats the octopus on top of the Wrzutnia button and makes tentacle tips move energetically", () => {
+    const css = read("app/project-navigation-refinement.css");
+    expect(css).toContain("top: -32px");
+    expect(css).toContain("left: 50%");
+    expect(css).toContain("width: 142px");
+    expect(css).toContain("transform: translateX(-50%)");
+    expect(css).toContain("transform-origin: 50% 12%");
+    expect(css).toContain("animation: pw-octo-tip-b .68s");
+    expect(css).toContain("animation-duration: .52s");
   });
 
   it("uses seven stable desktop navigation cells and no horizontal overflow", () => {
