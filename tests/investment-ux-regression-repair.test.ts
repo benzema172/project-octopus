@@ -47,26 +47,32 @@ describe("investment UX regression repair", () => {
     expect(css).toContain("z-index: 1200");
   });
 
-  it("uses a dedicated seated octopus silhouette with eight asymmetrical tentacles", () => {
+  it("uses a slimmer seated octopus silhouette with eight asymmetrical tentacles", () => {
     const asset = read("public/octopus-intake-sitting.svg");
     expect(asset.match(/class="tentacle[^\"]*t\d"/g)?.length).toBe(8);
-    expect(asset).toContain("Korpus zachodzi na górną krawędź przycisku");
-    expect(asset).toContain('rx="4.6" ry="6.6" fill="#21152e"');
+    expect(asset).toContain("Smukły korpus kończy się dokładnie na linii siedzenia");
+    expect(asset).toContain('rx="3.2" ry="5.1" fill="#21152e"');
+    expect(asset).toContain("stroke-width:5.4");
+    expect(asset).toContain("stroke-width:6.2");
   });
 
-  it("seats the octopus on the left edge of Wrzutnia and animates the tentacles quickly", () => {
-    const css = read("app/project-navigation-refinement.css");
+  it("seats the octopus on the button edge and keeps WRZUTNIA on one line", () => {
+    const baseCss = read("app/project-navigation-refinement.css");
+    const css = read("app/wrzutnia-mascot-refinement.css");
+    const layout = read("app/workspace/projects/[projectId]/layout.tsx");
     const asset = read("public/octopus-intake-sitting.svg");
-    expect(css).toContain('background: url("/octopus-intake-sitting.svg")');
-    expect(css).toContain("top: -35px");
-    expect(css).toContain("left: -8px");
-    expect(css).toContain("width: 112px");
-    expect(css).toContain("height: 86px");
-    expect(css).toContain(".pw-intake-octopus > svg");
-    expect(css).toContain("display: none !important");
-    expect(asset).toContain("animation:w2 .62s");
-    expect(asset).toContain("transform-origin:50% 8%");
-    expect(asset).toContain("M48 51C45 61 46 71 50 80");
+    expect(baseCss).toContain('background: url("/octopus-intake-sitting.svg")');
+    expect(css).toContain("top: -33px !important");
+    expect(css).toContain("width: 94px !important");
+    expect(css).toContain("height: 74px !important");
+    expect(css).toContain("white-space: nowrap !important");
+    expect(css).toContain("padding: 10px 15px 9px 84px !important");
+    expect(css).toContain("178px !important");
+    expect(layout).toContain('import "../../../wrzutnia-mascot-refinement.css";');
+    expect(layout.indexOf("wrzutnia-mascot-refinement.css")).toBeGreaterThan(layout.indexOf("investment-menu-toggle-fix.css"));
+    expect(asset).toContain("animation:w2 .58s");
+    expect(asset).toContain("transform-origin:50% 10%");
+    expect(asset).toContain("M42 37C40 47 41 56 44 64");
   });
 
   it("uses seven stable desktop navigation cells and no horizontal overflow", () => {
