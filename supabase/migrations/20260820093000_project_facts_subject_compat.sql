@@ -2,7 +2,7 @@ begin;
 
 -- Upgraded production databases still require project_facts.subject. Newer AI
 -- writers persist the semantic label in value_json.label, so derive subject at
--- the database boundary whenever an older NOT NULL schema requires it.
+-- the database boundary only when the legacy column is actually present.
 create or replace function public.ensure_project_fact_subject()
 returns trigger
 language plpgsql
@@ -22,12 +22,20 @@ $$;
 
 revoke all on function public.ensure_project_fact_subject() from public, anon, authenticated;
 
-drop trigger if exists project_facts_subject_compat on public.project_facts;
-create trigger project_facts_subject_compat
-before insert or update of subject, value_json, fact_type
-on public.project_facts
-for each row
-execute function public.ensure_project_fact_subject();
+do $migration$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'project_facts'
+      and column_name = 'subject'
+  ) then
+    execute 'drop trigger if exists project_facts_subject_compat on public.project_facts';
+    execute 'create trigger project_facts_subject_compat before insert or update on public.project_facts for each row execute function public.ensure_project_fact_subject()';
+  end if;
+end
+$migration$;
 
 insert into public.app_schema_versions(version)
 values ('20260820_project_facts_subject_compat')
