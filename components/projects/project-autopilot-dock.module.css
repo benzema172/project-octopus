@@ -1,0 +1,316 @@
+.dock{
+  position:relative;
+  display:grid;
+  grid-template-columns:minmax(300px,1.1fr) minmax(150px,.52fr) minmax(340px,1.05fr) minmax(310px,1fr);
+  align-items:stretch;
+  gap:10px;
+  margin:10px 0 12px;
+  padding:10px;
+  border:1px solid rgba(104,78,137,.15);
+  border-radius:18px;
+  background:linear-gradient(120deg,rgba(255,255,255,.98),rgba(251,249,253,.98));
+  box-shadow:0 8px 24px rgba(45,31,63,.045);
+  overflow:visible;
+}
+
+.dock::before{
+  content:"";
+  position:absolute;
+  inset:0 auto 0 0;
+  width:3px;
+  border-radius:18px 0 0 18px;
+  background:#18a087;
+}
+
+.dockGood::before{background:linear-gradient(180deg,#1bb694,#19a186)}
+.dockWarn::before{background:linear-gradient(180deg,#e0a02c,#c7831e)}
+.dockRisk::before{background:linear-gradient(180deg,#e15a72,#c93e5a)}
+
+.dockOverview,
+.dockHealth,
+.dockSignals,
+.dockNext{
+  min-width:0;
+  border:1px solid rgba(106,82,134,.10);
+  border-radius:14px;
+  background:rgba(255,255,255,.78);
+}
+
+.dockOverview{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:10px;
+  padding:10px 11px 10px 12px;
+}
+
+.dockBrand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+}
+
+.dockBot{
+  display:grid;
+  flex:0 0 auto;
+  place-items:center;
+  width:36px;
+  height:36px;
+  border-radius:12px;
+  color:#7532bd;
+  background:linear-gradient(145deg,rgba(138,43,226,.13),rgba(0,207,194,.13));
+  box-shadow:inset 0 0 0 1px rgba(121,52,190,.05);
+}
+
+.dockBrandText{min-width:0}
+.dockBrandText>small{
+  display:block;
+  margin-bottom:3px;
+  color:#908597;
+  font-size:8px;
+  font-weight:850;
+  letter-spacing:.10em;
+  text-transform:uppercase;
+}
+
+.dockStateLine{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  min-width:0;
+}
+
+.dockStateLine>strong{
+  overflow:hidden;
+  color:#2c2730;
+  font-size:12px;
+  font-weight:850;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.dockState{
+  flex:0 0 auto;
+  padding:3px 7px;
+  border-radius:999px;
+  font-size:8px;
+  font-weight:900;
+  letter-spacing:.03em;
+  text-transform:uppercase;
+}
+
+.dockState[data-state="stable"]{background:#e9f8f3;color:#15846f}
+.dockState[data-state="attention"]{background:#fff4dc;color:#a06b08}
+.dockState[data-state="risk"]{background:#fff0f3;color:#bc4058}
+
+.dockBrandText p{
+  overflow:hidden;
+  margin:4px 0 0;
+  color:#746d79;
+  font-size:9px;
+  line-height:1.25;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.dockCenterLink{
+  display:inline-flex;
+  align-items:center;
+  gap:3px;
+  color:#7030b7;
+  font-size:9px;
+  font-weight:850;
+  text-decoration:none;
+  white-space:nowrap;
+}
+
+.dockHealth{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:9px;
+  padding:8px 10px;
+}
+
+.dockHealthRing{
+  --health:0deg;
+  position:relative;
+  display:grid;
+  flex:0 0 auto;
+  place-items:center;
+  width:50px;
+  height:50px;
+  border-radius:50%;
+  background:conic-gradient(#19a086 0 var(--health),#ede9ef var(--health) 360deg);
+}
+
+.dockHealthRing::after{
+  content:"";
+  position:absolute;
+  inset:5px;
+  border-radius:50%;
+  background:#fff;
+}
+
+.dockHealthRing>span{
+  position:relative;
+  z-index:1;
+  display:flex;
+  align-items:baseline;
+  gap:1px;
+}
+
+.dockHealthRing b{font-size:15px;line-height:1;color:#29232d}
+.dockHealthRing small{font-size:7px;color:#8d8392}
+.dockHealth>div:last-child small,
+.dockHealth>div:last-child strong{display:block}
+.dockHealth>div:last-child small{font-size:8px;color:#918795;white-space:nowrap}
+.dockHealth>div:last-child strong{margin-top:2px;font-size:10px;color:#3a333f;white-space:nowrap}
+
+.dockSignals{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:6px;
+  padding:7px;
+}
+
+.dockSignal{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  min-width:0;
+  min-height:52px;
+  padding:6px 7px;
+  border-radius:10px;
+  background:#faf8fb;
+}
+
+.dockSignal>span{
+  display:grid;
+  flex:0 0 auto;
+  place-items:center;
+  width:27px;
+  height:27px;
+  border-radius:9px;
+  background:#f1edf4;
+  color:#7e7487;
+}
+
+.dockSignal[data-kind="clear"]>span{background:#eaf8f4;color:#188a73}
+.dockSignal[data-kind="attention"]>span{background:#fff3da;color:#a86f09}
+.dockSignal[data-kind="risk"]>span{background:#ffedf1;color:#c4435c}
+.dockSignal[data-kind="ai"]>span{background:#f2ebfb;color:#7834c2}
+
+.dockSignal div{min-width:0}
+.dockSignal b,
+.dockSignal small{display:block}
+.dockSignal b{font-size:15px;line-height:1;color:#2c2730}
+.dockSignal small{
+  overflow:hidden;
+  margin-top:3px;
+  color:#8b8191;
+  font-size:8px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.dockNext{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:9px;
+  padding:8px 9px 8px 10px;
+  background:linear-gradient(120deg,rgba(138,43,226,.045),rgba(0,183,178,.035));
+}
+
+.dockNextIcon{
+  display:grid;
+  place-items:center;
+  width:33px;
+  height:33px;
+  border-radius:11px;
+  color:#7532bd;
+  background:rgba(126,48,193,.09);
+}
+
+.dockNextText{min-width:0}
+.dockNextText small,
+.dockNextText strong,
+.dockNextText span{display:block}
+.dockNextText small{
+  color:#918795;
+  font-size:8px;
+  font-weight:750;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.dockNextText strong{
+  overflow:hidden;
+  margin:3px 0 2px;
+  color:#302a34;
+  font-size:10px;
+  font-weight:850;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.dockNextText span{
+  overflow:hidden;
+  color:#7c7382;
+  font-size:8px;
+  line-height:1.25;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.dockNextAction{
+  display:grid;
+  place-items:center;
+  width:30px;
+  height:30px;
+  border-radius:10px;
+  color:#6f30b6;
+  background:#fff;
+  box-shadow:0 3px 10px rgba(68,43,90,.08);
+  text-decoration:none;
+}
+
+.dockAuto{
+  position:absolute;
+  z-index:2;
+  right:9px;
+  top:-8px;
+  padding:3px 7px;
+  border-radius:999px;
+  background:linear-gradient(100deg,#7d2bc4,#5c50df);
+  color:#fff;
+  font-size:7px;
+  font-weight:950;
+  letter-spacing:.08em;
+  box-shadow:0 4px 10px rgba(97,49,172,.18);
+}
+
+@media(max-width:1260px){
+  .dock{grid-template-columns:minmax(280px,1fr) minmax(145px,.5fr) minmax(300px,1fr)}
+  .dockNext{grid-column:1/-1}
+}
+
+@media(max-width:900px){
+  .dock{grid-template-columns:1fr 1fr}
+  .dockOverview{grid-column:1/-1}
+  .dockSignals{grid-column:1/-1}
+  .dockNext{grid-column:1/-1}
+}
+
+@media(max-width:620px){
+  .dock{grid-template-columns:1fr;padding:8px}
+  .dockOverview,.dockHealth,.dockSignals,.dockNext{grid-column:1}
+  .dockHealth{justify-content:flex-start}
+  .dockSignals{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .dockBrandText p,.dockNextText span{white-space:normal}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .dockNextAction,.dockCenterLink{scroll-behavior:auto}
+}
