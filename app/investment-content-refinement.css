@@ -1,0 +1,417 @@
+/* Investment content refinement — 2026-08-20
+   Project-only readability pass: prevent cramped text, clipping and edge-hugging cards
+   without re-expanding the layout into oversized decorative sections. */
+
+.project-workspace-v2 {
+  --pw-readable-xs: 10px;
+  --pw-readable-sm: 11px;
+  --pw-readable-body: 12.5px;
+  --pw-readable-title: 18px;
+  --pw-card-pad-x: 16px;
+  --pw-card-pad-y: 14px;
+}
+
+/* Every text-bearing child in investment workspace is allowed to shrink/wrap correctly. */
+.project-workspace-v2 :is(
+  article, section, div, span, p, strong, small, label,
+  .section-heading > div,
+  .project-module-heading > div,
+  .project-operation-card__heading > div,
+  .pw-module-section-title > div,
+  .project-live-record > div
+) {
+  min-width: 0;
+}
+
+.project-workspace-v2 :is(h1,h2,h3,h4,strong,p,span,small,label,a,button) {
+  overflow-wrap: anywhere;
+}
+
+/* Section headers: keep kicker/title away from the card edge and give actions breathing room. */
+.project-workspace-v2 .section-band {
+  gap: 14px !important;
+  border: 1px solid rgba(105,83,132,.12);
+  border-radius: 18px;
+  background: rgba(255,255,255,.88);
+  padding: 15px 17px 17px !important;
+  box-shadow: 0 7px 22px rgba(50,34,66,.035);
+}
+
+.project-workspace-v2 .section-heading {
+  display: flex;
+  align-items: center !important;
+  justify-content: space-between;
+  gap: 18px !important;
+  min-height: 44px;
+}
+
+.project-workspace-v2 .section-heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.project-workspace-v2 :is(.eyebrow,.co-kicker) {
+  margin: 0 !important;
+  color: #786d82;
+  font-size: var(--pw-readable-xs) !important;
+  font-weight: 850 !important;
+  line-height: 1.25 !important;
+  letter-spacing: .09em !important;
+  text-transform: uppercase;
+}
+
+.project-workspace-v2 .section-heading h2 {
+  margin: 0 !important;
+  color: #241f29;
+  font-size: var(--pw-readable-title) !important;
+  font-weight: 850;
+  line-height: 1.22 !important;
+  letter-spacing: -.018em;
+  white-space: normal !important;
+}
+
+.project-workspace-v2 .section-heading :is(p,span):not(.eyebrow) {
+  font-size: var(--pw-readable-body) !important;
+  line-height: 1.45 !important;
+}
+
+/* Page/module headings. */
+.project-workspace-v2 .project-module-heading {
+  gap: 22px !important;
+  padding: 16px 18px !important;
+  border-radius: 18px !important;
+}
+
+.project-workspace-v2 .project-module-heading h2 {
+  margin: 3px 0 0 !important;
+  font-size: clamp(20px,1.55vw,25px) !important;
+  line-height: 1.2 !important;
+  letter-spacing: -.025em;
+  white-space: normal !important;
+}
+
+.project-workspace-v2 .project-module-heading p:last-child {
+  margin-top: 7px !important;
+  max-width: 900px !important;
+  font-size: var(--pw-readable-body) !important;
+  line-height: 1.52 !important;
+}
+
+/* Common metric cards: labels should be readable and long values may wrap. */
+.project-workspace-v2 .metric-grid {
+  gap: 10px !important;
+}
+
+.project-workspace-v2 .metric-card {
+  min-height: 92px !important;
+  height: auto !important;
+  gap: 4px !important;
+  padding: 13px 15px !important;
+}
+
+.project-workspace-v2 .metric-card > span:first-child {
+  font-size: var(--pw-readable-xs) !important;
+  font-weight: 850 !important;
+  line-height: 1.3 !important;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+
+.project-workspace-v2 .metric-card strong {
+  max-width: 100%;
+  font-size: clamp(19px,1.45vw,24px) !important;
+  line-height: 1.15 !important;
+  white-space: normal !important;
+}
+
+.project-workspace-v2 .metric-card small {
+  font-size: var(--pw-readable-sm) !important;
+  line-height: 1.4 !important;
+  white-space: normal !important;
+}
+
+/* Operational investment modules were intentionally made too dense in the old audit. */
+.project-workspace-v2 .pw-module-metrics > div {
+  gap: 4px !important;
+  padding: 11px 13px !important;
+}
+.project-workspace-v2 .pw-module-metrics small {
+  font-size: var(--pw-readable-xs) !important;
+  line-height: 1.3 !important;
+}
+.project-workspace-v2 .pw-module-metrics strong {
+  font-size: 19px !important;
+  line-height: 1.15 !important;
+}
+.project-workspace-v2 .pw-module-metrics span {
+  font-size: var(--pw-readable-sm) !important;
+  line-height: 1.35 !important;
+}
+
+.project-workspace-v2 :is(.pw-module-flow,.pw-module-inputs,.pw-module-knowledge) {
+  padding: 14px 15px !important;
+}
+.project-workspace-v2 .pw-module-section-title {
+  align-items: flex-start !important;
+  gap: 11px !important;
+}
+.project-workspace-v2 .pw-module-section-title h3 {
+  font-size: 14px !important;
+  line-height: 1.3 !important;
+}
+.project-workspace-v2 .pw-module-section-title .co-kicker {
+  font-size: var(--pw-readable-xs) !important;
+}
+
+.project-workspace-v2 .pw-module-flow li {
+  min-height: 78px !important;
+  gap: 6px !important;
+  padding: 9px 10px !important;
+}
+.project-workspace-v2 .pw-module-flow li > strong {
+  font-size: var(--pw-readable-sm) !important;
+  line-height: 1.4 !important;
+  white-space: normal !important;
+}
+
+.project-workspace-v2 .pw-module-document-list article {
+  gap: 10px !important;
+  padding: 10px 11px !important;
+}
+.project-workspace-v2 .pw-module-document-list article strong {
+  font-size: var(--pw-readable-sm) !important;
+  line-height: 1.35 !important;
+  white-space: normal !important;
+  text-overflow: clip !important;
+}
+.project-workspace-v2 .pw-module-document-list article small,
+.project-workspace-v2 .pw-module-document-list > p {
+  font-size: var(--pw-readable-xs) !important;
+  line-height: 1.4 !important;
+}
+
+.project-workspace-v2 .pw-module-empty-input {
+  min-height: 96px !important;
+  gap: 7px !important;
+  padding: 14px 16px !important;
+}
+.project-workspace-v2 .pw-module-empty-input strong {
+  font-size: 13px !important;
+  line-height: 1.35 !important;
+}
+.project-workspace-v2 .pw-module-empty-input p {
+  font-size: var(--pw-readable-sm) !important;
+  line-height: 1.5 !important;
+}
+
+.project-workspace-v2 .pw-module-knowledge-list article {
+  gap: 12px !important;
+  padding: 10px 11px !important;
+}
+.project-workspace-v2 .pw-module-knowledge-list strong {
+  font-size: var(--pw-readable-sm) !important;
+  line-height: 1.35 !important;
+}
+.project-workspace-v2 .pw-module-knowledge-list p {
+  font-size: var(--pw-readable-xs) !important;
+  line-height: 1.5 !important;
+}
+.project-workspace-v2 .pw-module-knowledge-list article > span {
+  max-width: 42%;
+  font-size: 9px !important;
+  line-height: 1.25 !important;
+  text-align: center;
+  white-space: normal !important;
+}
+
+/* Brain/review content. */
+.project-workspace-v2 .brain-review-queue__head h3 {
+  font-size: 15px !important;
+  line-height: 1.3 !important;
+}
+.project-workspace-v2 .brain-review-queue__head > span {
+  font-size: var(--pw-readable-xs) !important;
+  line-height: 1.3 !important;
+  white-space: normal !important;
+}
+.project-workspace-v2 .brain-review-queue > p,
+.project-workspace-v2 .brain-next-stage p {
+  font-size: var(--pw-readable-sm) !important;
+  line-height: 1.5 !important;
+}
+.project-workspace-v2 .brain-review-list strong {
+  font-size: var(--pw-readable-sm) !important;
+  line-height: 1.35 !important;
+}
+.project-workspace-v2 .brain-review-list small {
+  font-size: var(--pw-readable-xs) !important;
+  line-height: 1.4 !important;
+}
+
+/* Operations/command/control cards. */
+.project-workspace-v2 .project-operation-card {
+  padding: 15px 16px !important;
+}
+.project-workspace-v2 .project-operation-card__heading {
+  gap: 16px !important;
+}
+.project-workspace-v2 .project-operation-card__heading h3 {
+  font-size: 16px !important;
+  line-height: 1.3 !important;
+}
+.project-workspace-v2 .project-operation-card__heading p:not(.eyebrow) {
+  font-size: var(--pw-readable-body) !important;
+  line-height: 1.5 !important;
+}
+.project-workspace-v2 .project-operation-form label {
+  font-size: var(--pw-readable-sm) !important;
+  line-height: 1.35 !important;
+}
+.project-workspace-v2 .command-row small,
+.project-workspace-v2 .command-row span,
+.project-workspace-v2 .command-cashflow :is(small,span),
+.project-workspace-v2 .command-kpis :is(small,span) {
+  font-size: var(--pw-readable-sm) !important;
+  line-height: 1.4 !important;
+}
+
+/* Closeout and versioned outputs — screenshot regression area. */
+.project-workspace-v2 .closeout-list {
+  display: grid;
+  gap: 8px;
+}
+.project-workspace-v2 .closeout-list > article {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto auto;
+  align-items: center;
+  gap: 11px;
+  min-height: 58px;
+  padding: 10px 12px !important;
+}
+.project-workspace-v2 .closeout-list > article > div {
+  display: grid;
+  gap: 3px;
+}
+.project-workspace-v2 .closeout-list > article small {
+  font-size: var(--pw-readable-xs) !important;
+  line-height: 1.35 !important;
+}
+.project-workspace-v2 .closeout-list > article strong {
+  font-size: var(--pw-readable-body) !important;
+  line-height: 1.4 !important;
+  white-space: normal !important;
+}
+.project-workspace-v2 .closeout-list > article div > span {
+  font-size: var(--pw-readable-xs) !important;
+  line-height: 1.4 !important;
+}
+
+.project-workspace-v2 .project-live-record {
+  gap: 16px !important;
+  padding: 12px 13px !important;
+}
+.project-workspace-v2 .project-live-record > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+.project-workspace-v2 .project-live-record strong {
+  font-size: var(--pw-readable-body) !important;
+  line-height: 1.4 !important;
+  white-space: normal !important;
+}
+.project-workspace-v2 .project-live-record :is(p,small) {
+  font-size: var(--pw-readable-sm) !important;
+  line-height: 1.4 !important;
+}
+.project-workspace-v2 .project-live-record > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.project-workspace-v2 :is(.empty-state,.empty-copy) {
+  font-size: var(--pw-readable-body) !important;
+  line-height: 1.5 !important;
+}
+.project-workspace-v2 .empty-state {
+  min-height: 126px !important;
+  gap: 7px !important;
+  padding: 18px 20px !important;
+}
+.project-workspace-v2 .empty-state strong {
+  font-size: 14px !important;
+  line-height: 1.35 !important;
+}
+.project-workspace-v2 .empty-state span {
+  font-size: var(--pw-readable-body) !important;
+  line-height: 1.45 !important;
+}
+
+/* Chips/buttons: never squeeze labels into unreadable single-line boxes. */
+.project-workspace-v2 :is(.primary-button,.secondary-button,.status-chip) {
+  line-height: 1.25 !important;
+}
+.project-workspace-v2 :is(.primary-button,.secondary-button) {
+  min-height: 36px;
+  padding: 8px 11px !important;
+  font-size: var(--pw-readable-sm) !important;
+  white-space: normal !important;
+  text-align: center;
+}
+.project-workspace-v2 .status-chip {
+  max-width: 150px;
+  padding: 5px 8px !important;
+  font-size: var(--pw-readable-xs) !important;
+  white-space: normal !important;
+  text-align: center;
+}
+
+/* Preserve compactness while allowing card grids to breathe before text collides. */
+@media (max-width: 1180px) {
+  .project-workspace-v2 .metric-grid--project {
+    grid-template-columns: repeat(2,minmax(0,1fr)) !important;
+  }
+  .project-workspace-v2 .closeout-list > article {
+    grid-template-columns: auto minmax(0,1fr) auto;
+  }
+  .project-workspace-v2 .closeout-list > article > .secondary-button {
+    grid-column: 2 / -1;
+    justify-self: end;
+  }
+}
+
+@media (max-width: 760px) {
+  .project-workspace-v2 {
+    --pw-card-pad-x: 13px;
+    --pw-card-pad-y: 12px;
+  }
+  .project-workspace-v2 .section-band {
+    padding: 13px !important;
+  }
+  .project-workspace-v2 .section-heading,
+  .project-workspace-v2 .project-module-heading,
+  .project-workspace-v2 .project-operation-card__heading {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+  .project-workspace-v2 .section-heading > :is(button,a),
+  .project-workspace-v2 .project-module-heading > :is(button,a) {
+    align-self: flex-start;
+  }
+  .project-workspace-v2 .metric-grid--project {
+    grid-template-columns: 1fr !important;
+  }
+  .project-workspace-v2 .closeout-list > article,
+  .project-workspace-v2 .project-live-record {
+    grid-template-columns: 1fr !important;
+  }
+  .project-workspace-v2 .closeout-list > article > svg {
+    display: none;
+  }
+  .project-workspace-v2 .closeout-list > article > :is(.status-chip,.secondary-button),
+  .project-workspace-v2 .project-live-record > div:last-child {
+    justify-self: stretch;
+    justify-content: flex-start;
+  }
+}
