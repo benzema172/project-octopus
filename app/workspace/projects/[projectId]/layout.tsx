@@ -1,10 +1,14 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { ArrowLeft, Building2, MapPin } from "lucide-react";
 import { notFound } from "next/navigation";
 import { CompanyShell } from "@/components/layout/company-shell";
+import { ProjectAutopilotDock } from "@/components/projects/project-autopilot-dock";
+import { ProjectAutopilotRouteGate } from "@/components/projects/project-autopilot-route-gate";
 import { ProjectIntakeSlot } from "@/components/projects/project-intake-slot";
 import { ProjectNavigation } from "@/components/projects/project-navigation";
 import { requireCurrentUser } from "@/lib/auth";
+import { getReliableInvestmentAutopilotSummary } from "@/lib/data/investment-autopilot-summary";
 import { getProjectProfile } from "@/lib/data/project-profile";
 import { getProjectForUser } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
@@ -25,6 +29,19 @@ export const dynamic = "force-dynamic";
 type ProjectLayoutProps = { children: React.ReactNode; params: Promise<{ projectId: string }> };
 
 const STATUS_LABELS: Record<string, string> = { planned: "Planowana", tender: "Przetarg", active: "Aktywna", paused: "Wstrzymana", completed: "Zakończona", archived: "Archiwalna" };
+
+async function loadAutopilotSummary(projectId: string) {
+  try { return await getReliableInvestmentAutopilotSummary(projectId); }
+  catch (error) {
+    console.error("Project Octopus: project Autopilot summary unavailable", { projectId, message: error instanceof Error ? error.message : String(error) });
+    return null;
+  }
+}
+
+async function AsyncProjectAutopilotDock({ projectId, canRun }: { projectId: string; canRun: boolean }) {
+  const summary = await loadAutopilotSummary(projectId);
+  return summary ? <ProjectAutopilotDock projectId={projectId} summary={summary} canRun={canRun} /> : null;
+}
 
 export default async function ProjectLayout({ children, params }: ProjectLayoutProps) {
   const { projectId } = await params;
@@ -77,6 +94,11 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
           <ProjectNavigation projectId={project.id} allowedDomains={allowedProjectDomains} />
         </section>
 
+        {allowedProjectDomains.includes("investments") ? (
+          <ProjectAutopilotRouteGate projectId={project.id}>
+            <Suspense fallback={null}><AsyncProjectAutopilotDock projectId={project.id} canRun={canUpload} /></Suspense>
+          </ProjectAutopilotRouteGate>
+        ) : null}
         {children}
       </main>
     </CompanyShell>
