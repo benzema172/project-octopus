@@ -15,6 +15,15 @@ describe("workspace layout density audit", () => {
     expect(projectAuditIndex).toBeGreaterThan(auditIndex);
   });
 
+  it("re-applies project audit after project-specific legacy styles", () => {
+    const layout = read("app/workspace/projects/[projectId]/layout.tsx");
+    const operationalIndex = layout.indexOf('import "../../../project-modules-operational.css"');
+    const auditIndex = layout.indexOf('import "../../../layout-density-project-audit.css"');
+
+    expect(operationalIndex).toBeGreaterThan(-1);
+    expect(auditIndex).toBeGreaterThan(operationalIndex);
+  });
+
   it("removes phantom panel height reservations and fixed decorative height", () => {
     const css = read("app/layout-density-audit.css");
 
@@ -70,6 +79,32 @@ describe("workspace layout density audit", () => {
     expect(css).toContain("@media (max-width: 760px)");
     expect(css).toContain(".pw-status-strip");
     expect(css).toContain(".pw-module-feature-grid");
+  });
+
+  it("compacts investment portfolio rows at the source stylesheet", () => {
+    const css = read("app/investments-refinement.css");
+
+    expect(css).toContain("min-height: 72px");
+    expect(css).toContain("padding: 10px 2px");
+    expect(css).toContain("gap: 16px");
+  });
+
+  it("compacts Brain knowledge while preserving responsive stacking", () => {
+    const css = read("app/brain-knowledge.css");
+
+    expect(css).toContain("min-height: 68px");
+    expect(css).toContain("gap: 8px");
+    expect(css).toContain("@media (max-width: 650px)");
+    expect(css).toContain("grid-template-columns: 1fr");
+  });
+
+  it("compacts hashed CSS-module company tools without relying on global selectors", () => {
+    const css = read("components/company/company-power-tools.module.css");
+
+    expect(css).toContain("margin: 12px auto 24px");
+    expect(css).toContain("min-height:76px");
+    expect(css).toContain("padding:10px 12px");
+    expect(css).toContain("@media (max-width: 720px)");
   });
 
   it("does not render the large upcoming-commitments panel when it has no records", () => {
