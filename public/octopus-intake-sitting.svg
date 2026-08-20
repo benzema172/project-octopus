@@ -1,53 +1,52 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 92" role="img" aria-label="Ośmiornica siedząca na przycisku Wrzutnia">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 104 82" role="img" aria-label="Smukła ośmiornica siedząca na przycisku Wrzutnia">
   <defs>
-    <linearGradient id="octo" x1="12" y1="8" x2="106" y2="86" gradientUnits="userSpaceOnUse">
+    <linearGradient id="octo" x1="8" y1="4" x2="91" y2="73" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#ff2d86"/>
-      <stop offset="0.34" stop-color="#8a2be2"/>
-      <stop offset="0.68" stop-color="#315be9"/>
+      <stop offset="0.36" stop-color="#8a2be2"/>
+      <stop offset="0.70" stop-color="#315be9"/>
       <stop offset="1" stop-color="#00cfc2"/>
     </linearGradient>
-    <linearGradient id="shine" x1="34" y1="8" x2="72" y2="48" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ffffff" stop-opacity=".34"/>
+    <linearGradient id="shine" x1="32" y1="5" x2="51" y2="34" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".30"/>
       <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
-    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="180%">
-      <feDropShadow dx="0" dy="3" stdDeviation="2.6" flood-color="#342052" flood-opacity=".28"/>
+    <filter id="softShadow" x="-35%" y="-30%" width="170%" height="180%">
+      <feDropShadow dx="0" dy="2.4" stdDeviation="2.1" flood-color="#342052" flood-opacity=".25"/>
     </filter>
   </defs>
   <style>
-    .tentacle{fill:none;stroke:url(#octo);stroke-linecap:round;stroke-linejoin:round;transform-box:fill-box;transform-origin:50% 8%;will-change:transform}
-    .rear{stroke-width:8.5}
-    .front{stroke-width:9.5}
-    .t1{animation:w1 .78s ease-in-out -.18s infinite}.t2{animation:w2 .62s ease-in-out -.31s infinite}.t3{animation:w3 .84s ease-in-out -.46s infinite}.t4{animation:w2 .69s ease-in-out -.12s infinite reverse}.t5{animation:w1 .73s ease-in-out -.38s infinite reverse}.t6{animation:w3 .64s ease-in-out -.27s infinite reverse}.t7{animation:w2 .88s ease-in-out -.57s infinite}.t8{animation:w1 .67s ease-in-out -.22s infinite reverse}
-    .body{animation:breathe 2.4s ease-in-out infinite;transform-box:fill-box;transform-origin:center bottom}
-    @keyframes w1{0%,100%{transform:rotate(-2deg)}35%{transform:rotate(6deg)}70%{transform:rotate(-5deg)}}
-    @keyframes w2{0%,100%{transform:rotate(3deg)}38%{transform:rotate(-7deg)}72%{transform:rotate(5deg)}}
-    @keyframes w3{0%,100%{transform:rotate(-1deg) scaleY(1)}40%{transform:rotate(5deg) scaleY(1.035)}76%{transform:rotate(-6deg) scaleY(.99)}}
-    @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.018,.985)}}
-    @media (prefers-reduced-motion:reduce){.tentacle,.body{animation:none!important}}
+    .tentacle{fill:none;stroke:url(#octo);stroke-linecap:round;stroke-linejoin:round;transform-box:fill-box;transform-origin:50% 10%;will-change:transform}
+    .rear{stroke-width:5.4}
+    .front{stroke-width:6.2}
+    .t1{animation:w1 .76s ease-in-out -.18s infinite}.t2{animation:w2 .58s ease-in-out -.31s infinite}.t3{animation:w3 .72s ease-in-out -.46s infinite}.t4{animation:w2 .63s ease-in-out -.12s infinite reverse}.t5{animation:w1 .69s ease-in-out -.38s infinite reverse}.t6{animation:w3 .61s ease-in-out -.27s infinite reverse}.t7{animation:w2 .81s ease-in-out -.57s infinite}.t8{animation:w1 .65s ease-in-out -.22s infinite reverse}
+    @keyframes w1{0%,100%{transform:rotate(-1.5deg)}35%{transform:rotate(4deg)}70%{transform:rotate(-3.5deg)}}
+    @keyframes w2{0%,100%{transform:rotate(2deg)}38%{transform:rotate(-5deg)}72%{transform:rotate(4deg)}}
+    @keyframes w3{0%,100%{transform:rotate(-1deg) scaleY(1)}40%{transform:rotate(4deg) scaleY(1.025)}76%{transform:rotate(-4deg) scaleY(.992)}}
+    @media (prefers-reduced-motion:reduce){.tentacle{animation:none!important}}
   </style>
 
-  <ellipse cx="52" cy="49" rx="27" ry="5.5" fill="#301a58" opacity=".18"/>
+  <!-- Cień styku z górną krawędzią przycisku. -->
+  <ellipse cx="43.5" cy="38.5" rx="17" ry="3.3" fill="#301a58" opacity=".16"/>
 
-  <!-- Macki z tyłu: wychodzą na boki jak ramiona oparte o krawędź. -->
-  <g class="tentacle rear t1"><path d="M39 49C28 48 20 45 12 39C7 35 3 39 6 44C12 53 25 57 40 54"/></g>
-  <g class="tentacle rear t8"><path d="M69 49C82 48 93 44 104 37C110 33 115 38 111 43C104 52 91 57 75 54"/></g>
+  <!-- Tylne macki są jak ramiona oparte o górną krawędź przycisku. -->
+  <g class="tentacle rear t1"><path d="M34 35C27 35 21 33 16 29C11 25 7 27 8 31C10 37 20 40 33 38"/></g>
+  <g class="tentacle rear t8"><path d="M54 35C62 35 70 32 78 27C83 24 87 27 85 31C82 37 70 40 55 38"/></g>
 
-  <!-- Korpus zachodzi na górną krawędź przycisku, dzięki czemu postać wygląda jak siedząca. -->
+  <!-- Smukły korpus kończy się dokładnie na linii siedzenia. -->
   <g class="body" filter="url(#softShadow)">
-    <path d="M31 46C28 40 28 33 29 25C31 12 40 5 52 5C65 5 74 13 75 27C76 36 73 44 68 49C61 55 39 55 31 46Z" fill="url(#octo)"/>
-    <path d="M35 29C35 16 42 10 52 9C45 12 41 20 41 31C41 40 44 46 49 50C40 49 35 42 35 29Z" fill="url(#shine)"/>
-    <ellipse cx="45" cy="27" rx="4.6" ry="6.6" fill="#21152e"/>
-    <ellipse cx="60" cy="27" rx="4.6" ry="6.6" fill="#21152e"/>
-    <circle cx="43.8" cy="24.7" r="1.1" fill="#fff" opacity=".88"/>
-    <circle cx="58.8" cy="24.7" r="1.1" fill="#fff" opacity=".88"/>
+    <path d="M32 35C29 29 29 21 31 13C33 6 38 2.5 44.5 2.5C51 2.5 56 6.5 58 13.5C60 21 59 29 55 35C51 40 36 40 32 35Z" fill="url(#octo)"/>
+    <path d="M34.5 26C34 16 37.5 8.5 43 5.5C39.5 10 38 17 38.5 25C39 31 41 35 44 38C38.5 37 35 33 34.5 26Z" fill="url(#shine)"/>
+    <ellipse cx="40" cy="18.5" rx="3.2" ry="5.1" fill="#21152e"/>
+    <ellipse cx="49.6" cy="18.5" rx="3.2" ry="5.1" fill="#21152e"/>
+    <circle cx="39.2" cy="16.7" r=".8" fill="#fff" opacity=".9"/>
+    <circle cx="48.8" cy="16.7" r=".8" fill="#fff" opacity=".9"/>
   </g>
 
-  <!-- Macki z przodu: opadają po froncie i zawijają się pod dolną krawędź przycisku. -->
-  <g class="tentacle front t2"><path d="M36 49C31 56 27 63 24 72C22 79 16 82 11 78C6 74 8 68 14 66C20 64 21 57 26 50"/></g>
-  <g class="tentacle front t3"><path d="M42 50C38 59 36 68 38 77C40 84 35 88 30 86C24 84 24 78 28 73C32 68 31 59 34 51"/></g>
-  <g class="tentacle front t4"><path d="M48 51C45 61 46 71 50 80C53 86 49 90 44 89C38 88 36 82 39 77C42 71 40 61 41 52"/></g>
-  <g class="tentacle front t5"><path d="M55 51C55 61 58 70 64 78C68 83 65 89 59 90C53 90 50 84 53 79C56 73 52 62 49 52"/></g>
-  <g class="tentacle front t6"><path d="M61 50C65 59 71 66 78 71C84 75 83 82 78 84C73 86 68 82 69 77C71 71 63 63 56 56"/></g>
-  <g class="tentacle front t7"><path d="M67 49C75 54 83 58 92 60C99 61 102 67 98 72C94 77 88 74 87 69C86 64 76 60 66 57"/></g>
+  <!-- Przednie macki startują na krawędzi i zwisają po froncie przycisku zamiast tworzyć wachlarz. -->
+  <g class="tentacle front t2"><path d="M34 36C31 43 28 48 23 53C20 56 15 57 13 54C11 51 13 48 17 49C20 50 22 46 25 40"/></g>
+  <g class="tentacle front t3"><path d="M38 37C35 46 34 54 36 61C37 65 34 68 30 67C26 66 26 62 29 59C32 56 31 48 33 40"/></g>
+  <g class="tentacle front t4"><path d="M42 37C40 47 41 56 44 64C46 68 43 71 39 70C35 69 34 65 36 62C39 58 37 48 38 40"/></g>
+  <g class="tentacle front t5"><path d="M46 37C46 47 49 56 53 63C56 67 54 71 50 72C46 72 43 68 45 64C47 60 44 49 42 40"/></g>
+  <g class="tentacle front t6"><path d="M50 37C53 46 58 53 64 58C68 61 68 65 64 67C60 69 57 66 58 62C59 58 53 51 48 45"/></g>
+  <g class="tentacle front t7"><path d="M54 36C61 41 68 44 75 45C80 46 82 50 79 53C76 56 72 54 72 51C71 48 63 45 55 43"/></g>
 </svg>
