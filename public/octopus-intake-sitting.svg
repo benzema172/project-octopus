@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 92" role="img" aria-label="Ośmiornica siedząca na przycisku Wrzutnia">
+  <defs>
+    <linearGradient id="octo" x1="12" y1="8" x2="106" y2="86" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff2d86"/>
+      <stop offset="0.34" stop-color="#8a2be2"/>
+      <stop offset="0.68" stop-color="#315be9"/>
+      <stop offset="1" stop-color="#00cfc2"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="34" y1="8" x2="72" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".34"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="3" stdDeviation="2.6" flood-color="#342052" flood-opacity=".28"/>
+    </filter>
+  </defs>
+  <style>
+    .tentacle{fill:none;stroke:url(#octo);stroke-linecap:round;stroke-linejoin:round;transform-box:fill-box;transform-origin:50% 8%;will-change:transform}
+    .rear{stroke-width:8.5}
+    .front{stroke-width:9.5}
+    .t1{animation:w1 .78s ease-in-out -.18s infinite}.t2{animation:w2 .62s ease-in-out -.31s infinite}.t3{animation:w3 .84s ease-in-out -.46s infinite}.t4{animation:w2 .69s ease-in-out -.12s infinite reverse}.t5{animation:w1 .73s ease-in-out -.38s infinite reverse}.t6{animation:w3 .64s ease-in-out -.27s infinite reverse}.t7{animation:w2 .88s ease-in-out -.57s infinite}.t8{animation:w1 .67s ease-in-out -.22s infinite reverse}
+    .body{animation:breathe 2.4s ease-in-out infinite;transform-box:fill-box;transform-origin:center bottom}
+    @keyframes w1{0%,100%{transform:rotate(-2deg)}35%{transform:rotate(6deg)}70%{transform:rotate(-5deg)}}
+    @keyframes w2{0%,100%{transform:rotate(3deg)}38%{transform:rotate(-7deg)}72%{transform:rotate(5deg)}}
+    @keyframes w3{0%,100%{transform:rotate(-1deg) scaleY(1)}40%{transform:rotate(5deg) scaleY(1.035)}76%{transform:rotate(-6deg) scaleY(.99)}}
+    @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.018,.985)}}
+    @media (prefers-reduced-motion:reduce){.tentacle,.body{animation:none!important}}
+  </style>
+
+  <ellipse cx="52" cy="49" rx="27" ry="5.5" fill="#301a58" opacity=".18"/>
+
+  <!-- Macki z tyłu: wychodzą na boki jak ramiona oparte o krawędź. -->
+  <g class="tentacle rear t1"><path d="M39 49C28 48 20 45 12 39C7 35 3 39 6 44C12 53 25 57 40 54"/></g>
+  <g class="tentacle rear t8"><path d="M69 49C82 48 93 44 104 37C110 33 115 38 111 43C104 52 91 57 75 54"/></g>
+
+  <!-- Korpus zachodzi na górną krawędź przycisku, dzięki czemu postać wygląda jak siedząca. -->
+  <g class="body" filter="url(#softShadow)">
+    <path d="M31 46C28 40 28 33 29 25C31 12 40 5 52 5C65 5 74 13 75 27C76 36 73 44 68 49C61 55 39 55 31 46Z" fill="url(#octo)"/>
+    <path d="M35 29C35 16 42 10 52 9C45 12 41 20 41 31C41 40 44 46 49 50C40 49 35 42 35 29Z" fill="url(#shine)"/>
+    <ellipse cx="45" cy="27" rx="4.6" ry="6.6" fill="#21152e"/>
+    <ellipse cx="60" cy="27" rx="4.6" ry="6.6" fill="#21152e"/>
+    <circle cx="43.8" cy="24.7" r="1.1" fill="#fff" opacity=".88"/>
+    <circle cx="58.8" cy="24.7" r="1.1" fill="#fff" opacity=".88"/>
+  </g>
+
+  <!-- Macki z przodu: opadają po froncie i zawijają się pod dolną krawędź przycisku. -->
+  <g class="tentacle front t2"><path d="M36 49C31 56 27 63 24 72C22 79 16 82 11 78C6 74 8 68 14 66C20 64 21 57 26 50"/></g>
+  <g class="tentacle front t3"><path d="M42 50C38 59 36 68 38 77C40 84 35 88 30 86C24 84 24 78 28 73C32 68 31 59 34 51"/></g>
+  <g class="tentacle front t4"><path d="M48 51C45 61 46 71 50 80C53 86 49 90 44 89C38 88 36 82 39 77C42 71 40 61 41 52"/></g>
+  <g class="tentacle front t5"><path d="M55 51C55 61 58 70 64 78C68 83 65 89 59 90C53 90 50 84 53 79C56 73 52 62 49 52"/></g>
+  <g class="tentacle front t6"><path d="M61 50C65 59 71 66 78 71C84 75 83 82 78 84C73 86 68 82 69 77C71 71 63 63 56 56"/></g>
+  <g class="tentacle front t7"><path d="M67 49C75 54 83 58 92 60C99 61 102 67 98 72C94 77 88 74 87 69C86 64 76 60 66 57"/></g>
+</svg>
