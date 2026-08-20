@@ -2,13 +2,11 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { APP_RELEASE, APP_RELEASE_LABEL } from "../lib/app-release";
 
-const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
-
 describe("application release badge", () => {
-  it("stays aligned with the package version and release date", () => {
-    expect(APP_RELEASE.version).toBe(packageJson.version);
-    expect(APP_RELEASE.introducedAt).toBe("19.08.2026");
-    expect(APP_RELEASE_LABEL).toContain(`v${packageJson.version}`);
+  it("publishes the official Project Octopus 1.1.0 release and date", () => {
+    expect(APP_RELEASE.version).toBe("1.1.0");
+    expect(APP_RELEASE.introducedAt).toBe("20.08.2026");
+    expect(APP_RELEASE_LABEL).toContain("v1.1.0");
     expect(APP_RELEASE_LABEL).toContain(APP_RELEASE.introducedAt);
   });
 
