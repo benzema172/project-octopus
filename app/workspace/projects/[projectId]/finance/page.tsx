@@ -9,7 +9,7 @@ import { hasDomainAccess } from "@/lib/authorization";
 import { getProjectModuleLiveMetrics } from "@/lib/data/project-module-kpis";
 import { getProjectForUser } from "@/lib/data/projects";
 import { PROJECT_MODULES } from "@/lib/product/project-modules";
-import "../../../../finance-compact.css";
+import "../../../../project-finance-compact.css";
 
 export const dynamic = "force-dynamic";
 
