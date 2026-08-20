@@ -1,0 +1,159 @@
+/* Investment dashboard/module card typography — companion to investment-content-refinement.css */
+
+.project-workspace-v2 .pw-status-strip > div {
+  min-height: 84px !important;
+  height: auto !important;
+  gap: 4px;
+  padding: 11px 13px !important;
+}
+.project-workspace-v2 .pw-status-strip span {
+  font-size: 10px !important;
+  line-height: 1.3 !important;
+  white-space: normal !important;
+}
+.project-workspace-v2 .pw-status-strip strong {
+  font-size: 19px !important;
+  line-height: 1.15 !important;
+  white-space: normal !important;
+}
+.project-workspace-v2 .pw-status-strip small {
+  font-size: 11px !important;
+  line-height: 1.4 !important;
+  white-space: normal !important;
+}
+
+.project-workspace-v2 .pw-section-card {
+  padding: 15px 16px !important;
+}
+.project-workspace-v2 .pw-section-heading {
+  align-items: center !important;
+  gap: 15px !important;
+}
+.project-workspace-v2 .pw-section-heading h2,
+.project-workspace-v2 .pw-brain-card h2,
+.project-workspace-v2 .pw-principle-card h2,
+.project-workspace-v2 .pw-module-intro h2 {
+  font-size: 18px !important;
+  line-height: 1.25 !important;
+  white-space: normal !important;
+}
+.project-workspace-v2 .pw-section-lead {
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+}
+.project-workspace-v2 .pw-text-link,
+.project-workspace-v2 .pw-brain-card a {
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+}
+
+.project-workspace-v2 :is(.pw-source-card,.pw-workflow-card) {
+  min-height: 82px !important;
+  height: auto !important;
+  gap: 11px !important;
+  padding: 11px 12px !important;
+}
+.project-workspace-v2 :is(.pw-source-card,.pw-workflow-card) > div {
+  min-width: 0;
+}
+.project-workspace-v2 .pw-source-card strong,
+.project-workspace-v2 .pw-workflow-card strong {
+  display: block;
+  font-size: 12.5px !important;
+  line-height: 1.35 !important;
+  white-space: normal !important;
+}
+.project-workspace-v2 .pw-source-card b {
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+}
+.project-workspace-v2 .pw-source-card p,
+.project-workspace-v2 .pw-workflow-card p {
+  font-size: 11px !important;
+  line-height: 1.45 !important;
+  white-space: normal !important;
+}
+
+.project-workspace-v2 .pw-brain-card > p:not(.co-kicker),
+.project-workspace-v2 .pw-principle-card p:not(.co-kicker) {
+  font-size: 11.5px !important;
+  line-height: 1.5 !important;
+}
+
+.project-workspace-v2 .pw-module-intro {
+  min-height: 0 !important;
+  padding: 15px 16px !important;
+}
+.project-workspace-v2 .pw-module-intro > div > p:last-child {
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+}
+.project-workspace-v2 .pw-module-intro > span {
+  max-width: 220px;
+  font-size: 10px !important;
+  line-height: 1.3 !important;
+  text-align: center;
+  white-space: normal !important;
+}
+
+.project-workspace-v2 .pw-module-feature-card {
+  min-height: 112px !important;
+  height: auto !important;
+  padding: 13px 14px !important;
+}
+.project-workspace-v2 .pw-module-feature-card h3 {
+  margin: 11px 0 5px !important;
+  font-size: 13.5px !important;
+  line-height: 1.35 !important;
+  white-space: normal !important;
+}
+.project-workspace-v2 .pw-module-feature-card p {
+  font-size: 11px !important;
+  line-height: 1.5 !important;
+}
+.project-workspace-v2 .pw-module-principle strong {
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+}
+.project-workspace-v2 .pw-module-principle p {
+  font-size: 11px !important;
+  line-height: 1.5 !important;
+}
+
+/* Header metadata also needs to survive long investor/location text. */
+.project-workspace-v2 .pw-project-meta small {
+  font-size: 9px !important;
+  line-height: 1.25 !important;
+}
+.project-workspace-v2 .pw-project-meta strong {
+  max-width: none !important;
+  overflow: visible !important;
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+}
+.project-workspace-v2 .pw-project-contract strong {
+  line-height: 1.3 !important;
+  white-space: normal !important;
+}
+.project-workspace-v2 .pw-project-contract span {
+  line-height: 1.3 !important;
+  white-space: normal !important;
+}
+
+@media (max-width: 980px) {
+  .project-workspace-v2 .pw-source-grid,
+  .project-workspace-v2 .pw-workflow-grid,
+  .project-workspace-v2 .pw-module-feature-grid {
+    grid-template-columns: repeat(2,minmax(0,1fr)) !important;
+  }
+}
+
+@media (max-width: 620px) {
+  .project-workspace-v2 .pw-source-grid,
+  .project-workspace-v2 .pw-workflow-grid,
+  .project-workspace-v2 .pw-module-feature-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
