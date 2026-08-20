@@ -4,6 +4,7 @@ import { ArrowLeft, Building2, MapPin } from "lucide-react";
 import { notFound } from "next/navigation";
 import { CompanyShell } from "@/components/layout/company-shell";
 import { ProjectAutopilotDock } from "@/components/projects/project-autopilot-dock";
+import { ProjectAutopilotRouteGate } from "@/components/projects/project-autopilot-route-gate";
 import { ProjectIntakeSlot } from "@/components/projects/project-intake-slot";
 import { ProjectNavigation } from "@/components/projects/project-navigation";
 import { requireCurrentUser } from "@/lib/auth";
@@ -93,7 +94,11 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
           <ProjectNavigation projectId={project.id} allowedDomains={allowedProjectDomains} />
         </section>
 
-        {allowedProjectDomains.includes("investments") ? <Suspense fallback={null}><AsyncProjectAutopilotDock projectId={project.id} canRun={canUpload} /></Suspense> : null}
+        {allowedProjectDomains.includes("investments") ? (
+          <ProjectAutopilotRouteGate projectId={project.id}>
+            <Suspense fallback={null}><AsyncProjectAutopilotDock projectId={project.id} canRun={canUpload} /></Suspense>
+          </ProjectAutopilotRouteGate>
+        ) : null}
         {children}
       </main>
     </CompanyShell>
