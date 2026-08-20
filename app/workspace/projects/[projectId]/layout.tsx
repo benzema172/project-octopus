@@ -4,7 +4,7 @@ import { ArrowLeft, Building2, MapPin } from "lucide-react";
 import { notFound } from "next/navigation";
 import { CompanyShell } from "@/components/layout/company-shell";
 import { ProjectAutopilotDock } from "@/components/projects/project-autopilot-dock";
-import { ProjectIntake } from "@/components/projects/project-intake-pipeline";
+import { ProjectIntakeSlot } from "@/components/projects/project-intake-slot";
 import { ProjectNavigation } from "@/components/projects/project-navigation";
 import { requireCurrentUser } from "@/lib/auth";
 import { getReliableInvestmentAutopilotSummary } from "@/lib/data/investment-autopilot-summary";
@@ -81,7 +81,7 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
             <div><MapPin size={16} aria-hidden="true" /><span><small>Lokalizacja</small><strong title={location}>{location}</strong></span></div>
           </div>
 
-          {canUpload ? <div className="pw-project-header__intake"><ProjectIntake projectId={project.id} /></div> : null}
+          {canUpload ? <div className="pw-project-header__intake"><ProjectIntakeSlot projectId={project.id} /></div> : null}
         </header>
 
         <ProjectNavigation projectId={project.id} allowedDomains={allowedProjectDomains} />
