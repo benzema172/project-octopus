@@ -1,0 +1,18 @@
+/* Investment navigation toggle fix — 2026-08-20.
+   The legacy :focus-within selector kept a dropdown visible after the user clicked
+   its trigger a second time. React state remains the single source of truth. */
+
+.project-navigation--v5 .pw-nav-group:not(.is-open) .pw-nav-group__menu,
+.project-navigation--v5 .pw-nav-group:not(.is-open):focus-within .pw-nav-group__menu {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translateY(-4px) scale(.985) !important;
+}
+
+.project-navigation--v5 .pw-nav-group.is-open .pw-nav-group__menu {
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transform: translateY(0) scale(1) !important;
+}
