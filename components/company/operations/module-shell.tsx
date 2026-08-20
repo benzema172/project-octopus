@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent, KeyboardEvent, ReactNode } from "react";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ChevronDown, MoreHorizontal, Plus, Save, Search, X } from "lucide-react";
@@ -42,6 +42,8 @@ type Props = {
   tableTitle: string;
   layoutVariant?: "default" | "finance";
   primaryMetricCount?: number;
+  detailTitle?: (row: Row) => ReactNode;
+  detailContent?: (row: Row) => ReactNode;
   children?: ReactNode;
 };
 
@@ -96,12 +98,13 @@ function RecordForm({ form, pending, open, onToggle, onSubmit }: { form: FormSpe
   );
 }
 
-export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, query, metrics, forms, rows, columns, emptyLabel, tableTitle, layoutVariant = "default", primaryMetricCount = 3, children }: Props) {
+export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, query, metrics, forms, rows, columns, emptyLabel, tableTitle, layoutVariant = "default", primaryMetricCount = 3, detailTitle, detailContent, children }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openFormKey, setOpenFormKey] = useState<string | null>(null);
+  const [selectedRow, setSelectedRow] = useState<Row | null>(null);
   const page = data.page ?? { page: 1, pageSize: Math.max(rows.length, 1), total: rows.length };
   const primaryMetrics = metrics.slice(0, primaryMetricCount);
   const secondaryMetrics = metrics.slice(primaryMetricCount);
@@ -142,6 +145,12 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
       <p>{metric.caption}</p>
     </article>
   ));
+
+  const openRowFromKeyboard = (event: KeyboardEvent<HTMLDivElement>, row: Row) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    setSelectedRow(row);
+  };
 
   return (
     <div className={`ops-workspace ops-workspace--paged${layoutVariant === "finance" ? " ops-workspace--finance" : ""}`}>
@@ -212,7 +221,15 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
             {columns.map((column) => <span key={column.label} role="columnheader">{column.label}</span>)}
           </div>
           {rows.map((row) => (
-            <div className="ops-table__row" role="row" key={String(row.id)}>
+            <div
+              className="ops-table__row ops-table__row--interactive"
+              role="row"
+              tabIndex={0}
+              aria-label={`Otwórz szczegóły: ${tableTitle}`}
+              key={String(row.id)}
+              onClick={() => setSelectedRow(row)}
+              onKeyDown={(event) => openRowFromKeyboard(event, row)}
+            >
               {columns.map((column) => (
                 <span className="ops-table__cell" role="cell" data-label={column.label} key={column.label}>{column.value(row)}</span>
               ))}
@@ -224,6 +241,22 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
       </section>
 
       {children}
+
+      {selectedRow ? (
+        <div className="ops-record-drawer-layer">
+          <button type="button" className="ops-record-drawer__backdrop" aria-label="Zamknij szczegóły" onClick={() => setSelectedRow(null)} />
+          <aside className="ops-record-drawer" role="dialog" aria-modal="true" aria-label={`Szczegóły: ${tableTitle}`}>
+            <header>
+              <div><small>Szczegóły rekordu</small><h2>{detailTitle ? detailTitle(selectedRow) : tableTitle}</h2></div>
+              <button type="button" className="co-icon-button" aria-label="Zamknij szczegóły" onClick={() => setSelectedRow(null)}><X size={18} aria-hidden="true" /></button>
+            </header>
+            <div className="ops-record-drawer__summary">
+              {columns.map((column) => <div key={column.label}><small>{column.label}</small><strong>{column.value(selectedRow)}</strong></div>)}
+            </div>
+            {detailContent ? <div className="ops-record-drawer__content">{detailContent(selectedRow)}</div> : null}
+          </aside>
+        </div>
+      ) : null}
     </div>
   );
 }
