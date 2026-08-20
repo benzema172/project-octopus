@@ -1,0 +1,96 @@
+/* Finance module: compact desktop actions and readable KPI cards. */
+.ops-workspace--finance .ops-metrics {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ops-workspace--finance .ops-metric {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-auto-flow: row;
+  align-content: start;
+  gap: 0 !important;
+  padding: 12px 13px !important;
+}
+
+.ops-workspace--finance .ops-metric > :is(small, strong, p) {
+  grid-column: 1;
+  min-width: 0;
+}
+
+.ops-workspace--finance .ops-metric strong {
+  overflow: visible;
+  margin-top: 6px;
+  font-size: clamp(16px, 1.35vw, 22px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+  line-height: 1.08;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.ops-workspace--finance .ops-metric p {
+  margin-top: 8px;
+}
+
+.ops-workspace--finance .ops-form-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px;
+}
+
+.ops-workspace--finance .ops-form-card--wide:not([open]) {
+  grid-column: auto;
+}
+
+.ops-workspace--finance .ops-form-card[open] {
+  grid-column: 1 / -1;
+}
+
+.ops-workspace--finance .ops-form-card > summary {
+  min-height: 44px;
+  gap: 8px;
+  padding: 7px 9px;
+}
+
+.ops-workspace--finance .ops-form-card__summary-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.ops-workspace--finance .ops-form-card > summary strong {
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-workspace--finance .ops-form-card > summary small {
+  display: none;
+}
+
+.ops-workspace--finance .ops-quick-actions__heading {
+  padding: 10px 13px;
+}
+
+@media (max-width: 1180px) {
+  .ops-workspace--finance .ops-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .ops-workspace--finance .ops-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .ops-workspace--finance .ops-metrics,
+  .ops-workspace--finance .ops-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-workspace--finance .ops-metric strong {
+    font-size: 20px;
+  }
+}

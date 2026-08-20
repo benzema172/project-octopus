@@ -30,7 +30,7 @@ export default function FinanceOperations({ workspaceId, data, canWrite, canAppr
     {label:"Nieprzypisane NET",value:money(summary.unallocatedNet),caption:"Koszt wymagający alokacji"},
     {label:"Kontrola",value:`${str(summary.matchReview,"0")} / ${str(summary.accountingPending,"0")}`,caption:`3-way match / księgowania${canApprove?" · możesz zatwierdzać":""}`}
   ];
-  return <CompanyModuleShell workspaceId={workspaceId} data={data} canWrite={canWrite} pathname={pathname} query={query} metrics={metrics} forms={forms} rows={invoices} tableTitle="Faktury i rozrachunki" emptyLabel="Brak faktur dla bieżącego filtra." columns={[
+  return <CompanyModuleShell workspaceId={workspaceId} data={data} canWrite={canWrite} pathname={pathname} query={query} layoutVariant="finance" metrics={metrics} forms={forms} rows={invoices} tableTitle="Faktury i rozrachunki" emptyLabel="Brak faktur dla bieżącego filtra." columns={[
     {label:"Dokument",value:row=><strong>{str(row.invoice_number)}</strong>},
     {label:"Kontrahent",value:row=>cpNames.get(String(row.counterparty_id)) ?? "—"},
     {label:"Przypisanie",value:row=>{const rows=allocationsByInvoice.get(String(row.id))??[];const names=[...new Set(rows.map(a=>projectNames.get(String(a.project_id))).filter(Boolean))];return names.length?names.join(", "):"Koszty ogólne / do alokacji";}},
