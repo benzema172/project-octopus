@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AppReleaseBadge } from "@/components/app-release-badge";
 import "./globals.css";
 import "./release-badge.css";
+import "./unified-ux-simplification.css";
 
 export const metadata: Metadata = {
   title: "Project Octopus",
