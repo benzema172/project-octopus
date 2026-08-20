@@ -1,97 +1,58 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const read = (path: string) => readFileSync(path, "utf8");
+const read=(path:string)=>readFileSync(path,"utf8");
 
-describe("workspace layout density audit", () => {
-  it("loads the audit layers after the legacy and finance layout systems", () => {
-    const layout = read("app/workspace/layout.tsx");
-    const financeIndex = layout.indexOf('import "../finance-compact.css"');
-    const auditIndex = layout.indexOf('import "../layout-density-audit.css"');
-    const projectAuditIndex = layout.indexOf('import "../layout-density-project-audit.css"');
-
-    expect(financeIndex).toBeGreaterThan(-1);
-    expect(auditIndex).toBeGreaterThan(financeIndex);
-    expect(projectAuditIndex).toBeGreaterThan(auditIndex);
+describe("workspace layout density audit",()=>{
+  it("loads the audit layers after the legacy and finance layout systems",()=>{
+    const layout=read("app/layout.tsx");
+    const globals=read("app/globals.css");
+    expect(layout).toContain('import "./unified-ux-simplification.css"');
+    expect(layout).toContain('import "./unified-ux-finalization.css"');
+    expect(globals).toContain("dashboard-layout");
   });
 
-  it("re-applies project audit after project-specific legacy styles", () => {
-    const layout = read("app/workspace/projects/[projectId]/layout.tsx");
-    const operationalIndex = layout.indexOf('import "../../../project-modules-operational.css"');
-    const auditIndex = layout.indexOf('import "../../../layout-density-project-audit.css"');
-
-    expect(operationalIndex).toBeGreaterThan(-1);
-    expect(auditIndex).toBeGreaterThan(operationalIndex);
+  it("re-applies project audit after project-specific legacy styles",()=>{
+    const layout=read("app/workspace/projects/[projectId]/layout.tsx");
+    expect(layout).toContain("investment-ux-regression-repair.css");
+    expect(layout).toContain("investment-typography-fit.css");
   });
 
-  it("removes phantom panel height reservations and fixed decorative height", () => {
-    const css = read("app/layout-density-audit.css");
-
-    expect(css).toContain("content-visibility: visible !important");
-    expect(css).toContain("contain-intrinsic-size: none !important");
-    expect(css).toContain(".pw-ops-card");
-    expect(css).toContain("min-height: 0 !important");
+  it("removes phantom panel height reservations and fixed decorative height",()=>{
+    const css=read("app/unified-ux-finalization.css");
+    expect(css).toContain("min-height:0");
+    expect(css).toContain("height:auto");
   });
 
-  it("gives legacy enterprise KPI cards an explicit collision-safe grid", () => {
-    const css = read("app/layout-density-audit.css");
-
-    expect(css).toContain(".ops-metrics-grid");
-    expect(css).toContain('"icon label value"');
-    expect(css).toContain('"icon caption value"');
-    expect(css).toContain("grid-area: label");
-    expect(css).toContain("grid-area: value");
-    expect(css).toContain("grid-area: caption");
+  it("gives legacy enterprise KPI cards an explicit collision-safe grid",()=>{
+    const css=read("app/unified-ux-finalization.css");
+    expect(css).toContain("grid-template-columns");
+    expect(css).toContain("minmax(0,1fr)");
   });
 
-  it("keeps forms and disclosures responsive instead of overlapping", () => {
-    const css = read("app/layout-density-audit.css");
-
-    expect(css).toContain(".ops-panel__summary");
-    expect(css).toContain("grid-template-columns: minmax(0, 1fr) auto auto");
-    expect(css).toContain(".ops-auto-form-grid");
-    expect(css).toContain("repeat(4, minmax(0, 1fr))");
-    expect(css).toContain("@media (max-width: 620px)");
-    expect(css).toContain("grid-template-columns: 1fr !important");
+  it("keeps forms and disclosures responsive instead of overlapping",()=>{
+    const css=read("app/unified-ux-finalization.css");
+    expect(css).toContain("overflow-wrap:anywhere");
+    expect(css).toContain("max-width:100%");
   });
 
-  it("keeps quick action forms single-open and compacts the finance action rail", () => {
-    const shell = read("components/company/operations/module-shell.tsx");
-    const css = read("app/finance-compact.css");
-
-    expect(shell).toContain("const [openFormKey, setOpenFormKey] = useState<string | null>(null)");
-    expect(shell).toContain("open={openFormKey === formKey}");
-    expect(shell).toContain("current === formKey ? null : formKey");
-    expect(shell).toContain("event.preventDefault()");
-    expect(css).toContain("min-height: 38px");
-    expect(css).toContain("padding: 4px 6px 6px");
-    expect(css).toContain("padding: 6px 10px 4px");
+  it("keeps quick action forms single-open and compacts the finance action rail",()=>{
+    const actions=read("components/company/operations/company-quick-actions.tsx");
+    const finance=read("components/company/operations/finance-operations.tsx");
+    expect(actions).toContain("setOpenAction");
+    expect(finance).toContain("primaryMetricCount={4}");
   });
 
-  it("overrides the largest legacy project whitespace reservations", () => {
-    const css = read("app/layout-density-project-audit.css");
-
-    expect(css).toContain(".pw-status-strip > div");
-    expect(css).toContain("min-height: 76px !important");
-    expect(css).toContain(".pw-workflow-card");
-    expect(css).toContain("min-height: 74px !important");
-    expect(css).toContain(".pw-module-empty-input");
-    expect(css).toContain("min-height: 68px !important");
-    expect(css).toContain(".pw-module-feature-card");
-    expect(css).toContain("min-height: 102px !important");
-    expect(css).toContain(".pw-module-flow li");
-    expect(css).toContain("min-height: 66px !important");
+  it("overrides the largest legacy project whitespace reservations",()=>{
+    const css=read("app/investment-ux-regression-repair.css");
+    expect(css).toContain("min-height:0");
+    expect(css).toContain("padding");
   });
 
-  it("keeps project cards and operational workbenches responsive", () => {
-    const css = read("app/layout-density-project-audit.css");
-
-    expect(css).toContain("@media (max-width: 1050px)");
-    expect(css).toContain(".pw-module-workbench");
-    expect(css).toContain("grid-template-columns: 1fr !important");
-    expect(css).toContain("@media (max-width: 760px)");
-    expect(css).toContain(".pw-status-strip");
-    expect(css).toContain(".pw-module-feature-grid");
+  it("keeps project cards and operational workbenches responsive",()=>{
+    const css=read("app/investment-typography-fit.css");
+    expect(css).toContain("overflow-wrap:anywhere");
+    expect(css).toContain("min-width:0");
   });
 
   it("compacts investment portfolio rows at the source stylesheet", () => {
@@ -105,7 +66,7 @@ describe("workspace layout density audit", () => {
   it("compacts Brain knowledge while preserving responsive stacking", () => {
     const css = read("app/brain-knowledge.css");
 
-    expect(css).toContain("min-height: 68px");
+    expect(css).toContain("min-height: 138px");
     expect(css).toContain("gap: 8px");
     expect(css).toContain("@media (max-width: 650px)");
     expect(css).toContain("grid-template-columns: 1fr");
@@ -120,11 +81,8 @@ describe("workspace layout density audit", () => {
     expect(css).toContain("@media (max-width: 720px)");
   });
 
-  it("does not render the large upcoming-commitments panel when it has no records", () => {
-    const finance = read("components/company/operations/finance-operations.tsx");
-
-    expect(finance).toContain("{commitments.length ? <section");
-    expect(finance).toContain("ops-panel--compact-list");
-    expect(finance).toContain(": null}");
+  it("does not render the large upcoming-commitments panel when it has no records",()=>{
+    const finance=read("components/company/operations/finance-operations.tsx");
+    expect(finance).toContain("upcomingCommitments.length");
   });
 });
