@@ -7,9 +7,11 @@ describe("investment UX regression repair", () => {
   it("keeps Wrzutnia outside navigation so dropdowns cannot be displaced", () => {
     const nav = read("components/projects/project-navigation.tsx");
     const layout = read("app/workspace/projects/[projectId]/layout.tsx");
+    const slot = read("components/projects/project-intake-slot.tsx");
     expect(nav).not.toContain("ProjectIntake");
     expect(layout).toContain("pw-project-header__intake");
-    expect(layout).toContain("<ProjectIntake projectId={project.id} />");
+    expect(layout).toContain("<ProjectIntakeSlot projectId={project.id} />");
+    expect(slot).toContain('import("@/components/projects/project-intake-pipeline")');
   });
 
   it("uses seven stable desktop navigation cells and no horizontal overflow", () => {
