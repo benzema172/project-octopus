@@ -21,4 +21,29 @@ describe("project document matching", () => {
     expect(matchProjectHint("OGÓLNE", projects)).toBeNull();
     expect(matchProjectHint("materiały biurowe centrala", projects)).toBeNull();
   });
+
+  it("uses a contract number as deterministic evidence", () => {
+    const candidates = [{ ...projects[0], contractNumber: "SAN/12/2026" }, projects[1]];
+    const match = matchProjectHint("Umowa SAN/12/2026", candidates);
+
+    expect(match?.project.id).toBe(projects[0].id);
+    expect(match?.score).toBeGreaterThan(0.98);
+  });
+
+  it("does not auto-assign two similarly matching investments", () => {
+    const ambiguous = [
+      { id: "a", name: "Hala A", investorName: "Ten sam inwestor", location: "Poznań" },
+      { id: "b", name: "Hala B", investorName: "Ten sam inwestor", location: "Poznań" }
+    ];
+
+    expect(matchProjectHint("Ten sam inwestor Poznań hala", ambiguous)).toBeNull();
+  });
+
+  it("learns a stable alias from a previously corrected assignment", () => {
+    const candidates = [{ ...projects[0], aliases: [{ value: "Żłobek Muchomorki", weight: 1 }] }, projects[1]];
+    const match = matchProjectHint("Faktura: Żłobek Muchomorki", candidates);
+
+    expect(match?.project.id).toBe(projects[0].id);
+    expect(match?.evidence).toContainEqual({ type: "alias", value: "Żłobek Muchomorki" });
+  });
 });

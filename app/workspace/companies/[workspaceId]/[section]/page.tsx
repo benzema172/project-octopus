@@ -108,9 +108,10 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
 
   if (section in OPERATIONAL_MODULES) {
     const moduleConfig = OPERATIONAL_MODULES[section as keyof typeof OPERATIONAL_MODULES];
-    const [data, canWrite] = await Promise.all([
+    const [data, canWrite, canApprove] = await Promise.all([
       moduleConfig.load(workspace.id),
-      hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: moduleConfig.domain, level: "write" })
+      hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: moduleConfig.domain, level: "write" }),
+      hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: moduleConfig.domain, level: "approve" })
     ]);
     return (
       <main className="co-page">
@@ -121,7 +122,7 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
             <p>{moduleConfig.description}</p>
           </div>
         </header>
-        <CompanyOperationsWorkspace workspaceId={workspace.id} kind={moduleConfig.kind} data={data} canWrite={canWrite} referenceDate={referenceDate} />
+        <CompanyOperationsWorkspace workspaceId={workspace.id} kind={moduleConfig.kind} data={data} canWrite={canWrite} canApprove={canApprove} referenceDate={referenceDate} />
       </main>
     );
   }
@@ -220,7 +221,7 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
             <p>Definicje cyklicznych raportów i zamknięte snapshoty danych finansowych, operacyjnych oraz zasobowych.</p>
           </div>
         </header>
-        <CompanyOperationsWorkspace workspaceId={workspace.id} kind="reports" data={data} canWrite={canWrite} referenceDate={referenceDate} />
+        <CompanyOperationsWorkspace workspaceId={workspace.id} kind="reports" data={data} canWrite={canWrite} canApprove={false} referenceDate={referenceDate} />
       </main>
     );
   }
@@ -272,9 +273,10 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
   }
 
   if (section === "ai-inbox") {
-    const [allItems, accessPolicy] = await Promise.all([
+    const [allItems, accessPolicy, projects] = await Promise.all([
       listAiInbox(workspace.id),
-      loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id })
+      loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id }),
+      listProjectsForWorkspace(user, workspace.id)
     ]);
     const items = allItems.filter((item) => {
       const domain: Domain = item.entityType === "template_version"
@@ -291,7 +293,7 @@ export default async function CompanySectionPage({ params, searchParams }: Compa
     return (
       <main className="co-page">
         <header className="co-page-heading"><div><p className="co-kicker">Wspólna kontrola AI</p><h1>Skrzynka AI</h1><p>Klasyfikacje, importy kosztorysów, skutki rewizji, szkice z budowy i wiedza firmy wymagające decyzji człowieka.</p></div><strong className="co-count-badge">{reviewCount} decyzji · {errorCount} błędów</strong></header>
-        <section className="co-section"><AiInbox items={items} workspaceId={workspace.id} /></section>
+        <section className="co-section"><AiInbox items={items} workspaceId={workspace.id} projects={projects.map((project) => ({ id: project.id, name: project.name }))} /></section>
       </main>
     );
   }

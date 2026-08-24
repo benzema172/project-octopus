@@ -117,6 +117,7 @@ export default async function CompanyReportsPage({ params }: Props) {
           kind="reports"
           data={data}
           canWrite={canWrite}
+          canApprove={false}
           referenceDate={new Date().toISOString()}
         />
       </section>

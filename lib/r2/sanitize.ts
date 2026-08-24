@@ -1,5 +1,7 @@
+import type { DocumentCategory } from "@/lib/documents/classification";
+
 export const MAX_SUPPORTED_UPLOAD_BYTES = 50 * 1024 * 1024;
-export const SUPPORTED_UPLOAD_ACCEPT = ".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp,.zip,.xml,.txt,.json,.md";
+export const SUPPORTED_UPLOAD_ACCEPT = ".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp,.xml,.txt,.json,.md,.zip";
 
 const SUPPORTED_MIME_TYPES: Record<string, Set<string>> = {
   pdf: new Set(["application/pdf"]),
@@ -12,11 +14,11 @@ const SUPPORTED_MIME_TYPES: Record<string, Set<string>> = {
   jpg: new Set(["image/jpeg", "image/jpg"]),
   jpeg: new Set(["image/jpeg", "image/jpg"]),
   webp: new Set(["image/webp"]),
-  zip: new Set(["application/zip", "application/x-zip-compressed"]),
   xml: new Set(["application/xml", "text/xml", "text/plain"]),
   txt: new Set(["text/plain"]),
   json: new Set(["application/json", "text/json", "text/plain"]),
-  md: new Set(["text/markdown", "text/plain"])
+  md: new Set(["text/markdown", "text/plain"]),
+  zip: new Set(["application/zip", "application/x-zip-compressed"])
 };
 
 export function validateUploadFile(fileName: string, mimeType: string, fileSize?: number): string | null {
@@ -25,7 +27,7 @@ export function validateUploadFile(fileName: string, mimeType: string, fileSize?
 
   const allowedMimeTypes = SUPPORTED_MIME_TYPES[extension];
   if (!allowedMimeTypes) {
-    return "Nieobsługiwany format. Dozwolone są PDF, DOC/DOCX, XLS/XLSX, CSV, obrazy, ZIP, XML i pliki tekstowe.";
+    return "Nieobsługiwany format. Dozwolone są PDF, DOC/DOCX, XLS/XLSX, CSV, obrazy, XML, pliki tekstowe i kontrolowane paczki ZIP.";
   }
 
   if (typeof fileSize === "number" && fileSize > MAX_SUPPORTED_UPLOAD_BYTES) {
@@ -56,33 +58,35 @@ export function sanitizeFileName(fileName: string): string {
   return safe || "document";
 }
 
-export function inferDocumentCategory(mimeType: string, fileName: string): string {
-  const lowerName = fileName.toLowerCase();
+export function inferDocumentCategory(mimeType: string, fileName: string): DocumentCategory {
+  const lowerName = fileName.toLocaleLowerCase("pl").replaceAll("ł", "l").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
   if (/kosztorys|przedmiar|boq|kalkulacj/.test(lowerName)) return "estimate";
   if (/stwi?or|specyfikacj.*technic/.test(lowerName)) return "specification";
-  if (/projekt|rzut|schemat|pzt|pw[-_ ]|pb[-_ ]/.test(lowerName)) return "project";
+  if (/projekt|dokumentacja|opis.*technic|rzut|schemat|pzt|pw[-_ ]|pb[-_ ]/.test(lowerName)) return "technical";
   if (/faktur|invoice|ksef/.test(lowerName)) return "invoice";
-  if (/protok[oó]ł|protokol|pr[oó]ba|odbior|zanikow/.test(lowerName)) return "protocol";
+  if (/protokol|proba|odbior|zanikow/.test(lowerName)) return "protocol";
   if (/wniosek|wnioski|zatwierdzenie.*materia/.test(lowerName)) return "application";
+  if (/harmonogram|schedule|terminarz/.test(lowerName)) return "schedule";
+  if (/(^|[^a-z0-9])(wz|pz)([^a-z0-9]|$)|dostaw/.test(lowerName)) return "warehouse";
   if (/wz[oó]r|szablon|template/.test(lowerName)) return "template";
   if (/umowa.*prac|badani|bhp|urlop|pracownik/.test(lowerName)) return "hr";
   if (/pojazd|samoch|flota|paliw|serwis/.test(lowerName)) return "fleet";
+  if (/umowa|kontrakt|aneks|zlecenie/.test(lowerName)) return "contract";
+  if (/korespondencj|uzgodnieni|notatka|rfi|zapytani/.test(lowerName)) return "correspondence";
+  if (/raport|zestawieni|podsumowani/.test(lowerName)) return "report";
+  if (lowerName.endsWith(".zip") || mimeType.includes("zip")) return "other";
 
   if (mimeType.includes("pdf") || lowerName.endsWith(".pdf")) {
-    return "pdf";
+    return "technical";
   }
 
   if (mimeType.includes("spreadsheet") || lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") || lowerName.endsWith(".csv")) {
-    return "estimate";
-  }
-
-  if (lowerName.endsWith(".zip") || mimeType.includes("zip")) {
-    return "package";
+    return "other";
   }
 
   if (mimeType.includes("word") || lowerName.endsWith(".doc") || lowerName.endsWith(".docx")) {
-    return "document";
+    return "technical";
   }
 
   return "other";

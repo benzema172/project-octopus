@@ -132,14 +132,23 @@ export async function getFinanceWorkspaceData(workspaceId: string, options: Comp
     db.from("payments").select("id,invoice_id,payment_date,amount,bank_reference,status").eq("workspace_id", workspaceId).in("invoice_id", invoiceIds).order("payment_date", { ascending: false }).limit(page.pageSize * 10),
     db.from("financial_allocations").select("id,project_id,source_id,source_line_id,boq_item_id,wbs_node_id,amount,status").eq("workspace_id", workspaceId).eq("source_type", "invoice").in("source_id", invoiceIds).limit(page.pageSize * 10)
   ]) : [null, null, null];
+  const invoiceLines = invoiceLinesResult ? rows(invoiceLinesResult, "pozycji faktur") : [];
+  const invoiceLineIds = ids(invoiceLines);
+  const procurementMatchesResult = invoiceLineIds.length
+    ? await db.from("procurement_matches")
+      .select("id,project_id,invoice_line_id,purchase_order_line_id,receipt_line_id,boq_item_id,ordered_quantity,received_quantity,invoiced_quantity,ordered_unit_price,invoiced_unit_price,quantity_variance,price_variance_percent,planned_unit_price,budget_price_variance_percent,tax_consistent,match_confidence,matched_dimensions,status,warnings,updated_at")
+      .eq("workspace_id", workspaceId).in("invoice_line_id", invoiceLineIds)
+      .order("updated_at", { ascending: false }).limit(page.pageSize * 20)
+    : null;
 
   return {
     counterparties: rows(counterpartiesResult, "kontrahentów"),
     invoices,
-    invoiceLines: invoiceLinesResult ? rows(invoiceLinesResult, "pozycji faktur") : [],
+    invoiceLines,
     payments: paymentsResult ? rows(paymentsResult, "płatności") : [],
     commitments: rows(commitmentsResult, "zobowiązań"),
     allocations: allocationsResult ? rows(allocationsResult, "alokacji finansowych") : [],
+    procurementMatches: procurementMatchesResult ? rows(procurementMatchesResult, "uzgodnień zakupowych") : [],
     projects: rows(projectsResult, "inwestycji"),
     aiImports,
     summary,

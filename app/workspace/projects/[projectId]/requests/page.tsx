@@ -24,7 +24,7 @@ export default async function RequestsPage({ params }: Props) {
   const canWrite = await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "write", projectId: project.id });
   const db = createServiceSupabaseClient();
   const [documents, brain, requirementsResult, requestsResult, stockItemsResult, boqItemsResult] = await Promise.all([
-    listDocumentsForCategories(projectId, ["wniosek"]),
+    listDocumentsForCategories(projectId, ["application"]),
     getMaterialKnowledge(projectId),
     db.from("project_requirements").select("id,title,description,status").eq("workspace_id", project.workspace_id).eq("project_id", project.id).eq("requirement_type", "material_application").order("created_at", { ascending: false }),
     db.from("material_requests").select("id,source_requirement_id,title,manufacturer,product_name,model,proposed_use,compliance_summary,status,sent_to,submitted_at,sent_at,decision_note,stock_item_id,boq_item_id,wbs_node_id,request_origin,procurement_trace_id").eq("project_id", project.id).order("created_at", { ascending: false }),

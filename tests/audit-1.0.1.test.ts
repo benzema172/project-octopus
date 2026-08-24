@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 
-describe("Project Octopus 1.0.1 audit regressions", () => {
+describe("Project Octopus release audit regressions", () => {
   it("supports company-level document finalization without allowing silent project rebinding", () => {
     const sql = read("supabase/migrations/20260818073000_101_company_document_upload_fix.sql");
     expect(sql).toContain("if p_project_id is not null then");
@@ -53,12 +53,12 @@ describe("Project Octopus 1.0.1 audit regressions", () => {
     expect(sql).toContain("insert into public.meter_readings");
   });
 
-  it("keeps package and lock metadata aligned at 1.0.1", () => {
+  it("keeps package and lock metadata aligned with the current 1.1.0 release", () => {
     const pkg = JSON.parse(read("package.json")) as { version: string; devDependencies: Record<string, string> };
     const lock = JSON.parse(read("package-lock.json")) as { version: string; packages: Record<string, { version?: string; devDependencies?: Record<string, string> }> };
-    expect(pkg.version).toBe("1.0.1");
-    expect(lock.version).toBe("1.0.1");
-    expect(lock.packages[""]?.version).toBe("1.0.1");
+    expect(pkg.version).toBe("1.1.0");
+    expect(lock.version).toBe("1.1.0");
+    expect(lock.packages[""]?.version).toBe("1.1.0");
     expect(pkg.devDependencies["@types/node"]).toBe("22.12.0");
     expect(lock.packages[""]?.devDependencies?.["@types/node"]).toBe("22.12.0");
   });

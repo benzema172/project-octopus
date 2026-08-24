@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { processDocumentVersion } from "@/lib/ai/process-document";
 import { getRequestUser } from "@/lib/auth";
-import { syncProjectProfileFromAiFacts } from "@/lib/data/project-profile-ai";
 import { getProjectForUser } from "@/lib/data/projects";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
-import { runInvestmentAutopilot } from "@/lib/investments/run-autopilot";
+import { normalizeDocumentCategory } from "@/lib/documents/classification";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -57,57 +56,24 @@ export async function POST(request: Request) {
     const analysis = await processDocumentVersion({
       workspaceId: project.workspace_id,
       versionId: body.versionId,
-      userId: user.id
+      userId: user.id,
+      categoryOverride: body.lockCategory ? normalizeDocumentCategory(sourceDocument.category) : null
     });
-    const finalCategory = body.lockCategory && sourceDocument.category ? sourceDocument.category : analysis.category;
-
-    if (finalCategory !== analysis.category) {
-      await supabase.from("documents").update({ category: finalCategory }).eq("id", sourceDocument.id);
-    }
-
-    let profileSync: Awaited<ReturnType<typeof syncProjectProfileFromAiFacts>> | null = null;
-    try {
-      profileSync = await syncProjectProfileFromAiFacts({
-        project,
-        facts: analysis.facts,
-        documentId: sourceDocument.id,
-        documentVersionId: body.versionId,
-        userId: user.id
-      });
-    } catch (profileError) {
-      console.error("Project Octopus: automatic Project Profile sync after document analysis failed", {
-        projectId: project.id,
-        documentId: sourceDocument.id,
-        message: profileError instanceof Error ? profileError.message : String(profileError)
-      });
-    }
-
-    let autopilot: Awaited<ReturnType<typeof runInvestmentAutopilot>> | null = null;
-    try {
-      autopilot = await runInvestmentAutopilot({ workspaceId: project.workspace_id, projectId: project.id, userId: user.id });
-    } catch (autopilotError) {
-      console.error("Project Octopus: automatic investment autopilot after document analysis failed", {
-        projectId: project.id,
-        documentId: sourceDocument.id,
-        message: autopilotError instanceof Error ? autopilotError.message : String(autopilotError)
-      });
-    }
 
     return NextResponse.json({
       ok: true,
-      category: finalCategory,
-      ai_category: analysis.category,
+      category: analysis.effectiveCategory,
+      ai_category: analysis.aiCategory,
       confidence: analysis.confidence,
       summary: analysis.summary,
-      profile_sync: profileSync,
-      autopilot,
+      proposed_project_id: analysis.proposedProjectId,
+      project_match: analysis.projectMatch,
       counts: {
         facts: analysis.facts.length,
         materials: analysis.requiredApplications.length,
         devices: analysis.installations.length,
         boq_items: analysis.boqItems.length,
-        findings: analysis.warnings.length,
-        profile_fields: profileSync?.updatedFields.length ?? 0
+        findings: analysis.warnings.length
       }
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

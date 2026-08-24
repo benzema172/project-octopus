@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { normalizeDocumentCategory, type DocumentCategory } from "../documents/classification";
 
 export type UploadIntent = {
   workspaceId: string;
@@ -9,6 +10,11 @@ export type UploadIntent = {
   fileName: string;
   mimeType: string;
   fileSize: number;
+  category: DocumentCategory;
+  categoryLocked: boolean;
+  sourceChannel?: string;
+  sourceExternalKey?: string;
+  sourceMetadata?: Record<string, unknown>;
   expiresAt: number;
 };
 
@@ -30,6 +36,12 @@ function isUploadIntent(value: unknown): value is UploadIntent {
     typeof intent.fileSize === "number" &&
     Number.isFinite(intent.fileSize) &&
     intent.fileSize > 0 &&
+    typeof intent.category === "string" &&
+    normalizeDocumentCategory(intent.category) === intent.category &&
+    typeof intent.categoryLocked === "boolean" &&
+    (intent.sourceChannel === undefined || typeof intent.sourceChannel === "string") &&
+    (intent.sourceExternalKey === undefined || typeof intent.sourceExternalKey === "string") &&
+    (intent.sourceMetadata === undefined || (typeof intent.sourceMetadata === "object" && intent.sourceMetadata !== null && !Array.isArray(intent.sourceMetadata))) &&
     typeof intent.expiresAt === "number" &&
     Number.isFinite(intent.expiresAt)
   );
@@ -87,4 +99,3 @@ export function verifyUploadToken(token: string, secret: string, now = Date.now(
 
   return intent;
 }
-

@@ -52,7 +52,11 @@ try {
     "get_project_command_panel_snapshot",
     "get_project_reconciliation_snapshot",
     "get_project_execution_snapshot",
-    "get_project_autopilot_snapshot"
+    "get_project_autopilot_snapshot",
+    "canonical_document_category",
+    "complete_document_upload_v2",
+    "review_document_analysis_atomic",
+    "trg_orchestrate_approved_business_document"
   ];
   for (const name of requiredFunctions) {
     const result = await database.query(
@@ -61,6 +65,40 @@ try {
     );
     if (result.rows[0]?.count < 1) throw new Error(`Missing post-change database function: ${name}`);
   }
+
+  const intakeColumns = await database.query(`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'document_intakes'
+      and column_name in ('requested_category', 'category_locked', 'match_metadata')
+  `);
+  if (intakeColumns.rows.length !== 3) throw new Error("Missing document routing columns on document_intakes.");
+
+  const trigger = await database.query(`
+    select count(*)::integer count
+    from pg_trigger
+    where tgrelid = 'public.documents'::regclass
+      and tgname = 'orchestrate_approved_business_document'
+      and not tgisinternal
+  `);
+  if (trigger.rows[0]?.count !== 1) throw new Error("Missing approved business document trigger.");
+
+  const callableByAuthenticated = await database.query(`
+    select
+      has_function_privilege(
+        'authenticated',
+        'public.review_document_analysis_atomic(uuid,uuid,text,text,uuid,boolean,uuid,text)',
+        'execute'
+      ) review_allowed,
+      has_function_privilege(
+        'authenticated',
+        'public.canonical_document_category(text)',
+        'execute'
+      ) category_mapper_allowed
+  `);
+  if (callableByAuthenticated.rows[0]?.review_allowed) throw new Error("Atomic document review RPC is exposed to authenticated clients.");
+  if (!callableByAuthenticated.rows[0]?.category_mapper_allowed) throw new Error("Authenticated RLS cannot execute the category mapper.");
 
   console.log(`OK   full auto-discovered migration chain: ${migrations.length} migrations`);
 } finally {

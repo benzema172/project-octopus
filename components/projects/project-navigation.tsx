@@ -15,6 +15,7 @@ import {
   FileText,
   Gauge,
   LayoutDashboard,
+  ListChecks,
   Menu,
   PackageCheck,
   ShieldCheck,
@@ -60,6 +61,7 @@ export function ProjectNavigation({ projectId, allowedDomains }: ProjectNavigati
       label: "Realizacja",
       icon: Construction,
       items: [
+        { href: `${base}/tasks`, label: "Plan działań", icon: ListChecks, domain: "investments" },
         { href: `${base}/cost-estimate`, label: "Kosztorys / BOQ", icon: Calculator, domain: "investments" },
         { href: `${base}/schedule`, label: "Harmonogram", icon: CalendarDays, domain: "investments" },
         { href: `${base}/site`, label: "Budowa / dziennik", icon: Construction, domain: "investments" },

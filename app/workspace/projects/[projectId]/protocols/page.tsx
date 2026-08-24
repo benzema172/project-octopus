@@ -30,7 +30,7 @@ export default async function ProtocolsPage({ params }: Props) {
   const canWrite = await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "write", projectId: project.id });
   const db = createServiceSupabaseClient();
   const [documents, allDocuments, requirementsResult, protocolsResult] = await Promise.all([
-    listDocumentsForCategories(projectId, ["protokol"]),
+    listDocumentsForCategories(projectId, ["protocol"]),
     listDocumentsForProject(projectId).catch(() => []),
     db.from("protocol_requirements").select("id,protocol_type,title,status").eq("workspace_id", project.workspace_id).eq("project_id", project.id).order("created_at", { ascending: false }),
     db.from("protocols").select("id,protocol_requirement_id,protocol_type,title,protocol_date,scope,location,test_medium,test_pressure,pressure_unit,test_duration_minutes,measurement_device,result,remarks,status,protocol_participants(name,role,company,signed),protocol_evidence(id,document_id,label,evidence_type)").eq("project_id", project.id).order("created_at", { ascending: false }).returns<ProtocolRow[]>()

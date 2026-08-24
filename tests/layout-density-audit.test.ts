@@ -105,7 +105,8 @@ describe("workspace layout density audit", () => {
   it("compacts Brain knowledge while preserving responsive stacking", () => {
     const css = read("app/brain-knowledge.css");
 
-    expect(css).toContain("min-height: 68px");
+    expect(css).toContain(".brain-facts-panel--compact");
+    expect(css).toContain("min-height: 138px");
     expect(css).toContain("gap: 8px");
     expect(css).toContain("@media (max-width: 650px)");
     expect(css).toContain("grid-template-columns: 1fr");

@@ -55,7 +55,7 @@ describe("Project Octopus operational metrics", () => {
   });
 });
 
-describe("Project Octopus 1.0 functional contract", () => {
+describe("Project Octopus functional contract", () => {
   const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
   const layout = readFileSync("app/workspace/companies/[workspaceId]/[section]/layout.tsx", "utf8");
   const deferred = readFileSync("components/company/company-power-tools-deferred.tsx", "utf8");
@@ -64,8 +64,8 @@ describe("Project Octopus 1.0 functional contract", () => {
   const exportRoute = readFileSync("app/api/company/export/route.ts", "utf8");
   const component = readFileSync("components/company/company-power-tools.tsx", "utf8");
 
-  it("publishes version 1.0.1 and keeps advanced tools available without eager layout loading", () => {
-    expect(packageJson.version).toBe("1.0.1");
+  it("publishes version 1.1.0 and keeps advanced tools available without eager layout loading", () => {
+    expect(packageJson.version).toBe("1.1.0");
     expect(layout).not.toContain("CompanyPowerTools");
     expect(layout).not.toContain("getCompanyPowerToolsData");
     expect(deferred).toContain("CompanyPowerTools");

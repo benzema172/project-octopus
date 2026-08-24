@@ -3,6 +3,10 @@ import { getRequestUser } from "@/lib/auth";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { normalizeDocumentCategory } from "@/lib/documents/classification";
+import { getProjectForUser } from "@/lib/data/projects";
+import { syncProjectProfileFromAiFacts, type ProjectProfileAiFact } from "@/lib/data/project-profile-ai";
+import { runInvestmentAutopilot } from "@/lib/investments/run-autopilot";
 
 export const runtime = "nodejs";
 
@@ -12,6 +16,9 @@ type ReviewBody = {
   entityId?: string;
   action?: "approve" | "reject";
   note?: string;
+  category?: string;
+  projectId?: string | null;
+  projectSelectionSet?: boolean;
 };
 
 async function approveEstimateImport(input: { workspaceId: string; importId: string; userId: string }) {
@@ -74,60 +81,120 @@ export async function POST(request: Request) {
     let result: Record<string, unknown> = {};
     let projectId: string | null = null;
     let documentId: string | null = null;
+    let atomicallyLogged = false;
 
     if (body.entityType === "document") {
-      const { data: document } = await supabase
+      const [{ data: document }, { data: latestClassification }] = await Promise.all([
+        supabase
         .from("documents")
-        .select("id,project_id,workspace_id,ai_status,category")
+        .select("id,project_id,workspace_id,ai_status,category,current_version_id")
         .eq("id", body.entityId)
         .eq("workspace_id", workspace.id)
-        .maybeSingle<{ id: string; project_id: string | null; workspace_id: string; ai_status: string; category: string | null }>();
+        .maybeSingle<{ id: string; project_id: string | null; workspace_id: string; ai_status: string; category: string | null; current_version_id: string | null }>(),
+        supabase
+          .from("document_classifications")
+          .select("id,category,proposed_project_id,document_version_id")
+          .eq("document_id", body.entityId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle<{ id: string; category: string; proposed_project_id: string | null; document_version_id: string }>()
+      ]);
       if (!document) throw new Error("Nie znaleziono dokumentu w aktywnej firmie.");
-      const allowed = await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: domainForDocumentCategory(document.category), level: "approve", projectId: document.project_id });
+      const requestedCategory = body.category === undefined ? null : normalizeDocumentCategory(body.category);
+      if (body.category !== undefined && !requestedCategory) {
+        return NextResponse.json({ error: "Wybrana kategoria dokumentu jest nieprawidłowa." }, { status: 400 });
+      }
+      const finalCategory = requestedCategory
+        ?? normalizeDocumentCategory(latestClassification?.category)
+        ?? normalizeDocumentCategory(document.category)
+        ?? "other";
+      const projectSelectionSet = body.projectSelectionSet === true;
+      const requestedProjectId = typeof body.projectId === "string" ? body.projectId.trim() || null : null;
+      const finalProjectId = projectSelectionSet
+        ? requestedProjectId
+        : latestClassification?.proposed_project_id ?? document.project_id;
+      if (finalProjectId) {
+        const { data: selectedProject, error: selectedProjectError } = await supabase
+          .from("projects")
+          .select("id")
+          .eq("id", finalProjectId)
+          .eq("workspace_id", workspace.id)
+          .maybeSingle<{ id: string }>();
+        if (selectedProjectError || !selectedProject) {
+          return NextResponse.json({ error: "Wybrana inwestycja nie należy do aktywnej firmy." }, { status: 422 });
+        }
+      }
+      const allowed = await hasDomainAccess({
+        workspaceId: workspace.id,
+        userId: user.id,
+        domain: domainForDocumentCategory(finalCategory),
+        level: "approve",
+        projectId: finalProjectId
+      });
       if (!allowed) return NextResponse.json({ error: "Brak uprawnienia do zatwierdzenia dokumentu w tej domenie." }, { status: 403 });
       documentId = document.id;
-      projectId = document.project_id;
-      const nextStatus = approved ? "approved" : "rejected";
-      const { data: latestClassification } = await supabase
-        .from("document_classifications")
-        .select("id,category,proposed_project_id")
-        .eq("document_id", document.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle<{ id: string; category: string; proposed_project_id: string | null }>();
-      if (latestClassification) {
-        await supabase.from("document_classifications").update({
-          status: nextStatus,
-          approved_by: user.id,
-          approved_at: new Date().toISOString()
-        }).eq("id", latestClassification.id);
+      const { data: reviewed, error: reviewError } = await supabase.rpc("review_document_analysis_atomic", {
+        p_workspace_id: workspace.id,
+        p_document_id: document.id,
+        p_action: body.action,
+        p_category: finalCategory,
+        p_project_id: finalProjectId,
+        p_project_selection_set: projectSelectionSet,
+        p_actor_id: user.id,
+        p_note: body.note ?? null
+      }).single<{
+        result_document_id: string;
+        result_project_id: string | null;
+        result_category: string;
+        result_status: string;
+        result_document_version_id: string;
+      }>();
+      if (reviewError || !reviewed) {
+        throw new Error(`Nie udało się atomowo zapisać decyzji dokumentu: ${reviewError?.message ?? "brak danych"}`);
       }
-      await Promise.all([
-        supabase.from("document_extractions").update({ status: nextStatus }).eq("document_id", document.id).eq("status", "proposed"),
-        supabase.from("document_intakes").update({ status: approved ? "ready" : "rejected", decided_by: user.id, decided_at: new Date().toISOString(), decision_note: body.note ?? null }).eq("document_id", document.id),
-        supabase.from("documents").update({
-          category: approved ? latestClassification?.category : undefined,
-          project_id: approved ? latestClassification?.proposed_project_id ?? document.project_id : undefined,
-          review_status: nextStatus,
-          ai_status: approved ? "ready" : "rejected",
-          approved_by: approved ? user.id : null,
-          approved_at: approved ? new Date().toISOString() : null
-        }).eq("id", document.id)
-      ]);
-      if (approved && latestClassification?.proposed_project_id) {
-        await supabase.from("document_versions").update({ project_id: latestClassification.proposed_project_id }).eq("document_id", document.id);
-        projectId = latestClassification.proposed_project_id;
+      atomicallyLogged = true;
+      projectId = reviewed.result_project_id;
+      result = {
+        documentId: reviewed.result_document_id,
+        projectId,
+        category: reviewed.result_category,
+        status: reviewed.result_status,
+        documentVersionId: reviewed.result_document_version_id
+      };
+
+      if (approved && projectId) {
+        try {
+          const [{ data: extraction }, project] = await Promise.all([
+            supabase
+              .from("document_extractions")
+              .select("payload")
+              .eq("document_version_id", reviewed.result_document_version_id)
+              .eq("extraction_type", "document_context")
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle<{ payload: { facts?: ProjectProfileAiFact[] } }>(),
+            getProjectForUser(user, projectId)
+          ]);
+          const facts = Array.isArray(extraction?.payload?.facts) ? extraction.payload.facts : [];
+          if (project && facts.length > 0) {
+            result.profileSync = await syncProjectProfileFromAiFacts({
+              project,
+              facts,
+              documentId: document.id,
+              documentVersionId: reviewed.result_document_version_id,
+              userId: user.id
+            });
+          }
+          result.autopilot = await runInvestmentAutopilot({ workspaceId: workspace.id, projectId, userId: user.id });
+        } catch (postApprovalError) {
+          console.error("Project Octopus: post-approval project synchronization failed", {
+            documentId: document.id,
+            projectId,
+            message: postApprovalError instanceof Error ? postApprovalError.message : String(postApprovalError)
+          });
+          result.postApprovalWarning = "Dokument zatwierdzono, ale odświeżenie Karty inwestycji lub planu działań wymaga ponowienia.";
+        }
       }
-      const { data: refs } = await supabase.from("source_references").select("id").eq("document_id", document.id).returns<Array<{ id: string }>>();
-      const refIds = (refs ?? []).map((reference) => reference.id);
-      if (refIds.length > 0) {
-        await supabase.from("project_facts").update({
-          status: nextStatus,
-          approved_by: approved ? user.id : null,
-          approved_at: approved ? new Date().toISOString() : null
-        }).in("source_reference_id", refIds).eq("status", "proposed");
-      }
-      result = { documentId: document.id, status: nextStatus };
     } else if (body.entityType === "estimate_import") {
       if (approved) {
         result = await approveEstimateImport({ workspaceId: workspace.id, importId: body.entityId, userId: user.id });
@@ -180,7 +247,7 @@ export async function POST(request: Request) {
       result = { projectId, status: approved ? "approved" : "rejected" };
     }
 
-    await Promise.all([
+    if (!atomicallyLogged) await Promise.all([
       supabase.from("ai_review_actions").insert({
         workspace_id: workspace.id,
         project_id: projectId,

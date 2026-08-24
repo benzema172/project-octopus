@@ -31,7 +31,7 @@ export default async function CostEstimatePage({ params }: Props) {
   }
 
   const [documents, boqItems] = await Promise.all([
-    listDocumentsForCategories(projectId, ["kosztorys"]),
+    listDocumentsForCategories(projectId, ["estimate"]),
     getBoqKnowledge(projectId)
   ]);
 

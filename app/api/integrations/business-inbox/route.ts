@@ -1,5 +1,5 @@
-import { timingSafeEqual } from "node:crypto";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { authorizeIntegrationRequest, normalizeIntegrationChannel } from "@/lib/integrations/auth";
 
 export const runtime = "nodejs";
 
@@ -12,21 +12,6 @@ type IntegrationBody = {
   documentType?: string | null;
   payload?: Record<string, unknown>;
 };
-
-const ALLOWED_CHANNELS = new Set(["ksef", "erp", "subiekt", "comarch", "symfonia", "enova", "email", "api"]);
-
-function authorized(request: Request) {
-  const expected = process.env.OCTOPUS_INTEGRATION_TOKEN?.trim();
-  if (!expected) return { ok: false as const, status: 503, error: "Integracje zewnętrzne nie są skonfigurowane." };
-  const header = request.headers.get("authorization") ?? "";
-  const supplied = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  const expectedBuffer = Buffer.from(expected);
-  const suppliedBuffer = Buffer.from(supplied);
-  if (!supplied || expectedBuffer.length !== suppliedBuffer.length || !timingSafeEqual(expectedBuffer, suppliedBuffer)) {
-    return { ok: false as const, status: 401, error: "Nieprawidłowy token integracyjny." };
-  }
-  return { ok: true as const };
-}
 
 function optionalId(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -41,7 +26,7 @@ function canonicalPayload(payload: Record<string, unknown> | undefined) {
 }
 
 export async function POST(request: Request) {
-  const auth = authorized(request);
+  const auth = authorizeIntegrationRequest(request);
   if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
 
   let body: IntegrationBody;
@@ -50,20 +35,26 @@ export async function POST(request: Request) {
 
   const workspaceId = optionalId(body.workspaceId);
   const externalKey = optionalId(body.externalKey);
-  const sourceChannel = optionalId(body.sourceChannel)?.toLowerCase();
+  const sourceChannel = normalizeIntegrationChannel(body.sourceChannel);
   const projectId = optionalId(body.projectId);
   const documentId = optionalId(body.documentId);
   const documentType = optionalId(body.documentType);
   if (!workspaceId || !externalKey || !sourceChannel) {
     return Response.json({ error: "Wymagane są workspaceId, sourceChannel i externalKey." }, { status: 400 });
   }
-  if (!ALLOWED_CHANNELS.has(sourceChannel)) {
-    return Response.json({ error: "Nieobsługiwany kanał integracyjny." }, { status: 400 });
-  }
 
   const db = createServiceSupabaseClient();
   const { data: workspace } = await db.from("workspaces").select("id").eq("id", workspaceId).maybeSingle<{ id: string }>();
   if (!workspace) return Response.json({ error: "Nie znaleziono firmy." }, { status: 404 });
+  await db.from("document_ingestion_channels").upsert({
+    workspace_id: workspaceId,
+    channel_type: sourceChannel,
+    name: sourceChannel,
+    status: "active",
+    configuration: { acceptsBusinessPayload: true },
+    last_received_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }, { onConflict: "workspace_id,channel_type,name" });
 
   if (projectId) {
     const { data: project } = await db.from("projects").select("id").eq("workspace_id", workspaceId).eq("id", projectId).maybeSingle<{ id: string }>();

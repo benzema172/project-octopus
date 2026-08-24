@@ -15,7 +15,7 @@ describe("legacy Office upload support", () => {
 
   it("routes legacy spreadsheets and Word documents to useful categories", () => {
     expect(inferDocumentCategory("application/vnd.ms-excel", "Kosztorys sanitarny.xls")).toBe("estimate");
-    expect(inferDocumentCategory("application/msword", "Opis techniczny.doc")).toBe("document");
+    expect(inferDocumentCategory("application/msword", "Opis techniczny.doc")).toBe("technical");
   });
 
   it("extracts worksheet content from a BIFF8 XLS buffer", async () => {

@@ -13,12 +13,14 @@ import {
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
+import { ProjectActionPreview } from "@/components/projects/project-action-preview";
 import { ExecutionLayerNotice } from "@/components/system/execution-layer-notice";
 import { hasDomainAccess } from "@/lib/authorization";
 import { requireCurrentUser } from "@/lib/auth";
 import { isExecutionLayerSchemaReady } from "@/lib/data/operations";
 import { getProjectDashboardSnapshot, type ProjectDashboardSnapshot } from "@/lib/data/project-dashboard-snapshot";
 import { getProjectProfile } from "@/lib/data/project-profile";
+import { listProjectTasks } from "@/lib/data/project-tasks";
 import { getProjectForUser } from "@/lib/data/projects";
 import { parseLocalizedNumber } from "@/lib/numbers/parse-localized-number";
 import "../../../project-dashboard-combined.css";
@@ -78,10 +80,15 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   });
   if (!investmentsAllowed) return <DomainAccessDenied workspaceId={project.workspace_id} area="Inwestycja" />;
 
-  const [profile, schemaReady, financeAllowed] = await Promise.all([
+  const [profile, schemaReady, financeAllowed, canManageInvestments, projectTasks] = await Promise.all([
     getProjectProfile(project),
     isExecutionLayerSchemaReady(),
-    hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "finance", level: "read", projectId: project.id })
+    hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "finance", level: "read", projectId: project.id }),
+    hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "write", projectId: project.id }),
+    listProjectTasks(project.workspace_id, project.id).catch((error) => {
+      console.error("Project Octopus: project action preview unavailable", { projectId: project.id, message: error instanceof Error ? error.message : String(error) });
+      return [];
+    })
   ]);
 
   let dashboard = EMPTY_DASHBOARD;
@@ -95,7 +102,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
 
   const { documentsCount, boqValue, acceptedWorkValue, closeoutRequired, closeoutComplete, alerts, milestones, risks, forecast } = dashboard;
   const base = `/workspace/projects/${project.id}`;
-  const today = new Date();
+  const referenceTime = new Date().toISOString();
+  const today = new Date(referenceTime);
   const start = parseDate(profile.startDate);
   const finish = parseDate(profile.completionDate);
   const hasContractDates = Boolean(start && finish && finish.getTime() > start.getTime());
@@ -147,6 +155,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           <b>Zobacz kompletność <ArrowRight size={14} /></b>
         </Link>
       </section>
+
+      <ProjectActionPreview projectId={project.id} tasks={projectTasks} canWrite={canManageInvestments} referenceTime={referenceTime} />
 
       <section className="pw-finance-card">
         <div className="pw-card-title-row">

@@ -20,7 +20,7 @@ export default async function ProjectOutputsPage({ params }: Props) {
   if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id })) return <DomainAccessDenied workspaceId={project.workspace_id} area="Wyniki inwestycji" />;
   const db=createServiceSupabaseClient();
   const [documents,outputsResult,requestsResult,protocolsResult]=await Promise.all([
-    listDocumentsForCategories(projectId,["wniosek","protokol"]),
+    listDocumentsForCategories(projectId,["application","protocol"]),
     db.from("project_outputs").select("id,title,output_type,version_number,status,mime_type,generated_at,approved_at,warnings").eq("workspace_id",project.workspace_id).eq("project_id",project.id).order("generated_at",{ascending:false}),
     db.from("material_requests").select("id,title,manufacturer,product_name,model,approved_at").eq("project_id",project.id).eq("status","approved").order("approved_at",{ascending:false}),
     db.from("protocols").select("id,title,protocol_type,protocol_date,result,approved_at").eq("project_id",project.id).eq("status","approved").order("approved_at",{ascending:false})
