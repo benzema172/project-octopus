@@ -56,4 +56,13 @@ describe("compact investment submodules after Schedule", () => {
     expect(outputs).toContain("format=json");
     expect(outputs).toContain('className="pw-submodule-sources"');
   });
+
+  it("keeps the requests view compatible with the legacy devices schema", () => {
+    const migration = read("supabase/migrations/20260824112000_backfill_devices_updated_at.sql");
+    const knowledge = read("lib/data/module-knowledge.ts");
+    expect(migration).toContain("alter table public.devices");
+    expect(migration).toContain("add column if not exists updated_at");
+    expect(migration).toContain("create trigger set_devices_updated_at");
+    expect(knowledge).toContain('.order("updated_at", { ascending: false })');
+  });
 });
