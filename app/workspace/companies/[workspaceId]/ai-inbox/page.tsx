@@ -11,7 +11,8 @@ import {
   loadDomainAccessPolicy,
   type Domain
 } from "@/lib/authorization";
-import { listAiInbox } from "@/lib/data/operations";
+import { getProjectMatchQuality, listAiInbox } from "@/lib/data/operations";
+import { listProjectsForWorkspace } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 
 export const dynamic = "force-dynamic";
@@ -28,15 +29,16 @@ export default async function CompanyAiInboxPage({ params }: Props) {
     return <DomainAccessDenied workspaceId={workspace.id} area="Skrzynka AI" />;
   }
 
-  const [allItems, accessPolicy] = await Promise.all([
+  const [allItems, accessPolicy, projects] = await Promise.all([
     listAiInbox(workspace.id).catch((error) => {
       console.error("Project Octopus: AI inbox fallback", error);
       return [];
     }),
-    loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id })
+    loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id }),
+    listProjectsForWorkspace(user, workspace.id)
   ]);
 
-  const items = allItems.filter((item) => {
+  const items = allItems.flatMap((item) => {
     const domain: Domain = item.entityType === "template_version"
       ? "templates"
       : item.entityType === "knowledge_entry"
@@ -44,7 +46,16 @@ export default async function CompanyAiInboxPage({ params }: Props) {
         : item.entityType === "document"
           ? domainForDocumentCategory(item.category)
           : "investments";
-    return domainAccessPolicyAllows(accessPolicy, { domain, level: "read", projectId: item.projectId });
+    if (!domainAccessPolicyAllows(accessPolicy, { domain, level: "read", projectId: item.projectId })) return [];
+    return [{
+      ...item,
+      canWrite: domainAccessPolicyAllows(accessPolicy, { domain, level: "write", projectId: item.projectId }),
+      canApprove: domainAccessPolicyAllows(accessPolicy, { domain, level: "approve", projectId: item.projectId })
+    }];
+  });
+  const matchQuality = await getProjectMatchQuality(workspace.id, projects.map((project) => project.id)).catch((error) => {
+    console.error("Project Octopus: matcher quality fallback", error);
+    return { reviewed: 0, confirmed: 0, corrected: 0, rejected: 0, aliases: 0, precision: null, recall: null, correctionRate: null };
   });
 
   const reviewCount = items.filter((item) => item.status === "review").length;
@@ -68,6 +79,13 @@ export default async function CompanyAiInboxPage({ params }: Props) {
         <article className="co-metric-card"><span>Błędy</span><strong>{errorCount}</strong><small>można ponowić analizę dokumentu</small></article>
         <article className="co-metric-card"><span>W toku</span><strong>{processingCount}</strong><small>nowe i przetwarzane elementy</small></article>
         <article className="co-metric-card co-metric-card--ai"><span>Gotowe</span><strong>{readyCount}</strong><small>pozycje przyjęte przez pipeline</small></article>
+      </section>
+
+      <section className="ai-quality-strip" aria-label="Jakość dopasowania inwestycji">
+        <article><span>Zweryfikowane przypisania</span><strong>{matchQuality.reviewed}</strong><small>{matchQuality.confirmed} bez korekty</small></article>
+        <article><span>Precision</span><strong>{matchQuality.precision == null ? "—" : `${Math.round(matchQuality.precision * 100)}%`}</strong><small>trafność propozycji oznaczonych przez użytkowników</small></article>
+        <article><span>Recall</span><strong>{matchQuality.recall == null ? "—" : `${Math.round(matchQuality.recall * 100)}%`}</strong><small>wykrycie przypisań potwierdzonych korektą</small></article>
+        <article><span>Pamięć matchera</span><strong>{matchQuality.aliases}</strong><small>{matchQuality.correctionRate == null ? "brak próby" : `${Math.round(matchQuality.correctionRate * 100)}% korekt`}</small></article>
       </section>
 
       <section className="document-principles" aria-label="Jak działa Skrzynka AI">
@@ -95,7 +113,7 @@ export default async function CompanyAiInboxPage({ params }: Props) {
           <Link href={`/workspace/companies/${workspace.id}/documents?upload=1`} className="co-text-link">Dodaj dokument →</Link>
         </div>
         {errorCount > 0 ? <p className="form-message form-message--error"><AlertTriangle size={15} /> {errorCount} elementów wymaga ponowienia lub sprawdzenia przyczyny błędu.</p> : null}
-        <AiInbox items={items} workspaceId={workspace.id} />
+        <AiInbox items={items} workspaceId={workspace.id} currentUserId={user.id} projects={projects.map((project) => ({ id: project.id, name: project.name }))} />
       </section>
     </main>
   );

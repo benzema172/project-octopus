@@ -15,6 +15,7 @@ import {
   UploadCloud
 } from "lucide-react";
 import type { DocumentSummary, ProjectSummary } from "@/lib/types";
+import { DOCUMENT_DESTINATIONS, documentCategoryLabel } from "@/lib/documents/classification";
 import { MAX_SUPPORTED_UPLOAD_BYTES, SUPPORTED_UPLOAD_ACCEPT, validateUploadFile } from "@/lib/r2/sanitize";
 
 type DocumentUploadProps = {
@@ -30,35 +31,13 @@ type DocumentUploadProps = {
 type UploadResponse = { uploadUrl: string; token: string; headers: Record<string, string> };
 type DownloadResponse = { downloadUrl: string };
 type CompleteResponse = { documentId: string; versionId: string; versionNumber: number };
+type AnalysisResponse = { analysis?: { package?: { accepted?: number; rejected?: number; queuedVersionIds?: string[] } } };
 
 const MAX_BROWSER_HASH_BYTES = 32 * 1024 * 1024;
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function categoryLabel(category: string | null) {
-  const labels: Record<string, string> = {
-    project: "Projekt",
-    specification: "STWiOR",
-    estimate: "Kosztorys",
-    invoice: "Faktura",
-    protocol: "Protokół",
-    application: "Wniosek",
-    template: "Wzór",
-    hr: "Kadry",
-    fleet: "Flota",
-    pdf: "PDF",
-    document: "Dokument",
-    package: "Paczka",
-    other: "Inne",
-    kosztorys: "Kosztorys",
-    dokument: "Dokument",
-    paczka: "Paczka",
-    inne: "Inne"
-  };
-  return category ? labels[category] ?? category : "Do klasyfikacji";
 }
 
 async function sha256ForSmallFile(file: File) {
@@ -105,7 +84,16 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
     const prepareResponse = await fetch("/api/storage/upload-url", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ workspaceId, projectId: contextProjectId, documentId, fileName: file.name, mimeType, fileSize: file.size, category: uploadCategory || undefined })
+      body: JSON.stringify({
+        workspaceId,
+        projectId: contextProjectId,
+        documentId,
+        fileName: file.name,
+        mimeType,
+        fileSize: file.size,
+        category: uploadCategory || undefined,
+        categoryLocked: Boolean(uploadCategory)
+      })
     });
     if (!prepareResponse.ok) {
       const payload = await prepareResponse.json().catch(() => null);
@@ -120,7 +108,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
     const completeResponse = await fetch("/api/storage/complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: upload.token, sha256: digest, category: uploadCategory || undefined })
+      body: JSON.stringify({ token: upload.token, sha256: digest })
     });
     if (!completeResponse.ok) {
       const payload = await completeResponse.json().catch(() => null);
@@ -134,7 +122,20 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspaceId, versionId: completed.versionId })
       });
-      setStatus(analysisResponse.ok ? "Analiza AI gotowa do weryfikacji" : "Dokument zapisany — analiza pozostaje w kolejce");
+      const analysisPayload = await analysisResponse.json().catch(() => ({})) as AnalysisResponse;
+      const packageInfo = analysisPayload.analysis?.package;
+      if (analysisResponse.ok && packageInfo) {
+        const immediate = (packageInfo.queuedVersionIds ?? []).slice(0, 3);
+        setStatus(`Paczka rozpakowana: ${packageInfo.accepted ?? 0} plików przyjętych, ${packageInfo.rejected ?? 0} odrzuconych. Uruchamiam pierwsze analizy.`);
+        await Promise.allSettled(immediate.map((versionId) => fetch("/api/brain/process", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ workspaceId, versionId })
+        })));
+        setStatus(`Paczka gotowa — ${packageInfo.accepted ?? 0} dokumentów ma osobne zadania AI i manifest bezpieczeństwa.`);
+      } else {
+        setStatus(analysisResponse.ok ? "Analiza AI gotowa do weryfikacji" : "Dokument zapisany — analiza pozostaje w kolejce");
+      }
     } else {
       setStatus("Dokument zapisany — duży plik oczekuje w kolejce workera");
     }
@@ -281,7 +282,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
         </label>
         <select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Kategoria dokumentu">
           <option value="all">Wszystkie kategorie</option>
-          {categories.map((item) => <option key={item} value={item}>{categoryLabel(item)}</option>)}
+          {categories.map((item) => <option key={item} value={item}>{documentCategoryLabel(item)}</option>)}
         </select>
         <span className="document-toolbar__count">{filteredDocuments.length} / {documents.length}</span>
       </div>
@@ -305,16 +306,9 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
             <span>Rodzaj źródła</span>
             <select value={uploadCategory} onChange={(event) => setUploadCategory(event.target.value)}>
               <option value="">AI rozpozna automatycznie</option>
-              <option value="project">Projekt / dokumentacja techniczna</option>
-              <option value="specification">STWiOR / specyfikacja</option>
-              <option value="estimate">Kosztorys</option>
-              <option value="invoice">Faktura</option>
-              <option value="protocol">Protokół</option>
-              <option value="application">Wniosek materiałowy</option>
-              <option value="template">Wzór i wiedza dla AI</option>
-              <option value="hr">Dokument kadrowy</option>
-              <option value="fleet">Dokument floty</option>
-              <option value="other">Inny dokument</option>
+              {DOCUMENT_DESTINATIONS.map((destination) => (
+                <option key={destination.value} value={destination.value}>{destination.label}</option>
+              ))}
             </select>
           </label>
           <button
@@ -329,7 +323,7 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
           >
             <UploadCloud size={30} aria-hidden="true" />
             <strong>{isUploading ? "Przetwarzanie plików" : "Przeciągnij pliki lub wybierz z dysku"}</strong>
-            <span>PDF, DOC/DOCX, XLS/XLSX, CSV, obrazy, XML i ZIP · do {MAX_SUPPORTED_UPLOAD_BYTES / 1024 / 1024} MB</span>
+            <span>PDF, Office, CSV, obrazy, XML, tekst i bezpieczne paczki ZIP · do {MAX_SUPPORTED_UPLOAD_BYTES / 1024 / 1024} MB</span>
           </button>
           <div className="upload-pipeline">
             <span>R2</span><span>Ekstrakcja</span><span>Gemini</span><span>Klasyfikacja</span><span>Moduły</span>
@@ -343,22 +337,24 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
           {filteredDocuments.length > 0 ? filteredDocuments.map((document) => {
             const version = document.document_versions?.[0];
             const projectName = projects.find((item) => item.id === document.project_id)?.name;
+            const quarantined = version?.malware_scan_status === "infected";
             return (
               <article key={document.id} id={`document-${document.id}`} className="document-row">
                 <FileText size={19} aria-hidden="true" />
                 <div>
                   <div className="document-row__title">
                     <h3>{document.name}</h3>
-                    <span className="document-category">{categoryLabel(document.category)}</span>
+                    <span className="document-category">{documentCategoryLabel(document.category)}</span>
                   </div>
                   <p>{projectName ?? (document.project_id ? "Inwestycja" : "Dokument firmowy")} · {version?.mime_type ?? "plik"} · {version ? formatFileSize(version.file_size_bytes) : "bez wersji"} · {version ? `wersja ${version.version_number}` : "oczekuje"}</p>
                   <span className="document-ai-state"><Sparkles size={13} aria-hidden="true" />{["ready", "review"].includes(document.ai_status ?? "") ? "AI: analiza do weryfikacji" : "AI: w kolejce do analizy"}</span>
+                  {quarantined ? <span className="document-security-state">Kwarantanna · pobieranie zablokowane</span> : version?.malware_scan_status === "clean" ? <span className="document-security-state document-security-state--clean">Skan bezpieczeństwa: czysty</span> : null}
                 </div>
                 {version ? (
                   <div className="document-row__actions">
                     <button type="button" className="secondary-button" onClick={() => analyzeVersion(version.id)} disabled={isUploading}><Sparkles size={16} aria-hidden="true" />Analizuj</button>
-                    <button type="button" className="secondary-button" onClick={() => previewVersion(version.id, document.project_id)} disabled={isUploading}><Eye size={16} aria-hidden="true" />Podgląd</button>
-                    <button type="button" className="secondary-button" onClick={() => downloadVersion(version.id, document.project_id)} disabled={isUploading}><Download size={16} aria-hidden="true" />Pobierz</button>
+                    <button type="button" className="secondary-button" onClick={() => previewVersion(version.id, document.project_id)} disabled={isUploading || quarantined}><Eye size={16} aria-hidden="true" />Podgląd</button>
+                    <button type="button" className="secondary-button" onClick={() => downloadVersion(version.id, document.project_id)} disabled={isUploading || quarantined}><Download size={16} aria-hidden="true" />Pobierz</button>
                     <button type="button" className="secondary-button" onClick={() => openFilePicker(document.id, document.project_id)} disabled={isUploading || !storageReady}><FilePlus2 size={16} aria-hidden="true" />Nowa wersja</button>
                     <button type="button" className="secondary-button secondary-button--danger" onClick={() => changeDocumentState(document.id, "trashed", document.project_id)} disabled={isUploading || isPending}><Trash2 size={16} aria-hidden="true" />Do kosza</button>
                   </div>

@@ -13,13 +13,18 @@ describe("sanitizeFileName", () => {
 
 describe("inferDocumentCategory", () => {
   it("prioritizes business context over the PDF container", () => {
-    expect(inferDocumentCategory("application/pdf", "projekt.pdf")).toBe("project");
-    expect(inferDocumentCategory("application/pdf", "zalacznik.pdf")).toBe("pdf");
+    expect(inferDocumentCategory("application/pdf", "projekt.pdf")).toBe("technical");
+    expect(inferDocumentCategory("application/pdf", "zalacznik.pdf")).toBe("technical");
   });
 
   it("recognizes cost estimate spreadsheets", () => {
     expect(inferDocumentCategory("application/octet-stream", "kosztorys.xlsx")).toBe("estimate");
     expect(inferDocumentCategory("application/vnd.ms-excel", "kosztorys.xls")).toBe("estimate");
+  });
+
+  it("does not guess that every generic spreadsheet is a cost estimate", () => {
+    expect(inferDocumentCategory("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "zestawienie.xlsx")).toBe("report");
+    expect(inferDocumentCategory("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "dane.xlsx")).toBe("other");
   });
 
   it("uses construction context before the generic file type", () => {
@@ -47,10 +52,12 @@ describe("validateUploadFile", () => {
     expect(validateUploadFile("opis.doc", "application/msword", 1024)).toBeNull();
     expect(validateUploadFile("zdjecie.jpg", "image/jpeg", 1024)).toBeNull();
     expect(validateUploadFile("dane.csv", "application/octet-stream", 1024)).toBeNull();
+    expect(validateUploadFile("paczka.zip", "application/zip", 1024)).toBeNull();
   });
 
   it("rejects mismatched and oversized files before signing the upload", () => {
     expect(validateUploadFile("faktura.pdf", "text/html", 1024)).toContain("nie pasuje");
     expect(validateUploadFile("projekt.pdf", "application/pdf", 51 * 1024 * 1024)).toContain("50 MB");
+    expect(validateUploadFile("paczka.rar", "application/vnd.rar", 1024)).toContain("Nieobsługiwany format");
   });
 });

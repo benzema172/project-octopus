@@ -21,11 +21,14 @@ describe("AI Project Profile sync", () => {
     expect(source).toContain("protectedFields.push(field)");
   });
 
-  it("runs profile sync after each successful Wrzutnia document analysis", () => {
-    const route = read("app/api/brain/process-document/route.ts");
+  it("runs profile sync only after the document analysis is approved", () => {
+    const processRoute = read("app/api/brain/process-document/route.ts");
+    const route = read("app/api/brain/review/route.ts");
+    expect(processRoute).not.toContain("syncProjectProfileFromAiFacts");
+    expect(route).toContain("if (approved && projectId)");
     expect(route).toContain("syncProjectProfileFromAiFacts");
-    expect(route).toContain("profile_sync: profileSync");
-    expect(route).toContain("profile_fields: profileSync?.updatedFields.length ?? 0");
+    expect(route).toContain("result.profileSync = await");
+    expect(route).toContain("result.autopilot = await runInvestmentAutopilot");
   });
 
   it("explains the hybrid manual plus AI workflow on the Project Profile page", () => {

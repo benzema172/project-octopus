@@ -4,7 +4,7 @@ import { getRequestUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { processDocumentVersion } from "@/lib/ai/process-document";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
-import { getAiRuntimeStatus, getOptionalEnv } from "@/lib/env";
+import { getOptionalEnv } from "@/lib/env";
 import { errorFields, operationalLog, requestIdFrom } from "@/lib/observability/server-logger";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
@@ -33,10 +33,9 @@ export async function POST(request: Request) {
   const user = cronAuthorized ? null : await getRequestUser(request);
 
   if (!cronAuthorized && !user) return NextResponse.json({ error: "Brak uprawnień do workera." }, { status: 401 });
-  if (!getAiRuntimeStatus().ready) return NextResponse.json({ error: "Gemini nie jest skonfigurowane." }, { status: 503 });
 
   const url = new URL(request.url);
-  const limit = Math.max(1, Math.min(5, Number(url.searchParams.get("limit")) || 1));
+  const limit = Math.max(1, Math.min(5, Number(url.searchParams.get("limit")) || (cronAuthorized ? 5 : 1)));
   const workerName = `octopus-${randomUUID()}`;
   const supabase = createServiceSupabaseClient();
   const requestedWorkspaceId = url.searchParams.get("workspaceId")?.trim();
@@ -98,4 +97,8 @@ export async function POST(request: Request) {
   });
 
   return NextResponse.json({ ok: true, worker: workerName, processed: results.length, results }, { headers: { "Cache-Control": "no-store", "X-Request-Id": requestId } });
+}
+
+export async function GET(request: Request) {
+  return POST(request);
 }

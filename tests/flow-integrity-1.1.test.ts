@@ -52,9 +52,11 @@ describe("Flow Integrity 1.1 — P0/P1 contracts",()=>{
   it("routes PDF and external systems through one canonical Business Inbox processor",()=>{
     const ingress=read("supabase/migrations/20260819054000_121_flow_integrity_canonical_ingress.sql");
     const external=read("app/api/integrations/business-inbox/route.ts");
+    const integrationAuth=read("lib/integrations/auth.ts");
     expect(ingress).toContain("process_business_inbox_item_atomic");
     expect(ingress).toContain("orchestrate_approved_business_document_atomic");
-    expect(external).toContain('"ksef", "erp", "subiekt", "comarch", "symfonia", "enova", "email", "api"');
+    for(const channel of ["ksef","erp","subiekt","comarch","symfonia","enova","email","api"])expect(integrationAuth).toContain(`"${channel}"`);
+    expect(external).toContain("normalizeIntegrationChannel");
     expect(external).toContain('rpc("process_business_inbox_item_atomic"');
   });
 

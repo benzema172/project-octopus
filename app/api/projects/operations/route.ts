@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 type OperationBody = {
   projectId?: string;
-  action?: "site_event" | "initialize_closeout" | "create_forecast" | "project_requirement_create" | "protocol_requirement_create" | "schedule_activity_create" | "progress_period_create" | "progress_entry_create" | "assignment_create" | "budget_create" | "reservation_create" | "change_order_create";
+  action?: "site_event" | "initialize_closeout" | "create_forecast" | "project_requirement_create" | "protocol_requirement_create" | "schedule_activity_create" | "progress_period_create" | "progress_entry_create" | "assignment_create" | "budget_create" | "reservation_create" | "change_order_create" | "task_create" | "task_status_update";
   eventType?: string;
   title?: string;
   description?: string;
@@ -42,7 +42,29 @@ type OperationBody = {
   number?: string;
   valueChange?: string | number;
   daysChange?: string | number;
+  taskId?: string;
+  taskUpdatedAt?: string;
+  priority?: string;
+  dueAt?: string;
+  status?: string;
 };
+
+type TaskMutationRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  source_type: string | null;
+  source_id: string | null;
+  assigned_to: string | null;
+  due_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+class OperationConflictError extends Error {}
 
 function clean(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -51,6 +73,28 @@ function clean(value: unknown) {
 function isoDate(value: unknown) {
   const result = clean(value);
   return /^\d{4}-\d{2}-\d{2}$/.test(result) ? result : null;
+}
+
+function taskDueAt(value: unknown) {
+  const date = isoDate(value);
+  return date ? `${date}T12:00:00.000Z` : null;
+}
+
+function taskResponse(row: TaskMutationRow) {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    status: row.status,
+    priority: row.priority,
+    sourceType: row.source_type,
+    sourceId: row.source_id,
+    assignedTo: row.assigned_to,
+    dueAt: row.due_at,
+    completedAt: row.completed_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
 }
 
 export async function POST(request: Request) {
@@ -116,6 +160,78 @@ export async function POST(request: Request) {
   };
 
   try {
+    if (body.action === "task_create") {
+      const title = clean(body.title);
+      const description = clean(body.description);
+      const priority = clean(body.priority).toLowerCase() || "normal";
+      if (!title) throw new Error("Uzupełnij tytuł działania.");
+      if (title.length > 180) throw new Error("Tytuł działania może mieć maksymalnie 180 znaków.");
+      if (description.length > 1200) throw new Error("Opis działania może mieć maksymalnie 1200 znaków.");
+      if (!["urgent", "critical", "high", "normal", "medium", "low"].includes(priority)) throw new Error("Nieprawidłowy priorytet działania.");
+      if (clean(body.dueAt) && !isoDate(body.dueAt)) throw new Error("Nieprawidłowy termin działania.");
+      const { data, error } = await supabase.from("tasks").insert({
+        workspace_id: workspaceId,
+        project_id: project.id,
+        title,
+        description: description || null,
+        status: "open",
+        priority,
+        source_type: "manual",
+        assigned_to: user.id,
+        due_at: taskDueAt(body.dueAt),
+        created_by: user.id
+      }).select("id,title,description,status,priority,source_type,source_id,assigned_to,due_at,completed_at,created_at,updated_at").single<TaskMutationRow>();
+      if (error || !data) throw new Error(`Nie udało się utworzyć działania: ${error?.message ?? "brak danych"}`);
+      await supabase.from("audit_events").insert({
+        workspace_id: workspaceId,
+        project_id: project.id,
+        actor_id: user.id,
+        event_type: "task.created",
+        entity_type: "task",
+        entity_id: data.id,
+        after_value: { title, priority, dueAt: data.due_at }
+      });
+      return NextResponse.json({ ok: true, task: taskResponse(data) });
+    }
+
+    if (body.action === "task_status_update") {
+      const taskId = clean(body.taskId);
+      const expectedUpdatedAt = clean(body.taskUpdatedAt);
+      const status = clean(body.status).toLowerCase();
+      if (!taskId) throw new Error("Brakuje działania do aktualizacji.");
+      if (!["open", "in_progress", "completed"].includes(status)) throw new Error("Nieprawidłowy status działania.");
+      const { data: before, error: beforeError } = await supabase.from("tasks")
+        .select("id,title,description,status,priority,source_type,source_id,assigned_to,due_at,completed_at,created_at,updated_at")
+        .eq("id", taskId)
+        .eq("workspace_id", workspaceId)
+        .eq("project_id", project.id)
+        .maybeSingle<TaskMutationRow>();
+      if (beforeError || !before) throw new Error("Działanie nie należy do tej inwestycji.");
+      if (expectedUpdatedAt && expectedUpdatedAt !== before.updated_at) throw new OperationConflictError("Działanie zostało w międzyczasie zmienione. Odśwież plan i spróbuj ponownie.");
+      const now = new Date().toISOString();
+      const { data, error } = await supabase.from("tasks").update({
+        status,
+        completed_at: status === "completed" ? now : null,
+        updated_at: now
+      }).eq("id", taskId).eq("workspace_id", workspaceId).eq("project_id", project.id).eq("updated_at", before.updated_at)
+        .select("id,title,description,status,priority,source_type,source_id,assigned_to,due_at,completed_at,created_at,updated_at")
+        .single<TaskMutationRow>();
+      if (error?.code === "PGRST116") throw new OperationConflictError("Działanie zostało w międzyczasie zmienione. Odśwież plan i spróbuj ponownie.");
+      if (error) throw new Error(`Nie udało się zmienić statusu: ${error.message}`);
+      if (!data) throw new OperationConflictError("Działanie zostało w międzyczasie zmienione. Odśwież plan i spróbuj ponownie.");
+      await supabase.from("audit_events").insert({
+        workspace_id: workspaceId,
+        project_id: project.id,
+        actor_id: user.id,
+        event_type: "task.status_changed",
+        entity_type: "task",
+        entity_id: data.id,
+        before_value: { status: before.status, completedAt: before.completed_at },
+        after_value: { status: data.status, completedAt: data.completed_at }
+      });
+      return NextResponse.json({ ok: true, task: taskResponse(data) });
+    }
+
     if (body.action === "project_requirement_create") {
       if (!clean(body.title)) throw new Error("Uzupełnij tytuł wymagania.");
       const { data, error } = await supabase.from("project_requirements").insert({
@@ -377,6 +493,6 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ ok: true, forecastId: forecast.id, estimateAtCompletion, margin });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Operacja nie powiodła się." }, { status: 422 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Operacja nie powiodła się." }, { status: error instanceof OperationConflictError ? 409 : 422 });
   }
 }

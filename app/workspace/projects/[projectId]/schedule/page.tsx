@@ -21,7 +21,7 @@ export default async function SchedulePage({ params }: Props) {
     return <DomainAccessDenied workspaceId={project.workspace_id} area="Harmonogram" />;
   }
 
-  const documents = await listDocumentsForCategories(projectId, ["harmonogram"]);
+  const documents = await listDocumentsForCategories(projectId, ["schedule"]);
 
   return (
     <div className="project-tab-content pw-schedule-compact">

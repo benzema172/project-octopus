@@ -26,19 +26,21 @@ export async function GET(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const rows = workspaces ?? [];
-  const results: Array<{ workspaceId: string; alerts?: unknown; reports?: unknown; error?: string }> = [];
+  const results: Array<{ workspaceId: string; alerts?: unknown; reports?: unknown; reviewEscalations?: unknown; error?: string }> = [];
 
   for (let offset = 0; offset < rows.length; offset += WORKSPACE_CONCURRENCY) {
     const batch = rows.slice(offset, offset + WORKSPACE_CONCURRENCY);
     const batchResults = await Promise.all(batch.map(async (workspace) => {
       try {
-        const [alerts, reports] = await Promise.all([
+        const [alerts, reports, reviewEscalations] = await Promise.all([
           db.rpc("refresh_operational_notifications_atomic", { p_workspace_id: workspace.id }),
-          db.rpc("run_due_reports_atomic", { p_workspace_id: workspace.id, p_actor_id: null })
+          db.rpc("run_due_reports_atomic", { p_workspace_id: workspace.id, p_actor_id: null }),
+          db.rpc("escalate_due_document_reviews_atomic", { p_workspace_id: workspace.id })
         ]);
         if (alerts.error) throw alerts.error;
         if (reports.error) throw reports.error;
-        return { workspaceId: workspace.id, alerts: alerts.data, reports: reports.data };
+        if (reviewEscalations.error) throw reviewEscalations.error;
+        return { workspaceId: workspace.id, alerts: alerts.data, reports: reports.data, reviewEscalations: reviewEscalations.data };
       } catch (workspaceError) {
         operationalLog("error", { event: "operations_cron.workspace_failed", route: "/api/cron/operations", method: "GET", module: "system", workspaceId: workspace.id, requestId, ...errorFields(workspaceError) });
         return { workspaceId: workspace.id, error: workspaceError instanceof Error ? workspaceError.message : String(workspaceError) };

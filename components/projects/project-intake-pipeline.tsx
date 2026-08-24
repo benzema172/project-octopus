@@ -128,7 +128,7 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
   function add(files: FileList | File[]) {
     const all = Array.from(files);
     const usable = all.filter(accepted);
-    setNotice(usable.length !== all.length ? "Część plików pominięto. Obsługiwane są m.in. PDF, DOC/DOCX, XLS/XLSX, CSV, obrazy, ZIP, XML i pliki tekstowe do 50 MB." : null);
+    setNotice(usable.length !== all.length ? "Część plików pominięto. Archiwa ZIP rozpakuj, aby AI mogło przeanalizować każdy dokument osobno. Obsługiwane są PDF, DOC/DOCX, XLS/XLSX, CSV, obrazy, XML i pliki tekstowe do 50 MB." : null);
     setItems((current) => current.concat(usable.map((file) => {
       const suggestion = suggestDocumentClassification(file.name, file.type);
       return { id: crypto.randomUUID(), file, category: suggestion.category, locked: false, confidence: suggestion.confidence, reason: suggestion.reason, status: "ready" as const };
@@ -143,13 +143,24 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
     setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "uploading", error: undefined, message: "Wysyłanie do R2…" } : row));
     try {
       const mimeType = item.file.type || "application/octet-stream";
-      const prepare = await fetch("/api/storage/upload-url", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, fileName: item.file.name, mimeType, fileSize: item.file.size }) });
+      const prepare = await fetch("/api/storage/upload-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          fileName: item.file.name,
+          mimeType,
+          fileSize: item.file.size,
+          category: item.category,
+          categoryLocked: item.locked
+        })
+      });
       if (!prepare.ok) throw new Error((await prepare.json().catch(() => null))?.error ?? "Nie udało się przygotować uploadu.");
       const upload = await prepare.json() as UploadResponse;
       const put = await fetch(upload.uploadUrl, { method: "PUT", headers: upload.headers, body: item.file });
       if (!put.ok) throw new Error(`R2 odrzucił upload: HTTP ${put.status}`);
 
-      const complete = await fetch("/api/storage/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: upload.token, sha256: await digest(item.file), category: item.category }) });
+      const complete = await fetch("/api/storage/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: upload.token, sha256: await digest(item.file) }) });
       if (!complete.ok) throw new Error((await complete.json().catch(() => null))?.error ?? "Nie udało się zapisać dokumentu.");
       const ids = await complete.json() as CompleteResponse;
 

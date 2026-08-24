@@ -13,6 +13,33 @@ export type AiInboxItem = {
   category: string;
   createdAt: string;
   detail: string;
+  proposedProjectId?: string | null;
+  proposedProjectName?: string | null;
+  requestedCategory?: string | null;
+  categoryLocked?: boolean;
+  matchStatus?: string | null;
+  matchReason?: string | null;
+  channel?: string;
+  priority?: "low" | "normal" | "high" | "critical";
+  assignedTo?: string | null;
+  reviewDueAt?: string | null;
+  escalationLevel?: number;
+  overdue?: boolean;
+  canWrite?: boolean;
+  canApprove?: boolean;
+};
+
+export type AiInboxProjectOption = { id: string; name: string };
+
+export type ProjectMatchQuality = {
+  reviewed: number;
+  confirmed: number;
+  corrected: number;
+  rejected: number;
+  aliases: number;
+  precision: number | null;
+  recall: number | null;
+  correctionRate: number | null;
 };
 
 type IntakeRow = {
@@ -21,7 +48,15 @@ type IntakeRow = {
   proposed_project_id: string | null;
   status: string;
   suggested_category: string | null;
+  requested_category: string | null;
+  category_locked: boolean;
+  match_metadata: Record<string, unknown> | null;
   confidence: number | null;
+  channel: string;
+  priority: "low" | "normal" | "high" | "critical";
+  assigned_to: string | null;
+  review_due_at: string | null;
+  escalation_level: number;
   created_at: string;
   documents: { name?: string; ai_status?: string; project_id?: string | null } | Array<{ name?: string; ai_status?: string; project_id?: string | null }> | null;
 };
@@ -42,7 +77,7 @@ export async function listAiInbox(workspaceId: string): Promise<AiInboxItem[]> {
   const [intakesResult, estimatesResult, impactsResult, siteEventsResult, templatesResult, knowledgeResult] = await Promise.all([
     supabase
       .from("document_intakes")
-      .select("id,document_id,proposed_project_id,status,suggested_category,confidence,created_at,documents(name,ai_status,project_id)")
+      .select("id,document_id,proposed_project_id,status,suggested_category,requested_category,category_locked,match_metadata,confidence,channel,priority,assigned_to,review_due_at,escalation_level,created_at,documents(name,ai_status,project_id)")
       .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false })
       .limit(100)
@@ -84,8 +119,18 @@ export async function listAiInbox(workspaceId: string): Promise<AiInboxItem[]> {
       .limit(30)
   ]);
 
+  const proposedProjectIds = Array.from(new Set((intakesResult.data ?? []).map((row) => row.proposed_project_id).filter((value): value is string => Boolean(value))));
+  const { data: proposedProjects } = proposedProjectIds.length
+    ? await supabase.from("projects").select("id,name").in("id", proposedProjectIds).returns<Array<{ id: string; name: string }>>()
+    : { data: [] as Array<{ id: string; name: string }> };
+  const proposedProjectNames = new Map((proposedProjects ?? []).map((project) => [project.id, project.name]));
+
   const items: AiInboxItem[] = (intakesResult.data ?? []).map((row) => {
     const document = Array.isArray(row.documents) ? row.documents[0] : row.documents;
+    const match = row.match_metadata && typeof row.match_metadata.project_match === "object" && row.match_metadata.project_match
+      ? row.match_metadata.project_match as Record<string, unknown>
+      : null;
+    const matchReason = typeof match?.reason === "string" ? match.reason : null;
     return {
       id: row.document_id,
       entityType: "document",
@@ -96,7 +141,21 @@ export async function listAiInbox(workspaceId: string): Promise<AiInboxItem[]> {
       confidence: row.confidence,
       category: row.suggested_category ?? "nierozpoznana",
       createdAt: row.created_at,
-      detail: row.status === "review" ? "Sprawdź kategorię, inwestycję i fakty przed zatwierdzeniem." : "Dokument przechodzi wspólny pipeline AI."
+      detail: row.status === "review"
+        ? matchReason ?? "Sprawdź kategorię, inwestycję i fakty przed zatwierdzeniem."
+        : "Dokument przechodzi wspólny pipeline AI.",
+      proposedProjectId: row.proposed_project_id,
+      proposedProjectName: row.proposed_project_id ? proposedProjectNames.get(row.proposed_project_id) ?? null : null,
+      requestedCategory: row.requested_category,
+      categoryLocked: row.category_locked,
+      matchStatus: typeof match?.status === "string" ? match.status : null,
+      matchReason,
+      channel: row.channel,
+      priority: row.priority,
+      assignedTo: row.assigned_to,
+      reviewDueAt: row.review_due_at,
+      escalationLevel: row.escalation_level,
+      overdue: row.status === "review" && Boolean(row.review_due_at) && Date.parse(row.review_due_at ?? "") < Date.now()
     };
   });
 
@@ -139,7 +198,48 @@ export async function listAiInbox(workspaceId: string): Promise<AiInboxItem[]> {
     });
   }
 
-  return items.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+  const priorityRank = { critical: 4, high: 3, normal: 2, low: 1 } as const;
+  return items.sort((left, right) => {
+    if (Boolean(left.overdue) !== Boolean(right.overdue)) return left.overdue ? -1 : 1;
+    const priorityDifference = priorityRank[right.priority ?? "normal"] - priorityRank[left.priority ?? "normal"];
+    return priorityDifference || Date.parse(right.createdAt) - Date.parse(left.createdAt);
+  });
+}
+
+export async function getProjectMatchQuality(workspaceId: string, visibleProjectIds: string[] = []): Promise<ProjectMatchQuality> {
+  const db = createServiceSupabaseClient();
+  let aliasQuery = db.from("project_match_aliases").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("active", true);
+  if (visibleProjectIds.length) aliasQuery = aliasQuery.in("project_id", visibleProjectIds);
+  const [feedbackResult, aliasesResult] = await Promise.all([
+    db.from("project_match_feedback")
+      .select("outcome,proposed_project_id,selected_project_id")
+      .eq("workspace_id", workspaceId).order("decided_at", { ascending: false }).limit(5000),
+    aliasQuery
+  ]);
+  if (feedbackResult.error) throw new Error(`Nie udało się policzyć jakości matchera: ${feedbackResult.error.message}`);
+  if (aliasesResult.error) throw new Error(`Nie udało się policzyć aliasów matchera: ${aliasesResult.error.message}`);
+  const visible = new Set(visibleProjectIds);
+  const feedback = (feedbackResult.data ?? []).filter((row) => !visible.size
+    || (row.selected_project_id && visible.has(String(row.selected_project_id)))
+    || (row.proposed_project_id && visible.has(String(row.proposed_project_id))));
+  const confirmed = feedback.filter((row) => row.outcome === "confirmed").length;
+  const corrected = feedback.filter((row) => row.outcome === "corrected").length;
+  const rejected = feedback.filter((row) => row.outcome === "rejected").length;
+  const truePositive = feedback.filter((row) => row.outcome === "confirmed" && row.proposed_project_id && row.proposed_project_id === row.selected_project_id).length;
+  const falsePositive = feedback.filter((row) => row.proposed_project_id && (row.outcome === "corrected" || row.outcome === "rejected")).length;
+  const falseNegative = feedback.filter((row) => !row.proposed_project_id && Boolean(row.selected_project_id)).length;
+  const precisionDenominator = truePositive + falsePositive;
+  const recallDenominator = truePositive + falseNegative;
+  return {
+    reviewed: feedback.length,
+    confirmed,
+    corrected,
+    rejected,
+    aliases: aliasesResult.count ?? 0,
+    precision: precisionDenominator ? truePositive / precisionDenominator : null,
+    recall: recallDenominator ? truePositive / recallDenominator : null,
+    correctionRate: feedback.length ? corrected / feedback.length : null
+  };
 }
 
 export type ProjectExecutionSnapshot = {

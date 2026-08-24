@@ -16,12 +16,13 @@ type Props = {
   kind: Kind;
   data: Data;
   canWrite: boolean;
+  canApprove: boolean;
   referenceDate: string;
 };
 
-export function CompanyOperationsWorkspace({ workspaceId, kind, data, canWrite }: Props) {
+export function CompanyOperationsWorkspace({ workspaceId, kind, data, canWrite, canApprove }: Props) {
   const pathname = `/workspace/companies/${workspaceId}/${kind === "finance" ? "finances" : kind}`;
-  const common = { workspaceId, data, canWrite, canApprove: false, pathname, query: "" };
+  const common = { workspaceId, data, canWrite, canApprove, pathname, query: "" };
 
   if (kind === "finance") return <FinanceOperations {...common} />;
   if (kind === "hr") return <HrOperations {...common} />;

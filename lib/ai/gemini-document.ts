@@ -1,9 +1,10 @@
 import "server-only";
 
 import { getOptionalEnv, requireServerEnv } from "@/lib/env";
+import { normalizeDocumentCategory, type DocumentCategory } from "@/lib/documents/classification";
 
 export type DocumentAnalysis = {
-  category: string;
+  category: DocumentCategory;
   subcategory: string;
   confidence: number;
   summary: string;
@@ -64,7 +65,7 @@ export type DocumentAnalysis = {
 const RESPONSE_SCHEMA = {
   type: "OBJECT",
   properties: {
-    category: { type: "STRING", enum: ["project", "specification", "estimate", "invoice", "protocol", "application", "template", "hr", "fleet", "warehouse", "report", "other"] },
+    category: { type: "STRING", enum: ["technical", "specification", "estimate", "schedule", "protocol", "application", "contract", "correspondence", "invoice", "warehouse", "hr", "fleet", "template", "report", "other"] },
     subcategory: { type: "STRING" },
     confidence: { type: "NUMBER" },
     summary: { type: "STRING" },
@@ -136,12 +137,41 @@ type GeminiFile = {
   error?: { message?: string };
 };
 
+const RETRYABLE_GEMINI_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+
+function delay(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function geminiRequest(requestFactory: () => Promise<Response>, label: string, attempts = 3) {
+  let lastResponse: Response | null = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await requestFactory();
+      lastResponse = response;
+      if (response.ok || !RETRYABLE_GEMINI_STATUS.has(response.status) || attempt === attempts) return response;
+      await response.body?.cancel().catch(() => undefined);
+      const retryAfter = Number(response.headers.get("retry-after"));
+      await delay(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 700 * 2 ** (attempt - 1));
+    } catch (error) {
+      if (attempt === attempts) throw error;
+      await delay(700 * 2 ** (attempt - 1));
+    }
+  }
+  if (lastResponse) return lastResponse;
+  throw new Error(`Gemini: nie udało się wykonać operacji ${label}.`);
+}
+
 function normalizeAnalysis(value: unknown): DocumentAnalysis {
   if (!value || typeof value !== "object") throw new Error("Gemini zwrócił nieprawidłową analizę.");
   const source = value as Partial<DocumentAnalysis>;
   if (!source.category || !source.summary || typeof source.confidence !== "number") throw new Error("Analiza Gemini nie zawiera wymaganych pól.");
+  const category = normalizeDocumentCategory(source.category);
+  if (!category) throw new Error("Gemini zwrócił kategorię spoza słownika aplikacji.");
+  const warnings = Array.isArray(source.warnings) ? source.warnings.map(String) : [];
+  if ((source.boqItems?.length ?? 0) >= 500) warnings.push("Analiza osiągnęła limit 500 pozycji BOQ i wymaga kontroli kompletności.");
   return {
-    category: source.category,
+    category,
     subcategory: source.subcategory ?? "",
     confidence: Math.max(0, Math.min(1, source.confidence)),
     summary: source.summary,
@@ -191,7 +221,7 @@ function normalizeAnalysis(value: unknown): DocumentAnalysis {
         }))
       : [],
     facts: Array.isArray(source.facts) ? source.facts.slice(0, 200) : [],
-    warnings: Array.isArray(source.warnings) ? source.warnings.map(String) : []
+    warnings
   };
 }
 
@@ -200,7 +230,7 @@ export async function analyzeDocumentWithGemini(input: AnalyzeInput) {
   const model = getOptionalEnv("GEMINI_MODEL") ?? "gemini-3.5-flash";
   const projectCatalog = input.projectCatalog?.length ? input.projectCatalog.join("\n") : "Brak zdefiniowanych inwestycji — użyj OGÓLNE.";
   const prompt = `Jesteś silnikiem analizy dokumentów w polskiej firmie wykonującej instalacje sanitarne, wentylację, klimatyzację i roboty budowlane.\n
-Przeanalizuj dokument ${input.fileName}. Rozpoznaj jego rzeczywisty kontekst, nie tylko rozszerzenie. Kosztorys traktuj jako źródło pozycji BOQ i etapów WBS. Jeżeli to kosztorys lub przedmiar, wypełnij boqItems rzeczywistymi wierszami tabeli; nie łącz pozycji i zachowaj numer, ilość, jednostkę oraz ceny. Jeżeli dokument nie jest kosztorysem, zwróć pustą tablicę boqItems. Dla dokumentacji wskaż instalacje, etapy, wymagane wnioski materiałowe i protokoły.
+Przeanalizuj dokument ${input.fileName}. Rozpoznaj jego rzeczywisty kontekst, nie tylko rozszerzenie. Użyj dokładnie jednej kategorii: technical, specification, estimate, schedule, protocol, application, contract, correspondence, invoice, warehouse, hr, fleet, template, report albo other. Kosztorys traktuj jako źródło pozycji BOQ i etapów WBS. Jeżeli to kosztorys lub przedmiar, wypełnij boqItems rzeczywistymi wierszami tabeli; nie łącz pozycji i zachowaj numer, ilość, jednostkę oraz ceny. Jeżeli dokument nie jest kosztorysem, zwróć pustą tablicę boqItems. Dla dokumentacji wskaż instalacje, etapy, wymagane wnioski materiałowe i protokoły.
 
 Dla faktury, WZ, PZ lub dokumentu dostawy dokładnie wypełnij businessDocument: numer dokumentu, numer KSeF jeżeli faktycznie występuje, daty, strony, NIP-y, kwoty, numer zamówienia/PO jeżeli widnieje w dokumencie i każdą pozycję. Dla każdej pozycji ustaw lineType: material wyłącznie dla fizycznych materiałów/towarów/urządzeń, service dla robocizny, usług, transportu, najmu, podwykonawstwa i innych świadczeń niematerialnych, a other dla rabatów, korekt i pozycji niejednoznacznych. expenseCategory ustaw tylko gdy wynika z dokumentu: fuel dla paliwa/AdBlue, transport dla transportu/spedycji, equipment dla narzędzi/wyposażenia, subcontract dla podwykonawstwa, rental dla najmu, service dla pozostałych usług, material dla materiałów, other dla pozostałych; w razie braku pewności zwróć pusty string. Z każdej pozycji odczytaj stawkę VAT. Jeżeli dokument podaje numer PO/zamówienia przy pozycji, wpisz purchaseOrderNumber; jeśli jest tylko jeden numer dla całej faktury, wpisz go w businessDocument.purchaseOrderNumber. Dla pozycji paliwowej odczytaj vehicleRegistration, liters i mileage wyłącznie wtedy, gdy te dane są widoczne; w przeciwnym razie zwróć pusty string i 0. Nie wymyślaj numeru rejestracyjnego, PO, litrów ani przebiegu. Nie oznaczaj usługi jako materiał tylko dlatego, że ma ilość i cenę. documentType ustaw na invoice, WZ, PZ albo delivery. direction ustaw na purchase lub sale. Jeżeli dokument nie jest dokumentem handlowym/magazynowym, zwróć puste pola i pustą tablicę lines. Nie utożsamiaj zakupu materiału z wykonaniem robót. Nie próbuj wymyślać identyfikatorów bazy, BOQ, WBS ani projektu — ich twarde powiązanie wykona Octopus po analizie.
 
@@ -214,15 +244,18 @@ W searchPassages zwróć ważne, możliwe do wyszukania fragmenty i nagłówki d
   if (input.fileUri) parts.push({ fileData: { mimeType: input.mimeType, fileUri: input.fileUri } });
   if (input.extractedText) parts.push({ text: `\nTREŚĆ WYEKSTRAHOWANA:\n${input.extractedText.slice(0, 1_500_000)}` });
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts }],
-      generationConfig: { responseMimeType: "application/json", responseSchema: RESPONSE_SCHEMA, temperature: 0.1, maxOutputTokens: 8192 }
+  const response = await geminiRequest(
+    () => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts }],
+        generationConfig: { responseMimeType: "application/json", responseSchema: RESPONSE_SCHEMA, temperature: 0.1, maxOutputTokens: 16_384 }
+      }),
+      signal: AbortSignal.timeout(55_000)
     }),
-    signal: AbortSignal.timeout(55_000)
-  });
+    "analiza dokumentu"
+  );
   if (!response.ok) throw new Error(`Gemini odrzucił analizę: HTTP ${response.status} ${await response.text()}`.slice(0, 700));
   const payload = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
   const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
@@ -232,19 +265,22 @@ W searchPassages zwróć ważne, możliwe do wyszukania fragmenty i nagłówki d
 
 async function uploadGeminiFile(input: { fileName: string; mimeType: string; bytes: Buffer }) {
   const apiKey = requireServerEnv("GEMINI_API_KEY");
-  const start = await fetch("https://generativelanguage.googleapis.com/upload/v1beta/files", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": apiKey,
-      "X-Goog-Upload-Protocol": "resumable",
-      "X-Goog-Upload-Command": "start",
-      "X-Goog-Upload-Header-Content-Length": String(input.bytes.length),
-      "X-Goog-Upload-Header-Content-Type": input.mimeType
-    },
-    body: JSON.stringify({ file: { displayName: input.fileName } }),
-    signal: AbortSignal.timeout(30_000)
-  });
+  const start = await geminiRequest(
+    () => fetch("https://generativelanguage.googleapis.com/upload/v1beta/files", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+        "X-Goog-Upload-Protocol": "resumable",
+        "X-Goog-Upload-Command": "start",
+        "X-Goog-Upload-Header-Content-Length": String(input.bytes.length),
+        "X-Goog-Upload-Header-Content-Type": input.mimeType
+      },
+      body: JSON.stringify({ file: { displayName: input.fileName } }),
+      signal: AbortSignal.timeout(30_000)
+    }),
+    "rozpoczęcie uploadu"
+  );
   if (!start.ok) throw new Error(`Gemini nie rozpoczął uploadu pliku: HTTP ${start.status}`);
   const uploadUrl = start.headers.get("x-goog-upload-url");
   if (!uploadUrl) throw new Error("Gemini nie zwrócił adresu sesji uploadu.");
@@ -272,10 +308,13 @@ async function waitForGeminiFile(file: GeminiFile) {
     if (!current.state || current.state === "ACTIVE") return current;
     if (current.state === "FAILED") throw new Error(current.error?.message ?? "Gemini nie przetworzył pliku.");
     await new Promise((resolve) => setTimeout(resolve, 1_500));
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${current.name}`, {
-      headers: { "x-goog-api-key": apiKey },
-      signal: AbortSignal.timeout(15_000)
-    });
+    const response = await geminiRequest(
+      () => fetch(`https://generativelanguage.googleapis.com/v1beta/${current.name}`, {
+        headers: { "x-goog-api-key": apiKey },
+        signal: AbortSignal.timeout(15_000)
+      }),
+      "sprawdzenie stanu pliku"
+    );
     if (!response.ok) throw new Error(`Nie udało się sprawdzić stanu pliku Gemini: HTTP ${response.status}`);
     current = await response.json() as GeminiFile;
   }

@@ -2,16 +2,15 @@ import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { processDocumentVersion } from "@/lib/ai/process-document";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
-import { getAiRuntimeStatus } from "@/lib/env";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   const user = await getRequestUser(request);
   if (!user) return NextResponse.json({ error: "Brak aktywnej sesji." }, { status: 401 });
-  if (!getAiRuntimeStatus().ready) return NextResponse.json({ error: "Gemini nie jest skonfigurowane." }, { status: 503 });
   let body: { workspaceId?: string; versionId?: string };
   try { body = await request.json() as { workspaceId?: string; versionId?: string }; } catch { return NextResponse.json({ error: "Nieprawidłowe dane analizy." }, { status: 400 }); }
   if (!body.versionId) return NextResponse.json({ error: "Brakuje identyfikatora wersji." }, { status: 400 });

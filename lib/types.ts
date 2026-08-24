@@ -114,6 +114,8 @@ export type DocumentVersionSummary = {
   r2_object_key: string;
   r2_etag: string | null;
   sha256: string | null;
+  malware_scan_status?: string | null;
+  malware_scanned_at?: string | null;
   upload_status: string;
   uploaded_at: string | null;
   created_at: string;

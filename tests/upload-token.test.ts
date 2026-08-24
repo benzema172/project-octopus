@@ -10,6 +10,8 @@ const intent: UploadIntent = {
   fileName: "test.pdf",
   mimeType: "application/pdf",
   fileSize: 123,
+  category: "technical",
+  categoryLocked: false,
   expiresAt: Date.now() + 60_000
 };
 
@@ -38,10 +40,31 @@ describe("upload token", () => {
     expect(verifyUploadToken(token, "test-secret").projectId).toBeNull();
   });
 
+  it("preserves a locked manual category in the signed intent", () => {
+    const token = createUploadToken({ ...intent, category: "contract", categoryLocked: true }, "test-secret");
+    const verified = verifyUploadToken(token, "test-secret");
+
+    expect(verified.category).toBe("contract");
+    expect(verified.categoryLocked).toBe(true);
+  });
+
+  it("binds integration source and idempotency metadata to the signature", () => {
+    const token = createUploadToken({
+      ...intent,
+      sourceChannel: "ksef",
+      sourceExternalKey: "KSeF-2026-001",
+      sourceMetadata: { sender: "NIP:123" }
+    }, "test-secret");
+    const verified = verifyUploadToken(token, "test-secret");
+
+    expect(verified.sourceChannel).toBe("ksef");
+    expect(verified.sourceExternalKey).toBe("KSeF-2026-001");
+    expect(verified.sourceMetadata).toEqual({ sender: "NIP:123" });
+  });
+
   it("rejects a validly signed token with an invalid payload shape", () => {
     const malformed = createUploadToken({ ...intent, fileSize: Number.NaN }, "test-secret");
 
     expect(() => verifyUploadToken(malformed, "test-secret")).toThrow("nieprawidłową strukturę");
   });
 });
-

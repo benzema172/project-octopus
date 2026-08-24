@@ -27,6 +27,7 @@ const projectRoutes = [
   "app/workspace/projects/[projectId]/requests/page.tsx",
   "app/workspace/projects/[projectId]/protocols/page.tsx",
   "app/workspace/projects/[projectId]/schedule/page.tsx",
+  "app/workspace/projects/[projectId]/tasks/page.tsx",
   "app/workspace/projects/[projectId]/progress/page.tsx",
   "app/workspace/projects/[projectId]/finance/page.tsx",
   "app/workspace/projects/[projectId]/team/page.tsx",

@@ -4,17 +4,15 @@ import { getRequestUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { getR2Config, requireServerEnv } from "@/lib/env";
-import { normalizeDocumentCategory } from "@/lib/documents/classification";
 import { createR2Client } from "@/lib/r2/client";
 import { validateFileSignature } from "@/lib/r2/file-signature";
-import { inferDocumentCategory } from "@/lib/r2/sanitize";
 import { verifyUploadToken } from "@/lib/r2/upload-token";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
 
 export const runtime = "nodejs";
 
-type CompleteBody = { token?: string; sha256?: string; category?: string };
+type CompleteBody = { token?: string; sha256?: string };
 
 function jsonError(message: string, status: number) { return NextResponse.json({ error: message }, { status }); }
 function normalizeSha256(value: string | undefined) {
@@ -73,16 +71,14 @@ export async function POST(request: Request) {
   }
 
   const supabase = createServiceSupabaseClient();
-  const requestedCategory = normalizeDocumentCategory(body.category);
-  if (body.category && !requestedCategory) return jsonError("Nieprawidłowa ręczna kategoria dokumentu.", 400);
-  const category = requestedCategory ?? inferDocumentCategory(intent.mimeType, intent.fileName);
+  const category = intent.category;
   if (!await hasDomainAccess({ workspaceId: intent.workspaceId, userId: user.id, domain: domainForDocumentCategory(category), level: "write", projectId: intent.projectId })) {
     await r2.send(new DeleteObjectCommand({ Bucket: r2Config.bucketName, Key: intent.objectKey })).catch(() => undefined);
     return jsonError("Brak uprawnienia do zapisania dokumentu w wybranej kategorii.", 403);
   }
 
   const uploadedAt = new Date().toISOString();
-  const { data: completed, error: completeError } = await supabase.rpc("complete_document_upload", {
+  const { data: completed, error: completeError } = await supabase.rpc("complete_document_upload_v2", {
     p_document_id: intent.documentId,
     p_version_id: intent.versionId,
     p_workspace_id: intent.workspaceId,
@@ -96,7 +92,8 @@ export async function POST(request: Request) {
     p_r2_etag: normalizeEtag(head.ETag),
     p_sha256: normalizeSha256(body.sha256),
     p_uploaded_by: user.id,
-    p_uploaded_at: uploadedAt
+    p_uploaded_at: uploadedAt,
+    p_category_locked: intent.categoryLocked
   }).single<{ document_id: string; version_id: string; version_number: number }>();
 
   if (completeError || !completed) {
@@ -110,6 +107,8 @@ export async function POST(request: Request) {
     versionId: completed.version_id,
     versionNumber: completed.version_number,
     objectKey: intent.objectKey,
-    signatureVerified: true
+    signatureVerified: true,
+    category,
+    categoryLocked: intent.categoryLocked
   }, { headers: { "Cache-Control": "no-store" } });
 }

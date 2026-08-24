@@ -26,7 +26,7 @@ export default async function ProjectBrainPage({ params }: ProjectBrainPageProps
   }
 
   const [reviewDocuments, knowledge] = await Promise.all([
-    listDocumentsForCategories(projectId, ["do_weryfikacji"]),
+    listDocumentsForCategories(projectId, ["other"]),
     getProjectKnowledgeSnapshot(projectId)
   ]);
 

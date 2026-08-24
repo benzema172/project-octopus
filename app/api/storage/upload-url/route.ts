@@ -7,7 +7,7 @@ import { getProjectForUser } from "@/lib/data/projects";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
 import { getR2Config, requireServerEnv } from "@/lib/env";
 import { createR2Client } from "@/lib/r2/client";
-import { MAX_SUPPORTED_UPLOAD_BYTES, sanitizeFileName, validateUploadFile } from "@/lib/r2/sanitize";
+import { inferDocumentCategory, MAX_SUPPORTED_UPLOAD_BYTES, sanitizeFileName, validateUploadFile } from "@/lib/r2/sanitize";
 import { createUploadToken, type UploadIntent } from "@/lib/r2/upload-token";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
@@ -25,6 +25,7 @@ type UploadUrlBody = {
   mimeType?: string;
   fileSize?: number;
   category?: string;
+  categoryLocked?: boolean;
 };
 
 function jsonError(message: string, status: number) {
@@ -97,7 +98,11 @@ export async function POST(request: Request) {
     existingDocumentCategory = document.category;
   }
 
-  const uploadDomain = domainForDocumentCategory(existingDocumentCategory ?? requestedCategory);
+  const category = normalizeDocumentCategory(existingDocumentCategory)
+    ?? requestedCategory
+    ?? inferDocumentCategory(mimeType, fileName);
+  const categoryLocked = Boolean(requestedDocumentId || (body.categoryLocked && requestedCategory));
+  const uploadDomain = domainForDocumentCategory(category);
   if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: uploadDomain, level: "write", projectId })) {
     return jsonError("Brak uprawnienia do dodawania dokumentów w tej domenie.", 403);
   }
@@ -128,6 +133,8 @@ export async function POST(request: Request) {
     fileName,
     mimeType,
     fileSize,
+    category,
+    categoryLocked,
     expiresAt: Date.now() + PRESIGNED_URL_TTL_SECONDS * 1000
   };
 

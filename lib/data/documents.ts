@@ -3,6 +3,7 @@ import "server-only";
 import { cache } from "react";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { DocumentSummary, DocumentVersionSummary } from "@/lib/types";
+import { expandDocumentCategoryAliases } from "@/lib/documents/classification";
 
 type FlexibleRow = Record<string, unknown>;
 type FlexibleDocumentRow = FlexibleRow & {
@@ -31,7 +32,7 @@ function normalizeVersion(row: FlexibleRow, projectId: string | null, fallbackNa
     version_number: numberValue(row, "version_number", "version_no") || 1, file_name: stringValue(row, "file_name", "original_filename") ?? fallbackName,
     mime_type: stringValue(row, "mime_type") ?? "application/octet-stream", file_size_bytes: numberValue(row, "file_size_bytes", "size_bytes"),
     r2_bucket: stringValue(row, "r2_bucket", "bucket_name", "storage_bucket") ?? "", r2_object_key: stringValue(row, "r2_object_key", "object_key", "storage_key") ?? "",
-    r2_etag: stringValue(row, "r2_etag"), sha256: stringValue(row, "sha256"), upload_status: stringValue(row, "upload_status", "status") ?? "uploaded",
+    r2_etag: stringValue(row, "r2_etag"), sha256: stringValue(row, "sha256"), malware_scan_status: stringValue(row, "malware_scan_status"), malware_scanned_at: stringValue(row, "malware_scanned_at"), upload_status: stringValue(row, "upload_status", "status") ?? "uploaded",
     uploaded_at: stringValue(row, "uploaded_at"), created_at: stringValue(row, "created_at") ?? ""
   };
 }
@@ -52,7 +53,7 @@ function normalizeDocuments(rows: FlexibleDocumentRow[], fallbackProjectId: stri
 
 const DOCUMENT_WITH_VERSIONS_SELECT = [
   "id", "project_id", "workspace_id", "name", "title", "category", "document_type", "ai_status", "ai_confidence", "current_version_id", "deleted_at", "created_at", "updated_at",
-  "document_versions!document_versions_document_id_fkey(id,document_id,project_id,version_no,version_number,original_filename,file_name,mime_type,size_bytes,file_size_bytes,bucket_name,r2_bucket,object_key,r2_object_key,r2_etag,sha256,upload_status,uploaded_at,created_at)"
+  "document_versions!document_versions_document_id_fkey(id,document_id,project_id,version_no,version_number,original_filename,file_name,mime_type,size_bytes,file_size_bytes,bucket_name,r2_bucket,object_key,r2_object_key,r2_etag,sha256,malware_scan_status,malware_scanned_at,upload_status,uploaded_at,created_at)"
 ].join(",");
 
 function documentQuery(projectId: string, trashed: boolean) {
@@ -90,7 +91,7 @@ export async function safeListDocumentsForProject(projectId: string): Promise<Do
 
 export async function listDocumentsForCategories(projectId: string, categories: string[]): Promise<DocumentSummary[]> {
   if (!categories.length) return [];
-  const normalizedCategories = Array.from(new Set(categories.map((category) => category.trim()).filter(Boolean)));
+  const normalizedCategories = expandDocumentCategoryAliases(categories);
   if (!normalizedCategories.length) return [];
   const { data, error } = await documentQuery(projectId, false).in("category", normalizedCategories).order("updated_at", { ascending: false }).returns<FlexibleDocumentRow[]>();
   if (error) throw new Error(`Nie udało się pobrać dokumentów modułu: ${error.message}`);

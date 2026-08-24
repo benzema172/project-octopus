@@ -9,6 +9,7 @@ import { createR2Client } from "@/lib/r2/client";
 import { attachmentContentDisposition } from "@/lib/r2/sanitize";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
+import { malwareScanRequiredByPolicy } from "@/lib/documents/malware-scan";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,7 @@ type VersionRow = {
   mime_type: string;
   r2_bucket: string;
   r2_object_key: string;
+  malware_scan_status: string;
   documents: { workspace_id: string; project_id: string | null; category: string | null } | Array<{ workspace_id: string; project_id: string | null; category: string | null }>;
 };
 
@@ -62,7 +64,7 @@ export async function POST(request: Request) {
   const supabase = createServiceSupabaseClient();
   const { data: version, error } = await supabase
     .from("document_versions")
-    .select("id,file_name,mime_type,r2_bucket,r2_object_key,documents!inner(workspace_id,project_id,category)")
+    .select("id,file_name,mime_type,r2_bucket,r2_object_key,malware_scan_status,documents!inner(workspace_id,project_id,category)")
     .eq("id", body.versionId)
     .eq("documents.workspace_id", workspace.id)
     .maybeSingle<VersionRow>();
@@ -83,6 +85,8 @@ export async function POST(request: Request) {
     level: "read",
     projectId: sourceDocument.project_id
   })) return jsonError("Brak uprawnienia do pobrania tego dokumentu.", 403);
+  if (version.malware_scan_status === "infected") return jsonError("Dokument jest w kwarantannie po wykryciu zagrożenia.", 423);
+  if (version.malware_scan_status === "pending" && malwareScanRequiredByPolicy()) return jsonError("Dokument oczekuje na wymagany skan bezpieczeństwa.", 423);
 
   const r2Config = getR2Config();
 
