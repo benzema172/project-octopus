@@ -23,6 +23,7 @@ import "../../../investment-content-refinement.css";
 import "../../../investment-card-typography.css";
 import "../../../investment-menu-toggle-fix.css";
 import "../../../wrzutnia-mascot-refinement.css";
+import "../../../project-submodules-compact.css";
 import "../../../project-section-rhythm-final.css";
 import "../../../project-actions.css";
 

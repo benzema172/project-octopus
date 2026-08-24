@@ -1,8 +1,8 @@
-import { CheckCircle2, FileCheck2, PackageSearch, ShieldCheck } from "lucide-react";
+import { FileText, Link2, PackageCheck, Plus } from "lucide-react";
 import { notFound } from "next/navigation";
 import { MaterialRequestIntegrityPanel } from "@/components/projects/material-request-integrity-panel";
 import { MaterialRequestsWorkflow } from "@/components/projects/material-requests-workflow";
-import { ProjectModuleFoundation } from "@/components/projects/project-module-foundation";
+import { ProjectCompactShell } from "@/components/projects/project-compact-module-page";
 import { ProjectOperationPanel } from "@/components/projects/project-operation-panel";
 import { requireCurrentUser } from "@/lib/auth";
 import { listDocumentsForCategories } from "@/lib/data/documents";
@@ -48,31 +48,26 @@ export default async function RequestsPage({ params }: Props) {
     ...brain.devices.map((item) => ({ title: item.name, description: item.installation || "Urządzenie rozpoznane w dokumentacji", tag: "URZĄDZENIE" }))
   ];
 
-  return <ProjectModuleFoundation
+  return <ProjectCompactShell
+    icon={PackageCheck}
     kicker="Wnioski materiałowe"
     title="Materiały i urządzenia do akceptacji"
-    description="Pełny obieg WM od wymagania Project DNA, przez tożsamość materiału i BOQ/WBS, szkic i weryfikację, do wysłania, decyzji oraz dalszego śladu PO → PZ → faktura."
-    status={requests.length ? `${requests.length} wniosków w obiegu` : recognized ? `${recognized} elementów rozpoznanych przez Brain` : "Oczekuje na dane materiałowe"}
+    description="Wymaganie, szkic, weryfikacja, wysłanie i decyzja w jednym rejestrze."
+    status={requests.length ? `${requests.length} wniosków` : recognized ? `${recognized} rozpoznanych` : "Brak danych"}
     metrics={[
       { label: "Do przygotowania", value: String(requirements.filter((item) => !["approved","rejected"].includes(item.status)).length), hint: "wymagania materiałowe" },
       { label: "W obiegu", value: String(requests.filter((item) => ["draft","ai_ready","in_review","sent"].includes(item.status)).length), hint: "szkic → wysłany" },
-      { label: "Zatwierdzone", value: String(requests.filter((item) => item.status === "approved").length), hint: "zaakceptowane WM" }
+      { label: "Zatwierdzone", value: String(requests.filter((item) => item.status === "approved").length), hint: "zaakceptowane WM", tone: "positive" }
     ]}
-    documents={documents}
-    intakeLabel="Wnioski i materiały wejściowe"
-    knowledgeTitle="Materiały i urządzenia rozpoznane przez Brain"
-    knowledge={knowledge}
-    workflow={["Gemini wykrywa wymaganie materiałowe", "WM dostaje kanoniczny materiał + BOQ/WBS", "Weryfikacja kompletności → wysłanie do odbiorcy", "Approved WM zachowuje ten sam Procurement Trace w PO, PZ i fakturze"]}
-    items={[
-      { title: "Wybór materiału", description: "Materiały i urządzenia są pobierane z Brain i firmowej kartoteki, a zatwierdzony WM ma jedną tożsamość materiałową.", icon: PackageSearch },
-      { title: "Kompletacja danych", description: "Producent, produkt, model, zastosowanie, BOQ/WBS i zgodność są zapisane w rzeczywistym rekordzie WM.", icon: FileCheck2 },
-      { title: "Weryfikacja z projektem", description: "Wniosek nie przechodzi do wysłania bez etapu weryfikacji, a późniejsze PO nie może podmienić zatwierdzonego materiału.", icon: ShieldCheck },
-      { title: "Decyzja", description: "Zatwierdzenie lub odrzucenie jest rejestrowane w historii i aktualizuje wymaganie źródłowe.", icon: CheckCircle2 }
-    ]}
-    principle="AI przygotowuje dane, propozycję materiału i BOQ/WBS, ale przejście do wysłania oraz końcowa decyzja pozostają kontrolowaną czynnością użytkownika."
   >
-    <ProjectOperationPanel projectId={projectId} mode="requirement" />
+    <details className="pw-submodule-tool"><summary><Plus size={17} aria-hidden="true" />Dodaj wymaganie materiałowe</summary><ProjectOperationPanel projectId={projectId} mode="requirement" /></details>
     <MaterialRequestsWorkflow projectId={projectId} canWrite={canWrite} requirements={requirements} requests={requests} />
-    <MaterialRequestIntegrityPanel projectId={projectId} canWrite={canWrite} requests={requests} stockItems={stockItems} boqItems={boqItems} />
-  </ProjectModuleFoundation>;
+    <details className="pw-submodule-tool"><summary><Link2 size={16} aria-hidden="true" />Powiązania materiału, BOQ i śladu zakupowego</summary><MaterialRequestIntegrityPanel projectId={projectId} canWrite={canWrite} requests={requests} stockItems={stockItems} boqItems={boqItems} /></details>
+    <details className="pw-submodule-sources"><summary><FileText size={16} aria-hidden="true" />Źródła i rozpoznane materiały <span>{documents.length + knowledge.length}</span></summary>
+      {documents.length || knowledge.length ? <div className="pw-submodule-sources__list">
+        {documents.map((document) => <div key={`document-${document.id}`}><FileText size={15} aria-hidden="true" /><span><strong>{document.name}</strong><small>{document.category ?? "wniosek"}</small></span></div>)}
+        {knowledge.map((item, index) => <div key={`knowledge-${index}-${item.title}`}><PackageCheck size={15} aria-hidden="true" /><span><strong>{item.title}</strong><small>{item.tag} · {item.description}</small></span></div>)}
+      </div> : <p>Brak dokumentów i materiałów rozpoznanych przez Brain.</p>}
+    </details>
+  </ProjectCompactShell>;
 }

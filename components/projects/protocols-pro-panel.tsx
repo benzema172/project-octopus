@@ -66,9 +66,9 @@ export function ProtocolsProPanel({ projectId, canWrite, requirements, documents
     });
   }
 
-  return <section className="project-operation-card">
-    <div className="project-operation-card__heading"><div><p className="eyebrow">Protokoły PRO</p><h3>Rzeczywisty przebieg próby / odbioru</h3><p>Zapisz wynik z budowy, osoby uczestniczące, dowody oraz decyzję akceptacyjną. Octopus nie uzna protokołu za wykonany bez wymaganych danych.</p></div><ClipboardCheck size={22} /></div>
-    {canWrite ? <form className="project-operation-form" onSubmit={save}><div>
+  return <section className="project-operation-card pw-submodule-register">
+    <div className="project-operation-card__heading"><div><p className="eyebrow">Rejestr PRO</p><h3>Protokoły z danymi wykonawczymi</h3><p>Wyniki, osoby, dowody i decyzje.</p></div><ClipboardCheck size={22} /></div>
+    {canWrite ? <details className="pw-submodule-tool pw-submodule-tool--nested"><summary><Plus size={16}/>Dodaj wynik próby lub odbioru</summary><form className="project-operation-form" onSubmit={save}><div>
       <label><span>Wymaganie z dokumentacji</span><select name="protocolRequirementId" value={selectedRequirement} onChange={(event) => setSelectedRequirement(event.target.value)}><option value="">Bez powiązania / ręczny protokół</option>{requirements.filter((item) => item.status !== "fulfilled").map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
       <label><span>Rodzaj protokołu</span><input name="protocolType" required defaultValue={requirement?.protocol_type ?? ""} key={`type-${selectedRequirement}`} placeholder="np. pressure_test" /></label>
       <label><span>Nazwa</span><input name="title" required defaultValue={requirement?.title ?? ""} key={`title-${selectedRequirement}`} /></label>
@@ -85,9 +85,9 @@ export function ProtocolsProPanel({ projectId, canWrite, requirements, documents
       <label><span>Uwagi</span><textarea name="remarks" rows={2} /></label>
       <label><span>Uczestnicy</span><textarea name="participants" rows={4} placeholder={"Jan Kowalski | Kierownik robót | Firma X | podpisano\nAnna Nowak | Inspektor | Inwestor | podpisano"} /></label>
       <label><span>Dowody / załączniki</span><select name="evidenceDocumentIds" multiple size={Math.min(6, Math.max(3, documents.length))}>{documents.map((document) => <option key={document.id} value={document.id}>{document.name}</option>)}</select></label>
-    </div><button className="primary-button" disabled={pending}>{pending ? <LoaderCircle className="spin" size={16} /> : <Plus size={16} />}Zapisz rzeczywisty protokół</button></form> : <p className="project-operation-card__notice"><TriangleAlert size={17} />Tryb tylko do odczytu.</p>}
+    </div><button className="primary-button" disabled={pending}>{pending ? <LoaderCircle className="spin" size={16} /> : <Plus size={16} />}Zapisz rzeczywisty protokół</button></form></details> : <p className="project-operation-card__notice"><TriangleAlert size={17} />Tryb tylko do odczytu.</p>}
     {message ? <p className="project-operation-card__success"><CheckCircle2 size={16} />{message}</p> : null}{error ? <p className="project-operation-card__error"><TriangleAlert size={16} />{error}</p> : null}
-    <div className="project-live-records"><div className="project-live-records__heading"><div><p className="eyebrow">Rejestr PRO</p><h3>Protokoły z danymi wykonawczymi</h3></div><strong>{protocols.length}</strong></div>
+    <div className="project-live-records"><div className="project-live-records__heading"><div><p className="eyebrow">Dane na żywo</p><h3>Wyniki prób i odbiorów</h3></div><strong>{protocols.length}</strong></div>
       {protocols.map((protocol) => <article className="project-live-record" key={protocol.id}><div><strong>{protocol.title}</strong><p>{protocol.protocol_type} · {protocol.protocol_date ?? "bez daty"} · {protocol.location ?? "bez lokalizacji"}</p><small>{protocol.result ?? "Brak wyniku"}</small></div><div><span><Users size={14} /> {protocol.participants.length}</span><span><FileCheck2 size={14} /> {protocol.evidence.length}</span><span>{protocol.status}</span></div>{canWrite && ["draft", "ai_ready", "in_review"].includes(protocol.status) ? <div><button type="button" className="primary-button" disabled={pending} onClick={() => review(protocol.id, "approve")}><ShieldCheck size={15} />Akceptuj</button><button type="button" className="secondary-button" disabled={pending} onClick={() => review(protocol.id, "reject")}>Odrzuć</button></div> : null}</article>)}
       {!protocols.length ? <p className="empty-copy">Brak rzeczywistych protokołów. Dodaj pierwszy wynik z budowy.</p> : null}
     </div>

@@ -1,6 +1,6 @@
-import { ClipboardCheck, Droplets, FileSignature, Gauge } from "lucide-react";
+import { ClipboardCheck, FileText, Plus } from "lucide-react";
 import { notFound } from "next/navigation";
-import { ProjectModuleFoundation } from "@/components/projects/project-module-foundation";
+import { ProjectCompactShell } from "@/components/projects/project-compact-module-page";
 import { ProjectOperationPanel } from "@/components/projects/project-operation-panel";
 import { ProtocolsProPanel } from "@/components/projects/protocols-pro-panel";
 import { requireCurrentUser } from "@/lib/auth";
@@ -38,33 +38,22 @@ export default async function ProtocolsPage({ params }: Props) {
   const requirements = (requirementsResult.data ?? []).map((row) => ({ id: String(row.id), protocol_type: String(row.protocol_type), title: String(row.title), status: String(row.status) }));
   const protocols = (protocolsResult.data ?? []).map((row) => ({ ...row, participants: row.protocol_participants ?? [], evidence: row.protocol_evidence ?? [] }));
 
-  return <ProjectModuleFoundation
-    kicker="Protokoły"
+  return <ProjectCompactShell
+    icon={ClipboardCheck}
+    kicker="Protokoły i odbiory"
     title="Próby, odbiory i roboty zanikowe"
-    description="Pełny obieg: wymaganie z dokumentacji → rzeczywista próba/odbiór → uczestnicy i dowody → akceptacja → zamknięcie wymagania."
-    status={protocols.length ? `${protocols.length} protokołów wykonawczych` : requirements.length ? `${requirements.length} wymagań do obsługi` : "Oczekuje na wymagania lub dane z budowy"}
+    description="Wymagania, wyniki z budowy, uczestnicy, dowody i decyzje odbiorowe."
+    status={protocols.length ? `${protocols.length} protokołów` : requirements.length ? `${requirements.length} wymagań` : "Brak danych"}
     metrics={[
-      { label: "Wymagane", value: String(requirements.filter((item) => item.status !== "fulfilled").length), hint: "wynikające z Project DNA" },
-      { label: "Do weryfikacji", value: String(protocols.filter((item) => ["draft", "ai_ready", "in_review"].includes(item.status)).length), hint: "rzeczywiste dane z budowy" },
-      { label: "Zatwierdzone", value: String(protocols.filter((item) => item.status === "approved").length), hint: "zamknięte dowody odbiorowe" }
+      { label: "Wymagane", value: String(requirements.filter((item) => item.status !== "fulfilled").length), hint: "z Project DNA" },
+      { label: "Do weryfikacji", value: String(protocols.filter((item) => ["draft", "ai_ready", "in_review"].includes(item.status)).length), hint: "dane z budowy" },
+      { label: "Zatwierdzone", value: String(protocols.filter((item) => item.status === "approved").length), hint: "zamknięte dowody", tone: "positive" }
     ]}
-    documents={documents}
-    intakeLabel="Protokoły, próby i odbiory"
-    workflow={[
-      "Dokumentacja i Brain tworzą wymagania protokołów",
-      "Octopus przygotowuje szkic, ale nie wymyśla wyniku próby",
-      "Zapisujesz rzeczywisty wynik, parametry, uczestników i dowody",
-      "Akceptacja zamyka wymaganie oraz powiązany dowód odbiorowy"
-    ]}
-    items={[
-      { title: "Próby szczelności i ciśnieniowe", description: "Ciśnienie, medium, czas, urządzenie pomiarowe i wynik rzeczywisty.", icon: Gauge },
-      { title: "Płukanie i dezynfekcja", description: "Zakres, lokalizacja, wykonawcy, dowody oraz wynik odbiorowy.", icon: Droplets },
-      { title: "Roboty zanikowe", description: "Rejestr osób, załączników i decyzji przed zakryciem robót.", icon: FileSignature },
-      { title: "Odbiory częściowe", description: "Pełna historia akceptacji i powiązanie z wymaganiem Project DNA.", icon: ClipboardCheck }
-    ]}
-    principle="AI może przygotować wymaganie i szkic protokołu, ale rzeczywisty wynik, pomiar, osoby i akceptacja zawsze pochodzą z wykonania na budowie."
   >
-    <ProjectOperationPanel projectId={projectId} mode="protocol" />
+    <details className="pw-submodule-tool"><summary><Plus size={17} aria-hidden="true" />Dodaj wymagany protokół</summary><ProjectOperationPanel projectId={projectId} mode="protocol" /></details>
     <ProtocolsProPanel projectId={projectId} canWrite={canWrite} requirements={requirements} documents={allDocuments.map((document) => ({ id: document.id, name: document.name }))} protocols={protocols} />
-  </ProjectModuleFoundation>;
+    <details className="pw-submodule-sources"><summary><FileText size={16} aria-hidden="true" />Dokumenty źródłowe <span>{documents.length}</span></summary>
+      {documents.length ? <div className="pw-submodule-sources__list">{documents.map((document) => <div key={document.id}><FileText size={15} aria-hidden="true" /><span><strong>{document.name}</strong><small>{document.category ?? "protokół"}</small></span></div>)}</div> : <p>Brak przypisanych dokumentów protokołów i odbiorów.</p>}
+    </details>
+  </ProjectCompactShell>;
 }

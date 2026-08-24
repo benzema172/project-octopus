@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
+import { ShieldCheck } from "lucide-react";
 import { OperationsActionButton } from "@/components/projects/operations-action-button";
 import { CloseoutWorkspace } from "@/components/projects/closeout-workspace";
+import { ProjectCompactShell } from "@/components/projects/project-compact-module-page";
 import { requireCurrentUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -28,8 +30,13 @@ export default async function CloseoutPage({ params }: { params: Promise<{ proje
     db.from("documents").select("id,name").eq("workspace_id",project.workspace_id).eq("project_id",project.id).is("deleted_at",null).order("name"),
     db.from("project_outputs").select("id,title,version_number,status,generated_at,warnings").eq("workspace_id",project.workspace_id).eq("project_id",project.id).order("version_number",{ascending:false})
   ]);
-  return <div className="project-tab-content">
-    <section className="project-module-heading"><div><p className="eyebrow">Dokumentacja powykonawcza</p><h2>Paczka zamknięcia inwestycji</h2><p>Checklista z dowodami, wersjonowany snapshot przekazania oraz kontrolowane zatwierdzenie kończące inwestycję.</p></div>{canManage ? <OperationsActionButton projectId={project.id} action="initialize_closeout" label="Utwórz / aktualizuj listę" /> : <small>Dostęp tylko do odczytu.</small>}</section>
+  return <ProjectCompactShell
+    icon={ShieldCheck}
+    kicker="Zamknięcie inwestycji"
+    title="Paczka przekazania"
+    description="Checklista dowodów, wersjonowane eksporty i kontrolowane zatwierdzenie końcowe."
+    aside={canManage ? <OperationsActionButton projectId={project.id} action="initialize_closeout" label="Aktualizuj checklistę" /> : <small>Tylko odczyt</small>}
+  >
     <CloseoutWorkspace projectId={project.id} canManage={canManage} requirements={(requirementsResult.data??[]).map(row=>({id:String(row.id),category:String(row.category),title:String(row.title),required:row.required!==false,status:String(row.status),document_id:row.document_id?String(row.document_id):null}))} documents={(documentsResult.data??[]).map(row=>({id:String(row.id),name:String(row.name)}))} outputs={(outputsResult.data??[]).map(row=>({id:String(row.id),title:String(row.title),version_number:Number(row.version_number),status:String(row.status),generated_at:String(row.generated_at),warnings:row.warnings}))}/>
-  </div>;
+  </ProjectCompactShell>;
 }
