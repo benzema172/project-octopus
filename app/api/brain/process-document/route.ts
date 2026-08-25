@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { processDocumentVersion } from "@/lib/ai/process-document";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
+import { enrichDocumentWithInvestmentRouting, type InvestmentRoutingResult } from "@/lib/ai/investment-document-routing";
 import { getRequestUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -40,15 +41,24 @@ export async function POST(request: Request) {
   if (!project) return jsonError("Nie znaleziono inwestycji.", 404);
 
   const supabase = createServiceSupabaseClient();
-  const { data: sourceDocument, error: documentError } = await supabase
-    .from("documents")
-    .select("id,category")
-    .eq("id", body.documentId)
-    .eq("project_id", project.id)
-    .maybeSingle<{ id: string; category: string | null }>();
+  const [{ data: sourceDocument, error: documentError }, { data: sourceVersion, error: versionError }] = await Promise.all([
+    supabase
+      .from("documents")
+      .select("id,category")
+      .eq("id", body.documentId)
+      .eq("project_id", project.id)
+      .maybeSingle<{ id: string; category: string | null }>(),
+    supabase
+      .from("document_versions")
+      .select("id,file_name")
+      .eq("id", body.versionId)
+      .eq("document_id", body.documentId)
+      .maybeSingle<{ id: string; file_name: string }>()
+  ]);
 
   if (documentError) return jsonError(`Nie udało się pobrać dokumentu: ${documentError.message}`, 500);
-  if (!sourceDocument) return jsonError("Nie znaleziono dokumentu w tej inwestycji.", 404);
+  if (versionError) return jsonError(`Nie udało się pobrać wersji dokumentu: ${versionError.message}`, 500);
+  if (!sourceDocument || !sourceVersion) return jsonError("Nie znaleziono dokumentu lub jego wersji w tej inwestycji.", 404);
   if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: domainForDocumentCategory(sourceDocument.category), level: "write", projectId: project.id })) {
     return jsonError("Brak uprawnienia do analizy tego dokumentu.", 403);
   }
@@ -60,6 +70,33 @@ export async function POST(request: Request) {
       userId: user.id,
       categoryOverride: body.lockCategory ? normalizeDocumentCategory(sourceDocument.category) : null
     });
+
+    let routing: InvestmentRoutingResult | null = null;
+    let routingError: string | null = null;
+    try {
+      routing = await enrichDocumentWithInvestmentRouting({
+        workspaceId: project.workspace_id,
+        projectId: project.id,
+        documentId: body.documentId,
+        versionId: body.versionId,
+        userId: user.id,
+        fileName: sourceVersion.file_name,
+        analysis
+      });
+    } catch (error) {
+      routingError = error instanceof Error ? error.message : "Automatyczny routing dokumentu nie powiódł się.";
+      await supabase.from("audit_events").insert({
+        workspace_id: project.workspace_id,
+        project_id: project.id,
+        actor_id: user.id,
+        actor_type: "ai",
+        event_type: "document.investment_routing_failed",
+        entity_type: "document",
+        entity_id: body.documentId,
+        after_value: { version_id: body.versionId, error: routingError }
+      });
+    }
+
     const autopilot = await applyDocumentAutopilot({
       workspaceId: project.workspace_id,
       documentId: body.documentId,
@@ -77,6 +114,8 @@ export async function POST(request: Request) {
       summary: analysis.summary,
       proposed_project_id: autopilot.projectId ?? analysis.proposedProjectId,
       project_match: analysis.projectMatch,
+      routing,
+      routing_error: routingError,
       autopilot,
       counts: {
         facts: analysis.facts.length,
@@ -84,7 +123,7 @@ export async function POST(request: Request) {
         devices: analysis.installations.length,
         boq_items: analysis.boqItems.length,
         schedule_items: analysis.scheduleItems.length,
-        protocol_requirements: analysis.protocolRequirementsDetailed.length || analysis.requiredProtocols.length,
+        protocol_requirements: (analysis.protocolRequirementsDetailed.length || analysis.requiredProtocols.length) + (routing?.protocolProposals ?? 0),
         site_events: analysis.siteEvents.length,
         progress_items: analysis.progressItems.length,
         tasks: analysis.tasks.length + analysis.risks.length,
