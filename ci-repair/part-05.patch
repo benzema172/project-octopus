@@ -1,0 +1,42 @@
+ import { parseLocalizedNumber } from "@/lib/numbers/parse-localized-number";
++import { JsonBodyError, readJsonBody } from "@/lib/http/json-body";
+ import { createServiceSupabaseClient } from "@/lib/supabase/service";
+ 
+ export const runtime = "nodejs";
+@@ -135,95 +136,35 @@
+ async function createReportSnapshot(workspaceId: string, userId: string, payload: Record<string, unknown>) {
+   const supabase = createServiceSupabaseClient();
+   const definitionId = await requireOwnedId("report_definitions", payload.definitionId, workspaceId, "Definicja raportu");
+-  const { data: definition } = await supabase.from("report_definitions").select("id,name,report_type,project_id,definition").eq("id", definitionId).single();
+-  const projectId = definition?.project_id ? String(definition.project_id) : null;
+   const periodStart = date(payload.periodStart);
+   const periodEnd = date(payload.periodEnd);
+-  if (periodStart && periodEnd && periodStart > periodEnd) throw new Error("Początek okresu raportu nie może być późniejszy niż koniec.");
+-  const [projects, documents, employees, vehicles, stockItems, invoices, commitments, openAi, allocations, assignments, vehicleAllocations, materialEvents] = await Promise.all([
+-    supabase.from("projects").select("id,status").eq("workspace_id", workspaceId),
+-    supabase.from("documents").select("id,project_id,created_at").eq("workspace_id", workspaceId).is("deleted_at", null),
+-    supabase.from("employees").select("id,status").eq("workspace_id", workspaceId),
+-    supabase.from("vehicles").select("id,status").eq("workspace_id", workspaceId),
+-    supabase.from("stock_items").select("id,active").eq("workspace_id", workspaceId),
+-    supabase.from("invoices").select("id,direction,issue_date,gross_amount,paid_amount,status").eq("workspace_id", workspaceId),
+-    supabase.from("commitments").select("project_id,amount,expected_date,status").eq("workspace_id", workspaceId).in("status", ["open", "approved"]),
+-    supabase.from("document_intakes").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).in("status", ["queued", "review", "error"]),
+-    supabase.from("financial_allocations").select("source_id,project_id,status").eq("workspace_id", workspaceId).eq("source_type", "invoice").eq("status", "approved"),
+-    supabase.from("assignments").select("employee_id,project_id,date_from,date_to").eq("workspace_id", workspaceId),
+-    supabase.from("vehicle_allocations").select("vehicle_id,project_id").eq("workspace_id", workspaceId),
+-    supabase.from("material_chain_events").select("stock_item_id,project_id,occurred_at").eq("workspace_id", workspaceId)
+-  ]);
+-  const inPeriod = (value: unknown) => {
+-    if (!value) return true;
+-    const normalized = String(value).slice(0, 10);
+-    return (!periodStart || normalized >= periodStart) && (!periodEnd || normalized <= periodEnd);
+-  };
+-  const overlapsPeriod = (from: unknown, to: unknown) => {
+-    const start = from ? String(from).slice(0, 10) : null;
+-    const end = to ? String(to).slice(0, 10) : null;
+-    return (!periodEnd || !start || start <= periodEnd) && (!periodStart || !end || end >= periodStart);
+-  };
+-  const projectInvoiceIds = projectId
+-    ? new Set((allocations.data ?? []).filter((row) => row.project_id === projectId).map((row) => String(row.source_id)))
+-    : null;
+-  const invoiceRows = (invoices.data ?? []).filter((row) => inPeriod(row.issue_date) && (!projectInvoiceIds || projectInvoiceIds.has(String(row.id))));
