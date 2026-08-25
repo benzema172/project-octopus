@@ -80,7 +80,7 @@ export async function persistDocumentAnalysisSegments(input: AnalysisSegmentInpu
   if (segmentError) throw new Error(`Nie udało się zapisać segmentów analizy: ${segmentError.message}`);
   const { error: chunkError } = await db.from("document_chunks").insert(rows.map((row) => ({
     document_version_id: input.documentVersionId,
-    chunk_index: row.segment_index,
+    chunk_no: row.segment_index,
     content: row.extracted_text,
     metadata: { ...row.locator, sectionLabel: row.section_label, contentSha256: row.content_sha256, qualityScore: row.quality_score }
   })));
