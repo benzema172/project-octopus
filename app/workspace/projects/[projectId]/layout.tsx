@@ -16,6 +16,7 @@ import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { domainAccessPolicyAllows, loadDomainAccessPolicy, type Domain } from "@/lib/authorization";
 import "../../../project-workspace-v2.css";
 import "../../../project-intake.css";
+import "../../../project-intake-progress.css";
 import "../../../project-navigation-refinement.css";
 import "../../../project-modules-operational.css";
 import "../../../layout-density-project-audit.css";
