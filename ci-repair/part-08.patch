@@ -1,0 +1,73 @@
+-    const { error } = await db.from("notifications").insert(inserts);
+-    if (error) throw new Error(`Nie udało się zapisać alertów: ${error.message}`);
+-  }
+-  return inserts.length;
++  if (!inserts.length) return 0;
++
++  const { data, error } = await db.rpc("enqueue_automation_notifications_atomic", {
++    p_workspace_id: workspaceId,
++    p_notifications: inserts
++  });
++  if (error) throw new Error(`Nie udało się zapisać alertów atomowo: ${error.message}`);
++  return Number(data ?? 0);
+ }
+ 
+ export async function POST(request: Request) {
+@@ -261,9 +256,10 @@
+ 
+   let body: Body;
+   try {
+-    body = await request.json() as Body;
+-  } catch {
+-    return NextResponse.json({ error: "Nieprawidłowe dane żądania." }, { status: 400 });
++    body = await readJsonBody<Body>(request);
++  } catch (error) {
++    if (error instanceof JsonBodyError) return NextResponse.json({ error: error.message }, { status: error.status });
++    throw error;
+   }
+ 
+   if (!body.workspaceId || !body.action) return NextResponse.json({ error: "Brakuje firmy lub operacji." }, { status: 400 });
+--- a/app/api/company/power/route.ts
++++ b/app/api/company/power/route.ts
+@@ -4,6 +4,7 @@
+ import { getWorkspaceForUser } from "@/lib/data/workspace";
+ import { parseLocalizedNumber } from "@/lib/numbers/parse-localized-number";
+ import { createServiceSupabaseClient } from "@/lib/supabase/service";
++import { JsonBodyError, readJsonBody } from "@/lib/http/json-body";
+ 
+ export const runtime = "nodejs";
+ 
+@@ -77,9 +78,10 @@
+ 
+   let body: Body;
+   try {
+-    body = await request.json() as Body;
+-  } catch {
+-    return NextResponse.json({ error: "Nieprawidłowe dane operacji." }, { status: 400 });
++    body = await readJsonBody<Body>(request);
++  } catch (error) {
++    if (error instanceof JsonBodyError) return NextResponse.json({ error: error.message }, { status: error.status });
++    throw error;
+   }
+ 
+   if (!body.workspaceId || !body.action || !ACTION_DOMAIN[body.action]) {
+@@ -147,25 +149,24 @@
+       if (validTo && validFrom > validTo) throw new Error("Data zakończenia zatrudnienia nie może poprzedzać daty rozpoczęcia.");
+       const fte = amount(p.fullTimeEquivalent, "wymiar etatu");
+       if (fte < 0 || fte > 2) throw new Error("Wymiar etatu musi mieścić się w zakresie 0–2.");
+-      const { data: existingTerms, error: termsError } = await db.from("employments").select("id,valid_from,valid_to").eq("workspace_id", workspace.id).eq("employee_id", employeeId);
+-      if (termsError) throw termsError;
+-      const overlap = (existingTerms ?? []).some((term) => periodsOverlap(validFrom, validTo, String(term.valid_from), term.valid_to ? String(term.valid_to) : null));
+-      if (overlap) throw new Error("Ten pracownik ma już warunki zatrudnienia obejmujące część wskazanego okresu. Zakończ poprzedni okres albo zmień daty.");
+-      const { data, error } = await db.from("employments").insert({
+-        workspace_id: workspace.id,
+-        employee_id: employeeId,
+-        employment_type: text(p.employmentType, "forma zatrudnienia", true),
+-        position: text(p.position, "stanowisko"),
+-        valid_from: validFrom,
+-        valid_to: validTo,
+-        full_time_equivalent: fte || null,
+-        monthly_cost: amount(p.monthlyCost, "koszt miesięczny") || null,
+-        hourly_cost: amount(p.hourlyCost, "koszt godzinowy") || null,
+-        currency: "PLN"
+-      }).select("id").single<{ id: string }>();
