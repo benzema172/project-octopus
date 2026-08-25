@@ -1,0 +1,77 @@
+ import {
+   ArrowLeftRight,
+@@ -51,7 +51,9 @@
+ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomains, children }: CompanyShellProps) {
+   const pathname = usePathname();
+   const [mobileOpen, setMobileOpen] = useState(false);
++  const [isMobile, setIsMobile] = useState(false);
+   const [assistantReady, setAssistantReady] = useState(false);
++  const menuButtonRef = useRef<HTMLButtonElement>(null);
+   const base = `/workspace/companies/${workspaceId}`;
+ 
+   useEffect(() => {
+@@ -59,6 +61,31 @@
+     return () => window.clearTimeout(timeoutId);
+   }, []);
+ 
++  useEffect(() => {
++    const media = window.matchMedia("(max-width: 980px)");
++    const syncMobile = () => setIsMobile(media.matches);
++    syncMobile();
++    media.addEventListener("change", syncMobile);
++    return () => media.removeEventListener("change", syncMobile);
++  }, []);
++
++  useEffect(() => {
++    if (!isMobile || !mobileOpen) return;
++    const previousOverflow = document.body.style.overflow;
++    document.body.style.overflow = "hidden";
++    const handleKeyDown = (event: KeyboardEvent) => {
++      if (event.key === "Escape") {
++        setMobileOpen(false);
++        window.requestAnimationFrame(() => menuButtonRef.current?.focus());
++      }
++    };
++    window.addEventListener("keydown", handleKeyDown);
++    return () => {
++      document.body.style.overflow = previousOverflow;
++      window.removeEventListener("keydown", handleKeyDown);
++    };
++  }, [isMobile, mobileOpen]);
++
+   const allItems: NavItem[] = [
+     { href: base, label: "Pulpit", icon: LayoutDashboard, exact: true, group: "primary" },
+     { href: `${base}/investments`, label: "Inwestycje", icon: FolderKanban, projectRoutes: true, domain: "investments", group: "primary" },
+@@ -84,6 +111,11 @@
+   const toolsActive = toolItems.some(isActive);
+   const [toolsOpen, setToolsOpen] = useState(toolsActive);
+ 
++  const closeMobileMenu = () => {
++    setMobileOpen(false);
++    if (isMobile) window.requestAnimationFrame(() => menuButtonRef.current?.focus());
++  };
++
+   const renderLink = (item: NavItem) => {
+     const active = isActive(item);
+     const Icon = item.icon;
+@@ -94,7 +126,7 @@
+         prefetch={item.group === "tools" ? false : undefined}
+         className={active ? "is-active" : undefined}
+         aria-current={active ? "page" : undefined}
+-        onClick={() => setMobileOpen(false)}
++        onClick={closeMobileMenu}
+       >
+         <Icon size={18} aria-hidden="true" />
+         <span>{item.label}</span>
+@@ -105,18 +137,18 @@
+   return (
+     <div className="co-shell">
+       <header className="co-mobile-bar">
+-        <button type="button" className="co-mobile-menu-button" aria-label="Otwórz menu firmy" aria-controls="company-navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)}>
++        <button ref={menuButtonRef} type="button" className="co-mobile-menu-button" aria-label="Otwórz menu firmy" aria-controls="company-navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)}>
+           <Menu size={19} aria-hidden="true" />
+         </button>
+         <span><small>Aktywna firma</small><strong>{companyName}</strong></span>
+         <Link href="/workspace" className="co-mobile-menu-button" aria-label="Zmień firmę" title="Zmień firmę"><ArrowLeftRight size={18} aria-hidden="true" /></Link>
+       </header>
+ 
