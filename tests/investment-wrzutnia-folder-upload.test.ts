@@ -17,7 +17,7 @@ describe("Investment Wrzutnia folder upload", () => {
     const intake = read("components/projects/project-intake-pipeline.tsx");
 
     expect(intake).toContain("folderInput");
-    expect(intake).toContain('setAttribute("webkitdirectory", "")');
+    expect(intake).toContain('ref={(node) => { folderInput.current = node; node?.setAttribute("webkitdirectory", "")');
     expect(intake).toContain('setAttribute("directory", "")');
     expect(intake).toContain("webkitGetAsEntry");
     expect(intake).toContain("candidatesFromDataTransfer");
