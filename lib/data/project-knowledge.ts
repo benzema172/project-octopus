@@ -45,7 +45,7 @@ async function countRows(table: string, projectId: string, status?: string) {
 export async function getProjectKnowledgeSnapshot(projectId: string): Promise<ProjectKnowledgeSnapshot> {
   const supabase = createServiceSupabaseClient();
   const [facts, materials, devices, boqItems, findings, completedRuns, failedRuns, factResult] = await Promise.all([
-    countRows("project_facts", projectId),
+    countRows("project_facts", projectId, "approved"),
     countRows("materials", projectId),
     countRows("devices", projectId),
     countRows("boq_items", projectId),
@@ -56,6 +56,7 @@ export async function getProjectKnowledgeSnapshot(projectId: string): Promise<Pr
       .from("project_facts")
       .select("id,fact_type,value_text,confidence,source_references(page_number,quote)")
       .eq("project_id", projectId)
+      .eq("status", "approved")
       .order("updated_at", { ascending: false })
       .limit(12)
       .returns<FactRow[]>()

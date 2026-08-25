@@ -10,6 +10,7 @@ import { ProjectNavigation } from "@/components/projects/project-navigation";
 import { requireCurrentUser } from "@/lib/auth";
 import { getReliableInvestmentAutopilotSummary } from "@/lib/data/investment-autopilot-summary";
 import { getProjectProfile } from "@/lib/data/project-profile";
+import { getProjectAiProposalPendingCount } from "@/lib/data/project-ai-proposals";
 import { getProjectForUser } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { domainAccessPolicyAllows, loadDomainAccessPolicy, type Domain } from "@/lib/authorization";
@@ -51,10 +52,11 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
   const project = await getProjectForUser(user, projectId);
   if (!project) notFound();
 
-  const [profile, workspace, policy] = await Promise.all([
+  const [profile, workspace, policy, aiProposalCount] = await Promise.all([
     getProjectProfile(project),
     getWorkspaceForUser(user, project.workspace_id),
-    loadDomainAccessPolicy({ workspaceId: project.workspace_id, userId: user.id })
+    loadDomainAccessPolicy({ workspaceId: project.workspace_id, userId: user.id }),
+    getProjectAiProposalPendingCount(project.workspace_id, project.id)
   ]);
   if (!workspace) notFound();
 
@@ -95,6 +97,8 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
 
           <ProjectNavigation projectId={project.id} allowedDomains={allowedProjectDomains} />
         </section>
+
+        {aiProposalCount > 0 && allowedProjectDomains.includes("investments") ? <Link className="pw-ai-proposal-alert" href={`/workspace/projects/${project.id}/documentation#ai-review-center`}><span>AI</span><strong>{aiProposalCount} propozycji wymaga weryfikacji</strong><small>Otwórz centrum decyzji</small></Link> : null}
 
         {allowedProjectDomains.includes("investments") ? (
           <ProjectAutopilotRouteGate projectId={project.id}>

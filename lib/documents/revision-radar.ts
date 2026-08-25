@@ -58,6 +58,31 @@ function factMap(value: unknown) {
   return map;
 }
 
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value as JsonRecord)
+    .filter(([key]) => !["confidence", "quote", "locator", "sourceLocator", "sourceRow"].includes(key))
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, nested]) => [key, stableValue(nested)]));
+}
+
+function rowKey(row: JsonRecord) {
+  const raw = row.itemNumber ?? row.code ?? row.boqItemNumber ?? row.name ?? row.title ?? row.protocolType ?? row.type ?? row.label;
+  return String(raw ?? "").trim().toLocaleLowerCase("pl");
+}
+
+function keyedRows(value: unknown) {
+  const rows = new Map<string, JsonRecord>();
+  if (!Array.isArray(value)) return rows;
+  for (const raw of value) {
+    const row = object(raw);
+    const key = rowKey(row);
+    if (key) rows.set(key, row);
+  }
+  return rows;
+}
+
 function impact(input: Omit<RevisionImpactDraft, "evidence" | "confidence"> & { evidence?: unknown[]; confidence?: number }): RevisionImpactDraft {
   return { ...input, evidence: input.evidence ?? [], confidence: input.confidence ?? 0.9 };
 }
@@ -87,6 +112,45 @@ export function buildRevisionImpacts(previous: JsonRecord, current: JsonRecord):
       schedule_impact_days: null,
       evidence: [{ added: diff.added, removed: diff.removed }]
     }));
+  }
+
+  const structuredFields: Array<{ field: string; target: string; label: string; risk: RevisionImpactDraft["risk_level"] }> = [
+    { field: "boqItems", target: "boq", label: "Pozycja BOQ", risk: "high" },
+    { field: "scheduleItems", target: "schedule", label: "Aktywność harmonogramu", risk: "high" },
+    { field: "materialRequirements", target: "applications", label: "Wymaganie materiałowe", risk: "medium" },
+    { field: "protocolRequirementsDetailed", target: "protocols", label: "Wymaganie protokołu", risk: "high" },
+    { field: "progressItems", target: "progress", label: "Pozycja przerobu", risk: "critical" }
+  ];
+  for (const config of structuredFields) {
+    const beforeRows = keyedRows(previous[config.field]);
+    const afterRows = keyedRows(current[config.field]);
+    for (const key of new Set([...beforeRows.keys(), ...afterRows.keys()])) {
+      const before = beforeRows.get(key);
+      const after = afterRows.get(key);
+      if (before && after && JSON.stringify(stableValue(before)) === JSON.stringify(stableValue(after))) continue;
+      const kind = !before ? "added" : !after ? "removed" : "modified";
+      const beforeTotal = before ? number(before.totalPrice) : 0;
+      const afterTotal = after ? number(after.totalPrice) : 0;
+      let scheduleDays: number | null = null;
+      if (config.field === "scheduleItems" && before && after) {
+        const beforeFinish = date(before.plannedFinish);
+        const afterFinish = date(after.plannedFinish);
+        if (beforeFinish !== null && afterFinish !== null) scheduleDays = Math.round((afterFinish - beforeFinish) / 86_400_000);
+      }
+      impacts.push(impact({
+        impact_type: `revision_${config.field}_row`,
+        target_type: config.target,
+        summary: `${config.label} „${String(after?.title ?? after?.name ?? after?.description ?? before?.title ?? before?.name ?? before?.description ?? key)}”: ${kind === "added" ? "dodana" : kind === "removed" ? "usunięta" : "zmieniona"}.`,
+        risk_level: config.risk,
+        field_path: `${config.field}.${key}`,
+        change_kind: kind,
+        before_value: before ?? null,
+        after_value: after ?? null,
+        financial_impact: config.field === "boqItems" ? afterTotal - beforeTotal : null,
+        schedule_impact_days: scheduleDays,
+        evidence: [{ naturalKey: key }]
+      }));
+    }
   }
 
   const previousBusiness = object(previous.businessDocument);

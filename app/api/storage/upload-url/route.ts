@@ -26,6 +26,11 @@ type UploadUrlBody = {
   fileSize?: number;
   category?: string;
   categoryLocked?: boolean;
+  releaseType?: "baseline" | "revision" | "addendum" | "as_built" | "closeout" | "other";
+  packageLabel?: string;
+  revisionLabel?: string;
+  effectiveAt?: string;
+  replacesVersionId?: string;
 };
 
 function jsonError(message: string, status: number) {
@@ -53,7 +58,14 @@ export async function POST(request: Request) {
   const mimeType = body.mimeType?.trim() || "application/octet-stream";
   const fileSize = Number(body.fileSize);
   const requestedCategory = normalizeDocumentCategory(body.category);
+  const releaseType = ["baseline", "revision", "addendum", "as_built", "closeout", "other"].includes(body.releaseType ?? "baseline")
+    ? body.releaseType ?? "baseline" : null;
   if (body.category && !requestedCategory) return jsonError("Nieprawidłowa kategoria dokumentu.", 400);
+  if (!releaseType) return jsonError("Nieprawidłowy typ wydania dokumentacji.", 400);
+  const packageLabel = body.packageLabel?.trim().slice(0, 160) || undefined;
+  const revisionLabel = body.revisionLabel?.trim().slice(0, 80) || undefined;
+  const effectiveAt = body.effectiveAt?.trim() || undefined;
+  if (effectiveAt && Number.isNaN(Date.parse(effectiveAt))) return jsonError("Nieprawidłowa data obowiązywania dokumentacji.", 400);
 
   if (!fileName || !Number.isFinite(fileSize) || fileSize <= 0) {
     return jsonError("Brakuje prawidłowych danych pliku.", 400);
@@ -135,6 +147,11 @@ export async function POST(request: Request) {
     fileSize,
     category,
     categoryLocked,
+    releaseType,
+    packageLabel,
+    revisionLabel,
+    effectiveAt: effectiveAt ? new Date(effectiveAt).toISOString() : undefined,
+    replacesVersionId: body.replacesVersionId?.trim() || undefined,
     expiresAt: Date.now() + PRESIGNED_URL_TTL_SECONDS * 1000
   };
 

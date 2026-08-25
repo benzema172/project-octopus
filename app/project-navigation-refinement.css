@@ -258,3 +258,4 @@
   .pw-intake-trigger--octopus { width: 100%; justify-content: center; padding-left: 78px; }
   .pw-intake-octopus { left: 2px; }
 }
+.pw-ai-proposal-alert{display:flex;align-items:center;gap:6px;margin:6px 0 0;border:1px solid #eadfcf;border-radius:10px;background:#fffaf2;color:#6b553d;padding:5px 9px;text-decoration:none;font-size:8px}.pw-ai-proposal-alert span{border-radius:999px;background:#7241c5;color:#fff;padding:3px 5px;font-size:7px;font-weight:900}.pw-ai-proposal-alert strong{font-size:8.5px}.pw-ai-proposal-alert small{margin-left:auto;color:#9a6a2c;font-size:7.5px;font-weight:800}

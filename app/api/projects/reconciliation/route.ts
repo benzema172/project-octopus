@@ -91,7 +91,7 @@ export async function POST(request: Request) {
     }
 
     const [boqResult, allocResult, stockEventsResult] = await Promise.all([
-      db.from("boq_items").select("id,item_number,description,unit,cost_code,wbs_node_id").eq("project_id", project.id).limit(2000),
+      db.from("boq_items").select("id,item_number,description,unit,cost_code,wbs_node_id").eq("project_id", project.id).eq("is_active", true).limit(2000),
       db.from("financial_allocations").select("source_line_id").eq("workspace_id", project.workspace_id).eq("project_id", project.id).eq("source_type", "invoice").eq("allocation_scope", "project").eq("status", "approved").not("source_line_id", "is", null).limit(1000),
       db.from("material_chain_events").select("stock_item_id").eq("workspace_id", project.workspace_id).eq("project_id", project.id).not("stock_item_id", "is", null).limit(1000)
     ]);
@@ -104,6 +104,7 @@ export async function POST(request: Request) {
       invoiceLineIds.length ? db.from("invoice_lines").select("id,description,quantity,unit,unit_price").eq("workspace_id", project.workspace_id).in("id", invoiceLineIds).limit(2000) : Promise.resolve({ data: [], error: null }),
       stockIds.length ? db.from("stock_items").select("id,sku,name,item_type,unit").eq("workspace_id", project.workspace_id).in("id", stockIds).limit(1000) : Promise.resolve({ data: [], error: null })
     ]);
+    if (linesResult.error || itemsResult.error) throw new Error("Nie udało się pobrać pozycji do automatycznego uzgadniania.");
     const proposals: Array<Record<string, unknown>> = [];
     for (const line of linesResult.data ?? []) {
       const best = rankMatches(`${line.description ?? ""} ${line.quantity ?? ""} ${line.unit ?? ""}`, candidates, 1)[0];
@@ -113,12 +114,17 @@ export async function POST(request: Request) {
       const best = rankMatches(`${item.sku ?? ""} ${item.name ?? ""} ${item.item_type ?? ""} ${item.unit ?? ""}`, candidates, 1)[0];
       if (best && best.score >= 0.22) proposals.push({ workspace_id: project.workspace_id, source_type: "stock_item", source_id: item.id, target_type: "boq_item", target_id: best.id, relation_type: "semantic_match", confidence: best.score, status: "proposed", created_by: user.id });
     }
-    let inserted = 0;
-    for (const proposal of proposals) {
-      const { error } = await db.from("entity_links").upsert(proposal, { onConflict: "workspace_id,source_type,source_id,target_type,target_id,relation_type", ignoreDuplicates: true });
-      if (!error) inserted += 1;
+    let processed = 0;
+    if (proposals.length) {
+      const { error } = await db.from("entity_links").upsert(proposals, {
+        onConflict: "workspace_id,source_type,source_id,target_type,target_id,relation_type",
+        ignoreDuplicates: true
+      });
+      if (error) throw new Error(`Nie udało się zapisać propozycji uzgodnień: ${error.message}`);
+      processed = proposals.length;
     }
-    await db.from("audit_events").insert({ workspace_id: project.workspace_id, project_id: project.id, actor_id: user.id, actor_type: "ai", event_type: "reconciliation.auto_match", entity_type: "project", entity_id: project.id, after_value: { candidates: proposals.length, processed: inserted, scope: "project_allocated_invoice_lines_and_stock" } });
-    return NextResponse.json({ ok: true, candidates: proposals.length, processed: inserted });
+    const { error: auditError } = await db.from("audit_events").insert({ workspace_id: project.workspace_id, project_id: project.id, actor_id: user.id, actor_type: "ai", event_type: "reconciliation.auto_match", entity_type: "project", entity_id: project.id, after_value: { candidates: proposals.length, processed, scope: "project_allocated_invoice_lines_and_stock" } });
+    if (auditError) console.error("Project Octopus: reconciliation audit event failed", { projectId: project.id, message: auditError.message });
+    return NextResponse.json({ ok: true, candidates: proposals.length, processed });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Uzgadnianie nie powiodło się." }, { status: 422 }); }
 }

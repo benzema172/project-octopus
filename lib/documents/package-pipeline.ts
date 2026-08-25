@@ -60,6 +60,13 @@ export type PackageDocumentAnalysis = {
     lines: [];
   };
   boqItems: [];
+  materialRequirements: [];
+  protocolRequirementsDetailed: [];
+  scheduleItems: [];
+  siteEvents: [];
+  progressItems: [];
+  tasks: [];
+  risks: [];
   facts: [];
   warnings: string[];
   aiCategory: DocumentCategory;
@@ -67,6 +74,7 @@ export type PackageDocumentAnalysis = {
   categoryLocked: boolean;
   proposedProjectId: string | null;
   projectMatch: ProjectMatchDecision | null;
+  moduleProposalCounts: Record<string, number>;
   package: {
     id: string;
     accepted: number;
@@ -345,9 +353,11 @@ function packageAnalysis(id: string, accepted: number, rejected: number, queuedV
     summary: `Bezpiecznie rozpakowano paczkę: ${accepted} plików przyjętych, ${rejected} odrzuconych.`,
     projectHint: "",
     installations: [], workStages: [], requiredProtocols: [], requiredApplications: [],
-    searchPassages: [], businessDocument: emptyBusinessDocument(), boqItems: [], facts: [], warnings,
+    searchPassages: [], businessDocument: emptyBusinessDocument(), boqItems: [],
+    materialRequirements: [], protocolRequirementsDetailed: [], scheduleItems: [], siteEvents: [], progressItems: [], tasks: [], risks: [],
+    facts: [], warnings,
     aiCategory: "other", effectiveCategory: "other", categoryLocked: false,
-    proposedProjectId: projectId, projectMatch: null,
+    proposedProjectId: projectId, projectMatch: null, moduleProposalCounts: {},
     package: { id, accepted, rejected, queuedVersionIds }
   };
 }

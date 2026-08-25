@@ -70,11 +70,17 @@ export async function POST(request: Request) {
       project_match: analysis.projectMatch,
       counts: {
         facts: analysis.facts.length,
-        materials: analysis.requiredApplications.length,
+        materials: analysis.materialRequirements.length || analysis.requiredApplications.length,
         devices: analysis.installations.length,
         boq_items: analysis.boqItems.length,
+        schedule_items: analysis.scheduleItems.length,
+        protocol_requirements: analysis.protocolRequirementsDetailed.length || analysis.requiredProtocols.length,
+        site_events: analysis.siteEvents.length,
+        progress_items: analysis.progressItems.length,
+        tasks: analysis.tasks.length + analysis.risks.length,
         findings: analysis.warnings.length
-      }
+      },
+      module_proposals: analysis.moduleProposalCounts
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "Nieznany błąd analizy dokumentu.", 500);

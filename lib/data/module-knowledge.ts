@@ -32,6 +32,7 @@ export async function getBoqKnowledge(projectId: string) {
     .from("boq_items")
     .select("id,item_number,description,quantity,unit,unit_price,total_price")
     .eq("project_id", projectId)
+    .eq("is_active", true)
     .order("item_number", { ascending: true, nullsFirst: false })
     .limit(120)
     .returns<BoqKnowledgeItem[]>();

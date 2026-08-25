@@ -29,7 +29,7 @@ export default async function RequestsPage({ params }: Props) {
     db.from("project_requirements").select("id,title,description,status").eq("workspace_id", project.workspace_id).eq("project_id", project.id).eq("requirement_type", "material_application").order("created_at", { ascending: false }),
     db.from("material_requests").select("id,source_requirement_id,title,manufacturer,product_name,model,proposed_use,compliance_summary,status,sent_to,submitted_at,sent_at,decision_note,stock_item_id,boq_item_id,wbs_node_id,request_origin,procurement_trace_id").eq("project_id", project.id).order("created_at", { ascending: false }),
     db.from("stock_items").select("id,sku,name,unit").eq("workspace_id", project.workspace_id).eq("active", true).order("name").limit(1000),
-    db.from("boq_items").select("id,item_number,description,unit,cost_code,wbs_node_id").eq("project_id", project.id).order("item_number").limit(2000)
+    db.from("boq_items").select("id,item_number,description,unit,cost_code,wbs_node_id").eq("project_id", project.id).eq("is_active", true).order("item_number").limit(2000)
   ]);
   const recognized = brain.materials.length + brain.devices.length;
   const requirements = (requirementsResult.data ?? []).map((row) => ({ id: String(row.id), title: String(row.title), description: row.description ? String(row.description) : null, status: String(row.status) }));

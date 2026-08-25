@@ -36,7 +36,7 @@ export async function ProjectOperationPanel({ projectId, mode }: { projectId: st
   if (mode === "progress_entry") {
     const [{ data: periods }, { data: items }] = await Promise.all([
       supabase.from("progress_periods").select("id,period_start,period_end,status").eq("project_id", projectId).in("status", ["open", "submitted"]).order("period_start", { ascending: false }),
-      supabase.from("boq_items").select("id,item_number,description,unit,quantity,quantity_executed").eq("project_id", projectId).order("item_number").limit(500)
+      supabase.from("boq_items").select("id,item_number,description,unit,quantity,quantity_executed").eq("project_id", projectId).eq("is_active", true).order("item_number").limit(500)
     ]);
     primaryOptions = (periods ?? []).map((row) => ({ value: String(row.id), label: `${row.period_start}–${row.period_end} · ${row.status}` }));
     secondaryOptions = (items ?? []).map((row) => ({ value: String(row.id), label: `${row.item_number ?? "BOQ"} · ${row.description} · ${Number(row.quantity_executed ?? 0)}/${Number(row.quantity ?? 0)} ${row.unit ?? ""}` }));
