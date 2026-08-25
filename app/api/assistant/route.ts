@@ -3,6 +3,7 @@ import { getRequestUser } from "@/lib/auth";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainAccessPolicyAllows, domainForDocumentCategory, loadDomainAccessPolicy } from "@/lib/authorization";
+import { JsonBodyError, readJsonBody } from "@/lib/http/json-body";
 
 export const runtime = "nodejs";
 
@@ -40,9 +41,10 @@ export async function POST(request: Request) {
 
   let body: AssistantBody;
   try {
-    body = (await request.json()) as AssistantBody;
-  } catch {
-    return jsonError("Nieprawidłowe dane zapytania.", 400);
+    body = await readJsonBody<AssistantBody>(request);
+  } catch (error) {
+    if (error instanceof JsonBodyError) return jsonError(error.message, error.status);
+    throw error;
   }
 
   const workspaceId = body.workspaceId?.trim();
@@ -185,6 +187,9 @@ export async function POST(request: Request) {
       signal: AbortSignal.timeout(55_000)
     });
   } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      return jsonError("Przekroczono czas oczekiwania na odpowiedź Gemini.", 504);
+    }
     return jsonError(error instanceof Error ? `Nie udało się połączyć z Gemini: ${error.message}` : "Nie udało się połączyć z Gemini.", 502);
   }
 

@@ -371,10 +371,28 @@ export function ProjectOctopusLogin({ configReady }: ProjectOctopusLoginProps) {
     setMessage(null);
 
     try {
+      let authEmail = normalizedEmail;
+      let authPassword = password;
+
+      if (!normalizedEmail.includes("@")) {
+        const guestResponse = await fetch("/api/auth/guest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ login: normalizedEmail, password })
+        });
+        const guestPayload = await guestResponse.json().catch(() => ({})) as { email?: string; password?: string; error?: string };
+        if (!guestResponse.ok || !guestPayload.email || !guestPayload.password) {
+          setMessage(guestPayload.error ?? "Nieprawidłowy login lub hasło.");
+          return;
+        }
+        authEmail = guestPayload.email;
+        authPassword = guestPayload.password;
+      }
+
       const supabase = createBrowserSupabaseClient();
       const result = await supabase.auth.signInWithPassword({
-        email: normalizedEmail,
-        password
+        email: authEmail,
+        password: authPassword
       });
 
       if (result.error) {
@@ -430,6 +448,7 @@ export function ProjectOctopusLogin({ configReady }: ProjectOctopusLoginProps) {
         <small>Project</small>
         <strong>Octopus</strong>
       </h1>
+      <p className="v27-login-hint">Kliknij lub pociągnij mackę, aby się zalogować</p>
 
       <div className="v27-board-shell">
         <section className={`v27-board ${paused ? "paused" : ""}`} aria-label="Animowane logo Project Octopus na siatce z małych kwadratów">
@@ -483,7 +502,8 @@ export function ProjectOctopusLogin({ configReady }: ProjectOctopusLoginProps) {
                 key={handle.id}
                 type="button"
                 className="v27-tentacle-handle"
-                aria-label={`Pociągnij mackę ${handle.id.replaceAll("-", " ")}, aby otworzyć logowanie`}
+                aria-label={handle.id === "upper-left" ? "Otwórz logowanie" : `Pociągnij mackę ${handle.id.replaceAll("-", " ")}, aby otworzyć logowanie`}
+                onClick={openLogin}
                 onPointerDown={(event) => beginDrag(event, handle.id)}
                 onPointerMove={moveDrag}
                 onPointerUp={(event) => endDrag(event.pointerId)}
@@ -511,6 +531,7 @@ export function ProjectOctopusLogin({ configReady }: ProjectOctopusLoginProps) {
 
             <label className="v27-field">
               <UserRound aria-hidden="true" />
+              <span className="ux-sr-only">Login</span>
               <input
                 ref={loginInputRef}
                 type="email"
@@ -523,6 +544,7 @@ export function ProjectOctopusLogin({ configReady }: ProjectOctopusLoginProps) {
 
             <label className="v27-field">
               <LockKeyhole aria-hidden="true" />
+              <span className="ux-sr-only">Hasło</span>
               <input
                 type={showPassword ? "text" : "password"}
                 autoComplete="current-password"

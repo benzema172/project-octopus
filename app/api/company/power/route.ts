@@ -4,6 +4,7 @@ import { hasDomainAccess, type Domain } from "@/lib/authorization";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { parseLocalizedNumber } from "@/lib/numbers/parse-localized-number";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { JsonBodyError, readJsonBody } from "@/lib/http/json-body";
 
 export const runtime = "nodejs";
 
@@ -77,9 +78,10 @@ export async function POST(request: Request) {
 
   let body: Body;
   try {
-    body = await request.json() as Body;
-  } catch {
-    return NextResponse.json({ error: "Nieprawidłowe dane operacji." }, { status: 400 });
+    body = await readJsonBody<Body>(request);
+  } catch (error) {
+    if (error instanceof JsonBodyError) return NextResponse.json({ error: error.message }, { status: error.status });
+    throw error;
   }
 
   if (!body.workspaceId || !body.action || !ACTION_DOMAIN[body.action]) {
@@ -147,25 +149,24 @@ export async function POST(request: Request) {
       if (validTo && validFrom > validTo) throw new Error("Data zakończenia zatrudnienia nie może poprzedzać daty rozpoczęcia.");
       const fte = amount(p.fullTimeEquivalent, "wymiar etatu");
       if (fte < 0 || fte > 2) throw new Error("Wymiar etatu musi mieścić się w zakresie 0–2.");
-      const { data: existingTerms, error: termsError } = await db.from("employments").select("id,valid_from,valid_to").eq("workspace_id", workspace.id).eq("employee_id", employeeId);
-      if (termsError) throw termsError;
-      const overlap = (existingTerms ?? []).some((term) => periodsOverlap(validFrom, validTo, String(term.valid_from), term.valid_to ? String(term.valid_to) : null));
-      if (overlap) throw new Error("Ten pracownik ma już warunki zatrudnienia obejmujące część wskazanego okresu. Zakończ poprzedni okres albo zmień daty.");
-      const { data, error } = await db.from("employments").insert({
-        workspace_id: workspace.id,
-        employee_id: employeeId,
-        employment_type: text(p.employmentType, "forma zatrudnienia", true),
-        position: text(p.position, "stanowisko"),
-        valid_from: validFrom,
-        valid_to: validTo,
-        full_time_equivalent: fte || null,
-        monthly_cost: amount(p.monthlyCost, "koszt miesięczny") || null,
-        hourly_cost: amount(p.hourlyCost, "koszt godzinowy") || null,
-        currency: "PLN"
-      }).select("id").single<{ id: string }>();
-      if (error || !data) throw error ?? new Error("Nie utworzono zatrudnienia.");
-      id = data.id;
-      await audit("employment", id, "created");
+      const monthlyCost = amount(p.monthlyCost, "koszt miesięczny");
+      const hourlyCost = amount(p.hourlyCost, "koszt godzinowy");
+      if (monthlyCost < 0 || hourlyCost < 0) throw new Error("Koszt zatrudnienia nie może być ujemny.");
+
+      const { data, error } = await db.rpc("create_employment_atomic", {
+        p_workspace_id: workspace.id,
+        p_employee_id: employeeId,
+        p_employment_type: text(p.employmentType, "forma zatrudnienia", true),
+        p_position: text(p.position, "stanowisko"),
+        p_valid_from: validFrom,
+        p_valid_to: validTo,
+        p_full_time_equivalent: fte || null,
+        p_monthly_cost: monthlyCost || null,
+        p_hourly_cost: hourlyCost || null,
+        p_actor_id: user.id
+      });
+      if (error || !data) throw new Error(`Nie udało się utworzyć zatrudnienia atomowo: ${error?.message ?? "brak danych"}`);
+      id = String(data);
     } else if (body.action === "assignment_create") {
       const employeeId = await owned("employees", p.employeeId, "Pracownik");
       const projectId = await owned("projects", p.projectId, "Inwestycja");

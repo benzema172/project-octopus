@@ -90,3 +90,9 @@ body:has(.octopus-login) .app-release-badge__date {
     left: 50%;
   }
 }
+
+
+.app-release-badge {
+  right: max(8px, env(safe-area-inset-right));
+  bottom: max(8px, env(safe-area-inset-bottom));
+}

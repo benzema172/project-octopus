@@ -39,6 +39,12 @@ function isMissingColumn(message: string | undefined, column: string) {
   return Boolean(message?.includes(column) && (message.includes("schema cache") || message.includes("does not exist")));
 }
 
+function isMissingWorkspaceProjectCountsFunction(message: string | undefined) {
+  return Boolean(message?.includes("get_workspace_project_counts") && (
+    message.includes("schema cache") || message.includes("Could not find the function") || message.includes("does not exist")
+  ));
+}
+
 function isMissingOwnerId(message: string | undefined) {
   return isMissingColumn(message, "owner_id");
 }
@@ -190,19 +196,28 @@ export const listCompanyWorkspacesForUser = cache(async function listCompanyWork
   const rows = await readCompanyRows(workspaceIds);
   const roleByWorkspace = new Map(memberships.map((membership) => [membership.workspace_id, membership.role]));
   const supabase = createServiceSupabaseClient();
-  const { data: projects, error: projectsError } = await supabase
-    .from("projects")
-    .select("workspace_id")
-    .in("workspace_id", workspaceIds)
-    .returns<Array<{ workspace_id: string }>>();
+  const projectCount = new Map<string, number>();
+  const { data: projectCountsRaw, error: projectCountsError } = await supabase.rpc("get_workspace_project_counts", {
+    p_workspace_ids: workspaceIds
+  });
+  const projectCounts = (projectCountsRaw ?? []) as unknown as Array<{ workspace_id: string; project_count: number }>;
 
-  if (projectsError) {
-    throw new Error(`Nie udało się policzyć inwestycji firm: ${projectsError.message}`);
+  if (projectCountsError && !isMissingWorkspaceProjectCountsFunction(projectCountsError.message)) {
+    throw new Error(`Nie udało się policzyć inwestycji firm: ${projectCountsError.message}`);
   }
 
-  const projectCount = new Map<string, number>();
-  for (const project of projects ?? []) {
-    projectCount.set(project.workspace_id, (projectCount.get(project.workspace_id) ?? 0) + 1);
+  if (!projectCountsError) {
+    for (const row of projectCounts ?? []) projectCount.set(String(row.workspace_id), Number(row.project_count ?? 0));
+  } else {
+    // Compatibility fallback for an older production schema: count rows without downloading project payloads.
+    await Promise.all(workspaceIds.map(async (workspaceId) => {
+      const { count, error } = await supabase
+        .from("projects")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId);
+      if (error) throw new Error(`Nie udało się policzyć inwestycji firmy: ${error.message}`);
+      projectCount.set(workspaceId, count ?? 0);
+    }));
   }
 
   const rowById = new Map(rows.map((row) => [row.id, row]));
