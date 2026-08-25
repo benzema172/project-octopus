@@ -1,0 +1,49 @@
++  useEffect(() => {
++    if (!selectedRow) return;
++    drawerCloseRef.current?.focus();
++    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
++      if (event.key === "Escape") closeDrawer();
++    };
++    window.addEventListener("keydown", handleKeyDown);
++    return () => window.removeEventListener("keydown", handleKeyDown);
++  }, [selectedRow]);
++
+   return (
+     <div className={`ops-workspace ops-workspace--paged${layoutVariant === "finance" ? " ops-workspace--finance" : ""}`}>
+       <div className="ops-action-bar">
+@@ -227,7 +249,7 @@
+               tabIndex={0}
+               aria-label={`Otwórz szczegóły: ${tableTitle}`}
+               key={String(row.id)}
+-              onClick={() => setSelectedRow(row)}
++              onClick={(event) => openRow(row, event.currentTarget)}
+               onKeyDown={(event) => openRowFromKeyboard(event, row)}
+             >
+               {columns.map((column) => (
+@@ -244,11 +266,11 @@
+ 
+       {selectedRow ? (
+         <div className="ops-record-drawer-layer">
+-          <button type="button" className="ops-record-drawer__backdrop" aria-label="Zamknij szczegóły" onClick={() => setSelectedRow(null)} />
++          <button type="button" className="ops-record-drawer__backdrop" aria-label="Zamknij szczegóły" onClick={closeDrawer} />
+           <aside className="ops-record-drawer" role="dialog" aria-modal="true" aria-label={`Szczegóły: ${tableTitle}`}>
+             <header>
+               <div><small>Szczegóły rekordu</small><h2>{detailTitle ? detailTitle(selectedRow) : tableTitle}</h2></div>
+-              <button type="button" className="co-icon-button" aria-label="Zamknij szczegóły" onClick={() => setSelectedRow(null)}><X size={18} aria-hidden="true" /></button>
++              <button ref={drawerCloseRef} type="button" className="co-icon-button" aria-label="Zamknij szczegóły" onClick={closeDrawer}><X size={18} aria-hidden="true" /></button>
+             </header>
+             <div className="ops-record-drawer__summary">
+               {columns.map((column) => <div key={column.label}><small>{column.label}</small><strong>{column.value(selectedRow)}</strong></div>)}
+--- a/components/system/server-pagination.tsx
++++ b/components/system/server-pagination.tsx
+@@ -2,8 +2,28 @@
+ import { ChevronLeft, ChevronRight } from "lucide-react";
+ 
+ export function ServerPagination({ page, pageSize, total, pathname, query = {} }: { page:number; pageSize:number; total:number; pathname:string; query?:Record<string,string|number|undefined> }) {
+-  const pages=Math.max(1,Math.ceil(total/pageSize));
+-  if(pages<=1)return null;
+-  const href=(target:number)=>{const params=new URLSearchParams();for(const[key,value]of Object.entries(query))if(value!==undefined)params.set(key,String(value));params.set("page",String(target));return `${pathname}?${params.toString()}`;};
+-  return <nav className="server-pagination" aria-label="Stronicowanie"><Link className={`secondary-button${page<=1?" is-disabled":""}`} aria-disabled={page<=1} href={page<=1?href(1):href(page-1)}><ChevronLeft size={14}/>Poprzednia</Link><span>Strona <strong>{page}</strong> z <strong>{pages}</strong> · {total} rekordów</span><Link className={`secondary-button${page>=pages?" is-disabled":""}`} aria-disabled={page>=pages} href={page>=pages?href(pages):href(page+1)}>Następna<ChevronRight size={14}/></Link></nav>;
++  const pages = Math.max(1, Math.ceil(total / pageSize));
++  if (pages <= 1) return null;
++  const href = (target: number) => {
