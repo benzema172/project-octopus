@@ -178,20 +178,14 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
   const [stage, setStage] = useState("Upuść dokumenty, aby rozpocząć automatyczną analizę.");
   const [processing, setProcessing] = useState(false);
   const [position, setPosition] = useState<IntakePosition | null>(null);
-  const [mounted, setMounted] = useState(false);
   const [releaseType, setReleaseType] = useState<ReleaseType>("baseline");
   const [packageLabel, setPackageLabel] = useState("");
   const [revisionLabel, setRevisionLabel] = useState("");
   const [effectiveAt, setEffectiveAt] = useState("");
   const [pending, startTransition] = useTransition();
 
-  useEffect(() => setMounted(true), []);
-
   useEffect(() => {
-    if (!open) {
-      setPosition(null);
-      return;
-    }
+    if (!open) return;
 
     const updatePosition = () => {
       const triggerRect = trigger.current?.getBoundingClientRect();
@@ -474,6 +468,6 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
       <IntakeOctopus />
       <span className="pw-intake-trigger__label">WRZUTNIA</span>
     </button>
-    {mounted && dialog ? createPortal(dialog, document.body) : null}
+    {dialog ? createPortal(dialog, document.body) : null}
   </div>;
 }
