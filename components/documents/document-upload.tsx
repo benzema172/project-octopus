@@ -8,6 +8,7 @@ import {
   FilePlus2,
   FileSearch,
   FileText,
+  FolderOpen,
   RotateCcw,
   Search,
   Sparkles,
@@ -34,6 +35,91 @@ type CompleteResponse = { documentId: string; versionId: string; versionNumber: 
 type AnalysisResponse = { analysis?: { package?: { accepted?: number; rejected?: number; queuedVersionIds?: string[] } } };
 
 const MAX_BROWSER_HASH_BYTES = 32 * 1024 * 1024;
+const MAX_FOLDER_FILES = 1000;
+const IGNORED_FOLDER_ARTIFACTS = new Set([".DS_Store", "Thumbs.db", "desktop.ini"]);
+
+type UploadCandidate = {
+  file: File;
+  relativePath: string;
+};
+
+type BrowserFileEntry = {
+  isFile: boolean;
+  isDirectory: boolean;
+  name: string;
+  fullPath?: string;
+  file?: (success: (file: File) => void, failure?: (error: DOMException) => void) => void;
+  createReader?: () => {
+    readEntries: (success: (entries: BrowserFileEntry[]) => void, failure?: (error: DOMException) => void) => void;
+  };
+};
+
+function normalizeRelativePath(value: string) {
+  return value.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/{2,}/g, "/");
+}
+
+function candidateFromFile(file: File): UploadCandidate {
+  const browserFile = file as File & { webkitRelativePath?: string };
+  return {
+    file,
+    relativePath: normalizeRelativePath(browserFile.webkitRelativePath?.trim() || file.name)
+  };
+}
+
+function folderPathForCandidate(candidate: UploadCandidate) {
+  const parts = normalizeRelativePath(candidate.relativePath).split("/").filter(Boolean);
+  return parts.length > 1 ? parts.slice(0, -1).join("/") : undefined;
+}
+
+function shouldIgnoreFolderArtifact(candidate: UploadCandidate) {
+  const path = normalizeRelativePath(candidate.relativePath);
+  const parts = path.split("/").filter(Boolean);
+  return IGNORED_FOLDER_ARTIFACTS.has(candidate.file.name) || parts.includes("__MACOSX");
+}
+
+function fileFromEntry(entry: BrowserFileEntry) {
+  return new Promise<File>((resolve, reject) => {
+    if (!entry.file) return reject(new Error(`Nie można odczytać pliku ${entry.name}.`));
+    entry.file(resolve, reject);
+  });
+}
+
+async function readDirectoryEntries(entry: BrowserFileEntry) {
+  if (!entry.createReader) return [] as BrowserFileEntry[];
+  const reader = entry.createReader();
+  const collected: BrowserFileEntry[] = [];
+  while (true) {
+    const batch = await new Promise<BrowserFileEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
+    if (!batch.length) break;
+    collected.push(...batch);
+  }
+  return collected;
+}
+
+async function candidatesFromEntry(entry: BrowserFileEntry, parentPath = ""): Promise<UploadCandidate[]> {
+  const entryPath = normalizeRelativePath(entry.fullPath || [parentPath, entry.name].filter(Boolean).join("/"));
+  if (entry.isFile) {
+    const file = await fileFromEntry(entry);
+    return [{ file, relativePath: entryPath || file.name }];
+  }
+  if (!entry.isDirectory) return [];
+  const children = await readDirectoryEntries(entry);
+  const nested = await Promise.all(children.map((child) => candidatesFromEntry(child, entryPath)));
+  return nested.flat();
+}
+
+async function candidatesFromDataTransfer(dataTransfer: DataTransfer) {
+  const items = Array.from(dataTransfer.items ?? []);
+  const roots: BrowserFileEntry[] = [];
+  for (const item of items) {
+    const entryGetter = (item as unknown as { webkitGetAsEntry?: () => BrowserFileEntry | null }).webkitGetAsEntry;
+    const entry = entryGetter?.call(item);
+    if (entry) roots.push(entry);
+  }
+  if (!roots.length) return Array.from(dataTransfer.files ?? []).map(candidateFromFile);
+  const nested = await Promise.all(roots.map((entry) => candidatesFromEntry(entry)));
+  return nested.flat();
+}
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -74,7 +160,8 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
     });
   }, [category, documents, query]);
 
-  async function uploadFile(file: File, documentId: string | null, contextProjectId: string | null) {
+  async function uploadFile(candidate: UploadCandidate, documentId: string | null, contextProjectId: string | null) {
+    const { file } = candidate;
     setError(null);
     const validationError = validateUploadFile(file.name, file.type || "application/octet-stream", file.size);
     if (validationError) throw new Error(validationError);
@@ -92,7 +179,8 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
         mimeType,
         fileSize: file.size,
         category: uploadCategory || undefined,
-        categoryLocked: Boolean(uploadCategory)
+        categoryLocked: Boolean(uploadCategory),
+        packageLabel: folderPathForCandidate(candidate)
       })
     });
     if (!prepareResponse.ok) {
@@ -142,12 +230,19 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
     startTransition(() => router.refresh());
   }
 
-  async function handleFiles(files: FileList | null) {
+  async function handleCandidates(candidates: UploadCandidate[]) {
     if (!storageReady) return;
-    const selectedFiles = Array.from(files ?? []);
-    if (!selectedFiles.length) return;
+    const selectedFiles = candidates.filter((candidate) => !shouldIgnoreFolderArtifact(candidate));
+    if (!selectedFiles.length) {
+      setError("Folder nie zawiera obsługiwanych plików do przesłania.");
+      return;
+    }
+    if (selectedFiles.length > MAX_FOLDER_FILES) {
+      setError(`Jednorazowo możesz przekazać maksymalnie ${MAX_FOLDER_FILES} plików. Podziel dokumentację na mniejsze foldery.`);
+      return;
+    }
     if (targetDocumentIdRef.current && selectedFiles.length > 1) {
-      setError("Nowa wersja dokumentu może zawierać jeden plik. Dla paczki użyj głównej Wrzutni.");
+      setError("Nowa wersja dokumentu może zawierać jeden plik. Dla folderu użyj głównej Wrzutni.");
       if (inputRef.current) inputRef.current.value = "";
       return;
     }
@@ -155,16 +250,19 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
     setError(null);
     const failures: string[] = [];
     let completed = 0;
-    for (const [index, file] of selectedFiles.entries()) {
+    const hasFolderStructure = selectedFiles.some((candidate) => candidate.relativePath.includes("/"));
+    for (const [index, candidate] of selectedFiles.entries()) {
       try {
-        setStatus(`Plik ${index + 1} z ${selectedFiles.length}: ${file.name}`);
-        await uploadFile(file, targetDocumentIdRef.current, targetProjectIdRef.current);
+        setStatus(`Plik ${index + 1} z ${selectedFiles.length}: ${candidate.relativePath}`);
+        await uploadFile(candidate, targetDocumentIdRef.current, targetProjectIdRef.current);
         completed += 1;
       } catch (uploadError) {
-        failures.push(`${file.name}: ${uploadError instanceof Error ? uploadError.message : "upload nie powiódł się"}`);
+        failures.push(`${candidate.relativePath}: ${uploadError instanceof Error ? uploadError.message : "upload nie powiódł się"}`);
       }
     }
-    if (completed) setStatus(`Zapisano ${completed} z ${selectedFiles.length} plików. Analiza działa w tle.`);
+    if (completed) {
+      setStatus(`Zapisano ${completed} z ${selectedFiles.length} plików${hasFolderStructure ? " z zachowaniem informacji o folderach" : ""}. Analiza działa w tle.`);
+    }
     if (failures.length) setError(failures.join(" · "));
     if (!completed) setStatus(null);
     try {
@@ -177,10 +275,40 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
     }
   }
 
+  async function handleFiles(files: FileList | null) {
+    await handleCandidates(Array.from(files ?? []).map(candidateFromFile));
+  }
+
+  async function handleDrop(dataTransfer: DataTransfer) {
+    if (!storageReady) return;
+    try {
+      setStatus("Odczytywanie struktury folderów");
+      const candidates = await candidatesFromDataTransfer(dataTransfer);
+      await handleCandidates(candidates);
+    } catch (dropError) {
+      setStatus(null);
+      setError(dropError instanceof Error ? dropError.message : "Nie udało się odczytać przeciągniętego folderu.");
+    }
+  }
+
   function openFilePicker(documentId: string | null = null, contextProjectId: string | null = selectedProjectId || null) {
     targetDocumentIdRef.current = documentId;
     targetProjectIdRef.current = projectId ?? contextProjectId;
-    inputRef.current?.click();
+    if (inputRef.current) {
+      inputRef.current.removeAttribute("webkitdirectory");
+      inputRef.current.removeAttribute("directory");
+      inputRef.current.click();
+    }
+  }
+
+  function openFolderPicker() {
+    targetDocumentIdRef.current = null;
+    targetProjectIdRef.current = projectId ?? (selectedProjectId || null);
+    if (inputRef.current) {
+      inputRef.current.setAttribute("webkitdirectory", "");
+      inputRef.current.setAttribute("directory", "");
+      inputRef.current.click();
+    }
   }
 
   async function downloadVersion(versionId: string, contextProjectId: string | null) {
@@ -318,13 +446,17 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
             onDragEnter={(event) => { event.preventDefault(); setIsDragging(true); }}
             onDragOver={(event) => event.preventDefault()}
             onDragLeave={() => setIsDragging(false)}
-            onDrop={(event) => { event.preventDefault(); setIsDragging(false); handleFiles(event.dataTransfer.files); }}
+            onDrop={(event) => { event.preventDefault(); setIsDragging(false); void handleDrop(event.dataTransfer); }}
             disabled={isPending || isUploading || !storageReady}
           >
             <UploadCloud size={30} aria-hidden="true" />
-            <strong>{isUploading ? "Przetwarzanie plików" : "Przeciągnij pliki lub wybierz z dysku"}</strong>
-            <span>PDF, Office, CSV, obrazy, XML, tekst i bezpieczne paczki ZIP · do {MAX_SUPPORTED_UPLOAD_BYTES / 1024 / 1024} MB</span>
+            <strong>{isUploading ? "Przetwarzanie dokumentacji" : "Przeciągnij pliki albo cały folder"}</strong>
+            <span>Foldery są odczytywane razem z podfolderami · PDF, Office, CSV, obrazy, XML, tekst i bezpieczne ZIP · do {MAX_SUPPORTED_UPLOAD_BYTES / 1024 / 1024} MB na plik</span>
           </button>
+          <button type="button" className="secondary-button" onClick={openFolderPicker} disabled={isPending || isUploading || !storageReady}>
+            <FolderOpen size={16} aria-hidden="true" />Wybierz folder z dysku
+          </button>
+          <p className="form-hint">Octopus zachowa ścieżkę folderu jako metadane paczki, pominie pliki systemowe i przeanalizuje każdy obsługiwany plik osobno.</p>
           <div className="upload-pipeline">
             <span>R2</span><span>Ekstrakcja</span><span>Gemini</span><span>Klasyfikacja</span><span>Moduły</span>
           </div>
