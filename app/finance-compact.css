@@ -357,3 +357,17 @@
     font-size: 20px;
   }
 }
+
+
+@media (max-width: 520px) {
+  .enterprise-flow-steps {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .enterprise-flow-counters {
+    display: flex;
+    flex-wrap: wrap;
+  }
+}

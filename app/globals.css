@@ -2997,3 +2997,13 @@ button:disabled {
   .ai-quality-strip article:nth-child(3) { border-left: 0; border-top: 1px solid var(--line); }
   .ai-quality-strip article:nth-child(4) { border-top: 1px solid var(--line); }
 }
+
+
+.v27-login-hint {
+  margin: 0 auto 10px;
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-align: center;
+}

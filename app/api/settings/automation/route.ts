@@ -4,6 +4,7 @@ import { hasDomainAccess } from "@/lib/authorization";
 import { listAiInbox } from "@/lib/data/operations";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { JsonBodyError, readJsonBody } from "@/lib/http/json-body";
 
 export const runtime = "nodejs";
 
@@ -71,15 +72,6 @@ async function runAlertScan(workspaceId: string) {
     .eq("active", true);
   if (rulesError) throw new Error(`Nie udało się odczytać reguł alertów: ${rulesError.message}`);
 
-  const { data: existing, error: existingError } = await db
-    .from("notifications")
-    .select("event_type,entity_type,entity_id")
-    .eq("workspace_id", workspaceId)
-    .is("read_at", null)
-    .limit(1000);
-  if (existingError) throw new Error(`Nie udało się sprawdzić istniejących alertów: ${existingError.message}`);
-
-  const existingKeys = new Set((existing ?? []).map((row) => `${row.event_type}|${row.entity_type}|${row.entity_id}`));
   const pending = new Map<string, NotificationInsert>();
   const today = new Date().toISOString().slice(0, 10);
   const employeeScopeCache = new Map<string, string[]>();
@@ -88,7 +80,7 @@ async function runAlertScan(workspaceId: string) {
 
   const add = (notification: NotificationInsert) => {
     const key = `${notification.event_type}|${notification.entity_type}|${notification.entity_id}`;
-    if (!existingKeys.has(key) && !pending.has(key)) pending.set(key, notification);
+    if (!pending.has(key)) pending.set(key, notification);
   };
 
   const employeeIdsForProject = async (projectId: string) => {
@@ -248,11 +240,14 @@ async function runAlertScan(workspaceId: string) {
   }
 
   const inserts = Array.from(pending.values());
-  if (inserts.length) {
-    const { error } = await db.from("notifications").insert(inserts);
-    if (error) throw new Error(`Nie udało się zapisać alertów: ${error.message}`);
-  }
-  return inserts.length;
+  if (!inserts.length) return 0;
+
+  const { data, error } = await db.rpc("enqueue_automation_notifications_atomic", {
+    p_workspace_id: workspaceId,
+    p_notifications: inserts
+  });
+  if (error) throw new Error(`Nie udało się zapisać alertów atomowo: ${error.message}`);
+  return Number(data ?? 0);
 }
 
 export async function POST(request: Request) {
@@ -261,9 +256,10 @@ export async function POST(request: Request) {
 
   let body: Body;
   try {
-    body = await request.json() as Body;
-  } catch {
-    return NextResponse.json({ error: "Nieprawidłowe dane żądania." }, { status: 400 });
+    body = await readJsonBody<Body>(request);
+  } catch (error) {
+    if (error instanceof JsonBodyError) return NextResponse.json({ error: error.message }, { status: error.status });
+    throw error;
   }
 
   if (!body.workspaceId || !body.action) return NextResponse.json({ error: "Brakuje firmy lub operacji." }, { status: 400 });

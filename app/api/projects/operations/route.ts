@@ -4,6 +4,7 @@ import { hasDomainAccess } from "@/lib/authorization";
 import { getProjectForUser } from "@/lib/data/projects";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { parseLocalizedNumber } from "@/lib/numbers/parse-localized-number";
+import { JsonBodyError, readJsonBody } from "@/lib/http/json-body";
 
 export const runtime = "nodejs";
 
@@ -103,9 +104,10 @@ export async function POST(request: Request) {
 
   let body: OperationBody;
   try {
-    body = await request.json() as OperationBody;
-  } catch {
-    return NextResponse.json({ error: "Nieprawidłowe dane operacji." }, { status: 400 });
+    body = await readJsonBody<OperationBody>(request);
+  } catch (error) {
+    if (error instanceof JsonBodyError) return NextResponse.json({ error: error.message }, { status: error.status });
+    throw error;
   }
 
   if (!body.projectId || !body.action) return NextResponse.json({ error: "Brakuje inwestycji lub rodzaju operacji." }, { status: 400 });
@@ -388,6 +390,10 @@ export async function POST(request: Request) {
 
     if (body.action === "site_event") {
       if (!clean(body.title) || !clean(body.eventType)) throw new Error("Uzupełnij typ i tytuł zdarzenia.");
+      if (body.geoPoint && (
+        !Number.isFinite(body.geoPoint.latitude) || body.geoPoint.latitude < -90 || body.geoPoint.latitude > 90 ||
+        !Number.isFinite(body.geoPoint.longitude) || body.geoPoint.longitude < -180 || body.geoPoint.longitude > 180
+      )) throw new Error("Współrzędne zdarzenia są poza dozwolonym zakresem.");
       const { data, error } = await supabase.from("site_events").insert({
         workspace_id: workspaceId,
         project_id: project.id,

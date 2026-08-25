@@ -34,7 +34,7 @@ export function CompanyActionCenter({ items }: { items: CompanyActionItem[] }) {
           <p>Octopus zbiera wyjątki z finansów, dokumentów, magazynu, kadr, floty i inwestycji. Kliknięcie prowadzi bezpośrednio do miejsca działania.</p>
         </div>
         <div className="co-company-address">
-          <strong>{items.length} aktywnych</strong>
+          <strong>{`Co najmniej ${items.length} aktywnych`}</strong>
           <span>{critical} krytycznych · {warnings} ostrzeżeń</span>
         </div>
       </div>

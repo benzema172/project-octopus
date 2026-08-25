@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   ArrowLeftRight,
@@ -51,13 +51,40 @@ type NavItem = {
 export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomains, children }: CompanyShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [assistantReady, setAssistantReady] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const base = `/workspace/companies/${workspaceId}`;
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => setAssistantReady(true), 650);
     return () => window.clearTimeout(timeoutId);
   }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 980px)");
+    const syncMobile = () => setIsMobile(media.matches);
+    syncMobile();
+    media.addEventListener("change", syncMobile);
+    return () => media.removeEventListener("change", syncMobile);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile || !mobileOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileOpen(false);
+        window.requestAnimationFrame(() => menuButtonRef.current?.focus());
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMobile, mobileOpen]);
 
   const allItems: NavItem[] = [
     { href: base, label: "Pulpit", icon: LayoutDashboard, exact: true, group: "primary" },
@@ -84,6 +111,11 @@ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomai
   const toolsActive = toolItems.some(isActive);
   const [toolsOpen, setToolsOpen] = useState(toolsActive);
 
+  const closeMobileMenu = () => {
+    setMobileOpen(false);
+    if (isMobile) window.requestAnimationFrame(() => menuButtonRef.current?.focus());
+  };
+
   const renderLink = (item: NavItem) => {
     const active = isActive(item);
     const Icon = item.icon;
@@ -94,7 +126,7 @@ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomai
         prefetch={item.group === "tools" ? false : undefined}
         className={active ? "is-active" : undefined}
         aria-current={active ? "page" : undefined}
-        onClick={() => setMobileOpen(false)}
+        onClick={closeMobileMenu}
       >
         <Icon size={18} aria-hidden="true" />
         <span>{item.label}</span>
@@ -105,18 +137,18 @@ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomai
   return (
     <div className="co-shell">
       <header className="co-mobile-bar">
-        <button type="button" className="co-mobile-menu-button" aria-label="Otwórz menu firmy" aria-controls="company-navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)}>
+        <button ref={menuButtonRef} type="button" className="co-mobile-menu-button" aria-label="Otwórz menu firmy" aria-controls="company-navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)}>
           <Menu size={19} aria-hidden="true" />
         </button>
         <span><small>Aktywna firma</small><strong>{companyName}</strong></span>
         <Link href="/workspace" className="co-mobile-menu-button" aria-label="Zmień firmę" title="Zmień firmę"><ArrowLeftRight size={18} aria-hidden="true" /></Link>
       </header>
 
-      <button type="button" className={`co-sidebar-backdrop${mobileOpen ? " is-visible" : ""}`} aria-label="Zamknij menu" aria-hidden={!mobileOpen} onClick={() => setMobileOpen(false)} tabIndex={mobileOpen ? 0 : -1} />
+      <button type="button" className={`co-sidebar-backdrop${mobileOpen ? " is-visible" : ""}`} aria-label="Zamknij menu" aria-hidden={!mobileOpen} onClick={closeMobileMenu} tabIndex={mobileOpen ? 0 : -1} />
 
-      <aside className={`co-sidebar${mobileOpen ? " is-mobile-open" : ""}`} id="company-navigation" aria-label="Nawigacja firmy">
-        <div className="co-sidebar-mobile-head"><strong>Menu firmy</strong><button type="button" onClick={() => setMobileOpen(false)} aria-label="Zamknij menu firmy"><X size={18} aria-hidden="true" /></button></div>
-        <Link href="/workspace" className="co-sidebar-brand" onClick={() => setMobileOpen(false)}><strong>OCTOPUS</strong><span>Project Octopus</span></Link>
+      <aside className={`co-sidebar${mobileOpen ? " is-mobile-open" : ""}`} id="company-navigation" aria-label="Nawigacja firmy" inert={isMobile && !mobileOpen ? true : undefined}>
+        <div className="co-sidebar-mobile-head"><strong>Menu firmy</strong><button type="button" onClick={closeMobileMenu} aria-label="Zamknij menu firmy"><X size={18} aria-hidden="true" /></button></div>
+        <Link href="/workspace" className="co-sidebar-brand" onClick={closeMobileMenu}><strong>OCTOPUS</strong><span>Project Octopus</span></Link>
 
         <div className="co-company-switcher">
           <div className="co-company-switcher__topline"><small>Aktywna firma</small><Link href="/workspace" className="co-company-switcher__change" aria-label="Zmień firmę" title="Zmień firmę"><ArrowLeftRight size={15} aria-hidden="true" /></Link></div>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { FormEvent, KeyboardEvent, ReactNode } from "react";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ChevronDown, MoreHorizontal, Plus, Save, Search, X } from "lucide-react";
 import { ServerPagination } from "@/components/system/server-pagination";
@@ -105,6 +105,8 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
   const [error, setError] = useState<string | null>(null);
   const [openFormKey, setOpenFormKey] = useState<string | null>(null);
   const [selectedRow, setSelectedRow] = useState<Row | null>(null);
+  const drawerCloseRef = useRef<HTMLButtonElement>(null);
+  const lastRowTriggerRef = useRef<HTMLDivElement | null>(null);
   const page = data.page ?? { page: 1, pageSize: Math.max(rows.length, 1), total: rows.length };
   const primaryMetrics = metrics.slice(0, primaryMetricCount);
   const secondaryMetrics = metrics.slice(primaryMetricCount);
@@ -146,11 +148,31 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
     </article>
   ));
 
+  const openRow = (row: Row, trigger: HTMLDivElement) => {
+    lastRowTriggerRef.current = trigger;
+    setSelectedRow(row);
+  };
+
+  const closeDrawer = () => {
+    setSelectedRow(null);
+    window.requestAnimationFrame(() => lastRowTriggerRef.current?.focus());
+  };
+
   const openRowFromKeyboard = (event: KeyboardEvent<HTMLDivElement>, row: Row) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
-    setSelectedRow(row);
+    openRow(row, event.currentTarget);
   };
+
+  useEffect(() => {
+    if (!selectedRow) return;
+    drawerCloseRef.current?.focus();
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") closeDrawer();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedRow]);
 
   return (
     <div className={`ops-workspace ops-workspace--paged${layoutVariant === "finance" ? " ops-workspace--finance" : ""}`}>
@@ -227,7 +249,7 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
               tabIndex={0}
               aria-label={`Otwórz szczegóły: ${tableTitle}`}
               key={String(row.id)}
-              onClick={() => setSelectedRow(row)}
+              onClick={(event) => openRow(row, event.currentTarget)}
               onKeyDown={(event) => openRowFromKeyboard(event, row)}
             >
               {columns.map((column) => (
@@ -244,11 +266,11 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
 
       {selectedRow ? (
         <div className="ops-record-drawer-layer">
-          <button type="button" className="ops-record-drawer__backdrop" aria-label="Zamknij szczegóły" onClick={() => setSelectedRow(null)} />
+          <button type="button" className="ops-record-drawer__backdrop" aria-label="Zamknij szczegóły" onClick={closeDrawer} />
           <aside className="ops-record-drawer" role="dialog" aria-modal="true" aria-label={`Szczegóły: ${tableTitle}`}>
             <header>
               <div><small>Szczegóły rekordu</small><h2>{detailTitle ? detailTitle(selectedRow) : tableTitle}</h2></div>
-              <button type="button" className="co-icon-button" aria-label="Zamknij szczegóły" onClick={() => setSelectedRow(null)}><X size={18} aria-hidden="true" /></button>
+              <button ref={drawerCloseRef} type="button" className="co-icon-button" aria-label="Zamknij szczegóły" onClick={closeDrawer}><X size={18} aria-hidden="true" /></button>
             </header>
             <div className="ops-record-drawer__summary">
               {columns.map((column) => <div key={column.label}><small>{column.label}</small><strong>{column.value(selectedRow)}</strong></div>)}
