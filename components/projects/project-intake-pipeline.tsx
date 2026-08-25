@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, FileSpreadsheet, FileText, FolderOpen, Sparkles, UploadCloud, X } from "lucide-react";
-import { DOCUMENT_DESTINATIONS, suggestDocumentClassification, type DocumentCategory } from "@/lib/documents/classification";
-import { SUPPORTED_UPLOAD_ACCEPT, validateUploadFile } from "@/lib/r2/sanitize";
+import { AlertTriangle, Sparkles, UploadCloud, X } from "lucide-react";
+import { suggestDocumentClassification, type DocumentCategory } from "@/lib/documents/classification";
+import { validateUploadFile } from "@/lib/r2/sanitize";
 
 type Status = "ready" | "uploading" | "analysing" | "done" | "warning" | "error";
 type Item = {
@@ -13,9 +13,6 @@ type Item = {
   file: File;
   relativePath: string;
   category: DocumentCategory;
-  locked: boolean;
-  confidence: string;
-  reason: string;
   status: Status;
   message?: string;
   error?: string;
@@ -26,6 +23,8 @@ type ProcessResponse = { category?: DocumentCategory; confidence?: number; count
 type IntakePosition = { top: number; right: number; width: number; maxHeight: number };
 type ReleaseType = "baseline" | "revision" | "addendum" | "as_built" | "closeout" | "other";
 type UploadCandidate = { file: File; relativePath: string };
+type IntakeIssue = { id: string; name: string; relativePath: string; bytes: number; reason: string };
+type UploadProgress = { totalFiles: number; uploadedFiles: number; totalBytes: number; uploadedBytes: number; settledFiles: number };
 type BrowserFileEntry = {
   isFile: boolean;
   isDirectory: boolean;
@@ -40,10 +39,13 @@ type BrowserFileEntry = {
 const MAX_HASH = 32 * 1024 * 1024;
 const MAX_FOLDER_FILES = 1000;
 const IGNORED_FOLDER_ARTIFACTS = new Set([".DS_Store", "Thumbs.db", "desktop.ini"]);
+const EMPTY_PROGRESS: UploadProgress = { totalFiles: 0, uploadedFiles: 0, totalBytes: 0, uploadedBytes: 0, settledFiles: 0 };
 
-function accepted(file: File) { return validateUploadFile(file.name, file.type || "application/octet-stream", file.size) === null; }
-function size(bytes: number) { return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`; }
-function icon(name: string) { return /\.(xlsx?|csv)$/i.test(name) ? FileSpreadsheet : FileText; }
+function formatBytes(bytes: number) {
+  if (bytes <= 0) return "0 MB";
+  if (bytes < 1024 * 1024) return `${Math.max(0.01, bytes / 1024 / 1024).toFixed(2)} MB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
 function normalizeRelativePath(value: string) { return value.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/{2,}/g, "/"); }
 function candidateFromFile(file: File): UploadCandidate {
   const browserFile = file as File & { webkitRelativePath?: string };
@@ -53,9 +55,11 @@ function folderPathForCandidate(candidate: UploadCandidate) {
   const parts = normalizeRelativePath(candidate.relativePath).split("/").filter(Boolean);
   return parts.length > 1 ? parts.slice(0, -1).join("/") : undefined;
 }
-function shouldIgnoreFolderArtifact(candidate: UploadCandidate) {
+function artifactReason(candidate: UploadCandidate) {
   const parts = normalizeRelativePath(candidate.relativePath).split("/").filter(Boolean);
-  return IGNORED_FOLDER_ARTIFACTS.has(candidate.file.name) || parts.includes("__MACOSX");
+  if (IGNORED_FOLDER_ARTIFACTS.has(candidate.file.name)) return "Plik systemowy systemu operacyjnego — nie jest dokumentacją inwestycji.";
+  if (parts.includes("__MACOSX")) return "Techniczny plik pomocniczy macOS z katalogu __MACOSX.";
+  return null;
 }
 function fileFromEntry(entry: BrowserFileEntry) {
   return new Promise<File>((resolve, reject) => {
@@ -107,6 +111,25 @@ async function digest(file: File) {
   const hash = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
   return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
+function uploadFileWithProgress(upload: UploadResponse, file: File, onProgress: (loaded: number) => void) {
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", upload.uploadUrl);
+    for (const [name, value] of Object.entries(upload.headers)) xhr.setRequestHeader(name, value);
+    xhr.upload.onprogress = (event) => onProgress(Math.min(event.loaded, file.size));
+    xhr.onerror = () => reject(new Error("Nie udało się połączyć z magazynem R2."));
+    xhr.onabort = () => reject(new Error("Wysyłanie pliku zostało przerwane."));
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress(file.size);
+        resolve();
+      } else {
+        reject(new Error(`R2 odrzucił upload: HTTP ${xhr.status}`));
+      }
+    };
+    xhr.send(file);
+  });
+}
 
 function IntakeOctopus() {
   return (
@@ -141,14 +164,19 @@ function IntakeOctopus() {
 
 export function ProjectIntake({ projectId }: { projectId: string }) {
   const router = useRouter();
-  const input = useRef<HTMLInputElement>(null);
-  const folderInput = useRef<HTMLInputElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const popover = useRef<HTMLDivElement>(null);
+  const knownFiles = useRef(new Set<string>());
+  const queue = useRef<Item[]>([]);
+  const processingQueue = useRef(false);
   const [open, setOpen] = useState(false);
   const [drag, setDrag] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
+  const [issues, setIssues] = useState<IntakeIssue[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [progress, setProgress] = useState<UploadProgress>(EMPTY_PROGRESS);
+  const [stage, setStage] = useState("Upuść dokumenty, aby rozpocząć automatyczną analizę.");
+  const [processing, setProcessing] = useState(false);
   const [position, setPosition] = useState<IntakePosition | null>(null);
   const [mounted, setMounted] = useState(false);
   const [releaseType, setReleaseType] = useState<ReleaseType>("baseline");
@@ -181,9 +209,7 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
       setPosition({ top, right, width, maxHeight });
     };
 
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
     const closeOnOutside = (event: PointerEvent) => {
       const target = event.target as Node;
       if (trigger.current?.contains(target) || popover.current?.contains(target)) return;
@@ -191,8 +217,6 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
     };
 
     updatePosition();
-    folderInput.current?.setAttribute("webkitdirectory", "");
-    folderInput.current?.setAttribute("directory", "");
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
     document.addEventListener("keydown", closeOnEscape);
@@ -205,54 +229,23 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
     };
   }, [open]);
 
-  function add(candidates: UploadCandidate[]) {
-    const withoutArtifacts = candidates.filter((candidate) => !shouldIgnoreFolderArtifact(candidate));
-    const limited = withoutArtifacts.slice(0, MAX_FOLDER_FILES);
-    const usable = limited.filter((candidate) => accepted(candidate.file));
-    const notices: string[] = [];
-    if (withoutArtifacts.length > MAX_FOLDER_FILES) notices.push(`Folder ma ponad ${MAX_FOLDER_FILES} plików — przyjęto pierwsze ${MAX_FOLDER_FILES}.`);
-    if (usable.length !== limited.length) notices.push("Część plików pominięto. Obsługiwane są PDF, DOC/DOCX, XLS/XLSX, CSV, obrazy, XML, pliki tekstowe i bezpieczne paczki ZIP do 50 MB.");
-    setNotice(notices.length ? notices.join(" ") : null);
-    setItems((current) => {
-      const known = new Set(current.map((item) => `${item.relativePath}:${item.file.size}:${item.file.lastModified}`));
-      const next: Item[] = [];
-      for (const candidate of usable) {
-        const key = `${candidate.relativePath}:${candidate.file.size}:${candidate.file.lastModified}`;
-        if (known.has(key)) continue;
-        known.add(key);
-        const suggestion = suggestDocumentClassification(candidate.file.name, candidate.file.type);
-        next.push({
-          id: crypto.randomUUID(),
-          file: candidate.file,
-          relativePath: candidate.relativePath,
-          category: suggestion.category,
-          locked: false,
-          confidence: suggestion.confidence,
-          reason: suggestion.reason,
-          status: "ready"
-        });
-      }
-      return current.concat(next);
-    });
-  }
-
-  async function addDropped(dataTransfer: DataTransfer) {
-    try {
-      const candidates = await candidatesFromDataTransfer(dataTransfer);
-      add(candidates);
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Nie udało się odczytać folderu.");
-    }
-  }
-
-  function setCategory(id: string, category: DocumentCategory) {
-    setItems((current) => current.map((item) => item.id === id ? { ...item, category, locked: true } : item));
+  function addIssue(candidate: UploadCandidate, reason: string) {
+    const key = `${candidate.relativePath}:${candidate.file.size}:${reason}`;
+    setIssues((current) => current.some((issue) => `${issue.relativePath}:${issue.bytes}:${issue.reason}` === key) ? current : current.concat({
+      id: crypto.randomUUID(),
+      name: candidate.file.name,
+      relativePath: candidate.relativePath,
+      bytes: candidate.file.size,
+      reason
+    }));
   }
 
   async function processItem(item: Item) {
-    setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "uploading", error: undefined, message: "Wysyłanie do R2…" } : row));
+    setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "uploading", error: undefined, message: "Przygotowanie uploadu…" } : row));
+    let reportedBytes = 0;
     try {
       const mimeType = item.file.type || "application/octet-stream";
+      setStage(`Przygotowanie: ${item.file.name}`);
       const prepare = await fetch("/api/storage/upload-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -262,7 +255,7 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
           mimeType,
           fileSize: item.file.size,
           category: item.category,
-          categoryLocked: item.locked,
+          categoryLocked: false,
           releaseType,
           packageLabel: packageLabelForItem(packageLabel, item),
           revisionLabel: revisionLabel || undefined,
@@ -271,38 +264,143 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
       });
       if (!prepare.ok) throw new Error((await prepare.json().catch(() => null))?.error ?? "Nie udało się przygotować uploadu.");
       const upload = await prepare.json() as UploadResponse;
-      const put = await fetch(upload.uploadUrl, { method: "PUT", headers: upload.headers, body: item.file });
-      if (!put.ok) throw new Error(`R2 odrzucił upload: HTTP ${put.status}`);
 
-      const complete = await fetch("/api/storage/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: upload.token, sha256: await digest(item.file) }) });
-      if (!complete.ok) throw new Error((await complete.json().catch(() => null))?.error ?? "Nie udało się zapisać dokumentu.");
+      setStage(`Wysyłanie do R2: ${item.file.name}`);
+      await uploadFileWithProgress(upload, item.file, (loaded) => {
+        const next = Math.max(reportedBytes, Math.min(loaded, item.file.size));
+        const delta = next - reportedBytes;
+        if (delta <= 0) return;
+        reportedBytes = next;
+        setProgress((current) => ({ ...current, uploadedBytes: Math.min(current.totalBytes, current.uploadedBytes + delta) }));
+      });
+      setProgress((current) => ({ ...current, uploadedFiles: current.uploadedFiles + 1 }));
+
+      const complete = await fetch("/api/storage/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: upload.token, sha256: await digest(item.file) })
+      });
+      if (!complete.ok) throw new Error((await complete.json().catch(() => null))?.error ?? "Plik wysłano do R2, ale nie udało się zapisać dokumentu.");
       const ids = await complete.json() as CompleteResponse;
 
       setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "analysing", message: "Gemini analizuje treść i buduje Brain…" } : row));
-      const analysis = await fetch("/api/brain/process-document", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, documentId: ids.documentId, versionId: ids.versionId, lockCategory: item.locked }) });
+      setStage(`AI analizuje: ${item.file.name}`);
+      const analysis = await fetch("/api/brain/process-document", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, documentId: ids.documentId, versionId: ids.versionId, lockCategory: false })
+      });
       const result = await analysis.json().catch(() => null) as ProcessResponse | null;
       if (!analysis.ok) {
-        setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "warning", message: "Plik zapisany. Analiza AI wymaga ponowienia.", error: result?.error ?? "Analiza AI nie powiodła się." } : row));
+        const reason = result?.error ?? "Analiza AI nie powiodła się.";
+        setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "warning", message: "Plik zapisany. Analiza AI wymaga ponowienia.", error: reason } : row));
+        addIssue({ file: item.file, relativePath: item.relativePath }, `Plik przesłano, ale analiza AI wymaga uwagi: ${reason}`);
         return true;
       }
 
       const count = Object.values(result?.counts ?? {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
-      setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "done", category: result?.category ?? row.category, message: `Brain gotowy · ${Math.round((result?.confidence ?? 0) * 100)}% pewności · ${count} rozpoznanych elementów` } : row));
+      setItems((current) => current.map((row) => row.id === item.id ? {
+        ...row,
+        status: "done",
+        category: result?.category ?? row.category,
+        message: `Brain gotowy · ${Math.round((result?.confidence ?? 0) * 100)}% pewności · ${count} rozpoznanych elementów`
+      } : row));
       return true;
     } catch (error) {
-      setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "error", error: error instanceof Error ? error.message : "Przetwarzanie nie powiodło się." } : row));
+      const reason = error instanceof Error ? error.message : "Przetwarzanie nie powiodło się.";
+      setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "error", error: reason } : row));
+      addIssue({ file: item.file, relativePath: item.relativePath }, reason);
       return false;
+    } finally {
+      setProgress((current) => ({ ...current, settledFiles: current.settledFiles + 1 }));
     }
   }
 
-  async function run() {
+  async function drainQueue() {
+    if (processingQueue.current) return;
+    processingQueue.current = true;
+    setProcessing(true);
     let changed = false;
-    for (const item of items.filter((row) => row.status === "ready" || row.status === "error")) changed = (await processItem(item)) || changed;
-    if (changed) startTransition(() => router.refresh());
+    try {
+      while (queue.current.length) {
+        const item = queue.current.shift();
+        if (!item) continue;
+        changed = (await processItem(item)) || changed;
+      }
+    } finally {
+      processingQueue.current = false;
+      setProcessing(false);
+      setStage("Wrzutnia zakończyła bieżącą kolejkę.");
+      if (changed) startTransition(() => router.refresh());
+      if (queue.current.length) void drainQueue();
+    }
   }
 
-  const busy = pending || items.some((item) => item.status === "uploading" || item.status === "analysing");
-  const ready = items.filter((item) => item.status === "ready" || item.status === "error").length;
+  function add(candidates: UploadCandidate[]) {
+    setNotice(null);
+    const accepted: Item[] = [];
+    let eligibleCount = 0;
+
+    for (const candidate of candidates) {
+      const systemReason = artifactReason(candidate);
+      if (systemReason) {
+        addIssue(candidate, systemReason);
+        continue;
+      }
+
+      eligibleCount += 1;
+      if (eligibleCount > MAX_FOLDER_FILES) {
+        addIssue(candidate, `Przekroczono limit ${MAX_FOLDER_FILES} plików w jednym wskazaniu.`);
+        continue;
+      }
+
+      const validationError = validateUploadFile(candidate.file.name, candidate.file.type || "application/octet-stream", candidate.file.size);
+      if (validationError) {
+        addIssue(candidate, validationError);
+        continue;
+      }
+
+      const key = `${candidate.relativePath}:${candidate.file.size}:${candidate.file.lastModified}`;
+      if (knownFiles.current.has(key)) {
+        addIssue(candidate, "Duplikat — ten sam plik jest już w bieżącej kolejce Wrzutni.");
+        continue;
+      }
+      knownFiles.current.add(key);
+      const suggestion = suggestDocumentClassification(candidate.file.name, candidate.file.type);
+      accepted.push({
+        id: crypto.randomUUID(),
+        file: candidate.file,
+        relativePath: candidate.relativePath,
+        category: suggestion.category,
+        status: "ready"
+      });
+    }
+
+    if (!accepted.length) return;
+    const addedBytes = accepted.reduce((sum, item) => sum + item.file.size, 0);
+    setItems((current) => current.concat(accepted));
+    setProgress((current) => ({ ...current, totalFiles: current.totalFiles + accepted.length, totalBytes: current.totalBytes + addedBytes }));
+    queue.current.push(...accepted);
+    setStage(`Rozpoznano ${accepted.length} plików. Start automatycznej wysyłki…`);
+    void drainQueue();
+  }
+
+  async function addDropped(dataTransfer: DataTransfer) {
+    try {
+      const candidates = await candidatesFromDataTransfer(dataTransfer);
+      add(candidates);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Nie udało się odczytać przeciągniętych danych.");
+    }
+  }
+
+  const busy = processing || pending;
+  const percent = progress.totalBytes > 0
+    ? Math.min(100, Math.round((progress.uploadedBytes / progress.totalBytes) * 100))
+    : progress.totalFiles > 0 ? Math.round((progress.uploadedFiles / progress.totalFiles) * 100) : 0;
+  const remainingPercent = progress.totalFiles > 0 ? Math.max(0, 100 - percent) : 100;
+  const remainingBytes = Math.max(0, progress.totalBytes - progress.uploadedBytes);
+  const completedAi = items.filter((item) => item.status === "done" || item.status === "warning").length;
 
   const dialog = open && position ? (
     <div
@@ -321,24 +419,45 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
         <label><span>Oznaczenie rewizji</span><input value={revisionLabel} onChange={(event) => setRevisionLabel(event.target.value)} placeholder="np. R02" maxLength={80} disabled={busy}/></label>
         <label><span>Obowiązuje od</span><input type="date" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} disabled={busy}/></label>
       </div>
-      <input ref={input} className="pw-intake-file-input" type="file" accept={SUPPORTED_UPLOAD_ACCEPT} multiple onChange={(event) => { if (event.target.files) add(Array.from(event.target.files).map(candidateFromFile)); event.currentTarget.value = ""; }} />
-      <input ref={(node) => { folderInput.current = node; node?.setAttribute("webkitdirectory", ""); node?.setAttribute("directory", ""); }} className="pw-intake-file-input" type="file" multiple aria-label="Wybierz folder z dokumentacją" onChange={(event) => { if (event.target.files) add(Array.from(event.target.files).map(candidateFromFile)); event.currentTarget.value = ""; }} />
-      <div className={`pw-intake-dropzone ${drag ? "is-dragging" : ""}`} onDragEnter={(event) => { event.preventDefault(); setDrag(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { event.preventDefault(); setDrag(false); }} onDrop={(event) => { event.preventDefault(); setDrag(false); void addDropped(event.dataTransfer); }}>
-        <span className="pw-intake-cloud"><UploadCloud size={27} /></span><strong>Przeciągnij pliki lub cały folder</strong><small>Foldery i podfoldery zachowują swoją ścieżkę · maks. {MAX_FOLDER_FILES} plików na wybór</small>
-        <div className="pw-intake-actions pw-intake-picker-actions">
-          <button type="button" onClick={() => input.current?.click()} disabled={busy}>Wybierz pliki</button>
-          <button type="button" onClick={() => folderInput.current?.click()} disabled={busy}><FolderOpen size={15} /> Wybierz folder</button>
-        </div>
+
+      <div
+        className={`pw-intake-dropzone ${drag ? "is-dragging" : ""}`}
+        aria-label="Przeciągnij tutaj pliki, ZIP lub folder z dokumentacją"
+        onDragEnter={(event) => { event.preventDefault(); setDrag(true); }}
+        onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
+        onDragLeave={(event) => { event.preventDefault(); setDrag(false); }}
+        onDrop={(event) => { event.preventDefault(); setDrag(false); void addDropped(event.dataTransfer); }}
+      >
+        <span className="pw-intake-cloud"><UploadCloud size={27} /></span>
+        <strong>Upuść tutaj dokumenty, ZIP lub cały folder</strong>
+        <small>Wrzutnia sama rozpozna pliki i foldery, przejdzie przez podfoldery i automatycznie rozpocznie wysyłkę oraz analizę AI.</small>
       </div>
-      <div className="pw-intake-ai-note"><Sparkles size={16} /><span><strong>Analiza z kontrolą człowieka:</strong> Gemini odczyta fakty, BOQ, harmonogram, WM, protokoły, przeroby i ryzyka. Nic formalnego ani finansowego nie trafi do modułów bez decyzji w Centrum weryfikacji.</span></div>
+
+      <div className="pw-intake-ai-note"><Sparkles size={16} /><span><strong>Automatycznie:</strong> rozpoznanie typu dokumentu → R2 → ekstrakcja → Gemini → Brain. Nic formalnego ani finansowego nie trafi do modułów bez decyzji w Centrum weryfikacji.</span></div>
       {notice ? <p className="pw-intake-error">{notice}</p> : null}
-      {items.length ? <div className="pw-intake-list">{items.map((item) => { const Icon = icon(item.file.name); const folderPath = folderPathForCandidate({ file: item.file, relativePath: item.relativePath }); return <article className={`pw-intake-row is-${item.status}`} key={item.id}>
-        <span className="pw-intake-file-icon"><Icon size={18} /></span><div className="pw-intake-file-main"><strong>{item.file.name}</strong><small>{size(item.file.size)} · {item.locked ? "kategoria ręczna" : `wstępna pewność: ${item.confidence}`}{folderPath ? ` · ${folderPath}` : ""}</small><p>{item.message ?? item.reason}</p></div>
-        <label className="pw-intake-destination"><span>Przypisz do</span><select value={item.category} onChange={(event) => setCategory(item.id, event.target.value as DocumentCategory)} disabled={["uploading", "analysing", "done", "warning"].includes(item.status)}>{DOCUMENT_DESTINATIONS.map((destination) => <option key={destination.value} value={destination.value}>{destination.label}</option>)}</select></label>
-        {item.status === "done" ? <span className="pw-intake-done"><CheckCircle2 size={17} /> Brain gotowy</span> : item.status === "warning" ? <span className="pw-intake-done"><AlertTriangle size={17} /> Plik zapisany</span> : <button type="button" className="pw-intake-remove" disabled={item.status === "uploading" || item.status === "analysing"} onClick={() => setItems((current) => current.filter((row) => row.id !== item.id))}>Usuń</button>}
-        {item.error ? <p className="pw-intake-row-error">{item.error}</p> : null}
-      </article>; })}</div> : null}
-      <div className="pw-intake-actions"><span>{items.length ? `${items.length} plików w kolejce` : "Możesz dodać pliki albo cały folder"}</span><button type="button" onClick={run} disabled={busy || !ready}><Sparkles size={16} /> {busy ? "Octopus przetwarza…" : `Wyślij i analizuj${ready ? ` (${ready})` : ""}`}</button></div>
+
+      {progress.totalFiles > 0 ? <section className="pw-intake-progress" aria-live="polite" aria-label="Postęp wysyłania dokumentacji">
+        <div className="pw-intake-progress__head"><strong>{percent}% przesłano</strong><span>{stage}</span></div>
+        <div className="pw-intake-progress__track"><span style={{ width: `${percent}%` }} /></div>
+        <div className="pw-intake-progress__stats">
+          <span><strong>{progress.uploadedFiles}/{progress.totalFiles}</strong> plików przesłanych</span>
+          <span><strong>{formatBytes(progress.uploadedBytes)}</strong> / {formatBytes(progress.totalBytes)}</span>
+          <span><strong>{remainingPercent}%</strong> zostało · {formatBytes(remainingBytes)}</span>
+          <span><strong>{completedAi}/{progress.totalFiles}</strong> przeanalizowanych przez AI</span>
+        </div>
+      </section> : null}
+
+      {issues.length ? <details className="pw-intake-skipped" open>
+        <summary><AlertTriangle size={15} /> Pominięte / wymagające uwagi <strong>{issues.length}</strong></summary>
+        <div className="pw-intake-skipped__list">
+          {issues.map((issue) => <article key={issue.id}>
+            <div><strong>{issue.name}</strong><small>{issue.relativePath !== issue.name ? issue.relativePath : "Plik główny"} · {formatBytes(issue.bytes)}</small></div>
+            <p>{issue.reason}</p>
+          </article>)}
+        </div>
+      </details> : null}
+
+      <div className="pw-intake-auto-status"><span>{busy ? "Octopus pracuje automatycznie — nie musisz nic klikać." : progress.totalFiles ? "Możesz dorzucić kolejne pliki lub folder — zostaną dopięte do kolejki." : "Przeciągnij dokumentację do pola powyżej. Nie trzeba wybierać trybu plik/folder."}</span></div>
     </div>
   ) : null;
 
