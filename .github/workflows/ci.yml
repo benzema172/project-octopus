@@ -27,6 +27,29 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+      - name: Upload regression source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-source
+          path: |
+            components/auth/project-octopus-login.tsx
+            app/globals.css
+            lib/demo/guest-constants.ts
+            app/layout-density-audit.css
+            app/release-badge.css
+            components/layout/company-shell.tsx
+            components/company/operations/module-shell.tsx
+            components/system/server-pagination.tsx
+            app/finance-compact.css
+            components/company/company-action-center.tsx
+            app/api/company/records/route.ts
+            app/api/settings/automation/route.ts
+            app/api/company/power/route.ts
+            app/api/projects/operations/route.ts
+            app/api/assistant/route.ts
+            lib/data/workspace.ts
+            app/workspace/error.tsx
+          retention-days: 1
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
