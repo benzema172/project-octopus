@@ -23,15 +23,10 @@ env:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-      - name: Apply deterministic CI repair
-        run: |
-          cat ci-repair/part-*.patch > /tmp/ci-regression-repair.patch
-          git apply --check /tmp/ci-regression-repair.patch
-          git apply /tmp/ci-regression-repair.patch
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
@@ -46,42 +41,10 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests
-        run: npm run test -- --reporter=json --outputFile=vitest-results.json
-      - name: Upload unit test diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: vitest-results
-          path: vitest-results.json
-          if-no-files-found: ignore
-          retention-days: 1
+        run: npm run test
       - name: Migration contract
         run: npm run test:migrations
       - name: Lint
         run: npm run lint
       - name: Build
         run: npm run build
-
-  persist:
-    needs: verify
-    if: github.event_name == 'push' && github.ref == 'refs/heads/agent/ci-unit-test-diagnostics'
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-      - name: Apply verified repair
-        run: |
-          cat ci-repair/part-*.patch > /tmp/ci-regression-repair.patch
-          git apply --check /tmp/ci-regression-repair.patch
-          git apply /tmp/ci-regression-repair.patch
-      - name: Persist source changes
-        run: |
-          rm -rf ci-repair
-          rm -f ci-regression-repair.patch.gz.b64
-          git add -A
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Fix CI regression contracts after 1.2.0"
-          git push origin HEAD:agent/ci-unit-test-diagnostics
