@@ -1,7 +1,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { DeleteObjectsCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { NextResponse } from "next/server";
-import { createR2Client, getRequiredR2Config } from "@/lib/r2/client";
+import { getR2Config } from "@/lib/env";
+import { createR2Client } from "@/lib/r2/client";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -61,7 +62,7 @@ export async function GET(request: Request) {
   const documentIds = [...new Set(rows.map((row) => row.document_id).filter(Boolean))];
   const objectKeys = [...new Set(rows.flatMap((row) => [row.r2_object_key, row.object_key, row.extracted_text_object_key]).filter((key): key is string => Boolean(key?.trim())))];
 
-  const { bucketName } = getRequiredR2Config();
+  const { bucketName } = getR2Config();
   const r2 = createR2Client();
 
   if (objectKeys.length > 0) {
