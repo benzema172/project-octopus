@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { processDocumentVersion } from "@/lib/ai/process-document";
+import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
 import { getRequestUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -59,6 +60,14 @@ export async function POST(request: Request) {
       userId: user.id,
       categoryOverride: body.lockCategory ? normalizeDocumentCategory(sourceDocument.category) : null
     });
+    const autopilot = await applyDocumentAutopilot({
+      workspaceId: project.workspace_id,
+      documentId: body.documentId,
+      versionId: body.versionId,
+      category: analysis.effectiveCategory,
+      projectId: project.id,
+      actorId: user.id
+    });
 
     return NextResponse.json({
       ok: true,
@@ -66,8 +75,9 @@ export async function POST(request: Request) {
       ai_category: analysis.aiCategory,
       confidence: analysis.confidence,
       summary: analysis.summary,
-      proposed_project_id: analysis.proposedProjectId,
+      proposed_project_id: autopilot.projectId ?? analysis.proposedProjectId,
       project_match: analysis.projectMatch,
+      autopilot,
       counts: {
         facts: analysis.facts.length,
         materials: analysis.materialRequirements.length || analysis.requiredApplications.length,
