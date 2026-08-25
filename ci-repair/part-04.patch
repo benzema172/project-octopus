@@ -1,0 +1,112 @@
++    const params = new URLSearchParams();
++    for (const [key, value] of Object.entries(query)) if (value !== undefined) params.set(key, String(value));
++    params.set("page", String(target));
++    return `${pathname}?${params.toString()}`;
++  };
++
++  return (
++    <nav className="server-pagination" aria-label="Stronicowanie">
++      {page <= 1 ? (
++        <span className="secondary-button is-disabled" aria-disabled="true"><ChevronLeft size={14} />Poprzednia</span>
++      ) : (
++        <Link className="secondary-button" href={href(page - 1)}><ChevronLeft size={14} />Poprzednia</Link>
++      )}
++      <span>Strona <strong>{page}</strong> z <strong>{pages}</strong> · {total} rekordów</span>
++      {page >= pages ? (
++        <span className="secondary-button is-disabled" aria-disabled="true">Następna<ChevronRight size={14} /></span>
++      ) : (
++        <Link className="secondary-button" href={href(page + 1)}>Następna<ChevronRight size={14} /></Link>
++      )}
++    </nav>
++  );
+ }
+--- a/components/company/company-action-center.tsx
++++ b/components/company/company-action-center.tsx
+@@ -34,7 +34,7 @@
+           <p>Octopus zbiera wyjątki z finansów, dokumentów, magazynu, kadr, floty i inwestycji. Kliknięcie prowadzi bezpośrednio do miejsca działania.</p>
+         </div>
+         <div className="co-company-address">
+-          <strong>{items.length} aktywnych</strong>
++          <strong>{`Co najmniej ${items.length} aktywnych`}</strong>
+           <span>{critical} krytycznych · {warnings} ostrzeżeń</span>
+         </div>
+       </div>
+--- a/app/layout-density-audit.css
++++ b/app/layout-density-audit.css
+@@ -416,3 +416,39 @@
+     white-space: normal;
+   }
+ }
++
++
++/* Final mobile regression guard: record rows must collapse into readable cards. */
++@media (max-width: 760px) {
++  .octopus-app-light .ops-table__row,
++  .octopus-app-light .ops-table > div:not(.ops-table__head) {
++    min-width: 0 !important;
++    grid-template-columns: minmax(0, 1fr) !important;
++  }
++
++  .octopus-app-light .ops-table__cell {
++    min-width: 0;
++    overflow-wrap: anywhere;
++  }
++
++  .server-pagination {
++    display: grid;
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++    gap: 8px;
++  }
++
++  .server-pagination > span:nth-child(2) {
++    grid-column: 1 / -1;
++    grid-row: 1;
++    text-align: center;
++  }
++}
++
++/* Keep fixed assistant controls above the release badge/safe-area lane. */
++.octopus-app-light .octopus-assistant-launcher {
++  bottom: calc(52px + env(safe-area-inset-bottom));
++}
++
++.octopus-app-light .octopus-assistant-panel {
++  bottom: calc(44px + env(safe-area-inset-bottom));
++}
+--- a/app/release-badge.css
++++ b/app/release-badge.css
+@@ -90,3 +90,9 @@
+     left: 50%;
+   }
+ }
++
++
++.app-release-badge {
++  right: max(8px, env(safe-area-inset-right));
++  bottom: max(8px, env(safe-area-inset-bottom));
++}
+--- a/app/finance-compact.css
++++ b/app/finance-compact.css
+@@ -357,3 +357,17 @@
+     font-size: 20px;
+   }
+ }
++
++
++@media (max-width: 520px) {
++  .enterprise-flow-steps {
++    display: grid;
++    grid-template-columns: repeat(2, minmax(0, 1fr));
++    overflow: visible;
++  }
++
++  .enterprise-flow-counters {
++    display: flex;
++    flex-wrap: wrap;
++  }
++}
+--- a/app/api/company/records/route.ts
++++ b/app/api/company/records/route.ts
+@@ -3,6 +3,7 @@
+ import { hasDomainAccess, type Domain } from "@/lib/authorization";
+ import { getWorkspaceForUser } from "@/lib/data/workspace";
