@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -61,11 +61,25 @@ jobs:
         run: npm run lint
       - name: Build
         run: npm run build
-      - name: Persist verified source repair
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/agent/ci-unit-test-diagnostics'
+
+  persist:
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/agent/ci-unit-test-diagnostics'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Apply verified repair
+        run: |
+          cat ci-repair/part-*.patch > /tmp/ci-regression-repair.patch
+          git apply --check /tmp/ci-regression-repair.patch
+          git apply /tmp/ci-regression-repair.patch
+      - name: Persist source changes
         run: |
           rm -rf ci-repair
-          rm -f ci-regression-repair.patch.gz.b64 vitest-results.json
+          rm -f ci-regression-repair.patch.gz.b64
           git add -A
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
