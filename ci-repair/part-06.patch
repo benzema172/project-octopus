@@ -1,0 +1,44 @@
+-  const sale = invoiceRows.filter((row) => row.direction === "sale").reduce((sum, row) => sum + Number(row.gross_amount ?? 0), 0);
+-  const purchase = invoiceRows.filter((row) => row.direction === "purchase").reduce((sum, row) => sum + Number(row.gross_amount ?? 0), 0);
+-  const paid = invoiceRows.reduce((sum, row) => sum + Number(row.paid_amount ?? 0), 0);
+-  const committed = (commitments.data ?? [])
+-    .filter((row) => (!projectId || row.project_id === projectId) && inPeriod(row.expected_date))
+-    .reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
+-  const assignedEmployees = projectId ? new Set((assignments.data ?? []).filter((row) => row.project_id === projectId && overlapsPeriod(row.date_from, row.date_to)).map((row) => String(row.employee_id))) : null;
+-  const assignedVehicles = projectId ? new Set((vehicleAllocations.data ?? []).filter((row) => row.project_id === projectId).map((row) => String(row.vehicle_id))) : null;
+-  const projectStockItems = projectId ? new Set((materialEvents.data ?? []).filter((row) => row.project_id === projectId && inPeriod(row.occurred_at)).map((row) => row.stock_item_id).filter(Boolean).map(String)) : null;
+-  const projectRows = (projects.data ?? []).filter((row) => !projectId || row.id === projectId);
+-  const documentRows = (documents.data ?? []).filter((row) => (!projectId || row.project_id === projectId) && inPeriod(row.created_at));
+-  const employeeRows = (employees.data ?? []).filter((row) => row.status === "active" && (!assignedEmployees || assignedEmployees.has(String(row.id))));
+-  const vehicleRows = (vehicles.data ?? []).filter((row) => row.status === "active" && (!assignedVehicles || assignedVehicles.has(String(row.id))));
+-  const stockRows = (stockItems.data ?? []).filter((row) => row.active && (!projectStockItems || projectStockItems.has(String(row.id))));
+-  const snapshot = {
+-    scope: { project_id: projectId, report_type: definition?.report_type ?? "management" },
+-    period: { start: periodStart, end: periodEnd },
+-    portfolio: { projects: projectRows.length, documents: documentRows.length },
+-    resources: { employees: employeeRows.length, vehicles: vehicleRows.length, stock_items: stockRows.length },
+-    finance: { sales_gross: sale, purchases_gross: purchase, paid, open_commitments: committed, gross_result: sale - purchase },
+-    ai: { pending_decisions: openAi.count ?? 0 }
+-  };
+-  const { data: run, error: runError } = await supabase.from("report_runs").insert({
+-    workspace_id: workspaceId,
+-    project_id: projectId,
+-    report_definition_id: definitionId,
+-    period_start: periodStart,
+-    period_end: periodEnd,
+-    status: "completed",
+-    started_at: new Date().toISOString(),
+-    finished_at: new Date().toISOString()
+-  }).select("id").single<{ id: string }>();
+-  if (runError || !run) throw new Error(`Nie udało się utworzyć raportu: ${runError?.message ?? "brak danych"}`);
+-  const { data: result, error } = await supabase.from("report_snapshots").insert({
+-    workspace_id: workspaceId,
+-    project_id: projectId,
+-    report_run_id: run.id,
+-    kpi_definitions: definition?.definition ?? {},
+-    data_snapshot: snapshot,
+-    narrative: {
+-      title: definition?.name ?? "Raport firmy",
+-      summary: `Wynik brutto dla wybranego zakresu: ${sale - purchase} PLN. Otwarte zobowiązania: ${committed} PLN.`,
+-      generated_by: userId
+-    },
