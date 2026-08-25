@@ -1,25 +1,26 @@
-import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import test from "node:test";
+import { describe, expect, it } from "vitest";
 
 const route = readFileSync("app/api/brain/process/route.ts", "utf8");
 
-test("brain/process resolves the version and workspace document without an embedded PostgREST join", () => {
-  assert.match(route, /\.from\("document_versions"\)/);
-  assert.match(route, /\.select\("document_id,project_id"\)/);
-  assert.match(route, /versionError/);
+describe("brain/process version lookup", () => {
+  it("resolves the version and workspace document without an embedded PostgREST join", () => {
+    expect(route).toMatch(/\.from\("document_versions"\)/);
+    expect(route).toMatch(/\.select\("document_id,project_id"\)/);
+    expect(route).toMatch(/versionError/);
 
-  assert.match(route, /\.from\("documents"\)/);
-  assert.match(route, /\.eq\("id", version\.document_id\)/);
-  assert.match(route, /\.eq\("workspace_id", workspace\.id\)/);
-  assert.match(route, /documentError/);
+    expect(route).toMatch(/\.from\("documents"\)/);
+    expect(route).toMatch(/\.eq\("id", version\.document_id\)/);
+    expect(route).toMatch(/\.eq\("workspace_id", workspace\.id\)/);
+    expect(route).toMatch(/documentError/);
 
-  assert.doesNotMatch(route, /documents!inner\(workspace_id,category\)/);
-});
+    expect(route).not.toMatch(/documents!inner\(workspace_id,category\)/);
+  });
 
-test("brain/process distinguishes database failures from a genuine missing version", () => {
-  assert.match(route, /\[brain\/process\] version lookup failed/);
-  assert.match(route, /Nie udało się odczytać wersji dokumentu\./);
-  assert.match(route, /Nie znaleziono wersji dokumentu\./);
-  assert.match(route, /\[brain\/process\] document lookup failed/);
+  it("distinguishes database failures from a genuine missing version", () => {
+    expect(route).toMatch(/\[brain\/process\] version lookup failed/);
+    expect(route).toMatch(/Nie udało się odczytać wersji dokumentu\./);
+    expect(route).toMatch(/Nie znaleziono wersji dokumentu\./);
+    expect(route).toMatch(/\[brain\/process\] document lookup failed/);
+  });
 });
