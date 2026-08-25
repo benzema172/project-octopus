@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { processDocumentVersion } from "@/lib/ai/process-document";
+import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
@@ -85,7 +86,15 @@ export async function POST(request: Request) {
       versionId: body.versionId,
       userId: user.id,
     });
-    return NextResponse.json({ ok: true, analysis }, { headers: { "Cache-Control": "no-store" } });
+    const autopilot = await applyDocumentAutopilot({
+      workspaceId: workspace.id,
+      documentId: version.document_id,
+      versionId: body.versionId,
+      category: analysis.effectiveCategory,
+      projectId: version.project_id ?? analysis.proposedProjectId,
+      actorId: user.id
+    });
+    return NextResponse.json({ ok: true, analysis, autopilot }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Analiza nie powiodła się.", queued: true },
