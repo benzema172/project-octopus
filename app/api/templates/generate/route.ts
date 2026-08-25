@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 
   const [factsResult, boqResult, requirementsResult, forecastResult] = await Promise.all([
     supabase.from("project_facts").select("id,fact_type,value_text,value_json,confidence,source_reference_id").eq("project_id", body.projectId).in("status", ["approved", "proposed"]).limit(300),
-    supabase.from("boq_items").select("id,item_number,description,quantity,unit,total_price,wbs_node_id").eq("project_id", body.projectId).limit(500),
+    supabase.from("boq_items").select("id,item_number,description,quantity,unit,total_price,wbs_node_id").eq("project_id", body.projectId).eq("is_active", true).limit(500),
     supabase.from("project_requirements").select("id,requirement_type,title,status").eq("project_id", body.projectId).limit(300),
     supabase.from("forecast_snapshots").select("forecast_date,forecast_finish_date,estimate_at_completion,forecast_margin,assumptions").eq("project_id", body.projectId).order("forecast_date", { ascending: false }).limit(1).maybeSingle()
   ]);

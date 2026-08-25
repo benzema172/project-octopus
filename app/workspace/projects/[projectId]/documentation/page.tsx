@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { DocumentUpload } from "@/components/documents/document-upload";
 import { ProjectDocumentControl } from "@/components/projects/project-document-control";
+import { ProjectAiReviewCenter } from "@/components/projects/project-ai-review-center";
 import { ServerPagination } from "@/components/system/server-pagination";
 import { requireCurrentUser } from "@/lib/auth";
 import { getProjectDocumentOperations } from "@/lib/data/document-operations";
@@ -8,6 +9,8 @@ import { isDocumentStorageSchemaReady, listDocumentsForProjectPage } from "@/lib
 import { getProjectForUser } from "@/lib/data/projects";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { hasDomainAccess } from "@/lib/authorization";
+import { getProjectAiProposalReview } from "@/lib/data/project-ai-proposals";
+import "../../../../project-ai-review-center.css";
 
 export const dynamic = "force-dynamic";
 
@@ -24,11 +27,12 @@ export default async function ProjectDocumentationPage({ params, searchParams }:
   if (!project) notFound();
   if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id })) return <DomainAccessDenied workspaceId={project.workspace_id} area="Dokumentacja inwestycji" />;
 
-  const [documentsPage, trashPage, storageSchemaReady, operations, canWrite, canApprove, canAdminSettings] = await Promise.all([
+  const [documentsPage, trashPage, storageSchemaReady, operations, proposalReview, canWrite, canApprove, canAdminSettings] = await Promise.all([
     listDocumentsForProjectPage(project.id,{page,pageSize:50}),
     listDocumentsForProjectPage(project.id,{trashed:true,page:1,pageSize:25}),
     isDocumentStorageSchemaReady(),
     getProjectDocumentOperations(project.workspace_id, project.id),
+    getProjectAiProposalReview(project.workspace_id, project.id),
     hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "write", projectId: project.id }),
     hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "approve", projectId: project.id }),
     hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "settings", level: "admin" })
@@ -36,6 +40,7 @@ export default async function ProjectDocumentationPage({ params, searchParams }:
 
   return (
     <div className="project-tab-content">
+      <ProjectAiReviewCenter projectId={project.id} review={proposalReview} canWrite={canWrite} canApprove={canApprove}/>
       <ProjectDocumentControl
         workspaceId={project.workspace_id}
         projectId={project.id}

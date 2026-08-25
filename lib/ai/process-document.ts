@@ -1,8 +1,9 @@
 import "server-only";
 
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { analyzeDocumentWithGemini, analyzeFileWithGemini } from "@/lib/ai/gemini-document";
+import { buildDocumentModuleProposals, proposalCounts } from "@/lib/ai/module-proposals";
 import { extractDocxText, extractLegacyDocText, extractLegacyXlsText, extractXlsxText } from "@/lib/ai/office-extractor";
 import { getR2Config } from "@/lib/env";
 import { createR2Client } from "@/lib/r2/client";
@@ -13,6 +14,7 @@ import { persistDocumentAnalysisSegments } from "@/lib/documents/analysis-segmen
 import { processDocumentPackage } from "@/lib/documents/package-pipeline";
 import { buildRevisionImpacts } from "@/lib/documents/revision-radar";
 import { scanDocumentBytes, type MalwareScanResult } from "@/lib/documents/malware-scan";
+import { extractSpreadsheetIntelligence } from "@/lib/documents/spreadsheet-intelligence";
 
 const MAX_PIPELINE_BYTES = 50 * 1024 * 1024;
 const MAX_INLINE_BYTES = 18 * 1024 * 1024;
@@ -62,6 +64,7 @@ export type ProcessedDocumentAnalysis = Awaited<ReturnType<typeof analyzeDocumen
   categoryLocked: boolean;
   proposedProjectId: string | null;
   projectMatch: ProjectMatchDecision | null;
+  moduleProposalCounts: Record<string, number>;
 };
 
 function extension(fileName: string) {
@@ -236,6 +239,26 @@ export async function processDocumentVersion(input: {
     }
     const effectiveCategory = lockedCategory ?? analysis.category;
     const categoryLocked = Boolean(lockedCategory);
+    if (["xls", "xlsx"].includes(extension(version.file_name))) {
+      try {
+        const spreadsheet = extractSpreadsheetIntelligence(bytes);
+        if (effectiveCategory === "estimate" && spreadsheet.boqItems.length > 0) analysis.boqItems = spreadsheet.boqItems;
+        if (effectiveCategory === "schedule" && spreadsheet.scheduleItems.length > 0) analysis.scheduleItems = spreadsheet.scheduleItems;
+        if (spreadsheet.progressItems.length > 0) analysis.progressItems = spreadsheet.progressItems;
+        if (spreadsheet.materialRequirements.length > 0) {
+          const materialMap = new Map<string, (typeof analysis.materialRequirements)[number]>();
+          for (const item of [...analysis.materialRequirements, ...spreadsheet.materialRequirements]) {
+            const key = `${item.installation}|${item.name}|${item.manufacturer}|${item.model}`.toLocaleLowerCase("pl");
+            const current = materialMap.get(key);
+            if (!current || current.confidence < item.confidence) materialMap.set(key, item);
+          }
+          analysis.materialRequirements = Array.from(materialMap.values());
+        }
+        analysis.warnings.push(...spreadsheet.warnings);
+      } catch (spreadsheetError) {
+        analysis.warnings.push(`Analizator arkusza nie uzupełnił danych tabelarycznych: ${spreadsheetError instanceof Error ? spreadsheetError.message : "nieznany błąd"}`);
+      }
+    }
     const projectMatch = version.project_id ? null : evaluateProjectMatch(analysis.projectHint, projectCandidates);
     const proposedProjectId = version.project_id ?? projectMatch?.project?.id ?? null;
     const routing = {
@@ -257,7 +280,7 @@ export async function processDocumentVersion(input: {
       proposed_project_id: proposedProjectId,
       confidence: analysis.confidence,
       rationale: [analysis.summary, categoryLocked ? "Kategoria została zablokowana przez użytkownika." : null, projectMatch?.reason].filter(Boolean).join(" "),
-      schema_version: "document-analysis-v2",
+      schema_version: "document-analysis-v3",
       model_name: model,
       status: "proposed"
     });
@@ -269,7 +292,7 @@ export async function processDocumentVersion(input: {
       document_id: version.document_id,
       document_version_id: version.id,
       extraction_type: "document_context",
-      schema_version: "document-analysis-v2",
+      schema_version: "document-analysis-v3",
       payload: { ...analysis, routing },
       warnings: analysis.warnings,
       confidence: analysis.confidence,
@@ -345,127 +368,36 @@ export async function processDocumentVersion(input: {
     if (segmentResult.truncated) {
       analysis.warnings.push("Indeks tekstu osiągnął limit segmentów; pełny plik źródłowy pozostaje dostępny do analizy.");
       await supabase.from("document_extractions").update({ warnings: analysis.warnings })
-        .eq("document_version_id", version.id).eq("extraction_type", "document_context").eq("schema_version", "document-analysis-v2");
+        .eq("document_version_id", version.id).eq("extraction_type", "document_context").eq("schema_version", "document-analysis-v3");
     }
 
-    if (proposedProjectId) {
-      const { data: previousReferences } = await supabase
-        .from("source_references")
-        .select("id")
-        .eq("document_version_id", version.id)
-        .returns<Array<{ id: string }>>();
-      const previousReferenceIds = (previousReferences ?? []).map((reference) => reference.id);
-      if (previousReferenceIds.length > 0) {
-        await supabase.from("evidence_requirements").delete().in("source_reference_id", previousReferenceIds).in("status", ["proposed", "missing"]);
-        await supabase.from("protocol_requirements").delete().in("source_reference_id", previousReferenceIds).in("status", ["proposed", "required"]);
-        await supabase.from("project_facts").delete().in("source_reference_id", previousReferenceIds).eq("status", "proposed");
-        await supabase.from("source_references").delete().in("id", previousReferenceIds);
-      }
-
-      const references = analysis.facts.map((fact) => ({
-        id: randomUUID(),
+    const moduleProposals = buildDocumentModuleProposals(analysis);
+    await supabase.from("document_module_proposals").update({ status: "superseded", updated_at: new Date().toISOString() })
+      .eq("document_id", version.document_id)
+      .neq("document_version_id", version.id)
+      .in("status", ["proposed", "approved", "failed"]);
+    await supabase.from("document_module_proposals").delete()
+      .eq("document_version_id", version.id)
+      .in("status", ["proposed", "rejected", "failed", "superseded"]);
+    for (let offset = 0; offset < moduleProposals.length; offset += 500) {
+      const { error: proposalsError } = await supabase.from("document_module_proposals").insert(moduleProposals.slice(offset, offset + 500).map((proposal) => ({
+        workspace_id: input.workspaceId,
         project_id: proposedProjectId,
         document_id: version.document_id,
         document_version_id: version.id,
-        section_label: fact.locator || null,
-        quote: fact.quote.slice(0, 1000),
-        locator: { label: fact.locator }
-      }));
-      if (references.length > 0) {
-        const { error: referencesError } = await supabase.from("source_references").insert(references);
-        if (referencesError) throw new Error(`Nie udało się zapisać źródeł: ${referencesError.message}`);
-        const { error: factsError } = await supabase.from("project_facts").insert(analysis.facts.map((fact, index) => ({
-          project_id: proposedProjectId,
-          fact_type: fact.type || fact.label,
-          value_text: fact.value,
-          value_json: { label: fact.label, unit: fact.unit },
-          confidence: fact.confidence,
-          source_reference_id: references[index].id,
-          status: "proposed"
-        })));
-        if (factsError) throw new Error(`Nie udało się zapisać faktów Project DNA: ${factsError.message}`);
-      }
-
-      await supabase.from("project_requirements").delete()
-        .eq("project_id", proposedProjectId)
-        .eq("source_document_id", version.document_id)
-        .contains("source_locator", { document_version_id: version.id })
-        .eq("status", "proposed");
-      const requirements = [
-        ...analysis.requiredApplications.map((title) => ({ requirement_type: "material_application", title })),
-        ...analysis.workStages.map((title) => ({ requirement_type: "work_stage", title }))
-      ];
-      if (requirements.length > 0) {
-        await supabase.from("project_requirements").insert(requirements.map((requirement) => ({
-          workspace_id: input.workspaceId,
-          project_id: proposedProjectId,
-          ...requirement,
-          source_document_id: version.document_id,
-          source_locator: { document_version_id: version.id },
-          status: "proposed",
-          confidence: analysis.confidence
-        })));
-      }
-
-      if (analysis.requiredProtocols.length > 0) {
-        const firstReferenceId = references[0]?.id ?? null;
-        const { data: protocolRows } = await supabase.from("protocol_requirements").insert(analysis.requiredProtocols.map((title) => ({
-          workspace_id: input.workspaceId,
-          project_id: proposedProjectId,
-          protocol_type: title.toLowerCase().replaceAll(" ", "_").slice(0, 80),
-          title,
-          status: "proposed",
-          source_reference_id: firstReferenceId,
-          trigger_rule: { document_version_id: version.id, ai_confidence: analysis.confidence },
-          required_evidence: ["zakres", "lokalizacja", "wynik", "data", "osoby", "podpis"]
-        }))).select("id,title").returns<Array<{ id: string; title: string }>>();
-        if (protocolRows && protocolRows.length > 0) {
-          await supabase.from("evidence_requirements").insert(protocolRows.map((protocol) => ({
-            workspace_id: input.workspaceId,
-            project_id: proposedProjectId,
-            evidence_type: "protocol",
-            title: protocol.title,
-            status: "proposed",
-            source_reference_id: firstReferenceId,
-            protocol_requirement_id: protocol.id
-          })));
-        }
-      }
-
-      if (effectiveCategory === "estimate" && analysis.boqItems.length > 0) {
-        const { data: estimateImport, error: estimateError } = await supabase.from("estimate_imports").upsert({
-          workspace_id: input.workspaceId,
-          project_id: proposedProjectId,
-          document_id: version.document_id,
-          document_version_id: version.id,
-          status: "pending_document",
-          column_mapping: { itemNumber: "AI", description: "AI", quantity: "AI", unit: "AI", unitPrice: "AI", totalPrice: "AI" },
-          detected_rows: analysis.boqItems.length,
-          accepted_rows: 0,
-          warnings: analysis.warnings,
-          created_by: input.userId ?? null,
-          updated_at: new Date().toISOString()
-        }, { onConflict: "document_version_id" }).select("id").single<{ id: string }>();
-        if (estimateError || !estimateImport) throw new Error(`Nie udało się utworzyć importu kosztorysu: ${estimateError?.message ?? "brak danych"}`);
-        await supabase.from("estimate_import_rows").delete().eq("estimate_import_id", estimateImport.id);
-        const { error: rowsError } = await supabase.from("estimate_import_rows").insert(analysis.boqItems.map((item, index) => ({
-          workspace_id: input.workspaceId,
-          estimate_import_id: estimateImport.id,
-          source_row: index + 1,
-          source_payload: item,
-          item_number: item.itemNumber || String(index + 1),
-          description: item.description,
-          quantity: item.quantity,
-          unit: item.unit,
-          unit_price: item.unitPrice,
-          total_price: item.totalPrice,
-          proposed_wbs_code: item.wbsCode || "00",
-          confidence: item.confidence,
-          status: "proposed",
-          validation_errors: item.description ? [] : ["Brak opisu pozycji"]
-        })));
-        if (rowsError) throw new Error(`Nie udało się zapisać pozycji kosztorysu: ${rowsError.message}`);
-      }
+        module: proposal.module,
+        proposal_type: proposal.proposalType,
+        natural_key: proposal.naturalKey,
+        title: proposal.title,
+        payload: proposal.payload,
+        confidence: proposal.confidence,
+        source_locator: proposal.sourceLocator,
+        source_quote: proposal.sourceQuote,
+        requires_formal_approval: proposal.requiresFormalApproval,
+        status: "proposed",
+        created_by: input.userId ?? null
+      })));
+      if (proposalsError) throw new Error(`Nie udało się zapisać propozycji dla modułów: ${proposalsError.message}`);
     }
 
     if (effectiveCategory === "template") {
@@ -521,7 +453,7 @@ export async function processDocumentVersion(input: {
       status: "succeeded",
       stage: "complete",
       model_name: model,
-      prompt_version: "document-analysis-v2",
+      prompt_version: "document-analysis-v3",
       finished_at: new Date().toISOString(),
       error_code: null,
       error_message: null
@@ -552,7 +484,8 @@ export async function processDocumentVersion(input: {
       effectiveCategory,
       categoryLocked,
       proposedProjectId,
-      projectMatch
+      projectMatch,
+      moduleProposalCounts: proposalCounts(moduleProposals)
     } satisfies ProcessedDocumentAnalysis;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Nieznany błąd analizy.";

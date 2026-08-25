@@ -11,7 +11,7 @@ export async function getProjectReconciliation(workspaceId: string, projectId: s
     db.from("material_requests").select("id,title,status,payload,stock_item_id,boq_item_id,wbs_node_id,procurement_trace_id,request_origin").eq("project_id", projectId).eq("status", "approved").order("created_at", { ascending: false }).limit(100),
     db.from("counterparties").select("id,name,tax_id,active").eq("workspace_id", workspaceId).eq("active", true).order("name").limit(500),
     db.from("stock_items").select("id,sku,name,unit,active").eq("workspace_id", workspaceId).eq("active", true).order("name").limit(1000),
-    db.from("boq_items").select("id,item_number,description,unit,wbs_node_id,cost_code").eq("project_id", projectId).order("item_number").limit(2000),
+    db.from("boq_items").select("id,item_number,description,unit,wbs_node_id,cost_code").eq("project_id", projectId).eq("is_active", true).order("item_number").limit(2000),
     db.from("procurement_matches").select("id,invoice_line_id,purchase_order_line_id,receipt_line_id,ordered_quantity,received_quantity,invoiced_quantity,ordered_unit_price,invoiced_unit_price,quantity_variance,price_variance_percent,status,warnings,updated_at").eq("workspace_id", workspaceId).eq("project_id", projectId).order("updated_at", { ascending: false }).limit(100),
     db.from("process_deviations").select("id,deviation_type,severity,source_type,source_id,title,detail,status,resolution_note,created_at,closed_at").eq("workspace_id", workspaceId).eq("project_id", projectId).order("created_at", { ascending: false }).limit(100),
     db.rpc("get_price_intelligence", { p_workspace_id: workspaceId, p_project_id: projectId, p_limit: 60 })

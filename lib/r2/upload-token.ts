@@ -12,6 +12,11 @@ export type UploadIntent = {
   fileSize: number;
   category: DocumentCategory;
   categoryLocked: boolean;
+  releaseType?: "baseline" | "revision" | "addendum" | "as_built" | "closeout" | "other";
+  packageLabel?: string;
+  revisionLabel?: string;
+  effectiveAt?: string;
+  replacesVersionId?: string;
   sourceChannel?: string;
   sourceExternalKey?: string;
   sourceMetadata?: Record<string, unknown>;
@@ -39,6 +44,11 @@ function isUploadIntent(value: unknown): value is UploadIntent {
     typeof intent.category === "string" &&
     normalizeDocumentCategory(intent.category) === intent.category &&
     typeof intent.categoryLocked === "boolean" &&
+    (intent.releaseType === undefined || ["baseline", "revision", "addendum", "as_built", "closeout", "other"].includes(String(intent.releaseType))) &&
+    (intent.packageLabel === undefined || typeof intent.packageLabel === "string") &&
+    (intent.revisionLabel === undefined || typeof intent.revisionLabel === "string") &&
+    (intent.effectiveAt === undefined || typeof intent.effectiveAt === "string") &&
+    (intent.replacesVersionId === undefined || typeof intent.replacesVersionId === "string") &&
     (intent.sourceChannel === undefined || typeof intent.sourceChannel === "string") &&
     (intent.sourceExternalKey === undefined || typeof intent.sourceExternalKey === "string") &&
     (intent.sourceMetadata === undefined || (typeof intent.sourceMetadata === "object" && intent.sourceMetadata !== null && !Array.isArray(intent.sourceMetadata))) &&

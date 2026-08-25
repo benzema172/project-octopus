@@ -113,6 +113,7 @@ export async function POST(request: Request) {
       const finalProjectId = projectSelectionSet
         ? requestedProjectId
         : latestClassification?.proposed_project_id ?? document.project_id;
+      const reviewedVersionId = latestClassification?.document_version_id ?? document.current_version_id;
       if (finalProjectId) {
         const { data: selectedProject, error: selectedProjectError } = await supabase
           .from("projects")
@@ -133,7 +134,16 @@ export async function POST(request: Request) {
       });
       if (!allowed) return NextResponse.json({ error: "Brak uprawnienia do zatwierdzenia dokumentu w tej domenie." }, { status: 403 });
       documentId = document.id;
-      const { data: reviewed, error: reviewError } = await supabase.rpc("review_document_analysis_atomic", {
+      const { count: proposalCount, error: proposalCountError } = reviewedVersionId
+        ? await supabase.from("document_module_proposals").select("id", { count: "exact", head: true })
+          .eq("document_version_id", reviewedVersionId).in("status", ["proposed", "approved", "failed"])
+        : { count: 0, error: null };
+      if (proposalCountError && proposalCountError.code !== "42P01") {
+        throw new Error(`Nie udało się sprawdzić propozycji dokumentu: ${proposalCountError.message}`);
+      }
+      const usesFieldReview = (proposalCount ?? 0) > 0;
+      const reviewFunction = usesFieldReview ? "review_document_with_proposals_atomic" : "review_document_analysis_atomic";
+      const { data: reviewed, error: reviewError } = await supabase.rpc(reviewFunction, {
         p_workspace_id: workspace.id,
         p_document_id: document.id,
         p_action: body.action,
@@ -159,11 +169,15 @@ export async function POST(request: Request) {
         projectId,
         category: reviewed.result_category,
         status: reviewed.result_status,
-        documentVersionId: reviewed.result_document_version_id
+        documentVersionId: reviewed.result_document_version_id,
+        proposalReviewRequired: approved && usesFieldReview,
+        pendingProposals: approved && usesFieldReview ? proposalCount : 0
       };
 
       if (approved && projectId) {
-        try {
+        if (usesFieldReview) {
+          result.nextStep = "Zweryfikuj propozycje pól i pozycji przed publikacją do modułów.";
+        } else try {
           const [{ data: extraction }, project] = await Promise.all([
             supabase
               .from("document_extractions")

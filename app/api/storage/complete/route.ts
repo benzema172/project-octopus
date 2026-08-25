@@ -101,6 +101,20 @@ export async function POST(request: Request) {
     return jsonError(`Nie udało się atomowo zapisać dokumentu: ${completeError?.message ?? "brak danych"}`, 500);
   }
 
+  if (intent.replacesVersionId) {
+    const { data: replacedVersion, error: replacedError } = await supabase.from("document_versions").select("id")
+      .eq("id", intent.replacesVersionId).eq("document_id", completed.document_id).maybeSingle<{ id: string }>();
+    if (replacedError || !replacedVersion) return jsonError("Wskazana wersja zastępowana nie należy do tego dokumentu.", 422);
+  }
+  const { error: metadataError } = await supabase.from("document_versions").update({
+    release_type: intent.releaseType ?? "baseline",
+    package_label: intent.packageLabel ?? null,
+    revision_label: intent.revisionLabel ?? null,
+    effective_at: intent.effectiveAt ?? null,
+    replaces_version_id: intent.replacesVersionId ?? null
+  }).eq("id", completed.version_id).eq("document_id", completed.document_id);
+  if (metadataError) return jsonError(`Dokument zapisano, ale nie udało się zapisać metadanych wydania: ${metadataError.message}`, 500);
+
   return NextResponse.json({
     ok: true,
     documentId: completed.document_id,

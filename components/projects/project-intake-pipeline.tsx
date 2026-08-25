@@ -23,6 +23,7 @@ type UploadResponse = { uploadUrl: string; token: string; headers: Record<string
 type CompleteResponse = { documentId: string; versionId: string };
 type ProcessResponse = { category?: DocumentCategory; confidence?: number; counts?: Record<string, number>; error?: string };
 type IntakePosition = { top: number; right: number; width: number; maxHeight: number };
+type ReleaseType = "baseline" | "revision" | "addendum" | "as_built" | "closeout" | "other";
 
 const MAX_HASH = 32 * 1024 * 1024;
 
@@ -77,6 +78,10 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [position, setPosition] = useState<IntakePosition | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [releaseType, setReleaseType] = useState<ReleaseType>("baseline");
+  const [packageLabel, setPackageLabel] = useState("");
+  const [revisionLabel, setRevisionLabel] = useState("");
+  const [effectiveAt, setEffectiveAt] = useState("");
   const [pending, startTransition] = useTransition();
 
   useEffect(() => setMounted(true), []);
@@ -128,7 +133,7 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
   function add(files: FileList | File[]) {
     const all = Array.from(files);
     const usable = all.filter(accepted);
-    setNotice(usable.length !== all.length ? "Część plików pominięto. Archiwa ZIP rozpakuj, aby AI mogło przeanalizować każdy dokument osobno. Obsługiwane są PDF, DOC/DOCX, XLS/XLSX, CSV, obrazy, XML i pliki tekstowe do 50 MB." : null);
+    setNotice(usable.length !== all.length ? "Część plików pominięto. Obsługiwane są PDF, DOC/DOCX, XLS/XLSX, CSV, obrazy, XML, pliki tekstowe i bezpieczne paczki ZIP do 50 MB." : null);
     setItems((current) => current.concat(usable.map((file) => {
       const suggestion = suggestDocumentClassification(file.name, file.type);
       return { id: crypto.randomUUID(), file, category: suggestion.category, locked: false, confidence: suggestion.confidence, reason: suggestion.reason, status: "ready" as const };
@@ -152,7 +157,11 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
           mimeType,
           fileSize: item.file.size,
           category: item.category,
-          categoryLocked: item.locked
+          categoryLocked: item.locked,
+          releaseType,
+          packageLabel: packageLabel || undefined,
+          revisionLabel: revisionLabel || undefined,
+          effectiveAt: effectiveAt || undefined
         })
       });
       if (!prepare.ok) throw new Error((await prepare.json().catch(() => null))?.error ?? "Nie udało się przygotować uploadu.");
@@ -201,11 +210,17 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
       style={position}
     >
       <div className="pw-intake-head"><div><p className="co-kicker">Centralne wejście plików</p><h3>Wrzutnia</h3><p>R2 → ekstrakcja → Gemini → klasyfikacja → Brain → moduły.</p></div><button type="button" className="pw-intake-close" onClick={() => setOpen(false)} aria-label="Zamknij Wrzutnię"><X size={17} /></button></div>
+      <div className="pw-intake-release" aria-label="Metadane wydania dokumentacji">
+        <label><span>Typ wydania</span><select value={releaseType} onChange={(event) => setReleaseType(event.target.value as ReleaseType)} disabled={busy}><option value="baseline">Bazowe</option><option value="revision">Rewizja</option><option value="addendum">Aneks / uzupełnienie</option><option value="as_built">Powykonawcze</option><option value="closeout">Zamknięcie</option><option value="other">Inne</option></select></label>
+        <label><span>Nazwa paczki</span><input value={packageLabel} onChange={(event) => setPackageLabel(event.target.value)} placeholder="np. PW Instalacje sanitarne" maxLength={160} disabled={busy}/></label>
+        <label><span>Oznaczenie rewizji</span><input value={revisionLabel} onChange={(event) => setRevisionLabel(event.target.value)} placeholder="np. R02" maxLength={80} disabled={busy}/></label>
+        <label><span>Obowiązuje od</span><input type="date" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} disabled={busy}/></label>
+      </div>
       <input ref={input} className="pw-intake-file-input" type="file" accept={SUPPORTED_UPLOAD_ACCEPT} multiple onChange={(event) => event.target.files && add(event.target.files)} />
       <button type="button" className={`pw-intake-dropzone ${drag ? "is-dragging" : ""}`} onClick={() => input.current?.click()} onDragEnter={(event) => { event.preventDefault(); setDrag(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { event.preventDefault(); setDrag(false); }} onDrop={(event) => { event.preventDefault(); setDrag(false); add(event.dataTransfer.files); }}>
-        <span className="pw-intake-cloud"><UploadCloud size={27} /></span><strong>Przeciągnij PDF, Word lub Excel</strong><small>DOC/DOCX i XLS/XLSX są odczytywane przez pipeline AI</small>
+        <span className="pw-intake-cloud"><UploadCloud size={27} /></span><strong>Przeciągnij dokumenty lub paczkę ZIP</strong><small>PDF, Word, Excel, CSV, obrazy i kontrolowane ZIP-y · do 50 MB</small>
       </button>
-      <div className="pw-intake-ai-note"><Sparkles size={16} /><span><strong>Pełna analiza AI:</strong> Gemini czyta zawartość, rozpoznaje fakty, materiały, urządzenia i pozycje kosztorysu. Ręczna zmiana kategorii blokuje jej automatyczne nadpisanie.</span></div>
+      <div className="pw-intake-ai-note"><Sparkles size={16} /><span><strong>Analiza z kontrolą człowieka:</strong> Gemini odczyta fakty, BOQ, harmonogram, WM, protokoły, przeroby i ryzyka. Nic formalnego ani finansowego nie trafi do modułów bez decyzji w Centrum weryfikacji.</span></div>
       {notice ? <p className="pw-intake-error">{notice}</p> : null}
       {items.length ? <div className="pw-intake-list">{items.map((item) => { const Icon = icon(item.file.name); return <article className={`pw-intake-row is-${item.status}`} key={item.id}>
         <span className="pw-intake-file-icon"><Icon size={18} /></span><div className="pw-intake-file-main"><strong>{item.file.name}</strong><small>{size(item.file.size)} · {item.locked ? "kategoria ręczna" : `wstępna pewność: ${item.confidence}`}</small><p>{item.message ?? item.reason}</p></div>

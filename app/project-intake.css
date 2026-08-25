@@ -127,10 +127,15 @@
 
 .pw-intake-file-input { display: none; }
 
+.pw-intake-release { display: grid; grid-template-columns: 1fr 1.5fr 1fr 1fr; gap: 6px; margin-top: 11px; }
+.pw-intake-release label { display: grid; gap: 3px; min-width: 0; }
+.pw-intake-release span { color: #8a8091; font-size: 7.5px; font-weight: 800; text-transform: uppercase; }
+.pw-intake-release input,.pw-intake-release select { min-width: 0; border: 1px solid #e2dae7; border-radius: 9px; background: #fff; color: #4a3f51; padding: 7px 8px; font: inherit; font-size: 8.5px; }
+
 .pw-intake-dropzone {
   display: grid;
   width: 100%;
-  min-height: 142px;
+  min-height: 116px;
   place-items: center;
   align-content: center;
   gap: 6px;
@@ -275,6 +280,7 @@
 }
 
 @media (max-width: 680px) {
+  .pw-intake-release { grid-template-columns: 1fr 1fr; }
   .pw-intake-trigger { padding: 9px 10px; }
   .pw-intake-popover { border-radius: 18px; padding: 14px; }
   .pw-intake-actions { align-items: stretch; flex-direction: column; }

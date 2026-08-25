@@ -42,7 +42,7 @@ export async function ProjectLiveRecords({ projectId, kind }: { projectId: strin
     const [{ data: periods }, { data: entries }, { data: boq }] = await Promise.all([
       supabase.from("progress_periods").select("id,status,period_start,period_end,created_at").eq("project_id", projectId).order("period_start", { ascending: false }).limit(20),
       supabase.from("progress_entries").select("id,progress_period_id,boq_item_id,quantity_executed,quantity_accepted,value_executed,value_accepted,status,created_at").eq("project_id", projectId).order("created_at", { ascending: false }).limit(50),
-      supabase.from("boq_items").select("id,item_number,description,unit").eq("project_id", projectId).limit(500)
+      supabase.from("boq_items").select("id,item_number,description,unit").eq("project_id", projectId).eq("is_active", true).limit(500)
     ]);
     const boqNames = new Map((boq ?? []).map((row) => [String(row.id), `${row.item_number ?? "BOQ"} · ${row.description}`]));
     records = [

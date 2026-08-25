@@ -1,4 +1,4 @@
-# Project Octopus 1.1.0
+# Project Octopus 1.2.0
 
 Project Octopus to operacyjny system firmy wykonawczej i inwestycji, w którym dokumenty źródłowe zasilają wspólny model danych: Project DNA, kosztorys/BOQ, WBS, harmonogram, materiały, protokoły, przerób, finanse, magazyn, kadry, flotę i raportowanie.
 
@@ -11,7 +11,7 @@ Project Octopus to operacyjny system firmy wykonawczej i inwestycji, w którym d
 - dane domenowe są rozdzielone uprawnieniami `read / write / approve / admin`, także z zakresem pojedynczej inwestycji,
 - zapis magazynowy i kluczowe operacje finansowe używają ścieżek atomowych zamiast luźnych aktualizacji klienta.
 
-## Aktualny zakres 1.1.0
+## Aktualny zakres 1.2.0
 
 ### Firma
 
@@ -27,6 +27,7 @@ Project Octopus to operacyjny system firmy wykonawczej i inwestycji, w którym d
 
 - Project DNA i dane kontraktowe,
 - kosztorys/BOQ, WBS i wersjonowanie,
+- kontrolowane rewizje BOQ z edycją pozycji, porównaniem zmian, aktywną projekcją oraz Change Order,
 - harmonogram, przerób i Kontrola 360°,
 - wnioski materiałowe oraz protokoły z workflow zatwierdzania,
 - dokumenty, Brain i źródła wiedzy,
@@ -38,7 +39,7 @@ Produkcyjny obieg został zweryfikowany end-to-end:
 
 `Wrzutnia → Cloudflare R2 → ekstrakcja PDF/DOCX/XLSX → Gemini → klasyfikacja i ekstrakcja → Brain → moduły`
 
-Pliki są przechowywane prywatnie w R2, a baza przechowuje metadane, wersje, wyniki ekstrakcji, powiązania i ślad audytowy. Wydanie 1.1.0 obejmuje certyfikowany zapis R2, atomowe zakończenie uploadu, trwałe zadania przetwarzania oraz działające przetwarzanie Gemini i zapis do Brain dla testów PDF i XLSX.
+Pliki są przechowywane prywatnie w R2, a baza przechowuje metadane, wersje, wyniki ekstrakcji, powiązania i ślad audytowy. Wydanie 1.2.0 obejmuje certyfikowany zapis R2, atomowe zakończenie uploadu, trwałe zadania przetwarzania, działające przetwarzanie Gemini i zapis do Brain oraz kontrolowany cykl rewizji kosztorysu bez nadpisywania zatwierdzonego baseline'u.
 
 ## Architektura
 
