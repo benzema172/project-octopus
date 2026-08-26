@@ -26,7 +26,7 @@ describe("investment Wrzutnia autonomous routing", () => {
   it("runs investment-context routing before Autopilot publishes module data", () => {
     expect(route).toContain("enrichDocumentWithInvestmentRouting");
     expect(route).toMatch(/const analysis = await processDocumentVersion[\s\S]*routing = await enrichDocumentWithInvestmentRouting[\s\S]*const autopilot = await applyDocumentAutopilot/);
-    expect(route).toContain("fileName: sourceVersion.file_name");
+    expect(route).toContain("fileName: activeVersion.file_name");
     expect(route).toContain("routing_error");
   });
 
