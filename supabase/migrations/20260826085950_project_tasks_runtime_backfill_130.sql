@@ -20,6 +20,7 @@ create table if not exists public.project_tasks (
 
 create index if not exists project_tasks_project_due_idx on public.project_tasks(project_id, due_date);
 create index if not exists project_tasks_assigned_to_idx on public.project_tasks(assigned_to);
+create index if not exists project_tasks_created_by_idx on public.project_tasks(created_by);
 
 alter table public.project_tasks enable row level security;
 drop policy if exists project_tasks_project_member on public.project_tasks;
