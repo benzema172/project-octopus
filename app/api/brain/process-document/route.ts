@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { processDocumentVersion } from "@/lib/ai/process-document";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
 import { enrichDocumentWithInvestmentRouting, type InvestmentRoutingResult } from "@/lib/ai/investment-document-routing";
+import { geminiRateLimitInfo, geminiRateLimitMessage, millisecondsUntil, wait } from "@/lib/ai/gemini-rate-limit";
 import { getRequestUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -11,11 +12,14 @@ import { normalizeDocumentCategory } from "@/lib/documents/classification";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+const MAX_AUTOMATIC_RATE_LIMIT_WAIT_MS = 75_000;
+
 type ProcessBody = {
   projectId?: string;
   documentId?: string;
   versionId?: string;
   lockCategory?: boolean;
+  force?: boolean;
 };
 
 function jsonError(message: string, status: number) {
@@ -63,10 +67,32 @@ export async function POST(request: Request) {
     return jsonError("Brak uprawnienia do analizy tego dokumentu.", 403);
   }
 
-  try {
+  async function deferForGeminiLimit(retryAt: string, message: string) {
+    const { error } = await supabase.rpc("defer_gemini_rate_limit", {
+      p_workspace_id: project.workspace_id,
+      p_document_id: body.documentId,
+      p_document_version_id: body.versionId,
+      p_retry_at: retryAt,
+      p_message: message
+    });
+    if (error) {
+      await supabase.from("processing_jobs").update({
+        status: "queued",
+        stage: "analyze",
+        error_code: "GEMINI_RATE_LIMIT",
+        error_message: message,
+        available_at: retryAt,
+        dead_letter_at: null,
+        locked_at: null,
+        locked_by: null
+      }).eq("workspace_id", project.workspace_id).eq("document_version_id", body.versionId);
+    }
+  }
+
+  async function runPipeline() {
     const analysis = await processDocumentVersion({
       workspaceId: project.workspace_id,
-      versionId: body.versionId,
+      versionId: body.versionId!,
       userId: user.id,
       categoryOverride: body.lockCategory ? normalizeDocumentCategory(sourceDocument.category) : null
     });
@@ -85,8 +111,8 @@ export async function POST(request: Request) {
       routing = await enrichDocumentWithInvestmentRouting({
         workspaceId: project.workspace_id,
         projectId: project.id,
-        documentId: body.documentId,
-        versionId: body.versionId,
+        documentId: body.documentId!,
+        versionId: body.versionId!,
         userId: user.id,
         fileName: sourceVersion.file_name,
         analysis
@@ -107,14 +133,14 @@ export async function POST(request: Request) {
 
     const autopilot = await applyDocumentAutopilot({
       workspaceId: project.workspace_id,
-      documentId: body.documentId,
-      versionId: body.versionId,
+      documentId: body.documentId!,
+      versionId: body.versionId!,
       category: analysis.effectiveCategory,
       projectId: project.id,
       actorId: user.id
     });
 
-    return NextResponse.json({
+    return {
       ok: true,
       category: analysis.effectiveCategory,
       ai_category: analysis.aiCategory,
@@ -139,8 +165,71 @@ export async function POST(request: Request) {
         findings: analysis.warnings.length
       },
       module_proposals: analysis.moduleProposalCounts
-    }, { headers: { "Cache-Control": "no-store" } });
-  } catch (error) {
-    return jsonError(error instanceof Error ? error.message : "Nieznany błąd analizy dokumentu.", 500);
+    };
+  }
+
+  if (!body.force) {
+    const nowIso = new Date().toISOString();
+    const { data: cooldown } = await supabase.from("processing_jobs")
+      .select("available_at,error_message")
+      .eq("workspace_id", project.workspace_id)
+      .eq("status", "queued")
+      .eq("error_code", "GEMINI_RATE_LIMIT")
+      .gt("available_at", nowIso)
+      .order("available_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ available_at: string; error_message: string | null }>();
+    const cooldownMs = millisecondsUntil(cooldown?.available_at);
+    if (cooldownMs > 0 && cooldownMs <= MAX_AUTOMATIC_RATE_LIMIT_WAIT_MS) {
+      await wait(cooldownMs + 750);
+    } else if (cooldownMs > MAX_AUTOMATIC_RATE_LIMIT_WAIT_MS && cooldown?.available_at) {
+      const message = cooldown.error_message ?? "Limit Gemini jest chwilowo wykorzystany. Dokument pozostaje w kolejce do automatycznej analizy.";
+      await deferForGeminiLimit(cooldown.available_at, message);
+      return NextResponse.json({
+        ok: false,
+        status: "waiting_rate_limit",
+        retryAt: cooldown.available_at,
+        retryAfterSeconds: Math.ceil(cooldownMs / 1000),
+        error: message
+      }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(Math.ceil(cooldownMs / 1000)) } });
+    }
+  }
+
+  let automaticRateLimitRetries = 0;
+  while (true) {
+    try {
+      const result = await runPipeline();
+      return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      const rateLimit = geminiRateLimitInfo(error);
+      if (!rateLimit) return jsonError(error instanceof Error ? error.message : "Nieznany błąd analizy dokumentu.", 500);
+
+      const message = geminiRateLimitMessage(rateLimit);
+      await deferForGeminiLimit(rateLimit.retryAt, message);
+      await supabase.from("audit_events").insert({
+        workspace_id: project.workspace_id,
+        project_id: project.id,
+        actor_id: user.id,
+        actor_type: "system",
+        event_type: "document.gemini_rate_limited",
+        entity_type: "document",
+        entity_id: body.documentId,
+        after_value: { version_id: body.versionId, retry_at: rateLimit.retryAt, retry_after_ms: rateLimit.retryAfterMs }
+      });
+
+      if (automaticRateLimitRetries < 1 && rateLimit.retryAfterMs <= MAX_AUTOMATIC_RATE_LIMIT_WAIT_MS) {
+        automaticRateLimitRetries += 1;
+        await wait(rateLimit.retryAfterMs + 750);
+        continue;
+      }
+
+      return NextResponse.json({
+        ok: false,
+        status: "waiting_rate_limit",
+        retryAt: rateLimit.retryAt,
+        retryAfterSeconds: Math.ceil(rateLimit.retryAfterMs / 1000),
+        error: message
+      }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(Math.ceil(rateLimit.retryAfterMs / 1000)) } });
+    }
   }
 }
