@@ -21,6 +21,7 @@ const STAGE: Record<string, string> = {
   extraction: "Ekstrakcja",
   extracted: "Treść gotowa",
   ai_analysis: "Analiza AI",
+  rate_limited: "Czeka na limit Gemini",
   recognized: "Rozpoznany",
   assigned: "Przypisany",
   modules: "Zapisany do modułów",
@@ -48,6 +49,7 @@ const jsonValue = (value: unknown) => {
 
 export function ProjectDocumentIntelligence130({ workspaceId, projectId, canWrite, data }: Props) {
   const complete = data.processing.filter((item) => item.stage === "modules").length;
+  const waitingForGemini = data.processing.filter((item) => item.stage === "rate_limited").length;
   const attention = data.processing.filter((item) => item.needsReview).length;
   const failed = data.processing.filter((item) => item.stage === "error").length;
   const revisionCandidates = data.revisions.filter((item) => item.detectionStatus === "review" || item.openImpacts > 0);
@@ -58,25 +60,25 @@ export function ProjectDocumentIntelligence130({ workspaceId, projectId, canWrit
     <section className="pi130-card pi130-doc-center" id="document-intelligence-130" aria-labelledby="document-intelligence-title">
       <div className="pi130-heading">
         <span className="pi130-heading__icon"><Bot size={19} /></span>
-        <div><p className="co-kicker">Document Intelligence 1.3.0</p><h2 id="document-intelligence-title">Centrum przetwarzania i kontroli dokumentów</h2><p>Jeden ślad od Wrzutni przez ekstrakcję i Gemini aż do modułów, rewizji i skutków zmian.</p></div>
+        <div><p className="co-kicker">Document Intelligence 1.3.1</p><h2 id="document-intelligence-title">Centrum przetwarzania i kontroli dokumentów</h2><p>Jeden ślad od Wrzutni przez ekstrakcję i Gemini aż do modułów, rewizji i skutków zmian.</p></div>
         <Link href={`/workspace/projects/${projectId}/brain`} className="pi130-heading__link">Decyzje AI <ArrowRight size={14} /></Link>
       </div>
 
       <div className="pi130-kpis">
         <div><FileSearch size={17} /><span><small>Dokumenty w śladzie AI</small><strong>{data.processing.length}</strong></span></div>
         <div data-tone="positive"><CheckCircle2 size={17} /><span><small>Zapisane do modułów</small><strong>{complete}</strong></span></div>
-        <div data-tone={attention ? "warning" : "positive"}><ShieldQuestion size={17} /><span><small>AI potrzebuje decyzji</small><strong>{attention}</strong></span></div>
+        <div data-tone={waitingForGemini ? "warning" : attention ? "warning" : "positive"}><ShieldQuestion size={17} /><span><small>Czeka na Gemini / decyzję</small><strong>{waitingForGemini + attention}</strong></span></div>
         <div data-tone={failed ? "danger" : "default"}><AlertTriangle size={17} /><span><small>Błędy przetwarzania</small><strong>{failed}</strong></span></div>
       </div>
 
       <div className="pi130-processing-table" role="table" aria-label="Status przetwarzania dokumentów">
         <div className="pi130-processing-table__head" role="row"><span>Dokument</span><span>Etap</span><span>Pewność</span><span>Co zrobiło AI</span><span>Akcja</span></div>
-        {visibleProcessing.map((item) => <div className="pi130-processing-row" role="row" key={item.documentId} data-tone={item.stage === "error" ? "danger" : item.needsReview ? "warning" : "default"}>
+        {visibleProcessing.map((item) => <div className="pi130-processing-row" role="row" key={item.documentId} data-tone={item.stage === "error" ? "danger" : item.stage === "rate_limited" || item.needsReview ? "warning" : "default"}>
           <span><strong>{item.name}</strong><small>{item.revisionLabel ? `Rewizja ${item.revisionLabel} · ` : ""}{item.category ?? "bez kategorii"} · {fmt(item.updatedAt)}</small></span>
           <span className="pi130-stage"><b>{STAGE[item.stage] ?? item.stage}</b><i><em style={{ width: `${Math.max(2, item.progressPercent)}%` }} /></i><small>{item.progressPercent}%</small></span>
-          <span><strong>{percent(item.confidence)}</strong>{item.needsReview ? <small className="pi130-warning">wymaga decyzji</small> : <small>automatycznie</small>}</span>
+          <span><strong>{percent(item.confidence)}</strong>{item.stage === "rate_limited" ? <small className="pi130-warning">limit API — plik bezpieczny</small> : item.needsReview ? <small className="pi130-warning">wymaga decyzji</small> : <small>automatycznie</small>}</span>
           <span><small>{item.errorMessage ?? item.explanation}</small></span>
-          <span>{item.retryAvailable && canWrite ? <DocumentRetryButton130 workspaceId={workspaceId} documentId={item.documentId} /> : item.stage === "modules" ? <CheckCircle2 size={17} aria-label="Gotowe" /> : <FileClock size={17} aria-label="W toku" />}</span>
+          <span>{item.retryAvailable && canWrite ? <DocumentRetryButton130 workspaceId={workspaceId} documentId={item.documentId} force={item.stage === "rate_limited"} /> : item.stage === "modules" ? <CheckCircle2 size={17} aria-label="Gotowe" /> : <FileClock size={17} aria-label="W toku" />}</span>
         </div>)}
         {!visibleProcessing.length ? <p className="pi130-empty">Brak dokumentów do pokazania. Wrzutnia automatycznie utworzy tu ślad przetwarzania.</p> : null}
       </div>
