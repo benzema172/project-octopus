@@ -56,8 +56,8 @@ describe("Project Octopus 1.3.0 — ten Project Intelligence capabilities", () =
 
   it("6. maps detected changes to affected investment modules", () => {
     expect(migration).toContain("assign_change_impact_modules");
-    for (const module of ["boq", "material_requests", "warehouse", "schedule", "protocols", "tasks", "finance", "documentation"]) {
-      expect(migration).toContain(`'${module}'`);
+    for (const moduleName of ["boq", "material_requests", "warehouse", "schedule", "protocols", "tasks", "finance", "documentation"]) {
+      expect(migration).toContain(`'${moduleName}'`);
     }
     expect(read("components/projects/project-document-intelligence-130.tsx")).toContain("Analiza wpływu zmian");
   });
