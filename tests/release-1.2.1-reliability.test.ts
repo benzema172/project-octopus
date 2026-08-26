@@ -37,4 +37,22 @@ describe("Project Octopus 1.2.1 reliability regressions", () => {
 
     expect(migration).toContain("uploaded_by uuid references auth.users(id) on delete set null");
   });
+
+  it("does not falsely mark queued ZIP children as completed AI work", () => {
+    const intake = read("components/projects/project-intake-pipeline.tsx");
+    const route = read("app/api/brain/process-document/route.ts");
+
+    expect(route).toContain("package: packageStatus");
+    expect(intake).toContain("result?.package?.queuedVersionIds?.length");
+    expect(intake).toContain("plików przekazano do kolejki AI");
+    expect(intake).toContain('items.filter((item) => item.status === "done").length');
+  });
+
+  it("allows a failed upload to be selected again without being blocked as a duplicate", () => {
+    const intake = read("components/projects/project-intake-pipeline.tsx");
+
+    expect(intake).toContain("function candidateKey(candidate: UploadCandidate)");
+    expect(intake).toContain("knownFiles.current.delete(candidateKey({ file: item.file, relativePath: item.relativePath }))");
+    expect(intake).toContain("Możesz ponownie dodać ten plik.");
+  });
 });
