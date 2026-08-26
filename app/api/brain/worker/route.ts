@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { processDocumentVersion } from "@/lib/ai/process-document";
+import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
+import { enrichDocumentWithInvestmentRouting } from "@/lib/ai/investment-document-routing";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { getOptionalEnv } from "@/lib/env";
 import { errorFields, operationalLog, requestIdFrom } from "@/lib/observability/server-logger";
@@ -15,6 +17,13 @@ type ClaimedJob = {
   id: string;
   workspace_id: string;
   document_version_id: string | null;
+};
+
+type WorkerVersion = {
+  document_id: string;
+  project_id: string | null;
+  file_name: string;
+  uploaded_by: string | null;
 };
 
 function safeSecretEqual(expected: string | null | undefined, received: string | null | undefined) {
@@ -73,9 +82,79 @@ export async function POST(request: Request) {
     }
     const jobStartedAt = performance.now();
     try {
-      await processDocumentVersion({ workspaceId: job.workspace_id, versionId: job.document_version_id, userId: user?.id ?? null, alreadyClaimed: true });
+      const { data: sourceVersion, error: sourceVersionError } = await supabase
+        .from("document_versions")
+        .select("document_id,project_id,file_name,uploaded_by")
+        .eq("id", job.document_version_id)
+        .maybeSingle<WorkerVersion>();
+      if (sourceVersionError || !sourceVersion) {
+        throw new Error(`Nie udało się odczytać wersji dla workera: ${sourceVersionError?.message ?? "brak danych"}`);
+      }
+
+      const actorId = user?.id ?? sourceVersion.uploaded_by;
+      const analysis = await processDocumentVersion({
+        workspaceId: job.workspace_id,
+        versionId: job.document_version_id,
+        userId: actorId,
+        alreadyClaimed: true
+      });
+
+      if (sourceVersion.project_id && actorId) {
+        try {
+          await enrichDocumentWithInvestmentRouting({
+            workspaceId: job.workspace_id,
+            projectId: sourceVersion.project_id,
+            documentId: sourceVersion.document_id,
+            versionId: job.document_version_id,
+            userId: actorId,
+            fileName: sourceVersion.file_name,
+            analysis
+          });
+        } catch (routingError) {
+          operationalLog("warn", {
+            event: "worker.investment_routing_failed",
+            route: "/api/brain/worker",
+            method: "POST",
+            module: "documents",
+            workspaceId: job.workspace_id,
+            projectId: sourceVersion.project_id,
+            requestId,
+            status: "partial",
+            ...errorFields(routingError),
+            meta: { jobId: job.id, versionId: job.document_version_id }
+          });
+        }
+      }
+
+      const autopilot = await applyDocumentAutopilot({
+        workspaceId: job.workspace_id,
+        documentId: sourceVersion.document_id,
+        versionId: job.document_version_id,
+        category: analysis.effectiveCategory,
+        projectId: sourceVersion.project_id ?? analysis.proposedProjectId,
+        actorId
+      });
+
       results.push({ jobId: job.id, versionId: job.document_version_id, status: "succeeded" });
-      operationalLog("info", { event: "worker.job_succeeded", route: "/api/brain/worker", method: "POST", module: "documents", workspaceId: job.workspace_id, requestId, durationMs: performance.now()-jobStartedAt, status: "succeeded", meta: { jobId: job.id, versionId: job.document_version_id } });
+      operationalLog("info", {
+        event: "worker.job_succeeded",
+        route: "/api/brain/worker",
+        method: "POST",
+        module: "documents",
+        workspaceId: job.workspace_id,
+        projectId: autopilot.projectId,
+        requestId,
+        durationMs: performance.now() - jobStartedAt,
+        status: autopilot.status,
+        meta: {
+          jobId: job.id,
+          versionId: job.document_version_id,
+          actorId,
+          published: autopilot.published,
+          failed: autopilot.failed,
+          protocolDrafts: autopilot.protocolDrafts
+        }
+      });
     } catch (processingError) {
       const errorMessage = processingError instanceof Error ? processingError.message : "Nieznany błąd";
       results.push({ jobId: job.id, versionId: job.document_version_id, status: "failed", error: errorMessage });
