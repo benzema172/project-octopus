@@ -67,7 +67,7 @@ export function ProjectDocumentIntelligence130({ workspaceId, projectId, canWrit
       <div className="pi130-kpis">
         <div><FileSearch size={17} /><span><small>Dokumenty w śladzie AI</small><strong>{data.processing.length}</strong></span></div>
         <div data-tone="positive"><CheckCircle2 size={17} /><span><small>Zapisane do modułów</small><strong>{complete}</strong></span></div>
-        <div data-tone={waitingForGemini ? "warning" : attention ? "warning" : "positive"}><ShieldQuestion size={17} /><span><small>Czeka na Gemini / decyzję</small><strong>{waitingForGemini + attention}</strong></span></div>
+        <div data-tone={waitingForGemini ? "warning" : attention ? "warning" : "positive"}><ShieldQuestion size={17} /><span><small>AI potrzebuje decyzji / czeka na Gemini</small><strong>{waitingForGemini + attention}</strong></span></div>
         <div data-tone={failed ? "danger" : "default"}><AlertTriangle size={17} /><span><small>Błędy przetwarzania</small><strong>{failed}</strong></span></div>
       </div>
 
