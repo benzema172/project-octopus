@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Sparkles, UploadCloud, X } from "lucide-react";
-import { suggestDocumentClassification, type DocumentCategory } from "@/lib/documents/classification";
+import { AlertTriangle, FileUp, FolderOpen, Sparkles, UploadCloud, X } from "lucide-react";
 import { validateUploadFile } from "@/lib/r2/sanitize";
 
 type Status = "ready" | "uploading" | "analysing" | "done" | "warning" | "error";
@@ -12,16 +11,20 @@ type Item = {
   id: string;
   file: File;
   relativePath: string;
-  category: DocumentCategory;
   status: Status;
   message?: string;
   error?: string;
 };
 type UploadResponse = { uploadUrl: string; token: string; headers: Record<string, string> };
 type CompleteResponse = { documentId: string; versionId: string };
-type ProcessResponse = { category?: DocumentCategory; confidence?: number; counts?: Record<string, number>; error?: string };
+type ProcessResponse = {
+  category?: string;
+  confidence?: number;
+  counts?: Record<string, number>;
+  routing?: { normalizedName?: string; discipline?: string; systemName?: string | null };
+  error?: string;
+};
 type IntakePosition = { top: number; right: number; width: number; maxHeight: number };
-type ReleaseType = "baseline" | "revision" | "addendum" | "as_built" | "closeout" | "other";
 type UploadCandidate = { file: File; relativePath: string };
 type IntakeIssue = { id: string; name: string; relativePath: string; bytes: number; reason: string };
 type UploadProgress = { totalFiles: number; uploadedFiles: number; totalBytes: number; uploadedBytes: number; settledFiles: number };
@@ -46,27 +49,35 @@ function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(0.01, bytes / 1024 / 1024).toFixed(2)} MB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
-function normalizeRelativePath(value: string) { return value.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/{2,}/g, "/"); }
+
+function normalizeRelativePath(value: string) {
+  return value.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/{2,}/g, "/");
+}
+
 function candidateFromFile(file: File): UploadCandidate {
   const browserFile = file as File & { webkitRelativePath?: string };
   return { file, relativePath: normalizeRelativePath(browserFile.webkitRelativePath?.trim() || file.name) };
 }
+
 function folderPathForCandidate(candidate: UploadCandidate) {
   const parts = normalizeRelativePath(candidate.relativePath).split("/").filter(Boolean);
   return parts.length > 1 ? parts.slice(0, -1).join("/") : undefined;
 }
+
 function artifactReason(candidate: UploadCandidate) {
   const parts = normalizeRelativePath(candidate.relativePath).split("/").filter(Boolean);
-  if (IGNORED_FOLDER_ARTIFACTS.has(candidate.file.name)) return "Plik systemowy systemu operacyjnego — nie jest dokumentacją inwestycji.";
-  if (parts.includes("__MACOSX")) return "Techniczny plik pomocniczy macOS z katalogu __MACOSX.";
+  if (IGNORED_FOLDER_ARTIFACTS.has(candidate.file.name)) return "Plik systemowy systemu operacyjnego — pominięty.";
+  if (parts.includes("__MACOSX")) return "Techniczny plik pomocniczy macOS — pominięty.";
   return null;
 }
+
 function fileFromEntry(entry: BrowserFileEntry) {
   return new Promise<File>((resolve, reject) => {
     if (!entry.file) return reject(new Error(`Nie można odczytać pliku ${entry.name}.`));
     entry.file(resolve, reject);
   });
 }
+
 async function readDirectoryEntries(entry: BrowserFileEntry) {
   if (!entry.createReader) return [] as BrowserFileEntry[];
   const reader = entry.createReader();
@@ -78,6 +89,7 @@ async function readDirectoryEntries(entry: BrowserFileEntry) {
   }
   return collected;
 }
+
 async function candidatesFromEntry(entry: BrowserFileEntry, parentPath = ""): Promise<UploadCandidate[]> {
   const entryPath = normalizeRelativePath(entry.fullPath || [parentPath, entry.name].filter(Boolean).join("/"));
   if (entry.isFile) {
@@ -89,6 +101,7 @@ async function candidatesFromEntry(entry: BrowserFileEntry, parentPath = ""): Pr
   const nested = await Promise.all(children.map((child) => candidatesFromEntry(child, entryPath)));
   return nested.flat();
 }
+
 async function candidatesFromDataTransfer(dataTransfer: DataTransfer) {
   const items = Array.from(dataTransfer.items ?? []);
   const roots: BrowserFileEntry[] = [];
@@ -101,16 +114,13 @@ async function candidatesFromDataTransfer(dataTransfer: DataTransfer) {
   const nested = await Promise.all(roots.map((entry) => candidatesFromEntry(entry)));
   return nested.flat();
 }
-function packageLabelForItem(baseLabel: string, item: Item) {
-  const folderPath = folderPathForCandidate({ file: item.file, relativePath: item.relativePath });
-  const parts = [baseLabel.trim(), folderPath].filter(Boolean);
-  return parts.length ? parts.join(" / ").slice(0, 160) : undefined;
-}
+
 async function digest(file: File) {
   if (file.size > MAX_HASH) return null;
   const hash = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
   return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
+
 function uploadFileWithProgress(upload: UploadResponse, file: File, onProgress: (loaded: number) => void) {
   return new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -123,9 +133,7 @@ function uploadFileWithProgress(upload: UploadResponse, file: File, onProgress: 
       if (xhr.status >= 200 && xhr.status < 300) {
         onProgress(file.size);
         resolve();
-      } else {
-        reject(new Error(`R2 odrzucił upload: HTTP ${xhr.status}`));
-      }
+      } else reject(new Error(`R2 odrzucił upload: HTTP ${xhr.status}`));
     };
     xhr.send(file);
   });
@@ -166,6 +174,8 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
   const router = useRouter();
   const trigger = useRef<HTMLButtonElement>(null);
   const popover = useRef<HTMLDivElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
   const knownFiles = useRef(new Set<string>());
   const queue = useRef<Item[]>([]);
   const processingQueue = useRef(false);
@@ -175,18 +185,13 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
   const [issues, setIssues] = useState<IntakeIssue[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [progress, setProgress] = useState<UploadProgress>(EMPTY_PROGRESS);
-  const [stage, setStage] = useState("Upuść dokumenty, aby rozpocząć automatyczną analizę.");
+  const [stage, setStage] = useState("Dodaj pliki lub folder. Resztę zrobi Octopus AI.");
   const [processing, setProcessing] = useState(false);
   const [position, setPosition] = useState<IntakePosition | null>(null);
-  const [releaseType, setReleaseType] = useState<ReleaseType>("baseline");
-  const [packageLabel, setPackageLabel] = useState("");
-  const [revisionLabel, setRevisionLabel] = useState("");
-  const [effectiveAt, setEffectiveAt] = useState("");
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
     if (!open) return;
-
     const updatePosition = () => {
       const triggerRect = trigger.current?.getBoundingClientRect();
       if (!triggerRect) return;
@@ -202,14 +207,12 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
       const maxHeight = Math.max(220, window.innerHeight - top - viewportPadding);
       setPosition({ top, right, width, maxHeight });
     };
-
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
     const closeOnOutside = (event: PointerEvent) => {
       const target = event.target as Node;
       if (trigger.current?.contains(target) || popover.current?.contains(target)) return;
       setOpen(false);
     };
-
     updatePosition();
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
@@ -225,21 +228,17 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
 
   function addIssue(candidate: UploadCandidate, reason: string) {
     const key = `${candidate.relativePath}:${candidate.file.size}:${reason}`;
-    setIssues((current) => current.some((issue) => `${issue.relativePath}:${issue.bytes}:${issue.reason}` === key) ? current : current.concat({
-      id: crypto.randomUUID(),
-      name: candidate.file.name,
-      relativePath: candidate.relativePath,
-      bytes: candidate.file.size,
-      reason
-    }));
+    setIssues((current) => current.some((issue) => `${issue.relativePath}:${issue.bytes}:${issue.reason}` === key)
+      ? current
+      : current.concat({ id: crypto.randomUUID(), name: candidate.file.name, relativePath: candidate.relativePath, bytes: candidate.file.size, reason }));
   }
 
   async function processItem(item: Item) {
-    setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "uploading", error: undefined, message: "Przygotowanie uploadu…" } : row));
+    setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "uploading", error: undefined, message: "Wysyłanie…" } : row));
     let reportedBytes = 0;
     try {
       const mimeType = item.file.type || "application/octet-stream";
-      setStage(`Przygotowanie: ${item.file.name}`);
+      setStage(`Wysyłanie: ${item.file.name}`);
       const prepare = await fetch("/api/storage/upload-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -248,18 +247,12 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
           fileName: item.file.name,
           mimeType,
           fileSize: item.file.size,
-          category: item.category,
           categoryLocked: false,
-          releaseType,
-          packageLabel: packageLabelForItem(packageLabel, item),
-          revisionLabel: revisionLabel || undefined,
-          effectiveAt: effectiveAt || undefined
+          packageLabel: folderPathForCandidate({ file: item.file, relativePath: item.relativePath })
         })
       });
       if (!prepare.ok) throw new Error((await prepare.json().catch(() => null))?.error ?? "Nie udało się przygotować uploadu.");
       const upload = await prepare.json() as UploadResponse;
-
-      setStage(`Wysyłanie do R2: ${item.file.name}`);
       await uploadFileWithProgress(upload, item.file, (loaded) => {
         const next = Math.max(reportedBytes, Math.min(loaded, item.file.size));
         const delta = next - reportedBytes;
@@ -277,8 +270,8 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
       if (!complete.ok) throw new Error((await complete.json().catch(() => null))?.error ?? "Plik wysłano do R2, ale nie udało się zapisać dokumentu.");
       const ids = await complete.json() as CompleteResponse;
 
-      setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "analysing", message: "Gemini analizuje treść i buduje Brain…" } : row));
-      setStage(`AI analizuje: ${item.file.name}`);
+      setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "analysing", message: "AI analizuje, nazywa i przypisuje…" } : row));
+      setStage(`Octopus AI porządkuje: ${item.file.name}`);
       const analysis = await fetch("/api/brain/process-document", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -293,11 +286,11 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
       }
 
       const count = Object.values(result?.counts ?? {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+      const normalizedName = result?.routing?.normalizedName || item.file.name;
       setItems((current) => current.map((row) => row.id === item.id ? {
         ...row,
         status: "done",
-        category: result?.category ?? row.category,
-        message: `Brain gotowy · ${Math.round((result?.confidence ?? 0) * 100)}% pewności · ${count} rozpoznanych elementów`
+        message: `${normalizedName} · ${Math.round((result?.confidence ?? 0) * 100)}% · ${count} elementów`
       } : row));
       return true;
     } catch (error) {
@@ -324,7 +317,7 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
     } finally {
       processingQueue.current = false;
       setProcessing(false);
-      setStage("Wrzutnia zakończyła bieżącą kolejkę.");
+      setStage("Gotowe. Możesz wrzucić kolejne pliki.");
       if (changed) startTransition(() => router.refresh());
       if (queue.current.length) void drainQueue();
     }
@@ -334,84 +327,56 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
     setNotice(null);
     const accepted: Item[] = [];
     let eligibleCount = 0;
-
     for (const candidate of candidates) {
       const systemReason = artifactReason(candidate);
-      if (systemReason) {
-        addIssue(candidate, systemReason);
-        continue;
-      }
-
+      if (systemReason) { addIssue(candidate, systemReason); continue; }
       eligibleCount += 1;
-      if (eligibleCount > MAX_FOLDER_FILES) {
-        addIssue(candidate, `Przekroczono limit ${MAX_FOLDER_FILES} plików w jednym wskazaniu.`);
-        continue;
-      }
-
+      if (eligibleCount > MAX_FOLDER_FILES) { addIssue(candidate, `Przekroczono limit ${MAX_FOLDER_FILES} plików w jednym wskazaniu.`); continue; }
       const validationError = validateUploadFile(candidate.file.name, candidate.file.type || "application/octet-stream", candidate.file.size);
-      if (validationError) {
-        addIssue(candidate, validationError);
-        continue;
-      }
-
+      if (validationError) { addIssue(candidate, validationError); continue; }
       const key = `${candidate.relativePath}:${candidate.file.size}:${candidate.file.lastModified}`;
-      if (knownFiles.current.has(key)) {
-        addIssue(candidate, "Duplikat — ten sam plik jest już w bieżącej kolejce Wrzutni.");
-        continue;
-      }
+      if (knownFiles.current.has(key)) { addIssue(candidate, "Duplikat — ten sam plik jest już w bieżącej kolejce."); continue; }
       knownFiles.current.add(key);
-      const suggestion = suggestDocumentClassification(candidate.file.name, candidate.file.type);
-      accepted.push({
-        id: crypto.randomUUID(),
-        file: candidate.file,
-        relativePath: candidate.relativePath,
-        category: suggestion.category,
-        status: "ready"
-      });
+      accepted.push({ id: crypto.randomUUID(), file: candidate.file, relativePath: candidate.relativePath, status: "ready" });
     }
-
     if (!accepted.length) return;
     const addedBytes = accepted.reduce((sum, item) => sum + item.file.size, 0);
     setItems((current) => current.concat(accepted));
     setProgress((current) => ({ ...current, totalFiles: current.totalFiles + accepted.length, totalBytes: current.totalBytes + addedBytes }));
     queue.current.push(...accepted);
-    setStage(`Rozpoznano ${accepted.length} plików. Start automatycznej wysyłki…`);
+    setStage(`Dodano ${accepted.length} plików. Octopus zaczyna automatyczne przetwarzanie…`);
     void drainQueue();
   }
 
   async function addDropped(dataTransfer: DataTransfer) {
     try {
-      const candidates = await candidatesFromDataTransfer(dataTransfer);
-      add(candidates);
+      add(await candidatesFromDataTransfer(dataTransfer));
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Nie udało się odczytać przeciągniętych danych.");
     }
   }
 
   const busy = processing || pending;
-  const percent = progress.totalBytes > 0
-    ? Math.min(100, Math.round((progress.uploadedBytes / progress.totalBytes) * 100))
-    : progress.totalFiles > 0 ? Math.round((progress.uploadedFiles / progress.totalFiles) * 100) : 0;
-  const remainingPercent = progress.totalFiles > 0 ? Math.max(0, 100 - percent) : 100;
-  const remainingBytes = Math.max(0, progress.totalBytes - progress.uploadedBytes);
+  const percent = progress.totalBytes > 0 ? Math.min(100, Math.round((progress.uploadedBytes / progress.totalBytes) * 100)) : 0;
   const completedAi = items.filter((item) => item.status === "done" || item.status === "warning").length;
 
   const dialog = open && position ? (
-    <div
-      ref={popover}
-      className="pw-intake-popover pw-intake-popover--portal"
-      role="dialog"
-      aria-modal="false"
-      aria-label="Wrzutnia dokumentów"
-      id="project-intake-dialog"
-      style={position}
-    >
-      <div className="pw-intake-head"><div><p className="co-kicker">Centralne wejście plików</p><h3>Wrzutnia</h3><p>R2 → ekstrakcja → Gemini → klasyfikacja → Brain → moduły.</p></div><button type="button" className="pw-intake-close" onClick={() => setOpen(false)} aria-label="Zamknij Wrzutnię"><X size={17} /></button></div>
-      <div className="pw-intake-release" aria-label="Metadane wydania dokumentacji">
-        <label><span>Typ wydania</span><select value={releaseType} onChange={(event) => setReleaseType(event.target.value as ReleaseType)} disabled={busy}><option value="baseline">Bazowe</option><option value="revision">Rewizja</option><option value="addendum">Aneks / uzupełnienie</option><option value="as_built">Powykonawcze</option><option value="closeout">Zamknięcie</option><option value="other">Inne</option></select></label>
-        <label><span>Nazwa paczki</span><input value={packageLabel} onChange={(event) => setPackageLabel(event.target.value)} placeholder="np. PW Instalacje sanitarne" maxLength={160} disabled={busy}/></label>
-        <label><span>Oznaczenie rewizji</span><input value={revisionLabel} onChange={(event) => setRevisionLabel(event.target.value)} placeholder="np. R02" maxLength={80} disabled={busy}/></label>
-        <label><span>Obowiązuje od</span><input type="date" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} disabled={busy}/></label>
+    <div ref={popover} className="pw-intake-popover pw-intake-popover--portal" role="dialog" aria-modal="false" aria-label="Wrzutnia dokumentów" id="project-intake-dialog" style={position}>
+      <input ref={fileInput} type="file" multiple hidden onChange={(event) => { add(Array.from(event.target.files ?? []).map(candidateFromFile)); event.currentTarget.value = ""; }} />
+      <input
+        ref={(node) => {
+          folderInput.current = node;
+          node?.setAttribute("webkitdirectory", "");
+          node?.setAttribute("directory", "");
+        }}
+        type="file"
+        multiple
+        hidden
+        onChange={(event) => { add(Array.from(event.target.files ?? []).map(candidateFromFile)); event.currentTarget.value = ""; }}
+      />
+      <div className="pw-intake-head">
+        <div><p className="co-kicker">Tylko wrzucasz pliki</p><h3>Wrzutnia</h3><p>Octopus AI sam rozpozna, nazwie, posortuje i zasili właściwe moduły inwestycji.</p></div>
+        <button type="button" className="pw-intake-close" onClick={() => setOpen(false)} aria-label="Zamknij Wrzutnię"><X size={17} /></button>
       </div>
 
       <div
@@ -423,20 +388,24 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
         onDrop={(event) => { event.preventDefault(); setDrag(false); void addDropped(event.dataTransfer); }}
       >
         <span className="pw-intake-cloud"><UploadCloud size={27} /></span>
-        <strong>Upuść tutaj dokumenty, ZIP lub cały folder</strong>
-        <small>Wrzutnia sama rozpozna pliki i foldery, przejdzie przez podfoldery i automatycznie rozpocznie wysyłkę oraz analizę AI.</small>
+        <strong>Upuść dokumenty albo cały folder</strong>
+        <small>Bez wybierania kategorii, branży, rewizji ani miejsca docelowego. AI zrobi to automatycznie na podstawie treści i kontekstu inwestycji.</small>
       </div>
 
-      <div className="pw-intake-ai-note"><Sparkles size={16} /><span><strong>Automatycznie:</strong> rozpoznanie typu dokumentu → R2 → ekstrakcja → Gemini → Brain. Nic formalnego ani finansowego nie trafi do modułów bez decyzji w Centrum weryfikacji.</span></div>
+      <div className="pw-intake-actions">
+        <button type="button" className="secondary-button" onClick={() => fileInput.current?.click()} disabled={busy}><FileUp size={16} />Wybierz pliki</button>
+        <button type="button" className="secondary-button" onClick={() => folderInput.current?.click()} disabled={busy}><FolderOpen size={16} />Wybierz folder</button>
+      </div>
+
+      <div className="pw-intake-ai-note"><Sparkles size={16} /><span><strong>Po wrzuceniu:</strong> R2 → ekstrakcja → Gemini → klasyfikacja → automatyczna nazwa i system/branża → Brain → kosztorys, materiały, harmonogram, zadania, finanse, magazyn i wymagane szkice protokołów. Wyników rzeczywistych prób, podpisów i odbiorów AI nie wymyśla.</span></div>
       {notice ? <p className="pw-intake-error">{notice}</p> : null}
 
       {progress.totalFiles > 0 ? <section className="pw-intake-progress" aria-live="polite" aria-label="Postęp wysyłania dokumentacji">
         <div className="pw-intake-progress__head"><strong>{percent}% przesłano</strong><span>{stage}</span></div>
         <div className="pw-intake-progress__track"><span style={{ width: `${percent}%` }} /></div>
         <div className="pw-intake-progress__stats">
-          <span><strong>{progress.uploadedFiles}/{progress.totalFiles}</strong> plików przesłanych</span>
+          <span><strong>{progress.uploadedFiles}/{progress.totalFiles}</strong> plików w R2</span>
           <span><strong>{formatBytes(progress.uploadedBytes)}</strong> / {formatBytes(progress.totalBytes)}</span>
-          <span><strong>{remainingPercent}%</strong> zostało · {formatBytes(remainingBytes)}</span>
           <span><strong>{completedAi}/{progress.totalFiles}</strong> przeanalizowanych przez AI</span>
         </div>
       </section> : null}
@@ -451,20 +420,12 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
         </div>
       </details> : null}
 
-      <div className="pw-intake-auto-status"><span>{busy ? "Octopus pracuje automatycznie — nie musisz nic klikać." : progress.totalFiles ? "Możesz dorzucić kolejne pliki lub folder — zostaną dopięte do kolejki." : "Przeciągnij dokumentację do pola powyżej. Nie trzeba wybierać trybu plik/folder."}</span></div>
+      <div className="pw-intake-auto-status"><span>{busy ? "Octopus pracuje automatycznie — niczego nie musisz przypisywać ręcznie." : "Wrzutnia służy wyłącznie do dodawania plików. Posortowane dokumenty znajdziesz w sekcji Dokumenty."}</span></div>
     </div>
   ) : null;
 
   return <div className="pw-intake">
-    <button
-      ref={trigger}
-      type="button"
-      className="pw-intake-trigger pw-intake-trigger--octopus"
-      onClick={() => setOpen((value) => !value)}
-      aria-expanded={open}
-      aria-controls="project-intake-dialog"
-      aria-haspopup="dialog"
-    >
+    <button ref={trigger} type="button" className="pw-intake-trigger pw-intake-trigger--octopus" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="project-intake-dialog" aria-haspopup="dialog">
       <IntakeOctopus />
       <span className="pw-intake-trigger__label">WRZUTNIA</span>
     </button>
