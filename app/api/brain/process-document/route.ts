@@ -41,6 +41,8 @@ export async function POST(request: Request) {
     return jsonError("Brakuje identyfikatora inwestycji, dokumentu lub wersji.", 400);
   }
 
+  const documentId = body.documentId;
+  const versionId = body.versionId;
   const project = await getProjectForUser(user, body.projectId);
   if (!project) return jsonError("Nie znaleziono inwestycji.", 404);
 
@@ -49,14 +51,14 @@ export async function POST(request: Request) {
     supabase
       .from("documents")
       .select("id,category")
-      .eq("id", body.documentId)
+      .eq("id", documentId)
       .eq("project_id", project.id)
       .maybeSingle<{ id: string; category: string | null }>(),
     supabase
       .from("document_versions")
       .select("id,file_name")
-      .eq("id", body.versionId)
-      .eq("document_id", body.documentId)
+      .eq("id", versionId)
+      .eq("document_id", documentId)
       .maybeSingle<{ id: string; file_name: string }>()
   ]);
 
@@ -67,11 +69,16 @@ export async function POST(request: Request) {
     return jsonError("Brak uprawnienia do analizy tego dokumentu.", 403);
   }
 
+  const activeUser = user;
+  const activeProject = project;
+  const activeDocument = sourceDocument;
+  const activeVersion = sourceVersion;
+
   async function deferForGeminiLimit(retryAt: string, message: string) {
     const { error } = await supabase.rpc("defer_gemini_rate_limit", {
-      p_workspace_id: project.workspace_id,
-      p_document_id: body.documentId,
-      p_document_version_id: body.versionId,
+      p_workspace_id: activeProject.workspace_id,
+      p_document_id: documentId,
+      p_document_version_id: versionId,
       p_retry_at: retryAt,
       p_message: message
     });
@@ -85,16 +92,16 @@ export async function POST(request: Request) {
         dead_letter_at: null,
         locked_at: null,
         locked_by: null
-      }).eq("workspace_id", project.workspace_id).eq("document_version_id", body.versionId);
+      }).eq("workspace_id", activeProject.workspace_id).eq("document_version_id", versionId);
     }
   }
 
   async function runPipeline() {
     const analysis = await processDocumentVersion({
-      workspaceId: project.workspace_id,
-      versionId: body.versionId!,
-      userId: user.id,
-      categoryOverride: body.lockCategory ? normalizeDocumentCategory(sourceDocument.category) : null
+      workspaceId: activeProject.workspace_id,
+      versionId,
+      userId: activeUser.id,
+      categoryOverride: body.lockCategory ? normalizeDocumentCategory(activeDocument.category) : null
     });
     const packageStatus = "package" in analysis
       ? {
@@ -109,35 +116,35 @@ export async function POST(request: Request) {
     let routingError: string | null = null;
     try {
       routing = await enrichDocumentWithInvestmentRouting({
-        workspaceId: project.workspace_id,
-        projectId: project.id,
-        documentId: body.documentId!,
-        versionId: body.versionId!,
-        userId: user.id,
-        fileName: sourceVersion.file_name,
+        workspaceId: activeProject.workspace_id,
+        projectId: activeProject.id,
+        documentId,
+        versionId,
+        userId: activeUser.id,
+        fileName: activeVersion.file_name,
         analysis
       });
     } catch (error) {
       routingError = error instanceof Error ? error.message : "Automatyczny routing dokumentu nie powiódł się.";
       await supabase.from("audit_events").insert({
-        workspace_id: project.workspace_id,
-        project_id: project.id,
-        actor_id: user.id,
+        workspace_id: activeProject.workspace_id,
+        project_id: activeProject.id,
+        actor_id: activeUser.id,
         actor_type: "ai",
         event_type: "document.investment_routing_failed",
         entity_type: "document",
-        entity_id: body.documentId,
-        after_value: { version_id: body.versionId, error: routingError }
+        entity_id: documentId,
+        after_value: { version_id: versionId, error: routingError }
       });
     }
 
     const autopilot = await applyDocumentAutopilot({
-      workspaceId: project.workspace_id,
-      documentId: body.documentId!,
-      versionId: body.versionId!,
+      workspaceId: activeProject.workspace_id,
+      documentId,
+      versionId,
       category: analysis.effectiveCategory,
-      projectId: project.id,
-      actorId: user.id
+      projectId: activeProject.id,
+      actorId: activeUser.id
     });
 
     return {
@@ -172,7 +179,7 @@ export async function POST(request: Request) {
     const nowIso = new Date().toISOString();
     const { data: cooldown } = await supabase.from("processing_jobs")
       .select("available_at,error_message")
-      .eq("workspace_id", project.workspace_id)
+      .eq("workspace_id", activeProject.workspace_id)
       .eq("status", "queued")
       .eq("error_code", "GEMINI_RATE_LIMIT")
       .gt("available_at", nowIso)
@@ -207,14 +214,14 @@ export async function POST(request: Request) {
       const message = geminiRateLimitMessage(rateLimit);
       await deferForGeminiLimit(rateLimit.retryAt, message);
       await supabase.from("audit_events").insert({
-        workspace_id: project.workspace_id,
-        project_id: project.id,
-        actor_id: user.id,
+        workspace_id: activeProject.workspace_id,
+        project_id: activeProject.id,
+        actor_id: activeUser.id,
         actor_type: "system",
         event_type: "document.gemini_rate_limited",
         entity_type: "document",
-        entity_id: body.documentId,
-        after_value: { version_id: body.versionId, retry_at: rateLimit.retryAt, retry_after_ms: rateLimit.retryAfterMs }
+        entity_id: documentId,
+        after_value: { version_id: versionId, retry_at: rateLimit.retryAt, retry_after_ms: rateLimit.retryAfterMs }
       });
 
       if (automaticRateLimitRetries < 1 && rateLimit.retryAfterMs <= MAX_AUTOMATIC_RATE_LIMIT_WAIT_MS) {
