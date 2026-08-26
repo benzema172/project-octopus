@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(path, "utf8");
 const migration = read("supabase/migrations/20260826090000_project_intelligence_130.sql");
 const followup = read("supabase/migrations/20260826091000_project_intelligence_130_provenance_events.sql");
+const hardening = read("supabase/migrations/20260826093000_project_intelligence_130_security_hardening.sql");
 const documentationPage = read("app/workspace/projects/[projectId]/documentation/page.tsx");
 const costPage = read("app/workspace/projects/[projectId]/cost-estimate/page.tsx");
 const requestsPage = read("app/workspace/projects/[projectId]/requests/page.tsx");
@@ -18,7 +19,11 @@ describe("Project Octopus 1.3.0 — ten Project Intelligence capabilities", () =
     expect(migration).toContain("ai_explanation");
     expect(migration).toContain("retry_available");
     expect(documentationPage).toContain("ProjectDocumentIntelligence130");
-    expect(read("components/projects/project-document-intelligence-130.tsx")).toContain("Ponów analizę");
+    const intelligence = read("components/projects/project-document-intelligence-130.tsx");
+    const retry = read("components/projects/document-retry-button-130.tsx");
+    expect(intelligence).toContain("DocumentRetryButton130");
+    expect(retry).toContain("Ponów analizę");
+    expect(retry).toContain('/api/brain/retry');
   });
 
   it("2. tracks ZIP/folder packages as aggregate jobs", () => {
@@ -86,5 +91,12 @@ describe("Project Octopus 1.3.0 — ten Project Intelligence capabilities", () =
     expect(data).toContain("getProjectTodayIntelligence130");
     expect(dashboard).toContain("ProjectTodayIntelligence130");
     expect(read("components/projects/project-today-intelligence-130.tsx")).toContain("Co powinienem zrobić dzisiaj?");
+  });
+
+  it("hardens the 1.3.0 database surface", () => {
+    expect(hardening).toContain("security_invoker = true");
+    expect(hardening).toContain("revoke execute on function public.capture_processing_job_event()");
+    expect(hardening).toContain("document_processing_events_member_insert");
+    expect(hardening).toContain("project_fact_versions_source_reference_fk_idx");
   });
 });
