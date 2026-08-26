@@ -114,7 +114,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      release: "1.3.3",
+      release: "1.3.4",
       storage: {
         prefix: STORAGE_PREFIX,
         removed: objectsBefore.length,
