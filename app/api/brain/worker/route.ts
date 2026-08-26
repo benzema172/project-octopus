@@ -15,6 +15,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const MAX_AUTOMATIC_RATE_LIMIT_WAIT_MS = 75_000;
+const BACKGROUND_TOKEN_HEADER = "x-octopus-background-token";
 
 type ClaimedJob = {
   id: string;
@@ -44,20 +45,29 @@ function safeSecretEqual(expected: string | null | undefined, received: string |
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export async function POST(request: Request) {
+async function handleWorker(request: Request) {
   const startedAt = performance.now();
   const requestId = requestIdFrom(request);
   const configuredSecret = getOptionalEnv("CRON_SECRET");
   const bearer = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
   const cronAuthorized = safeSecretEqual(configuredSecret, bearer);
-  const user = cronAuthorized ? null : await getRequestUser(request);
+  const supabase = createServiceSupabaseClient();
 
-  if (!cronAuthorized && !user) return NextResponse.json({ error: "Brak uprawnień do workera." }, { status: 401 });
+  let backgroundAuthorized = false;
+  const backgroundToken = request.headers.get(BACKGROUND_TOKEN_HEADER)?.trim();
+  if (!cronAuthorized && backgroundToken) {
+    const { data, error } = await supabase.rpc("verify_background_worker_token", { p_token: backgroundToken });
+    backgroundAuthorized = !error && data === true;
+  }
+
+  const systemAuthorized = cronAuthorized || backgroundAuthorized;
+  const user = systemAuthorized ? null : await getRequestUser(request);
+
+  if (!systemAuthorized && !user) return NextResponse.json({ error: "Brak uprawnień do workera." }, { status: 401 });
 
   const url = new URL(request.url);
-  const limit = Math.max(1, Math.min(5, Number(url.searchParams.get("limit")) || (cronAuthorized ? 5 : 1)));
+  const limit = Math.max(1, Math.min(5, Number(url.searchParams.get("limit")) || (systemAuthorized ? 5 : 1)));
   const workerName = `octopus-${randomUUID()}`;
-  const supabase = createServiceSupabaseClient();
   const requestedWorkspaceId = url.searchParams.get("workspaceId")?.trim();
   const userWorkspace = user && requestedWorkspaceId ? await getWorkspaceForUser(user, requestedWorkspaceId) : null;
   if (user && !requestedWorkspaceId) return NextResponse.json({ error: "Ręczne uruchomienie workera wymaga identyfikatora firmy." }, { status: 400 });
@@ -70,18 +80,18 @@ export async function POST(request: Request) {
   operationalLog("info", {
     event: "worker.started",
     route: "/api/brain/worker",
-    method: "POST",
+    method: request.method,
     module: "documents",
     action: "process_queue",
     workspaceId: userWorkspace?.id ?? null,
     requestId,
-    meta: { limit, authorizedByCron: cronAuthorized }
+    meta: { limit, authorizedByCron: cronAuthorized, authorizedByBackgroundQueue: backgroundAuthorized }
   });
 
   for (let index = 0; index < limit; index += 1) {
     const { data, error } = await supabase.rpc("claim_next_processing_job", { p_worker: workerName, p_workspace_id: userWorkspace?.id ?? null });
     if (error) {
-      operationalLog("error", { event: "worker.claim_failed", route: "/api/brain/worker", method: "POST", module: "documents", workspaceId: userWorkspace?.id ?? null, requestId, status: 500, ...errorFields(error) });
+      operationalLog("error", { event: "worker.claim_failed", route: "/api/brain/worker", method: request.method, module: "documents", workspaceId: userWorkspace?.id ?? null, requestId, status: 500, ...errorFields(error) });
       return NextResponse.json({ error: `Nie udało się pobrać zadania: ${error.message}`, results }, { status: 500 });
     }
     const job = (Array.isArray(data) ? data[0] : null) as ClaimedJob | undefined;
@@ -89,7 +99,7 @@ export async function POST(request: Request) {
     if (!job.document_version_id) {
       await supabase.from("processing_jobs").update({ status: "dead_letter", error_code: "MISSING_VERSION", error_message: "Zadanie nie ma wersji dokumentu.", dead_letter_at: new Date().toISOString(), locked_at: null, locked_by: null }).eq("id", job.id);
       results.push({ jobId: job.id, versionId: null, status: "failed", error: "Brak wersji dokumentu." });
-      operationalLog("warn", { event: "worker.job_dead_letter", route: "/api/brain/worker", method: "POST", module: "documents", workspaceId: job.workspace_id, requestId, status: "dead_letter", errorCode: "MISSING_VERSION", meta: { jobId: job.id } });
+      operationalLog("warn", { event: "worker.job_dead_letter", route: "/api/brain/worker", method: request.method, module: "documents", workspaceId: job.workspace_id, requestId, status: "dead_letter", errorCode: "MISSING_VERSION", meta: { jobId: job.id } });
       continue;
     }
     const jobStartedAt = performance.now();
@@ -126,7 +136,7 @@ export async function POST(request: Request) {
           operationalLog("warn", {
             event: "worker.investment_routing_failed",
             route: "/api/brain/worker",
-            method: "POST",
+            method: request.method,
             module: "documents",
             workspaceId: job.workspace_id,
             projectId: sourceVersion.project_id,
@@ -151,7 +161,7 @@ export async function POST(request: Request) {
       operationalLog("info", {
         event: "worker.job_succeeded",
         route: "/api/brain/worker",
-        method: "POST",
+        method: request.method,
         module: "documents",
         workspaceId: job.workspace_id,
         projectId: autopilot.projectId,
@@ -179,12 +189,12 @@ export async function POST(request: Request) {
           p_message: message
         });
         if (deferError) {
-          operationalLog("error", { event: "worker.rate_limit_defer_failed", route: "/api/brain/worker", method: "POST", module: "documents", workspaceId: job.workspace_id, requestId, ...errorFields(deferError), meta: { jobId: job.id } });
+          operationalLog("error", { event: "worker.rate_limit_defer_failed", route: "/api/brain/worker", method: request.method, module: "documents", workspaceId: job.workspace_id, requestId, ...errorFields(deferError), meta: { jobId: job.id } });
         }
         operationalLog("warn", {
           event: "worker.gemini_rate_limited",
           route: "/api/brain/worker",
-          method: "POST",
+          method: request.method,
           module: "documents",
           workspaceId: job.workspace_id,
           requestId,
@@ -204,14 +214,14 @@ export async function POST(request: Request) {
 
       const errorMessage = processingError instanceof Error ? processingError.message : "Nieznany błąd";
       results.push({ jobId: job.id, versionId: job.document_version_id, status: "failed", error: errorMessage });
-      operationalLog("error", { event: "worker.job_failed", route: "/api/brain/worker", method: "POST", module: "documents", workspaceId: job.workspace_id, requestId, durationMs: performance.now()-jobStartedAt, status: "failed", ...errorFields(processingError), meta: { jobId: job.id, versionId: job.document_version_id } });
+      operationalLog("error", { event: "worker.job_failed", route: "/api/brain/worker", method: request.method, module: "documents", workspaceId: job.workspace_id, requestId, durationMs: performance.now()-jobStartedAt, status: "failed", ...errorFields(processingError), meta: { jobId: job.id, versionId: job.document_version_id } });
     }
   }
 
   operationalLog("info", {
     event: "worker.finished",
     route: "/api/brain/worker",
-    method: "POST",
+    method: request.method,
     module: "documents",
     action: "process_queue",
     workspaceId: userWorkspace?.id ?? null,
@@ -222,13 +232,19 @@ export async function POST(request: Request) {
       processed: results.length,
       succeeded: results.filter((result)=>result.status==="succeeded").length,
       failed: results.filter((result)=>result.status==="failed").length,
-      waiting: results.filter((result)=>result.status==="waiting").length
+      waiting: results.filter((result)=>result.status==="waiting").length,
+      authorizedByCron: cronAuthorized,
+      authorizedByBackgroundQueue: backgroundAuthorized
     }
   });
 
   return NextResponse.json({ ok: true, worker: workerName, processed: results.length, results }, { headers: { "Cache-Control": "no-store", "X-Request-Id": requestId } });
 }
 
+export async function POST(request: Request) {
+  return handleWorker(request);
+}
+
 export async function GET(request: Request) {
-  return POST(request);
+  return handleWorker(request);
 }

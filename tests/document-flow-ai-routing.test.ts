@@ -64,9 +64,10 @@ describe("document flow migration", () => {
     expect(migration).toContain("then v_business -> 'lines' else '[]'::jsonb end");
   });
 
-  it("runs durable processing jobs from the background cron", () => {
+  it("runs durable processing jobs from system background triggers", () => {
     expect(workerRoute).toContain("export async function GET");
-    expect(workerRoute).toContain('(cronAuthorized ? 5 : 1)');
+    expect(workerRoute).toContain('(systemAuthorized ? 5 : 1)');
+    expect(workerRoute).toContain("authorizedByBackgroundQueue");
     expect(vercelConfig).toContain('"path": "/api/brain/worker"');
     expect(vercelConfig).toContain('"schedule": "30 3 * * *"');
   });
