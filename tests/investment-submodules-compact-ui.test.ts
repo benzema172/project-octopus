@@ -6,7 +6,7 @@ const route = (name: string) => read(`app/workspace/projects/[projectId]/${name}
 
 describe("compact investment submodules after Schedule", () => {
   it("removes generic presentation foundations from every remaining route", () => {
-    for (const name of ["site", "progress", "requests", "protocols", "team", "warehouse", "reports", "closeout", "outputs"]) {
+    for (const name of ["site", "progress", "requests", "protocols", "team", "finance", "warehouse", "reports", "closeout", "outputs"]) {
       const page = route(name);
       expect(page).not.toContain("ProjectModuleFoundation");
       expect(page).not.toContain("ProjectModulePage");
