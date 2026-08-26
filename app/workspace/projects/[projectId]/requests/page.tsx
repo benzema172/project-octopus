@@ -1,12 +1,14 @@
 import { FileText, Link2, PackageCheck, Plus } from "lucide-react";
 import { notFound } from "next/navigation";
 import { MaterialRequestIntegrityPanel } from "@/components/projects/material-request-integrity-panel";
+import { MaterialRequestIntelligence130 } from "@/components/projects/material-request-intelligence-130";
 import { MaterialRequestsWorkflow } from "@/components/projects/material-requests-workflow";
 import { ProjectCompactShell } from "@/components/projects/project-compact-module-page";
 import { ProjectOperationPanel } from "@/components/projects/project-operation-panel";
 import { requireCurrentUser } from "@/lib/auth";
 import { listDocumentsForCategories } from "@/lib/data/documents";
 import { getMaterialKnowledge } from "@/lib/data/module-knowledge";
+import { getMaterialRequestIntelligence130 } from "@/lib/data/project-intelligence-130";
 import { getProjectForUser } from "@/lib/data/projects";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { hasDomainAccess } from "@/lib/authorization";
@@ -23,9 +25,10 @@ export default async function RequestsPage({ params }: Props) {
   if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id })) return <DomainAccessDenied workspaceId={project.workspace_id} area="Wnioski materiałowe" />;
   const canWrite = await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "write", projectId: project.id });
   const db = createServiceSupabaseClient();
-  const [documents, brain, requirementsResult, requestsResult, stockItemsResult, boqItemsResult] = await Promise.all([
+  const [documents, brain, materialIntelligence, requirementsResult, requestsResult, stockItemsResult, boqItemsResult] = await Promise.all([
     listDocumentsForCategories(projectId, ["application"]),
     getMaterialKnowledge(projectId),
+    getMaterialRequestIntelligence130(project.workspace_id, project.id),
     db.from("project_requirements").select("id,title,description,status").eq("workspace_id", project.workspace_id).eq("project_id", project.id).eq("requirement_type", "material_application").order("created_at", { ascending: false }),
     db.from("material_requests").select("id,source_requirement_id,title,manufacturer,product_name,model,proposed_use,compliance_summary,status,sent_to,submitted_at,sent_at,decision_note,stock_item_id,boq_item_id,wbs_node_id,request_origin,procurement_trace_id").eq("project_id", project.id).order("created_at", { ascending: false }),
     db.from("stock_items").select("id,sku,name,unit").eq("workspace_id", project.workspace_id).eq("active", true).order("name").limit(1000),
@@ -52,7 +55,7 @@ export default async function RequestsPage({ params }: Props) {
     icon={PackageCheck}
     kicker="Wnioski materiałowe"
     title="Materiały i urządzenia do akceptacji"
-    description="Wymaganie, szkic, weryfikacja, wysłanie i decyzja w jednym rejestrze."
+    description="Wymaganie, szkic, weryfikacja, wysłanie, decyzja, zamówienie i dostawa w jednym rejestrze."
     status={requests.length ? `${requests.length} wniosków` : recognized ? `${recognized} rozpoznanych` : "Brak danych"}
     metrics={[
       { label: "Do przygotowania", value: String(requirements.filter((item) => !["approved","rejected"].includes(item.status)).length), hint: "wymagania materiałowe" },
@@ -60,6 +63,7 @@ export default async function RequestsPage({ params }: Props) {
       { label: "Zatwierdzone", value: String(requests.filter((item) => item.status === "approved").length), hint: "zaakceptowane WM", tone: "positive" }
     ]}
   >
+    <MaterialRequestIntelligence130 projectId={project.id} workflow={materialIntelligence.workflow} gaps={materialIntelligence.gaps} canWrite={canWrite} />
     <details className="pw-submodule-tool"><summary><Plus size={17} aria-hidden="true" />Dodaj wymaganie materiałowe</summary><ProjectOperationPanel projectId={projectId} mode="requirement" /></details>
     <MaterialRequestsWorkflow projectId={projectId} canWrite={canWrite} requirements={requirements} requests={requests} />
     <details className="pw-submodule-tool"><summary><Link2 size={16} aria-hidden="true" />Powiązania materiału, BOQ i śladu zakupowego</summary><MaterialRequestIntegrityPanel projectId={projectId} canWrite={canWrite} requests={requests} stockItems={stockItems} boqItems={boqItems} /></details>
