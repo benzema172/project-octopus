@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
 import { ProjectDocumentControl } from "@/components/projects/project-document-control";
+import { ProjectDocumentIntelligence130 } from "@/components/projects/project-document-intelligence-130";
 import { ProjectDocumentLibrary } from "@/components/projects/project-document-library";
 import { ServerPagination } from "@/components/system/server-pagination";
 import { requireCurrentUser } from "@/lib/auth";
 import { getProjectDocumentOperations } from "@/lib/data/document-operations";
 import { listDocumentsForProjectPage } from "@/lib/data/documents";
+import { getDocumentIntelligence130 } from "@/lib/data/project-intelligence-130";
 import { getProjectForUser } from "@/lib/data/projects";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { hasDomainAccess } from "@/lib/authorization";
@@ -26,10 +28,11 @@ export default async function ProjectDocumentationPage({ params, searchParams }:
     return <DomainAccessDenied workspaceId={project.workspace_id} area="Dokumentacja inwestycji" />;
   }
 
-  const [documentsPage, trashPage, operations, canWrite, canApprove, canAdminSettings] = await Promise.all([
+  const [documentsPage, trashPage, operations, intelligence, canWrite, canApprove, canAdminSettings] = await Promise.all([
     listDocumentsForProjectPage(project.id, { page, pageSize: 50 }),
     listDocumentsForProjectPage(project.id, { trashed: true, page: 1, pageSize: 25 }),
     getProjectDocumentOperations(project.workspace_id, project.id),
+    getDocumentIntelligence130(project.workspace_id, project.id),
     hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "write", projectId: project.id }),
     hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "approve", projectId: project.id }),
     hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "settings", level: "admin" })
@@ -37,6 +40,8 @@ export default async function ProjectDocumentationPage({ params, searchParams }:
 
   return (
     <div className="project-tab-content">
+      <ProjectDocumentIntelligence130 workspaceId={project.workspace_id} projectId={project.id} canWrite={canWrite} data={intelligence} />
+
       <section className="section-band">
         <div className="section-heading">
           <div>
