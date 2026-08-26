@@ -26,7 +26,8 @@ const securityMarkers = [
   /x-cron-secret/i,
   /LIVE_E2E/i,
   /timingSafeEqual\s*\(/,
-  /authorizeIntegrationRequest\s*\(/
+  /authorizeIntegrationRequest\s*\(/,
+  /verify_background_worker_token/
 ];
 
 describe("API security contract", () => {
