@@ -178,7 +178,13 @@ export function buildProjectFinanceSummary(input: ProjectFinanceSummaryInput): P
     if (invoice.dueDate && invoice.dueDate < today && gross - settled > 0.01) overdueInvoices += 1;
   }
 
-  const acceptedAllocations = input.allocations.filter((allocation) => ACCEPTED_ALLOCATION_STATUSES.has(clean(allocation.status)));
+  const purchaseInvoiceIds = new Set(input.invoices
+    .filter((invoice) => clean(invoice.direction) === "purchase")
+    .map((invoice) => invoice.id));
+  const acceptedAllocations = input.allocations.filter((allocation) =>
+    ACCEPTED_ALLOCATION_STATUSES.has(clean(allocation.status))
+    && (clean(allocation.sourceType) !== "invoice" || purchaseInvoiceIds.has(allocation.sourceId))
+  );
   const actualCostFromAllocations = sum(acceptedAllocations, (allocation) => allocation.amount);
   const actualCost = acceptedAllocations.length
     ? actualCostFromAllocations

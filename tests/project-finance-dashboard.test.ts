@@ -17,7 +17,10 @@ function input(overrides: Partial<ProjectFinanceSummaryInput> = {}): ProjectFina
       { invoiceId: "sale-1", amount: 210_000, status: "confirmed" },
       { invoiceId: "purchase-1", amount: 50_000, status: "confirmed" }
     ],
-    allocations: [{ sourceType: "invoice", sourceId: "purchase-1", amount: 120_000, status: "approved" }],
+    allocations: [
+      { sourceType: "invoice", sourceId: "purchase-1", amount: 120_000, status: "approved" },
+      { sourceType: "invoice", sourceId: "sale-1", amount: 250_000, status: "approved" }
+    ],
     commitments: [{ amount: 80_000, status: "open" }],
     budgets: [{ id: "budget-1", name: "Bazowy", versionNumber: 1, status: "active", totalRevenue: 1_000_000, totalCost: 700_000, createdAt: "2026-08-01" }],
     forecasts: [{ id: "forecast-1", status: "draft", forecastDate: "2026-08-20", forecastFinishDate: "2027-01-31", contractValue: 1_000_000, actualCost: 120_000, committedCost: 80_000, estimateToComplete: 530_000, estimateAtCompletion: 650_000, forecastMargin: null }],
