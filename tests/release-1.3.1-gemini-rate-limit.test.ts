@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { geminiRateLimitInfo, geminiRateLimitMessage, millisecondsUntil } from "@/lib/ai/gemini-rate-limit";
+import { geminiRateLimitInfo, geminiRateLimitMessage, millisecondsUntil } from "../lib/ai/gemini-rate-limit";
 
 const read = (path: string) => readFileSync(path, "utf8");
 const processRoute = read("app/api/brain/process-document/route.ts");
