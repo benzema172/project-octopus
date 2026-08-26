@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { AlertTriangle, LogOut, RefreshCw } from "lucide-react";
 import { useEffect } from "react";
 
@@ -21,13 +20,14 @@ export default function WorkspaceError({ error, reset }: { error: Error & { dige
             <button type="button" className="primary-button" onClick={reset}>
               <RefreshCw size={16} aria-hidden="true" /> Spróbuj ponownie
             </button>
-            <Link href="/auth/sign-out" className="secondary-button">
-              <LogOut size={16} aria-hidden="true" /> Odśwież logowanie
-            </Link>
+            <form action="/auth/sign-out" method="post">
+              <button type="submit" className="secondary-button">
+                <LogOut size={16} aria-hidden="true" /> Odśwież logowanie
+              </button>
+            </form>
           </div>
         </div>
       </section>
     </main>
   );
 }
-
