@@ -102,5 +102,6 @@ describe("investment finance dashboard", () => {
     }
     expect(css).toContain("grid-template-columns: repeat(6,minmax(0,1fr));");
     expect(css).toContain(".pf-section[open]");
+    expect(css).toContain(".pf-actions:not([open]) > :not(summary)");
   });
 });
