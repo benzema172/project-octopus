@@ -70,7 +70,14 @@ export async function POST(request: Request) {
       userId: user.id,
       categoryOverride: body.lockCategory ? normalizeDocumentCategory(sourceDocument.category) : null
     });
-    const packageStatus = "package" in analysis ? analysis.package : null;
+    const packageStatus = "package" in analysis
+      ? {
+          packageId: analysis.package.id,
+          acceptedEntries: analysis.package.accepted,
+          skippedEntries: analysis.package.rejected,
+          queuedVersionIds: analysis.package.queuedVersionIds
+        }
+      : null;
 
     let routing: InvestmentRoutingResult | null = null;
     let routingError: string | null = null;
