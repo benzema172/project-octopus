@@ -9,8 +9,7 @@ const retryRoute = read("app/api/brain/retry/route.ts");
 const retryButton = read("components/projects/document-retry-button-130.tsx");
 const intelligence = read("components/projects/project-document-intelligence-130.tsx");
 const migration = read("supabase/migrations/20260826104000_gemini_rate_limit_retry_131.sql");
-const packageJson = JSON.parse(read("package.json")) as { version: string };
-const release = read("lib/app-release.ts");
+const release131 = read("RELEASE_1.3.1.md");
 
 describe("Project Octopus 1.3.1 — Gemini rate-limit recovery", () => {
   it("recognizes RESOURCE_EXHAUSTED and respects Gemini retryDelay", () => {
@@ -66,8 +65,8 @@ describe("Project Octopus 1.3.1 — Gemini rate-limit recovery", () => {
     expect(intelligence).toContain('force={item.stage === "rate_limited"}');
   });
 
-  it("uses a unique 1.3.1 release number", () => {
-    expect(packageJson.version).toBe("1.3.1");
-    expect(release).toContain('version: "1.3.1"');
+  it("retains the documented 1.3.1 release contract after later patches", () => {
+    expect(release131).toContain("Project Octopus 1.3.1");
+    expect(release131).toContain("Gemini rate-limit recovery");
   });
 });
