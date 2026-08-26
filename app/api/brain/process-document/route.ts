@@ -70,6 +70,7 @@ export async function POST(request: Request) {
       userId: user.id,
       categoryOverride: body.lockCategory ? normalizeDocumentCategory(sourceDocument.category) : null
     });
+    const packageStatus = "package" in analysis ? analysis.package : null;
 
     let routing: InvestmentRoutingResult | null = null;
     let routingError: string | null = null;
@@ -114,6 +115,7 @@ export async function POST(request: Request) {
       summary: analysis.summary,
       proposed_project_id: autopilot.projectId ?? analysis.proposedProjectId,
       project_match: analysis.projectMatch,
+      package: packageStatus,
       routing,
       routing_error: routingError,
       autopilot,
