@@ -22,6 +22,13 @@ type ProcessResponse = {
   confidence?: number;
   counts?: Record<string, number>;
   routing?: { normalizedName?: string; discipline?: string; systemName?: string | null };
+  package?: {
+    packageId?: string;
+    totalEntries?: number;
+    acceptedEntries?: number;
+    skippedEntries?: number;
+    queuedVersionIds?: string[];
+  } | null;
   error?: string;
 };
 type IntakePosition = { top: number; right: number; width: number; maxHeight: number };
@@ -57,6 +64,10 @@ function normalizeRelativePath(value: string) {
 function candidateFromFile(file: File): UploadCandidate {
   const browserFile = file as File & { webkitRelativePath?: string };
   return { file, relativePath: normalizeRelativePath(browserFile.webkitRelativePath?.trim() || file.name) };
+}
+
+function candidateKey(candidate: UploadCandidate) {
+  return `${candidate.relativePath}:${candidate.file.size}:${candidate.file.lastModified}`;
 }
 
 function folderPathForCandidate(candidate: UploadCandidate) {
@@ -179,6 +190,7 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
   const knownFiles = useRef(new Set<string>());
   const queue = useRef<Item[]>([]);
   const processingQueue = useRef(false);
+  const lastQueueSummary = useRef<string | null>(null);
   const [open, setOpen] = useState(false);
   const [drag, setDrag] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
@@ -287,6 +299,19 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
 
       const count = Object.values(result?.counts ?? {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
       const normalizedName = result?.routing?.normalizedName || item.file.name;
+      const queuedChildren = result?.package?.queuedVersionIds?.length ?? 0;
+      if (queuedChildren > 0) {
+        const skipped = result?.package?.skippedEntries ?? 0;
+        const summary = `Paczka ${item.file.name}: ${queuedChildren} plików przekazano do kolejki AI${skipped ? `, ${skipped} pominięto` : ""}.`;
+        lastQueueSummary.current = summary;
+        setItems((current) => current.map((row) => row.id === item.id ? {
+          ...row,
+          status: "warning",
+          message: summary
+        } : row));
+        return true;
+      }
+
       setItems((current) => current.map((row) => row.id === item.id ? {
         ...row,
         status: "done",
@@ -295,8 +320,9 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
       return true;
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Przetwarzanie nie powiodło się.";
+      knownFiles.current.delete(candidateKey({ file: item.file, relativePath: item.relativePath }));
       setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "error", error: reason } : row));
-      addIssue({ file: item.file, relativePath: item.relativePath }, reason);
+      addIssue({ file: item.file, relativePath: item.relativePath }, `${reason} Możesz ponownie dodać ten plik.`);
       return false;
     } finally {
       setProgress((current) => ({ ...current, settledFiles: current.settledFiles + 1 }));
@@ -317,7 +343,8 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
     } finally {
       processingQueue.current = false;
       setProcessing(false);
-      setStage("Gotowe. Możesz wrzucić kolejne pliki.");
+      setStage(lastQueueSummary.current ?? "Gotowe. Możesz wrzucić kolejne pliki.");
+      lastQueueSummary.current = null;
       if (changed) startTransition(() => router.refresh());
       if (queue.current.length) void drainQueue();
     }
@@ -334,7 +361,7 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
       if (eligibleCount > MAX_FOLDER_FILES) { addIssue(candidate, `Przekroczono limit ${MAX_FOLDER_FILES} plików w jednym wskazaniu.`); continue; }
       const validationError = validateUploadFile(candidate.file.name, candidate.file.type || "application/octet-stream", candidate.file.size);
       if (validationError) { addIssue(candidate, validationError); continue; }
-      const key = `${candidate.relativePath}:${candidate.file.size}:${candidate.file.lastModified}`;
+      const key = candidateKey(candidate);
       if (knownFiles.current.has(key)) { addIssue(candidate, "Duplikat — ten sam plik jest już w bieżącej kolejce."); continue; }
       knownFiles.current.add(key);
       accepted.push({ id: crypto.randomUUID(), file: candidate.file, relativePath: candidate.relativePath, status: "ready" });
@@ -358,7 +385,7 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
 
   const busy = processing || pending;
   const percent = progress.totalBytes > 0 ? Math.min(100, Math.round((progress.uploadedBytes / progress.totalBytes) * 100)) : 0;
-  const completedAi = items.filter((item) => item.status === "done" || item.status === "warning").length;
+  const completedAi = items.filter((item) => item.status === "done").length;
 
   const dialog = open && position ? (
     <div ref={popover} className="pw-intake-popover pw-intake-popover--portal" role="dialog" aria-modal="false" aria-label="Wrzutnia dokumentów" id="project-intake-dialog" style={position}>
@@ -406,7 +433,7 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
         <div className="pw-intake-progress__stats">
           <span><strong>{progress.uploadedFiles}/{progress.totalFiles}</strong> plików w R2</span>
           <span><strong>{formatBytes(progress.uploadedBytes)}</strong> / {formatBytes(progress.totalBytes)}</span>
-          <span><strong>{completedAi}/{progress.totalFiles}</strong> przeanalizowanych przez AI</span>
+          <span><strong>{completedAi}/{progress.totalFiles}</strong> zakończonych analiz AI</span>
         </div>
       </section> : null}
 
