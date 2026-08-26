@@ -5,17 +5,13 @@ const read = (path: string) => readFileSync(path, "utf8");
 const worker = read("app/api/brain/worker/route.ts");
 const migration = read("supabase/migrations/20260826111000_background_ai_queue_132.sql");
 const release = read("RELEASE_1.3.2.md");
-const packageJson = JSON.parse(read("package.json")) as { version: string };
-const appRelease = read("lib/app-release.ts");
 const allMigrations = readdirSync("supabase/migrations")
   .filter((name) => name.endsWith(".sql"))
   .map((name) => read(`supabase/migrations/${name}`))
   .join("\n");
 
 describe("Project Octopus 1.3.2 — Background AI Queue", () => {
-  it("uses a unique 1.3.2 release number", () => {
-    expect(packageJson.version).toBe("1.3.2");
-    expect(appRelease).toContain('version: "1.3.2"');
+  it("keeps the historical 1.3.2 release record", () => {
     expect(release).toContain("Project Octopus 1.3.2");
   });
 
