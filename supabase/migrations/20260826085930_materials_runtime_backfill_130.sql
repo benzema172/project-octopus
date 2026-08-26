@@ -11,5 +11,5 @@ alter table public.materials
   add column if not exists metadata jsonb not null default '{}'::jsonb;
 
 update public.materials
-set status = coalesce(nullif(btrim(status), ''), 'approved')
-where status is null or btrim(status) = '';
+set status = 'approved'
+where status is null;
