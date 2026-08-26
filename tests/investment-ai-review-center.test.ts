@@ -23,7 +23,7 @@ function analysis(overrides: Partial<DocumentAnalysis>): DocumentAnalysis {
 }
 
 describe("Investment AI field proposals", () => {
-  it("routes BOQ, schedule, materials, protocols and progress into reviewable modules", () => {
+  it("routes BOQ, schedule, materials, protocols and progress into auditable module proposals", () => {
     const rows = buildDocumentModuleProposals(analysis({
       boqItems: [{ itemNumber: "1.1", description: "Rurociąg", quantity: 10, unit: "m", unitPrice: 50, totalPrice: 500, wbsCode: "SAN", confidence: .97, locator: "str. 3", quote: "Rurociąg 10 m" }],
       materialRequirements: [{ name: "Rura", installation: "SAN", manufacturer: "", model: "", specification: "PN16", quantity: 10, unit: "m", standards: ["PN-EN"], requiredDocuments: ["DoP"], alternativesAllowed: false, confidence: .91, locator: "str. 5", quote: "Rura PN16" }],
@@ -75,11 +75,12 @@ describe("row-level revision radar", () => {
   });
 });
 
-describe("review-center delivery contract", () => {
+describe("AI proposal delivery contract", () => {
   const migration = readFileSync("supabase/migrations/20260824140000_investment_ai_review_center.sql", "utf8");
   const reviewRoute = readFileSync("app/api/brain/review/route.ts", "utf8");
   const proposalsRoute = readFileSync("app/api/brain/proposals/route.ts", "utf8");
   const documentationPage = readFileSync("app/workspace/projects/[projectId]/documentation/page.tsx", "utf8");
+  const autopilot = readFileSync("lib/ai/document-autopilot.ts", "utf8");
 
   it("keeps field publication atomic, service-only and source-linked", () => {
     expect(migration).toContain("publish_document_module_proposal_atomic");
@@ -90,10 +91,13 @@ describe("review-center delivery contract", () => {
     expect(migration).toContain("to service_role");
   });
 
-  it("requires document approval and then a separate field-level decision", () => {
+  it("preserves review APIs but uses Autopilot for the new autonomous investment ingestion flow", () => {
     expect(reviewRoute).toContain("review_document_with_proposals_atomic");
     expect(reviewRoute).toContain("proposalReviewRequired");
     expect(proposalsRoute).toContain("publish_document_module_proposal_atomic");
-    expect(documentationPage).toContain("ProjectAiReviewCenter");
+    expect(autopilot).toContain("review_document_with_proposals_atomic");
+    expect(autopilot).toContain("publish_document_module_proposal_atomic");
+    expect(documentationPage).toContain("ProjectDocumentLibrary");
+    expect(documentationPage).not.toContain("ProjectAiReviewCenter");
   });
 });

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
-describe("Investment Wrzutnia drag and drop", () => {
+describe("Investment Wrzutnia drag, drop and folder picker", () => {
   it("mounts the ProjectIntake used by the investment header", () => {
     const layout = read("app/workspace/projects/[projectId]/layout.tsx");
     const slot = read("components/projects/project-intake-slot.tsx");
@@ -13,18 +13,18 @@ describe("Investment Wrzutnia drag and drop", () => {
     expect(slot).toContain("module.ProjectIntake");
   });
 
-  it("recognizes files, ZIPs and recursively dropped folders without picker buttons", () => {
+  it("recognizes files, ZIPs and recursively dropped or selected folders", () => {
     const intake = read("components/projects/project-intake-pipeline.tsx");
 
     expect(intake).toContain("webkitGetAsEntry");
     expect(intake).toContain("candidatesFromDataTransfer");
     expect(intake).toContain("candidatesFromEntry");
     expect(intake).toContain("readDirectoryEntries");
-    expect(intake).toContain("Upuść tutaj dokumenty, ZIP lub cały folder");
+    expect(intake).toContain("Upuść dokumenty albo cały folder");
     expect(intake).toContain("MAX_FOLDER_FILES = 1000");
-    expect(intake).not.toContain(">Wybierz pliki<");
-    expect(intake).not.toContain("Wybierz folder");
-    expect(intake).not.toContain("pw-intake-picker-actions");
+    expect(intake).toContain("Wybierz pliki");
+    expect(intake).toContain("Wybierz folder");
+    expect(intake).toContain("webkitdirectory");
   });
 
   it("starts processing automatically and reports real byte upload progress", () => {
@@ -36,12 +36,12 @@ describe("Investment Wrzutnia drag and drop", () => {
     expect(intake).toContain("xhr.upload.onprogress");
     expect(intake).toContain("uploadedBytes");
     expect(intake).toContain("uploadedFiles");
-    expect(intake).toContain("remainingPercent");
-    expect(intake).toContain("formatBytes(remainingBytes)");
+    expect(intake).toContain("formatBytes(progress.uploadedBytes)");
+    expect(intake).toContain("/api/brain/process-document");
     expect(intake).not.toContain("Wyślij i analizuj");
   });
 
-  it("does not render the successful-document list and lists only skipped or problematic files with reasons", () => {
+  it("does not render a manual successful-document worklist and lists only skipped or problematic files with reasons", () => {
     const intake = read("components/projects/project-intake-pipeline.tsx");
 
     expect(intake).not.toContain('className="pw-intake-list"');
@@ -53,14 +53,15 @@ describe("Investment Wrzutnia drag and drop", () => {
     expect(intake).toContain("Duplikat — ten sam plik");
   });
 
-  it("keeps folder context for every accepted investment document", () => {
+  it("keeps folder context for every accepted investment document without manual package metadata", () => {
     const intake = read("components/projects/project-intake-pipeline.tsx");
 
     expect(intake).toContain("relativePath: string");
     expect(intake).toContain("folderPathForCandidate");
-    expect(intake).toContain("packageLabelForItem");
-    expect(intake).toContain("packageLabel: packageLabelForItem(packageLabel, item)");
+    expect(intake).toContain("packageLabel: folderPathForCandidate");
     expect(intake).toContain('parts.includes("__MACOSX")');
     expect(intake).toContain('new Set([".DS_Store", "Thumbs.db", "desktop.ini"])');
+    expect(intake).not.toContain("Nazwa paczki");
+    expect(intake).not.toContain("Oznaczenie rewizji");
   });
 });
