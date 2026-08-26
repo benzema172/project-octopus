@@ -3,13 +3,12 @@ import { describe, expect, it } from "vitest";
 
 const route = readFileSync("app/api/system/reset-documentation/route.ts", "utf8");
 const migration = readFileSync("supabase/migrations/20260826115000_documentation_reset_133.sql", "utf8");
-const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
-const release = readFileSync("lib/app-release.ts", "utf8");
+const release = readFileSync("RELEASE_1.3.3.md", "utf8");
 
 describe("Project Octopus 1.3.3 — Documentation Reset", () => {
-  it("uses a unique 1.3.3 release number", () => {
-    expect(packageJson.version).toBe("1.3.3");
-    expect(release).toContain('version: "1.3.3"');
+  it("keeps the historical 1.3.3 release record", () => {
+    expect(release).toContain("Project Octopus 1.3.3");
+    expect(release).toContain("Documentation Reset");
   });
 
   it("requires the private background token and an exact destructive confirmation", () => {
