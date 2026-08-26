@@ -1,0 +1,165 @@
+/* Compact, task-first company navigation. */
+
+.octopus-app-light .co-sidebar {
+  overflow: hidden;
+  padding: 18px 14px 14px;
+}
+
+.octopus-app-light .co-sidebar-brand {
+  flex: 0 0 auto;
+  padding: 0 8px 13px;
+}
+
+.octopus-app-light .co-company-switcher {
+  flex: 0 0 auto;
+  gap: 2px;
+  min-height: 54px;
+  padding: 8px 10px;
+}
+
+.octopus-app-light .co-company-switcher__topline {
+  min-height: 20px;
+}
+
+.octopus-app-light .co-company-switcher__change {
+  width: 22px;
+  height: 22px;
+  flex-basis: 22px;
+  border-radius: 7px;
+}
+
+.co-sidebar-menu {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin-top: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-color: #d8d4df transparent;
+  scrollbar-width: thin;
+}
+
+.co-sidebar-section-label {
+  margin: 0 9px 6px;
+  color: #9691a0;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .11em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.octopus-app-light .co-sidebar-nav {
+  display: grid;
+  flex: 0 0 auto;
+  grid-auto-rows: 40px;
+  align-content: start;
+  gap: 3px;
+  margin: 0;
+  overflow: visible;
+  padding: 0;
+}
+
+.octopus-app-light .co-sidebar-nav a,
+.octopus-app-light .co-sidebar-tools nav a,
+.octopus-app-light .co-sidebar-tools > summary {
+  min-height: 40px;
+  border-radius: 10px;
+  padding: 0 10px;
+}
+
+.octopus-app-light .co-sidebar-nav a,
+.octopus-app-light .co-sidebar-tools nav a {
+  gap: 10px;
+  color: #5f5b67;
+  font-size: 12px;
+}
+
+.octopus-app-light .co-sidebar-nav a svg,
+.octopus-app-light .co-sidebar-tools nav a svg,
+.octopus-app-light .co-sidebar-tools > summary svg:first-child {
+  flex: 0 0 auto;
+  color: #716c79;
+}
+
+.octopus-app-light .co-sidebar-nav a:hover,
+.octopus-app-light .co-sidebar-tools nav a:hover,
+.octopus-app-light .co-sidebar-tools > summary:hover {
+  background: #f1f1f5;
+  transform: none;
+}
+
+.octopus-app-light .co-sidebar-nav a.is-active,
+.octopus-app-light .co-sidebar-nav a[aria-current="page"],
+.octopus-app-light .co-sidebar-tools nav a[aria-current="page"] {
+  background: #eeedf9;
+  color: #5145a8;
+  box-shadow: inset 2px 0 #6256c8;
+}
+
+.octopus-app-light .co-sidebar-nav a.is-active svg,
+.octopus-app-light .co-sidebar-nav a[aria-current="page"] svg,
+.octopus-app-light .co-sidebar-tools nav a[aria-current="page"] svg {
+  color: #6256c8;
+}
+
+.octopus-app-light .co-sidebar-tools {
+  flex: 0 0 auto;
+  margin-top: 12px;
+  border-top-color: #e7e5eb;
+  padding-top: 8px;
+}
+
+.octopus-app-light .co-sidebar-tools > summary {
+  color: #34303a;
+  font-size: 12px;
+}
+
+.octopus-app-light .co-sidebar-tools nav {
+  grid-auto-rows: 40px;
+  align-content: start;
+  gap: 3px;
+}
+
+.octopus-app-light .co-sidebar-footer {
+  flex: 0 0 auto;
+  min-height: 47px;
+  margin-top: 10px;
+  padding: 10px 4px 0;
+}
+
+.octopus-app-light .co-sidebar-footer .co-icon-button {
+  width: 34px;
+  min-height: 34px;
+  height: 34px;
+}
+
+@media (max-height: 700px) and (min-width: 981px) {
+  .octopus-app-light .co-sidebar-brand { padding-bottom: 9px; }
+  .octopus-app-light .co-sidebar-menu { margin-top: 8px; }
+  .octopus-app-light .co-sidebar-nav,
+  .octopus-app-light .co-sidebar-tools nav { grid-auto-rows: 38px; }
+  .octopus-app-light .co-sidebar-nav a,
+  .octopus-app-light .co-sidebar-tools nav a,
+  .octopus-app-light .co-sidebar-tools > summary { min-height: 38px; }
+}
+
+@media (max-width: 980px) {
+  .octopus-app-light .co-sidebar {
+    padding: 16px 14px 14px;
+  }
+
+  .co-sidebar-menu {
+    margin-top: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .octopus-app-light .co-sidebar-nav a,
+  .octopus-app-light .co-sidebar-tools nav a,
+  .octopus-app-light .co-sidebar-tools > summary {
+    transition: none;
+  }
+}

@@ -8,6 +8,7 @@ import "../finance-compact.css";
 import "../layout-density-audit.css";
 import "../layout-density-project-audit.css";
 import "../global-section-rhythm.css";
+import "../company-sidebar-compact.css";
 
 export const dynamic = "force-dynamic";
 

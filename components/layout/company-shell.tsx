@@ -155,14 +155,17 @@ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomai
           <strong>{companyName}</strong>
         </div>
 
-        <nav className="co-sidebar-nav" aria-label="Główne moduły firmy">{primaryItems.map(renderLink)}</nav>
+        <div className="co-sidebar-menu">
+          <p className="co-sidebar-section-label">Moduły</p>
+          <nav className="co-sidebar-nav" aria-label="Główne moduły firmy">{primaryItems.map(renderLink)}</nav>
 
-        {toolItems.length ? (
-          <details className="co-sidebar-tools" open={toolsActive || toolsOpen} onToggle={(event) => setToolsOpen(event.currentTarget.open)}>
-            <summary><Wrench size={17} aria-hidden="true" /><span>Narzędzia</span><ChevronDown className="co-sidebar-tools__chevron" size={15} aria-hidden="true" /></summary>
-            <nav aria-label="Narzędzia i ustawienia firmy">{toolItems.map(renderLink)}</nav>
-          </details>
-        ) : null}
+          {toolItems.length ? (
+            <details className="co-sidebar-tools" open={toolsActive || toolsOpen} onToggle={(event) => setToolsOpen(event.currentTarget.open)}>
+              <summary><Wrench size={17} aria-hidden="true" /><span>Narzędzia</span><ChevronDown className="co-sidebar-tools__chevron" size={15} aria-hidden="true" /></summary>
+              <nav aria-label="Narzędzia i ustawienia firmy">{toolItems.map(renderLink)}</nav>
+            </details>
+          ) : null}
+        </div>
 
         <div className="co-sidebar-footer">
           <div><small>Zalogowano jako</small><span title={userEmail}>{userEmail}</span></div>
