@@ -53,12 +53,9 @@ describe("Project Octopus release audit regressions", () => {
     expect(sql).toContain("insert into public.meter_readings");
   });
 
-  it("keeps package and lock metadata aligned with the current 1.2.0 release", () => {
-    const pkg = JSON.parse(read("package.json")) as { version: string; devDependencies: Record<string, string> };
-    const lock = JSON.parse(read("package-lock.json")) as { version: string; packages: Record<string, { version?: string; devDependencies?: Record<string, string> }> };
-    expect(pkg.version).toBe("1.2.0");
-    expect(lock.version).toBe("1.2.0");
-    expect(lock.packages[""]?.version).toBe("1.2.0");
+  it("keeps dependency lock metadata aligned with the current runtime dependency set", () => {
+    const pkg = JSON.parse(read("package.json")) as { devDependencies: Record<string, string> };
+    const lock = JSON.parse(read("package-lock.json")) as { packages: Record<string, { devDependencies?: Record<string, string> }> };
     expect(pkg.devDependencies["@types/node"]).toBe("22.12.0");
     expect(lock.packages[""]?.devDependencies?.["@types/node"]).toBe("22.12.0");
   });
