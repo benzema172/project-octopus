@@ -5,6 +5,7 @@ import { hasDomainAccess } from "@/lib/authorization";
 import { processDocumentVersion } from "@/lib/ai/process-document";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
 import { enrichDocumentWithInvestmentRouting } from "@/lib/ai/investment-document-routing";
+import { geminiRateLimitInfo, geminiRateLimitMessage, wait } from "@/lib/ai/gemini-rate-limit";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { getOptionalEnv } from "@/lib/env";
 import { errorFields, operationalLog, requestIdFrom } from "@/lib/observability/server-logger";
@@ -12,6 +13,8 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
+
+const MAX_AUTOMATIC_RATE_LIMIT_WAIT_MS = 75_000;
 
 type ClaimedJob = {
   id: string;
@@ -24,6 +27,14 @@ type WorkerVersion = {
   project_id: string | null;
   file_name: string;
   uploaded_by: string | null;
+};
+
+type WorkerResult = {
+  jobId: string;
+  versionId: string | null;
+  status: "succeeded" | "failed" | "waiting";
+  error?: string;
+  retryAt?: string;
 };
 
 function safeSecretEqual(expected: string | null | undefined, received: string | null | undefined) {
@@ -54,7 +65,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Tylko administrator firmy może ręcznie uruchomić worker." }, { status: 403 });
   }
 
-  const results: Array<{ jobId: string; versionId: string | null; status: "succeeded" | "failed"; error?: string }> = [];
+  const results: WorkerResult[] = [];
+  let automaticRateLimitWaits = 0;
   operationalLog("info", {
     event: "worker.started",
     route: "/api/brain/worker",
@@ -156,6 +168,40 @@ export async function POST(request: Request) {
         }
       });
     } catch (processingError) {
+      const rateLimit = geminiRateLimitInfo(processingError);
+      if (rateLimit) {
+        const message = geminiRateLimitMessage(rateLimit);
+        const { error: deferError } = await supabase.rpc("defer_gemini_rate_limit", {
+          p_workspace_id: job.workspace_id,
+          p_document_id: null,
+          p_document_version_id: job.document_version_id,
+          p_retry_at: rateLimit.retryAt,
+          p_message: message
+        });
+        if (deferError) {
+          operationalLog("error", { event: "worker.rate_limit_defer_failed", route: "/api/brain/worker", method: "POST", module: "documents", workspaceId: job.workspace_id, requestId, ...errorFields(deferError), meta: { jobId: job.id } });
+        }
+        operationalLog("warn", {
+          event: "worker.gemini_rate_limited",
+          route: "/api/brain/worker",
+          method: "POST",
+          module: "documents",
+          workspaceId: job.workspace_id,
+          requestId,
+          status: "waiting_rate_limit",
+          errorCode: "GEMINI_RATE_LIMIT",
+          meta: { jobId: job.id, versionId: job.document_version_id, retryAt: rateLimit.retryAt, retryAfterMs: rateLimit.retryAfterMs }
+        });
+        if (automaticRateLimitWaits < 1 && rateLimit.retryAfterMs <= MAX_AUTOMATIC_RATE_LIMIT_WAIT_MS) {
+          automaticRateLimitWaits += 1;
+          await wait(rateLimit.retryAfterMs + 750);
+          index -= 1;
+          continue;
+        }
+        results.push({ jobId: job.id, versionId: job.document_version_id, status: "waiting", error: message, retryAt: rateLimit.retryAt });
+        break;
+      }
+
       const errorMessage = processingError instanceof Error ? processingError.message : "Nieznany błąd";
       results.push({ jobId: job.id, versionId: job.document_version_id, status: "failed", error: errorMessage });
       operationalLog("error", { event: "worker.job_failed", route: "/api/brain/worker", method: "POST", module: "documents", workspaceId: job.workspace_id, requestId, durationMs: performance.now()-jobStartedAt, status: "failed", ...errorFields(processingError), meta: { jobId: job.id, versionId: job.document_version_id } });
@@ -172,7 +218,12 @@ export async function POST(request: Request) {
     requestId,
     durationMs: performance.now()-startedAt,
     status: 200,
-    meta: { processed: results.length, succeeded: results.filter((result)=>result.status==="succeeded").length, failed: results.filter((result)=>result.status==="failed").length }
+    meta: {
+      processed: results.length,
+      succeeded: results.filter((result)=>result.status==="succeeded").length,
+      failed: results.filter((result)=>result.status==="failed").length,
+      waiting: results.filter((result)=>result.status==="waiting").length
+    }
   });
 
   return NextResponse.json({ ok: true, worker: workerName, processed: results.length, results }, { headers: { "Cache-Control": "no-store", "X-Request-Id": requestId } });
