@@ -14,12 +14,22 @@ set search_path = public
 as $$
 declare
   v_job public.processing_jobs%rowtype;
+  v_document_id uuid := p_document_id;
   v_retry_at timestamptz := greatest(coalesce(p_retry_at, now() + interval '60 seconds'), now() + interval '5 seconds');
 begin
+  if v_document_id is null then
+    select dv.document_id into v_document_id
+    from public.document_versions dv
+    join public.documents d on d.id = dv.document_id and d.workspace_id = p_workspace_id
+    where dv.id = p_document_version_id
+    limit 1;
+  end if;
+  if v_document_id is null then raise exception 'Nie znaleziono dokumentu dla odroczonej analizy Gemini.'; end if;
+
   select pj.* into v_job
   from public.processing_jobs pj
   where pj.workspace_id = p_workspace_id
-    and pj.document_id = p_document_id
+    and pj.document_id = v_document_id
     and pj.document_version_id = p_document_version_id
   order by pj.created_at desc
   limit 1
@@ -31,11 +41,11 @@ begin
       job_type, job_key, stage, status, priority, attempt_count, max_attempts,
       available_at, error_code, error_message
     )
-    select p_workspace_id, d.project_id, p_document_id, p_document_version_id,
+    select p_workspace_id, d.project_id, v_document_id, p_document_version_id,
       'document_pipeline', 'document-pipeline:' || p_document_version_id::text,
       'analyze', 'queued', 100, 0, 5, v_retry_at, 'GEMINI_RATE_LIMIT', p_message
     from public.documents d
-    where d.id = p_document_id and d.workspace_id = p_workspace_id
+    where d.id = v_document_id and d.workspace_id = p_workspace_id
     returning * into v_job;
   else
     update public.processing_jobs pj
@@ -56,15 +66,15 @@ begin
 
   update public.documents
   set ai_status = 'queued', updated_at = now()
-  where id = p_document_id and workspace_id = p_workspace_id;
+  where id = v_document_id and workspace_id = p_workspace_id;
 
   update public.document_intakes
   set status = 'queued'
-  where workspace_id = p_workspace_id and document_id = p_document_id;
+  where workspace_id = p_workspace_id and document_id = v_document_id;
 
   update public.document_package_items
   set status = 'queued', error_message = null, updated_at = now()
-  where child_document_id = p_document_id or child_version_id = p_document_version_id;
+  where child_document_id = v_document_id or child_version_id = p_document_version_id;
 
   return query select v_job.id, v_retry_at;
 end;
