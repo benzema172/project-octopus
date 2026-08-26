@@ -51,7 +51,7 @@
 
 .pw-intake-progress__stats {
   display: grid;
-  grid-template-columns: repeat(4,minmax(0,1fr));
+  grid-template-columns: repeat(3,minmax(0,1fr));
   gap: 6px;
 }
 
@@ -168,7 +168,7 @@
 @media (max-width: 680px) {
   .pw-intake-progress__head { align-items: flex-start; flex-direction: column; gap: 4px; }
   .pw-intake-progress__head span { width: 100%; }
-  .pw-intake-progress__stats { grid-template-columns: 1fr 1fr; }
+  .pw-intake-progress__stats { grid-template-columns: 1fr; }
   .pw-intake-skipped__list article { grid-template-columns: 1fr; gap: 4px; }
 }
 
