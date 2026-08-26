@@ -90,6 +90,9 @@
 
 .pf-section > summary::-webkit-details-marker,
 .pf-actions > summary::-webkit-details-marker { display: none; }
+.pf-section:not([open]) > :not(summary),
+.pf-actions:not([open]) > :not(summary),
+.pf-actions__body > .pw-submodule-tool:not([open]) > :not(summary) { display: none !important; }
 .pf-section > summary:hover,
 .pf-actions > summary:hover { background: #faf8fc; }
 .pf-section[open] > summary,
