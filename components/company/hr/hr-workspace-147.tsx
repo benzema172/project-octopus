@@ -17,7 +17,7 @@ export function HrWorkspace147(props: Props) {
     setDashboardActive((button.textContent ?? "").includes("Pulpit"));
   };
 
-  return <div className={styles.shell} onClickCapture={mirrorTab}>
+  return <div className={`${styles.shell} ${dashboardActive ? styles.dashboardCompact : ""}`} onClickCapture={mirrorTab}>
     <div className={styles.workspaceSlot}>
       <HrWorkspace140 {...props} />
     </div>
