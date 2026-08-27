@@ -18,7 +18,7 @@ export function HrWorkspace147(props: Props) {
   };
 
   return <div className={`${styles.shell} ${dashboardActive ? styles.dashboardCompact : ""}`} onClickCapture={mirrorTab}>
-    <div className={styles.workspaceSlot}>
+    <div className={styles.workspaceSlot} data-hr-workspace-slot="employees-shell">
       <HrWorkspace140 {...props} />
     </div>
     {dashboardActive ? <HrDashboardCalendar147 data={props.data} /> : null}
