@@ -22,6 +22,7 @@ create table if not exists public.hr_teams (
 create index if not exists hr_teams_workspace_idx on public.hr_teams(workspace_id, active, name);
 create index if not exists hr_teams_leader_idx on public.hr_teams(leader_employee_id);
 create index if not exists hr_teams_project_idx on public.hr_teams(project_id);
+create index if not exists hr_teams_created_by_idx on public.hr_teams(created_by);
 alter table public.hr_teams enable row level security;
 drop policy if exists hr_teams_member on public.hr_teams;
 create policy hr_teams_member on public.hr_teams for all
@@ -65,6 +66,7 @@ create table if not exists public.safety_trainings (
 );
 create index if not exists safety_trainings_workspace_idx on public.safety_trainings(workspace_id, valid_until);
 create index if not exists safety_trainings_employee_idx on public.safety_trainings(employee_id, valid_until);
+create index if not exists safety_trainings_document_idx on public.safety_trainings(document_id);
 alter table public.safety_trainings enable row level security;
 drop policy if exists safety_trainings_member on public.safety_trainings;
 create policy safety_trainings_member on public.safety_trainings for all
@@ -91,6 +93,7 @@ create table if not exists public.employee_documents (
 create index if not exists employee_documents_workspace_idx on public.employee_documents(workspace_id, document_type, valid_until);
 create index if not exists employee_documents_employee_idx on public.employee_documents(employee_id, created_at desc);
 create index if not exists employee_documents_document_idx on public.employee_documents(document_id);
+create index if not exists employee_documents_created_by_idx on public.employee_documents(created_by);
 alter table public.employee_documents enable row level security;
 drop policy if exists employee_documents_member on public.employee_documents;
 create policy employee_documents_member on public.employee_documents for all
