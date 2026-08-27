@@ -1,1 +1,18 @@
-.shell{display:grid;gap:18px}.workspaceSlot{min-width:0}.workspaceSlot section[class*="metrics"]{display:none!important}
+.shell{display:grid;gap:14px}.workspaceSlot{min-width:0}.workspaceSlot section[class*="metrics"]{display:none!important}
+.dashboardCompact .workspaceSlot section[class*="grid2"]{gap:10px!important}
+.dashboardCompact .workspaceSlot section[class*="grid3"]{gap:10px!important}
+.dashboardCompact .workspaceSlot section[class*="grid2"] article[class*="panel"],
+.dashboardCompact .workspaceSlot section[class*="grid3"] article[class*="panel"]{padding:11px 14px!important;border-radius:13px!important}
+.dashboardCompact .workspaceSlot section[class*="grid2"] [class*="panelHeader"]{margin-bottom:7px!important;gap:8px!important;align-items:center!important}
+.dashboardCompact .workspaceSlot section[class*="grid2"] [class*="panelHeader"] h2{font-size:1.08rem!important;line-height:1.15!important;margin:0!important}
+.dashboardCompact .workspaceSlot section[class*="grid2"] [class*="kicker"]{margin-bottom:2px!important;font-size:.65rem!important}
+.dashboardCompact .workspaceSlot section[class*="grid2"] [class*="alertList"],
+.dashboardCompact .workspaceSlot section[class*="grid2"] [class*="simpleList"]{gap:5px!important}
+.dashboardCompact .workspaceSlot section[class*="grid2"] [class*="alert"],
+.dashboardCompact .workspaceSlot section[class*="grid2"] [class*="listItem"]{padding:7px 9px!important;border-radius:9px!important;align-items:center!important}
+.dashboardCompact .workspaceSlot section[class*="grid2"] [class*="subtle"],
+.dashboardCompact .workspaceSlot section[class*="grid3"] [class*="subtle"]{display:none!important}
+.dashboardCompact .workspaceSlot section[class*="grid3"] article[class*="panel"]{min-height:0!important}
+.dashboardCompact .workspaceSlot section[class*="grid3"] article[class*="panel"] h3{margin:0 0 5px!important;font-size:.93rem!important;line-height:1.2!important}
+.dashboardCompact .workspaceSlot section[class*="grid3"] article[class*="panel"]>strong{display:block;font-size:1rem!important;line-height:1.1!important;margin:0!important}
+@media(max-width:1100px){.dashboardCompact .workspaceSlot section[class*="grid2"],.dashboardCompact .workspaceSlot section[class*="grid3"]{gap:8px!important}}
