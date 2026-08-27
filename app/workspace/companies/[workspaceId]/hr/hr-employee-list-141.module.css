@@ -1,0 +1,121 @@
+.hr141 > div > details {
+  justify-self: end;
+  width: max-content;
+  min-width: 0;
+  border-radius: 11px;
+}
+
+.hr141 > div > details > summary {
+  width: max-content;
+  padding: 8px 11px;
+  font-size: .9rem;
+  line-height: 1;
+}
+
+.hr141 > div > details[open] {
+  justify-self: stretch;
+  width: 100%;
+}
+
+.hr141 > div > details[open] > summary {
+  margin-left: auto;
+}
+
+.hr141 > div:has(> details) > article table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.hr141 > div:has(> details) > article table thead th {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  background: #f7f8fa;
+  border-bottom: 1px solid #dfe3e8;
+}
+
+.hr141 > div:has(> details) > article table tbody {
+  counter-reset: employee-row;
+}
+
+.hr141 > div:has(> details) > article table tbody tr {
+  counter-increment: employee-row;
+}
+
+.hr141 > div:has(> details) > article table tbody td {
+  padding-top: 14px;
+  padding-bottom: 14px;
+  vertical-align: middle;
+}
+
+.hr141 > div:has(> details) > article table th + th,
+.hr141 > div:has(> details) > article table td + td {
+  border-left: 1px solid #eef0f3;
+}
+
+.hr141 > div:has(> details) > article table thead th:first-child,
+.hr141 > div:has(> details) > article table tbody td:first-child {
+  position: relative;
+  padding-left: 78px;
+  min-width: 280px;
+}
+
+.hr141 > div:has(> details) > article table thead th:first-child::before {
+  content: "LP.";
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  width: 34px;
+  transform: translateY(-50%);
+  color: #727786;
+  font-size: .76rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-align: center;
+}
+
+.hr141 > div:has(> details) > article table tbody td:first-child::before {
+  content: counter(employee-row);
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  width: 34px;
+  transform: translateY(-50%);
+  color: #1f2937;
+  font-weight: 750;
+  text-align: center;
+}
+
+.hr141 > div:has(> details) > article table thead th:first-child::after,
+.hr141 > div:has(> details) > article table tbody td:first-child::after {
+  content: "";
+  position: absolute;
+  left: 62px;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid #e7eaee;
+}
+
+.hr141 > div:has(> details) > article table tbody td:first-child > div {
+  display: none;
+}
+
+.hr141 > div:has(> details) > article table tbody td:first-child strong {
+  font-size: .96rem;
+}
+
+.hr141 > div:has(> details) > article table tbody tr:hover td {
+  background: #fafbfc;
+}
+
+@media (max-width: 680px) {
+  .hr141 > div > details,
+  .hr141 > div > details[open] {
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .hr141 > div > details > summary,
+  .hr141 > div > details[open] > summary {
+    margin-left: auto;
+  }
+}

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 const migration = readFileSync("supabase/migrations/20260827090000_hr_2_140.sql", "utf8");
 const page = readFileSync("app/workspace/companies/[workspaceId]/hr/page.tsx", "utf8");
 const ui = readFileSync("components/company/hr/hr-workspace-140.tsx", "utf8");
+const css141 = readFileSync("app/workspace/companies/[workspaceId]/hr/hr-employee-list-141.module.css", "utf8");
 const api = readFileSync("app/api/company/hr/route.ts", "utf8");
 const loader = readFileSync("lib/data/hr-workspace-140.ts", "utf8");
 const exportRoute = readFileSync("app/api/company/hr/export/route.ts", "utf8");
@@ -57,5 +58,16 @@ describe("Project Octopus 1.4.0 — Kadry 2.0", () => {
     expect(exportRoute).toContain("text/csv; charset=utf-8");
     expect(exportRoute).toContain("Urlop pozostały");
     expect(ui).toContain("Raport CSV");
+  });
+
+  it("keeps the employee list readable and numbers filtered rows from one", () => {
+    expect(page).toContain("hr-employee-list-141.module.css");
+    expect(page).toContain("styles.hr141");
+    expect(css141).toContain("counter-reset: employee-row");
+    expect(css141).toContain("counter-increment: employee-row");
+    expect(css141).toContain('content: "LP."');
+    expect(css141).toContain("content: counter(employee-row)");
+    expect(css141).toContain("justify-self: end");
+    expect(css141).toContain("width: max-content");
   });
 });
