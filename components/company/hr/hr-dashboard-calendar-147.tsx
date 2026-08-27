@@ -233,14 +233,14 @@ export function HrDashboardCalendar147({ data }: { data: CalendarData }) {
           <small>Wybrany dzień</small>
           <h3>{selectedLabel}</h3>
         </div>
-        <div className={styles.statusOverview}>
+        <div style={{ display: "grid", justifyItems: "end", gap: 5 }}>
           <div className={styles.summaryChips}>
             <span className={styles.summaryWork}>{selectedSummary.work} praca</span>
             <span className={styles.summaryAbsence}>{selectedSummary.absence} nieobecność</span>
             <span className={styles.summaryMissing}>{selectedSummary.missing} brak wpisu</span>
             {selectedSummary.conflict ? <span className={styles.summaryConflict}>{selectedSummary.conflict} konflikt</span> : null}
           </div>
-          <div className={styles.legend} aria-label="Legenda statusów kalendarza">
+          <div className={styles.legend} aria-label="Legenda statusów kalendarza" style={{ border: 0, background: "transparent", padding: 0, borderRadius: 0, justifyContent: "flex-end" }}>
             <span><i className={styles.legendWork} /> Praca</span>
             <span><i className={styles.legendAbsence} /> Nieobecność</span>
             <span><i className={styles.legendMissing} /> Brak wpisu</span>
