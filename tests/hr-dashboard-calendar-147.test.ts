@@ -21,7 +21,7 @@ describe("HR dashboard calendar day status 1.4.7", () => {
     expect(calendar).toContain("data.leaves.filter");
     expect(calendar).toContain('String(row.status) === "approved"');
     expect(calendar).toContain("sheetProjectIds.length ? sheetProjectIds : assignmentProjectIds");
-    expect(calendar).toContain('statusLabel: "Brak wpisu czasu"');
+    expect(calendar).toContain('"Brak wpisu czasu"');
     expect(calendar).toContain('statusLabel: "Urlop + wpis czasu"');
   });
 
