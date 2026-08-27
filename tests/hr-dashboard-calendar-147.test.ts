@@ -46,4 +46,13 @@ describe("HR dashboard calendar day status 1.4.7", () => {
     expect(css).toContain(".legendConflict");
     expect(css).toContain(".stateBar");
   });
+
+  it("keeps the status legend in the selected-day panel instead of above the month grid", () => {
+    const drawerIndex = calendar.indexOf("styles.dayDrawer");
+    const legendIndex = calendar.indexOf('aria-label="Legenda statusów kalendarza"');
+    const monthBarIndex = calendar.indexOf("styles.monthBar");
+    expect(drawerIndex).toBeGreaterThan(monthBarIndex);
+    expect(legendIndex).toBeGreaterThan(drawerIndex);
+    expect(calendar.match(/aria-label=\"Legenda statusów kalendarza\"/g)).toHaveLength(1);
+  });
 });
