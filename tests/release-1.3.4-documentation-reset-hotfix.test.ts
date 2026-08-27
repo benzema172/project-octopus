@@ -3,14 +3,11 @@ import { describe, expect, it } from "vitest";
 
 const migration = readFileSync("supabase/migrations/20260826121000_documentation_reset_134_hotfix.sql", "utf8");
 const route = readFileSync("app/api/system/reset-documentation/route.ts", "utf8");
-const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
-const release = readFileSync("lib/app-release.ts", "utf8");
 
 describe("Project Octopus 1.3.4 — Documentation Reset Hotfix", () => {
-  it("uses the unique 1.3.4 release number", () => {
-    expect(packageJson.version).toBe("1.3.4");
-    expect(release).toContain('version: "1.3.4"');
+  it("keeps the historical reset endpoint identified as the 1.3.4 hotfix without freezing future app versions", () => {
     expect(route).toContain('release: "1.3.4"');
+    expect(migration).toContain("Project Octopus 1.3.4");
   });
 
   it("complies with hosted Supabase safe-delete enforcement", () => {
