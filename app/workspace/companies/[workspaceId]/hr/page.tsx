@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
-import { HrWorkspace146 } from "@/components/company/hr/hr-workspace-146";
+import { HrWorkspace147 } from "@/components/company/hr/hr-workspace-147";
 import { requireCurrentUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { getHrWorkspace140Data } from "@/lib/data/hr-workspace-140";
@@ -32,6 +32,6 @@ export default async function HrPage({ params }: { params: Promise<{ workspaceId
         <p>Pracownicy, brygady, inwestycje, czas pracy, urlopy, uprawnienia, BHP, dokumenty i koszt pracy w jednym miejscu.</p>
       </div>
     </header>
-    <HrWorkspace146 workspaceId={workspace.id} data={data} canWrite={canWrite} canApprove={canApprove} />
+    <HrWorkspace147 workspaceId={workspace.id} data={data} canWrite={canWrite} canApprove={canApprove} />
   </main>;
 }
