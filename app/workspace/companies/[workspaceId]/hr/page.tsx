@@ -6,6 +6,7 @@ import { hasDomainAccess } from "@/lib/authorization";
 import { getHrWorkspace140Data } from "@/lib/data/hr-workspace-140";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import styles from "./hr-employee-list-141.module.css";
+import compact from "./hr-profile-compact-143.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export default async function HrPage({ params }: { params: Promise<{ workspaceId
     hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "hr", level: "approve" })
   ]);
 
-  return <main className={`co-page ${styles.hr141}`}>
+  return <main className={`co-page ${styles.hr141} ${compact.profile143}`}>
     <header className="co-page-heading">
       <div>
         <p className="co-kicker">Kadry 2.0</p>
