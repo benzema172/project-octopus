@@ -1,0 +1,170 @@
+.profile143 :global([role="dialog"][aria-modal="true"][aria-label^="Karta pracownika"]) {
+  position: fixed !important;
+  left: 50% !important;
+  top: 12px !important;
+  bottom: auto !important;
+  transform: translateX(-50%) !important;
+  width: min(900px, calc(100vw - 32px)) !important;
+  height: auto !important;
+  max-height: min(680px, calc(100dvh - 24px)) !important;
+  display: flex !important;
+  flex-direction: column;
+  overflow: hidden !important;
+  border-radius: 14px !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > header) {
+  position: relative !important;
+  top: auto !important;
+  flex: 0 0 auto;
+  padding: 12px 16px 10px !important;
+  border-radius: 14px 14px 0 0 !important;
+  background: #fff !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > header h2) {
+  margin: 2px 0 !important;
+  font-size: 1.22rem !important;
+  line-height: 1.2;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > header p) {
+  margin-bottom: 2px !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div) {
+  min-height: 0;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: max-content;
+  align-items: start;
+  gap: 8px !important;
+  padding: 10px 12px 14px !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section) {
+  align-self: start;
+  min-width: 0;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 10px !important;
+  border-radius: 10px !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:first-child),
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(7)) {
+  grid-column: 1 / -1 !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:first-child > div) {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:first-child > div > div) {
+  min-height: 0 !important;
+  padding: 6px 8px !important;
+  border-radius: 8px !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:first-child > div > div small) {
+  font-size: .72rem;
+  line-height: 1.15;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:first-child > div > div strong) {
+  font-size: .9rem;
+  line-height: 1.2;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section h3) {
+  margin: 0 0 6px !important;
+  font-size: .94rem !important;
+  line-height: 1.2;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section p) {
+  margin: 3px 0 !important;
+  font-size: .83rem;
+  line-height: 1.3 !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] form) {
+  gap: 6px !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] form > div) {
+  gap: 6px !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] form label) {
+  gap: 3px !important;
+  font-size: .76rem !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] form input),
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] form select),
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] form textarea) {
+  min-height: 32px;
+  padding: 5px 7px !important;
+  border-radius: 7px !important;
+  font-size: .82rem;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] form textarea) {
+  min-height: 48px !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(7) > form > div) {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] section details) {
+  margin-top: 6px;
+  border-radius: 8px !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] section details summary) {
+  padding: 8px 10px !important;
+  font-size: .8rem;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] section details > div) {
+  padding: 0 10px 10px !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] button) {
+  min-height: 32px;
+}
+
+@media (max-width: 900px) {
+  .profile143 :global([role="dialog"][aria-modal="true"][aria-label^="Karta pracownika"]) {
+    top: 8px !important;
+    width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px) !important;
+  }
+
+  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(7) > form > div) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 680px) {
+  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div) {
+    grid-template-columns: 1fr !important;
+    padding: 8px 9px 10px !important;
+  }
+
+  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section),
+  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:first-child),
+  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(7)) {
+    grid-column: 1 !important;
+  }
+
+  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:first-child > div),
+  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(7) > form > div) {
+    grid-template-columns: 1fr !important;
+  }
+}
