@@ -94,7 +94,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
     await request("delete", { timesheetId: entry.id }, String(entry.id));
   };
 
-  const formFor = (entry?: Row, key = "new") => <form className={styles.entryRow} onSubmit={submitEntry(entry)} key={key}>
+  const formFor = (entry?: Row, key = "new", showInlineAdd = false) => <form className={styles.entryRow} onSubmit={submitEntry(entry)} key={key}>
     <label className={styles.field}>
       <span>Inwestycja</span>
       <select name="projectId" defaultValue={entry?.project_id ? String(entry.project_id) : suggestedProjectId} disabled={!canWrite || busyId !== null}>
@@ -110,14 +110,15 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
       <span>Nadg.</span>
       <input name="overtimeHours" inputMode="decimal" defaultValue={entry ? String(entry.overtime_hours ?? 0) : "0"} disabled={!canWrite || busyId !== null} />
     </label>
-    {canWrite ? <button className={styles.save} type="submit" disabled={busyId !== null}><Save size={14} /> {entry ? "Zapisz" : "Dodaj"}</button> : null}
+    {canWrite ? <button className={styles.save} type="submit" disabled={busyId !== null} aria-label={variant === "inline" ? (entry ? "Zapisz wpis czasu" : "Dodaj wpis czasu") : undefined} title={variant === "inline" ? (entry ? "Zapisz" : "Dodaj wpis") : undefined}><Save size={14} /> {variant === "inline" ? null : entry ? "Zapisz" : "Dodaj"}</button> : null}
     {entry && canWrite ? <button className={styles.delete} type="button" aria-label="Usuń wpis" title="Usuń wpis" disabled={busyId !== null} onClick={() => void removeEntry(entry)}><Trash2 size={14} /></button> : null}
+    {showInlineAdd ? <button type="button" className={`${styles.add} ${styles.addInline}`} aria-label="Dodaj drugi wpis / inną inwestycję" title="Dodaj drugi wpis / inną inwestycję" disabled={busyId !== null} onClick={() => { setAdding(true); setMessage(null); setError(null); }}><Plus size={14} /></button> : null}
   </form>;
 
-  const editor = <div className={styles.inlineWrap}>
-    {entries.map((entry, index) => formFor(entry, String(entry.id ?? `${employeeId}-${workDate}-${index}`)))}
+  const editor = <div className={`${styles.inlineWrap} ${variant === "inline" ? styles.inlineCompact : ""}`}>
+    {entries.map((entry, index) => formFor(entry, String(entry.id ?? `${employeeId}-${workDate}-${index}`), variant === "inline" && index === 0 && canWrite && !adding))}
     {adding ? formFor(undefined, "new") : null}
-    {canWrite && entries.length > 0 && !adding ? <button type="button" className={styles.add} onClick={() => { setAdding(true); setMessage(null); setError(null); }}><Plus size={13} /> Dodaj drugi wpis / inną inwestycję</button> : null}
+    {variant !== "inline" && canWrite && entries.length > 0 && !adding ? <button type="button" className={styles.add} onClick={() => { setAdding(true); setMessage(null); setError(null); }}><Plus size={13} /> Dodaj drugi wpis / inną inwestycję</button> : null}
     {!canWrite ? <div className={styles.readOnly}>Widok tylko do odczytu — zapis czasu pracy wymaga uprawnienia do edycji Kadr.</div> : null}
     {message ? <div className={styles.message}>{message}</div> : null}
     {error ? <div className={styles.error} role="alert">{error}</div> : null}
