@@ -3,11 +3,14 @@ import { getRequestUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { getHrWorkspace140Data } from "@/lib/data/hr-workspace-140";
+import { isIsoDate } from "@/lib/hr/validation";
 
 export const runtime = "nodejs";
 
 function csvCell(value: unknown) {
-  const text = String(value ?? "").replace(/"/g, '""');
+  let text = String(value ?? "");
+  if (typeof value === "string" && /^[\s]*[=+\-@]/.test(text)) text = `'${text}`;
+  text = text.replace(/"/g, '""');
   return `"${text}"`;
 }
 
@@ -31,7 +34,7 @@ function employeeName(row?: Record<string, unknown>) {
 }
 
 function safeReferenceDate(value: string | null) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value ?? "") ? String(value) : new Date().toISOString().slice(0, 10);
+  return value && isIsoDate(value) ? value : new Date().toISOString().slice(0, 10);
 }
 
 export async function GET(request: Request) {
@@ -58,6 +61,7 @@ export async function GET(request: Request) {
     const employeeId = url.searchParams.get("employeeId");
     const range = period === "month" ? monthRange(referenceDate) : { from: addDays(referenceDate, -6), to: referenceDate };
     const employeeById = new Map(data.employees.map((row) => [String(row.id), row]));
+    if (employeeId && !employeeById.has(employeeId)) return NextResponse.json({ error: "Pracownik nie należy do aktywnej firmy." }, { status: 404 });
     const projectNames = new Map(data.projects.map((row) => [String(row.id), String(row.name)]));
     const entries = data.timesheets
       .filter((row) => {
