@@ -31,7 +31,7 @@ export function HrWorkspace147(props: Props) {
   const shellRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
   const dashboardActive = activeTab === "dashboard";
-  const employeesActive = activeTab === "employees";
+  const registryVisible = activeTab === "employees";
 
   const findTabButton = (label: string) => {
     const root = shellRef.current;
@@ -164,13 +164,13 @@ export function HrWorkspace147(props: Props) {
 
   return <div
     ref={shellRef}
-    className={`${styles.shell} ${dashboardActive ? styles.dashboardCompact : ""} ${employeesActive ? registryStyles.enhancedEmployees : ""}`}
+    className={`${styles.shell} ${dashboardActive ? styles.dashboardCompact : ""} ${registryVisible ? registryStyles.enhancedEmployees : ""}`}
     onClickCapture={mirrorTab}
     onKeyDownCapture={handleKeyDown}
   >
     <div className={styles.workspaceSlot} data-hr-workspace-slot="employees-shell">
       <HrWorkspace140 {...props} />
-      {employeesActive ? <HrEmployeeRegistry152
+      {registryVisible ? <HrEmployeeRegistry152
         workspaceId={props.workspaceId}
         data={props.data}
         canWrite={props.canWrite}
