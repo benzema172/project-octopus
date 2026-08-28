@@ -29,6 +29,7 @@ export function HrDocumentUpload157({ workspaceId, canWrite, documentCount }: Pr
     const root = document.querySelector<HTMLElement>('[data-hr-workspace-slot="employees-shell"]');
     if (!root) return;
 
+    let cancelled = false;
     let currentPanel: HTMLElement | null = null;
     let currentMount: HTMLElement | null = null;
     let legacyParagraph: HTMLElement | null = null;
@@ -56,18 +57,21 @@ export function HrDocumentUpload157({ workspaceId, canWrite, documentCount }: Pr
       currentMount = document.createElement("div");
       currentMount.dataset.hrUploadMount = "1";
       panel.appendChild(currentMount);
-      setMount(currentMount);
+      const nextMount = currentMount;
+      queueMicrotask(() => {
+        if (!cancelled && nextMount.isConnected) setMount(nextMount);
+      });
     };
 
     sync();
     const observer = new MutationObserver(sync);
     observer.observe(root, { childList: true, subtree: true });
     return () => {
+      cancelled = true;
       observer.disconnect();
       if (legacyParagraph) legacyParagraph.style.display = paragraphDisplay;
       if (legacyLink) legacyLink.style.display = linkDisplay;
       currentMount?.remove();
-      setMount(null);
     };
   }, [documentCount]);
 
