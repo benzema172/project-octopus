@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { HrWorkspace140 } from "./hr-workspace-140";
-import { HrDashboardCalendar147 } from "./hr-dashboard-calendar-147";
+import { HrDashboardCalendar159 } from "./hr-dashboard-calendar-159";
+import { HrTimeRecords159 } from "./hr-time-records-159";
 import { HrEmployeeCreate153 } from "./hr-employee-create-153";
 import { HrEmployeeRegistry152 } from "./hr-employee-registry-152";
 import { HrTeamCostControl156 } from "./hr-team-cost-control-156";
@@ -38,6 +39,7 @@ export function HrWorkspace147(props: Props) {
   const [employeeCreateOpen, setEmployeeCreateOpen] = useState(false);
   const dashboardActive = activeTab === "dashboard";
   const registryVisible = activeTab === "employees";
+  const timeVisible = activeTab === "time";
   const teamsVisible = activeTab === "teams";
   const documentsVisible = activeTab === "documents";
 
@@ -276,30 +278,12 @@ export function HrWorkspace147(props: Props) {
   >
     <div className={styles.workspaceSlot} data-hr-workspace-slot="employees-shell">
       <HrWorkspace140 {...props} />
-      {registryVisible ? <HrEmployeeRegistry152
-        workspaceId={props.workspaceId}
-        data={props.data}
-        canWrite={props.canWrite}
-        canManagePayroll={props.canManagePayroll}
-      /> : null}
-      {teamsVisible ? <HrTeamCostControl156
-        workspaceId={props.workspaceId}
-        data={props.data}
-        canWrite={props.canWrite}
-        canViewPayroll={props.canViewPayroll}
-      /> : null}
-      {documentsVisible ? <HrDocumentUpload157
-        workspaceId={props.workspaceId}
-        canWrite={props.canWrite}
-        documentCount={props.data.documents.length}
-      /> : null}
+      {registryVisible ? <HrEmployeeRegistry152 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canManagePayroll={props.canManagePayroll} /> : null}
+      {timeVisible ? <HrTimeRecords159 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} employees={props.data.employees} projects={props.data.projects} timesheets={props.data.timesheets} canWrite={props.canWrite} /> : null}
+      {teamsVisible ? <HrTeamCostControl156 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} /> : null}
+      {documentsVisible ? <HrDocumentUpload157 workspaceId={props.workspaceId} canWrite={props.canWrite} documentCount={props.data.documents.length} /> : null}
     </div>
-    {dashboardActive ? <HrDashboardCalendar147 data={props.data} /> : null}
-    {employeeCreateOpen ? <HrEmployeeCreate153
-      workspaceId={props.workspaceId}
-      referenceDate={props.data.referenceDate}
-      canManagePayroll={props.canManagePayroll}
-      onClose={() => setEmployeeCreateOpen(false)}
-    /> : null}
+    {dashboardActive ? <HrDashboardCalendar159 workspaceId={props.workspaceId} canWrite={props.canWrite} data={props.data} /> : null}
+    {employeeCreateOpen ? <HrEmployeeCreate153 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} canManagePayroll={props.canManagePayroll} onClose={() => setEmployeeCreateOpen(false)} /> : null}
   </div>;
 }
