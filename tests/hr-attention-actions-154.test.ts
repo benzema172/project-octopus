@@ -5,8 +5,9 @@ describe("Kadry 1.5.4 attention actions", () => {
   const workspace = readFileSync("components/company/hr/hr-workspace-147.tsx", "utf8");
   const css = readFileSync("components/company/hr/hr-workspace-146.module.css", "utf8");
 
-  it("turns every dashboard alert into a keyboard-accessible action", () => {
-    expect(workspace).toContain('section[class*="grid2"] [class*="alertList"] [class*="alert"]');
+  it("targets only the outer dashboard alert as a keyboard-accessible action", () => {
+    expect(workspace).toContain('section[class*="grid2"] [class*="alertList"] > article[class*="alert"]');
+    expect(workspace).not.toContain('section[class*="grid2"] [class*="alertList"] [class*="alert"]'));
     expect(workspace).toContain('element.dataset.hrActionIndex = String(index)');
     expect(workspace).toContain('element.setAttribute("role", "button")');
     expect(workspace).toContain('element.setAttribute("tabindex", "0")');
@@ -18,9 +19,11 @@ describe("Kadry 1.5.4 attention actions", () => {
     expect(workspace).toContain('activateTab("compliance", () => scrollToHeading("Uprawnienia, badania i BHP"))');
   });
 
-  it("shows a clear action affordance on each attention item", () => {
-    expect(css).toContain('content:"Otwórz →"');
-    expect(css).toContain('cursor:pointer');
+  it("renders exactly one subtle affordance from the action data hook", () => {
+    expect(css).toContain('[data-hr-action-index]::after{content:"Otwórz →"');
+    expect(css).not.toContain('[class*="alertList"] [class*="alert"]::after');
+    expect(css).toContain('background:#fff;color:#6b7280');
+    expect(css).toContain('box-shadow:none');
     expect(css).toContain('[data-hr-action-index]:focus-visible');
   });
 });
