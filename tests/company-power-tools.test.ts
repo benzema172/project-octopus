@@ -65,7 +65,7 @@ describe("Project Octopus functional contract", () => {
   const component = readFileSync("components/company/company-power-tools.tsx", "utf8");
 
   it("publishes the current release and keeps advanced tools available without eager layout loading", () => {
-    expect(packageJson.version).toBe("1.4.12");
+    expect(packageJson.version).toBe("1.4.13");
     expect(layout).not.toContain("CompanyPowerTools");
     expect(layout).not.toContain("getCompanyPowerToolsData");
     expect(deferred).toContain("CompanyPowerTools");

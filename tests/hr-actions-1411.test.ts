@@ -5,25 +5,24 @@ const wrapper = readFileSync("components/company/hr/hr-workspace-147.tsx", "utf8
 const wrapperCss = readFileSync("components/company/hr/hr-workspace-146.module.css", "utf8");
 const employeeRegressionCss = readFileSync("app/workspace/companies/[workspaceId]/hr/hr-employee-list-1410.module.css", "utf8");
 
-describe("Project Octopus 1.4.11 — HR action navigation", () => {
-  it("places the compact add-employee action in the same action host as Raport CSV", () => {
-    expect(wrapper).toContain("createPortal");
-    expect(wrapper).toContain('a[href*="/api/company/hr/export"]');
-    expect(wrapper).toContain("setActionHost(exportLink?.parentElement ?? null)");
-    expect(wrapper).toContain("employeeAddAction");
-    expect(wrapper).toContain("+ Dodaj pracownika");
-    expect(wrapperCss).toContain(".employeeAddAction{order:-1");
-    expect(wrapperCss).toContain("details:not([open]){display:none!important}");
+describe("Project Octopus HR action navigation", () => {
+  it("keeps add-employee placement stable without a React portal", () => {
+    expect(wrapper).not.toContain("createPortal");
+    expect(wrapper).not.toContain("setActionHost");
+    expect(wrapperCss).toContain('.employeesActive .workspaceSlot>div>details:not([open])');
+    expect(wrapperCss).toContain("position:absolute");
+    expect(wrapperCss).toContain("right:126px");
+    expect(wrapperCss).toContain('summary{display:flex!important');
   });
 
-  it("keeps the 1.4.10 readable employee list contract while adding actions", () => {
+  it("keeps the readable employee list contract", () => {
     expect(wrapper).toContain('data-hr-workspace-slot="employees-shell"');
     expect(employeeRegressionCss).toContain('content: "LP."');
     expect(employeeRegressionCss).toContain("content: counter(employee-row)");
     expect(employeeRegressionCss).toContain("tbody td:first-child > div");
   });
 
-  it("turns Octopus HR attention rows into keyboard-accessible navigation actions", () => {
+  it("turns Octopus HR attention rows into visible keyboard-accessible actions", () => {
     expect(wrapper).toContain("data-hr-action-index");
     expect(wrapper).toContain('element.setAttribute("role", "button")');
     expect(wrapper).toContain('element.setAttribute("tabindex", "0")');
@@ -38,5 +37,6 @@ describe("Project Octopus 1.4.11 — HR action navigation", () => {
     expect(wrapper).toContain('activateTab("compliance"');
     expect(wrapper).toContain('type === "allocation"');
     expect(wrapper).toContain('activateTab("teams"');
+    expect(wrapperCss).toContain('content:"Otwórz →"');
   });
 });

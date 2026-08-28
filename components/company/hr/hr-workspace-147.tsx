@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type MouseEvent } from "react";
-import { createPortal } from "react-dom";
 import { HrWorkspace140 } from "./hr-workspace-140";
 import { HrDashboardCalendar147 } from "./hr-dashboard-calendar-147";
 import styles from "./hr-workspace-146.module.css";
@@ -29,8 +28,6 @@ type TabKey = keyof typeof TAB_LABELS;
 export function HrWorkspace147(props: Props) {
   const shellRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
-  const [actionHost, setActionHost] = useState<HTMLElement | null>(null);
-  const [employeeFormOpen, setEmployeeFormOpen] = useState(false);
   const dashboardActive = activeTab === "dashboard";
   const employeesActive = activeTab === "employees";
 
@@ -53,7 +50,7 @@ export function HrWorkspace147(props: Props) {
     const button = findTabButton(TAB_LABELS[tab]);
     if (!button) return;
     button.click();
-    window.setTimeout(() => after?.(), 40);
+    window.setTimeout(() => after?.(), 60);
   };
 
   const setWorkDateAndFocus = (date: string) => {
@@ -105,23 +102,9 @@ export function HrWorkspace147(props: Props) {
     activateTab("dashboard");
   };
 
-  const toggleEmployeeForm = () => {
-    const root = shellRef.current;
-    if (!root) return;
-    const details = Array.from(root.querySelectorAll<HTMLDetailsElement>("details"))
-      .find((item) => (item.querySelector(":scope > summary")?.textContent ?? "").trim().includes("Dodaj pracownika"));
-    if (!details) return;
-    const nextOpen = !details.open;
-    details.open = nextOpen;
-    setEmployeeFormOpen(nextOpen);
-    if (nextOpen) window.setTimeout(() => details.scrollIntoView({ behavior: "smooth", block: "start" }), 20);
-  };
-
   useEffect(() => {
     const root = shellRef.current;
     if (!root) return;
-    const exportLink = root.querySelector<HTMLElement>('a[href*="/api/company/hr/export"]');
-    setActionHost(exportLink?.parentElement ?? null);
 
     if (dashboardActive) {
       for (const heading of root.querySelectorAll<HTMLHeadingElement>("h3")) {
@@ -166,7 +149,6 @@ export function HrWorkspace147(props: Props) {
     const label = button.textContent ?? "";
     const nextTab = (Object.entries(TAB_LABELS).find(([, value]) => label.includes(value))?.[0] ?? "dashboard") as TabKey;
     setActiveTab(nextTab);
-    if (nextTab !== "employees") setEmployeeFormOpen(false);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -188,16 +170,5 @@ export function HrWorkspace147(props: Props) {
       <HrWorkspace140 {...props} />
     </div>
     {dashboardActive ? <HrDashboardCalendar147 data={props.data} /> : null}
-    {employeesActive && props.canWrite && actionHost ? createPortal(
-      <button
-        type="button"
-        className={styles.employeeAddAction}
-        aria-expanded={employeeFormOpen}
-        onClick={toggleEmployeeForm}
-      >
-        + Dodaj pracownika
-      </button>,
-      actionHost
-    ) : null}
   </div>;
 }
