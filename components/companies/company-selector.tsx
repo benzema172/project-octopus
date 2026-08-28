@@ -51,6 +51,7 @@ export function CompanySelector({ companies, schemaReady, userEmail }: CompanySe
         {companies.map((company, index) => (
           <Link
             href={`/workspace/companies/${company.id}`}
+            prefetch={false}
             className={`co-company-card co-company-card--${(index % 4) + 1}`}
             key={company.id}
           >
