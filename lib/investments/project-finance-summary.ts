@@ -68,6 +68,7 @@ export type ProjectFinanceSummaryInput = {
   budgets: ProjectFinanceBudget[];
   forecasts: ProjectFinanceForecast[];
   changeOrders: ProjectFinanceChangeOrder[];
+  derivedLaborCost?: number;
   today?: string;
 };
 
@@ -186,9 +187,11 @@ export function buildProjectFinanceSummary(input: ProjectFinanceSummaryInput): P
     && (clean(allocation.sourceType) !== "invoice" || purchaseInvoiceIds.has(allocation.sourceId))
   );
   const actualCostFromAllocations = sum(acceptedAllocations, (allocation) => allocation.amount);
-  const actualCost = acceptedAllocations.length
+  const financialActualCost = acceptedAllocations.length
     ? actualCostFromAllocations
     : moneyOrNull(latestForecast?.actualCost) ?? 0;
+  const derivedLaborCost = Math.max(0, Number(input.derivedLaborCost ?? 0) || 0);
+  const actualCost = financialActualCost + derivedLaborCost;
   const openCommitments = sum(
     input.commitments.filter((commitment) => OPEN_COMMITMENT_STATUSES.has(clean(commitment.status))),
     (commitment) => commitment.amount
