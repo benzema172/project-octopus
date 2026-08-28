@@ -5,6 +5,7 @@ import { HrWorkspace140 } from "./hr-workspace-140";
 import { HrDashboardCalendar147 } from "./hr-dashboard-calendar-147";
 import { HrEmployeeCreate153 } from "./hr-employee-create-153";
 import { HrEmployeeRegistry152 } from "./hr-employee-registry-152";
+import { HrTeamCostControl156 } from "./hr-team-cost-control-156";
 import styles from "./hr-workspace-146.module.css";
 import registryStyles from "./hr-employee-registry-152.module.css";
 
@@ -34,6 +35,7 @@ export function HrWorkspace147(props: Props) {
   const [employeeCreateOpen, setEmployeeCreateOpen] = useState(false);
   const dashboardActive = activeTab === "dashboard";
   const registryVisible = activeTab === "employees";
+  const teamsVisible = activeTab === "teams";
 
   const findTabButton = (label: string) => {
     const root = shellRef.current;
@@ -191,6 +193,12 @@ export function HrWorkspace147(props: Props) {
         data={props.data}
         canWrite={props.canWrite}
         canManagePayroll={props.canManagePayroll}
+      /> : null}
+      {teamsVisible ? <HrTeamCostControl156
+        workspaceId={props.workspaceId}
+        data={props.data}
+        canWrite={props.canWrite}
+        canViewPayroll={props.canViewPayroll}
       /> : null}
     </div>
     {dashboardActive ? <HrDashboardCalendar147 data={props.data} /> : null}
