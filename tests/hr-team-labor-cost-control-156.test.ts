@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { calculateLaborControl } from "../lib/hr/labor-cost-control";
+import { applyProjectLaborCost } from "../lib/investments/project-finance-labor";
+import type { ProjectFinanceSummary } from "../lib/investments/project-finance-summary";
 
 describe("Project Octopus 1.5.6 HR labor cost control", () => {
   it("separates planned, approved, pending and unassigned labor cost", () => {
@@ -57,5 +59,47 @@ describe("Project Octopus 1.5.6 HR labor cost control", () => {
     expect(control).toContain("Koszt rzeczywisty");
     expect(control).toContain("Oczekujące");
     expect(control).toContain("Bez inwestycji");
+  });
+
+  it("feeds approved HR labor into the investment finance current cost and margin", () => {
+    const base = {
+      baseContractValue: 10000,
+      approvedChangeValue: 0,
+      adjustedContractValue: 10000,
+      boqValue: 10000,
+      executedWorkValue: 5000,
+      acceptedWorkValue: 5000,
+      acceptedProgressPercent: 50,
+      salesNet: 0,
+      salesGross: 0,
+      purchaseNet: 0,
+      purchaseGross: 0,
+      receivedPayments: 0,
+      outgoingPayments: 0,
+      clientReceivables: 0,
+      supplierPayables: 0,
+      cashflow: 0,
+      remainingToInvoice: 10000,
+      actualCost: 2000,
+      openCommitments: 0,
+      plannedCost: 7000,
+      currentResult: 3000,
+      currentMarginPercent: 60,
+      estimateToComplete: 5000,
+      estimateAtCompletion: 7000,
+      forecastResult: 3000,
+      forecastMarginPercent: 30,
+      overdueInvoices: 0,
+      activeBudget: null,
+      latestForecast: null
+    } satisfies ProjectFinanceSummary;
+    const withLabor = applyProjectLaborCost(base, 500);
+    expect(withLabor.actualCost).toBe(2500);
+    expect(withLabor.currentResult).toBe(2500);
+    expect(withLabor.currentMarginPercent).toBe(50);
+
+    const page = readFileSync("app/workspace/projects/[projectId]/finance/page.tsx", "utf8");
+    expect(page).toContain("getProjectLaborFinanceData");
+    expect(page).toContain("applyProjectLaborCost(financeData.summary, labor.actualCost)");
   });
 });
