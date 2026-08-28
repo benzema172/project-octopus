@@ -1,0 +1,517 @@
+.enhancedEmployees [data-hr-workspace-slot="employees-shell"] > div:first-child > [data-hr-employee-list] {
+  display: none !important;
+}
+
+.registry {
+  border: 1px solid var(--line, #e5e7eb);
+  border-radius: 15px;
+  background: var(--surface, #fff);
+  padding: 16px;
+}
+
+.headingRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.headingRow h2 {
+  margin: 0;
+  font-size: 1.45rem;
+}
+
+.kicker {
+  margin: 0 0 4px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: .72rem;
+  font-weight: 800;
+  color: var(--muted, #6b7280);
+}
+
+.count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line, #d1d5db);
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 800;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) 140px 180px;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 11px;
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.searchBox input,
+.filters select,
+.editForm input,
+.editForm select,
+.editForm textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line, #d1d5db);
+  border-radius: 9px;
+  padding: 9px 10px;
+  background: var(--surface, #fff);
+  color: inherit;
+  font: inherit;
+}
+
+.searchBox input {
+  flex: 1;
+}
+
+.tableWrap,
+.calendarTableWrap {
+  position: relative;
+  overflow: auto;
+  border: 1px solid var(--line, #e5e7eb);
+  border-radius: 13px;
+}
+
+.table,
+.calendarTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table {
+  min-width: 1080px;
+}
+
+.table th,
+.table td,
+.calendarTable th,
+.calendarTable td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--line, #e5e7eb);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table th,
+.calendarTable th {
+  background: var(--surface-soft, #f9fafb);
+  color: var(--muted, #6b7280);
+  font-size: .74rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.table th + th,
+.table td + td,
+.calendarTable th + th,
+.calendarTable td + td {
+  border-left: 1px solid #eef0f3;
+}
+
+.table tbody tr:hover td {
+  background: #fafbfc;
+}
+
+.lp {
+  width: 58px;
+  min-width: 58px;
+  text-align: center !important;
+}
+
+.actionsHead {
+  width: 112px;
+  text-align: center !important;
+}
+
+.nameButton {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.nameButton:hover {
+  text-decoration: underline;
+}
+
+.subtle {
+  color: var(--muted, #6b7280);
+  font-size: .82rem;
+}
+
+.load {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.load progress {
+  width: 82px;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.iconButton,
+.closeButton {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line, #d1d5db);
+  border-radius: 9px;
+  background: var(--surface, #fff);
+  color: inherit;
+  cursor: pointer;
+}
+
+.iconButton:hover,
+.closeButton:hover {
+  background: var(--surface-soft, #f5f6f8);
+  border-color: #9ca3af;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: .72rem;
+  font-weight: 800;
+  border: 1px solid var(--line, #d1d5db);
+}
+
+.statusActive {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.statusMuted {
+  background: #f9fafb;
+  color: #4b5563;
+}
+
+.feedback {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: .86rem;
+  font-weight: 650;
+}
+
+.feedbackError {
+  border-color: #fecaca;
+  background: #fff7f7;
+  color: #991b1b;
+}
+
+.empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--muted, #6b7280);
+}
+
+.modalLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: rgba(15, 23, 42, .38);
+  backdrop-filter: blur(3px);
+  cursor: default;
+}
+
+.modal {
+  position: relative;
+  z-index: 1;
+  width: min(920px, calc(100vw - 40px));
+  max-height: calc(100dvh - 28px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #dfe3e8;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, .24);
+}
+
+.calendarModal {
+  width: min(1120px, calc(100vw - 40px));
+}
+
+.modalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid #e5e7eb;
+  background: rgba(255,255,255,.98);
+}
+
+.modalHeader h2 {
+  margin: 2px 0 0;
+  font-size: 1.3rem;
+}
+
+.modalBody,
+.calendarBody {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 20px 20px;
+}
+
+.editForm {
+  display: grid;
+  gap: 13px;
+}
+
+.editForm fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 13px;
+  border: 1px solid #dbe3f4;
+  border-radius: 12px;
+  background: #fbfcff;
+}
+
+.editForm legend {
+  padding: 0 6px;
+  font-size: .86rem;
+  font-weight: 850;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.formGrid label {
+  display: grid;
+  gap: 5px;
+  font-size: .82rem;
+  font-weight: 750;
+}
+
+.fullWidth {
+  grid-column: 1 / -1;
+}
+
+.editForm textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+.modalActions,
+.dangerActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.primaryButton,
+.secondaryButton,
+.dangerButton,
+.todayButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.primaryButton {
+  border: 1px solid #111827;
+  background: #111827;
+  color: #fff;
+}
+
+.secondaryButton,
+.todayButton {
+  border: 1px solid var(--line, #d1d5db);
+  background: #fff;
+  color: inherit;
+}
+
+.dangerButton {
+  border: 1px solid #fecaca;
+  background: #fff;
+  color: #991b1b;
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.dangerButton:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.dangerZone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 16px;
+  padding: 13px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  background: #fffafa;
+}
+
+.dangerZone p {
+  margin: 4px 0 0;
+  color: #7f1d1d;
+  font-size: .8rem;
+  line-height: 1.4;
+}
+
+.monthToolbar {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 12px;
+}
+
+.monthToolbar > div {
+  display: grid;
+  gap: 2px;
+  text-align: center;
+}
+
+.monthToolbar > div strong {
+  text-transform: capitalize;
+  font-size: 1.05rem;
+}
+
+.monthToolbar > div span {
+  color: var(--muted, #6b7280);
+  font-size: .8rem;
+}
+
+.calendarTable {
+  min-width: 930px;
+}
+
+.calendarTable tbody tr:last-child td,
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.weekend td {
+  background: #fafafa;
+  color: #6b7280;
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,.78);
+  backdrop-filter: blur(1px);
+  font-weight: 750;
+}
+
+@media (max-width: 900px) {
+  .filters {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .searchBox {
+    grid-column: 1 / -1;
+  }
+
+  .dangerZone {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dangerActions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 680px) {
+  .registry {
+    padding: 12px;
+  }
+
+  .filters,
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .fullWidth,
+  .searchBox {
+    grid-column: 1;
+  }
+
+  .modalLayer {
+    padding: 8px;
+  }
+
+  .modal,
+  .calendarModal {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    border-radius: 14px;
+  }
+
+  .modalHeader {
+    padding: 14px 15px 12px;
+  }
+
+  .modalBody,
+  .calendarBody {
+    padding: 14px 15px 16px;
+  }
+
+  .monthToolbar {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .todayButton {
+    grid-column: 1 / -1;
+  }
+}
