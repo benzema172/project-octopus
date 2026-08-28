@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type MouseEvent } from "react";
+import { useRouter } from "next/navigation";
 import { HrWorkspace140 } from "./hr-workspace-140";
 import { HrDashboardCalendar147 } from "./hr-dashboard-calendar-147";
 import { HrEmployeeCreate153 } from "./hr-employee-create-153";
@@ -30,6 +31,7 @@ const DASHBOARD_COST_LABELS = new Map([
 type TabKey = keyof typeof TAB_LABELS;
 
 export function HrWorkspace147(props: Props) {
+  const router = useRouter();
   const shellRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
   const [employeeCreateOpen, setEmployeeCreateOpen] = useState(false);
@@ -108,6 +110,53 @@ export function HrWorkspace147(props: Props) {
     activateTab("dashboard");
   };
 
+  const forceDeleteEmployee = async (button: HTMLButtonElement) => {
+    const dialog = button.closest<HTMLElement>('[role="dialog"][aria-labelledby="employee-edit-title"]');
+    const employeeId = dialog?.querySelector<HTMLInputElement>('input[name="employeeId"]')?.value;
+    const employeeName = dialog?.querySelector<HTMLElement>("#employee-edit-title")?.textContent?.trim() || "tego pracownika";
+    if (!employeeId) {
+      window.alert("Nie udało się ustalić identyfikatora pracownika. Zamknij kartę i spróbuj ponownie.");
+      return;
+    }
+    if (!props.canApprove) {
+      window.alert("Trwałe usunięcie pracownika wraz z historią wymaga uprawnienia do zatwierdzania w Kadrach.");
+      return;
+    }
+
+    const accepted = window.confirm(
+      `Trwale usunąć ${employeeName}?\n\nZostanie usunięta karta pracownika oraz powiązana historia HR: warunki zatrudnienia, przypisania, karty czasu, limity i wnioski urlopowe, BHP/uprawnienia, rozliczenia płacowe, członkostwo w brygadach, dokumenty HR i wydany sprzęt. Ta operacja służy m.in. do wyzerowania danych testowych i jest nieodwracalna.`
+    );
+    if (!accepted) return;
+    const phrase = window.prompt("Aby potwierdzić świadome trwałe usunięcie, wpisz dokładnie: USUŃ");
+    if (phrase?.trim() !== "USUŃ") {
+      window.alert("Usuwanie anulowane — nie wpisano poprawnego hasła potwierdzającego.");
+      return;
+    }
+
+    button.disabled = true;
+    try {
+      const response = await fetch("/api/company/hr/employee", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: props.workspaceId,
+          action: "force_delete",
+          payload: { employeeId, confirmation: "USUŃ", reason: "manual_test_reset" }
+        })
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Nie udało się trwale usunąć pracownika.");
+
+      dialog?.querySelector<HTMLButtonElement>('button[aria-label="Zamknij"]')?.click();
+      router.refresh();
+      window.alert(`Pracownik ${employeeName} oraz jego powiązana historia HR zostały trwale usunięte.`);
+    } catch (reason) {
+      window.alert(reason instanceof Error ? reason.message : "Nie udało się trwale usunąć pracownika.");
+    } finally {
+      if (button.isConnected) button.disabled = false;
+    }
+  };
+
   useEffect(() => {
     const root = shellRef.current;
     if (!root) return;
@@ -147,8 +196,41 @@ export function HrWorkspace147(props: Props) {
     return () => observer.disconnect();
   }, [dashboardActive, props.data.alerts]);
 
+  useEffect(() => {
+    if (!registryVisible) return;
+    const syncPermanentDelete = () => {
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"][aria-labelledby="employee-edit-title"]');
+      if (!dialog) return;
+      const deleteButton = Array.from(dialog.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => (button.textContent ?? "").includes("Usuń trwale"));
+      if (!deleteButton) return;
+      deleteButton.dataset.hrForceDelete = "1";
+      deleteButton.title = props.canApprove
+        ? "Usuń pracownika razem z historią po dodatkowym potwierdzeniu"
+        : "Trwałe usunięcie wymaga uprawnienia do zatwierdzania w Kadrach";
+      const description = deleteButton.closest("section")?.querySelector("p");
+      const copy = props.canApprove
+        ? "Archiwizacja zachowuje pełną historię. Trwałe usunięcie kasuje kartę i powiązaną historię HR; wymaga dodatkowego potwierdzenia hasłem USUŃ."
+        : "Archiwizacja zachowuje pełną historię. Trwałe usunięcie wraz z historią jest dostępne tylko dla osoby z uprawnieniem do zatwierdzania w Kadrach.";
+      if (description && description.textContent !== copy) description.textContent = copy;
+    };
+
+    syncPermanentDelete();
+    const observer = new MutationObserver(syncPermanentDelete);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [props.canApprove, registryVisible]);
+
   const mirrorTab = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
+    const forceDeleteButton = target.closest<HTMLButtonElement>('[data-hr-force-delete="1"]');
+    if (forceDeleteButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      void forceDeleteEmployee(forceDeleteButton);
+      return;
+    }
+
     const clickedButton = target.closest<HTMLButtonElement>("button");
     if (registryVisible && clickedButton && (clickedButton.textContent ?? "").includes("Dodaj pracownika")) {
       event.preventDefault();
