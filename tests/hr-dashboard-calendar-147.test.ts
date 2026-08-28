@@ -15,11 +15,11 @@ describe("HR dashboard editable calendar day status", () => {
     expect(wrapper).toContain("data={props.data}");
   });
 
-  it("derives daily employee status from real HR assignments, timesheets and approved leave", () => {
-    expect(calendar).toContain("data.timesheets.filter");
-    expect(calendar).toContain("data.assignments");
-    expect(calendar).toContain("data.leaves.filter");
-    expect(calendar).toContain('String(row.status) === "approved"');
+  it("derives daily employee status from indexed real HR assignments, timesheets and approved leave", () => {
+    expect(calendar).toContain("timesheetIndex");
+    expect(calendar).toContain("assignmentIndex");
+    expect(calendar).toContain("approvedLeaveIndex");
+    expect(calendar).toContain('String(row.status) !== "approved"');
     expect(calendar).toContain("sheetProjectIds.length ? sheetProjectIds : assignmentProjectIds");
     expect(calendar).toContain('"Brak wpisu czasu"');
     expect(calendar).toContain('statusLabel: "Urlop + wpis czasu"');
