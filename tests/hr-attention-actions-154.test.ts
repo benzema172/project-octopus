@@ -19,7 +19,7 @@ describe("Kadry 1.5.4 attention actions", () => {
   });
 
   it("shows a clear action affordance on each attention item", () => {
-    expect(css).toContain('content:"Przejdź →"');
+    expect(css).toContain('content:"Otwórz →"');
     expect(css).toContain('cursor:pointer');
     expect(css).toContain('[data-hr-action-index]:focus-visible');
   });
