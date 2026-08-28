@@ -273,7 +273,7 @@ export function HrEmployeeRegistry152({
       </div>
       <div className={styles.tableWrap}>
         <table className={styles.table}>
-          <thead><tr><th className={styles.lp}>LP.</th><th>Pracownik</th><th>Stanowisko</th><th>Aktualna inwestycja</th><th>Obłożenie</th><th>Kontakt</th><th>Status</th><th className={styles.actionsHead}>Akcje</th></tr></thead>
+          <thead><tr><th className={styles.lp}>LP.</th><th>Pracownik</th><th>Stanowisko</th><th>Obłożenie</th><th>Kontakt</th><th>Status</th><th className={styles.actionsHead}>Akcje</th></tr></thead>
           <tbody>{filteredEmployees.map((employee, index) => {
             const employeeId = String(employee.id);
             const employment = currentEmploymentByEmployee.get(employeeId);
@@ -283,7 +283,6 @@ export function HrEmployeeRegistry152({
               <td className={styles.lp}>{index + 1}</td>
               <td><button type="button" className={styles.nameButton} onClick={() => setEditEmployeeId(employeeId)}><strong>{employeeName(employee)}</strong></button><div className={styles.subtle}>{text(employee.employee_number)}</div></td>
               <td>{text(employment?.position, "Bez stanowiska")}</td>
-              <td>{assignments.map((row) => text(projectById.get(String(row.project_id))?.name)).join(" · ") || "Bez przypisania"}</td>
               <td><div className={styles.load}><progress max="120" value={Math.min(120, load)} /><strong>{number(load, 0)}%</strong></div></td>
               <td>{text(employee.phone)}<div className={styles.subtle}>{text(employee.email)}</div></td>
               <td><span className={`${styles.status} ${String(employee.status) === "active" ? styles.statusActive : styles.statusMuted}`}>{statusLabel(String(employee.status ?? ""))}</span></td>
