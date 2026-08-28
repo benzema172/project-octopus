@@ -2,12 +2,13 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { assertTimesheetHours, isIsoDate, isYearMonth } from "../lib/hr/validation";
 
-describe("Kadry 1.6.0 audit hardening", () => {
+describe("Kadry audit hardening", () => {
   const inlineApi = readFileSync("app/api/company/hr/timesheet-entry/route.ts", "utf8");
   const calendarApi = readFileSync("app/api/company/hr/employee-calendar/route.ts", "utf8");
   const exportApi = readFileSync("app/api/company/hr/export/route.ts", "utf8");
   const timeGrid = readFileSync("components/company/hr/hr-time-records-159.tsx", "utf8");
   const upload = readFileSync("components/company/hr/hr-document-upload-157.tsx", "utf8");
+  const migration = readFileSync("supabase/migrations/20260828133500_hr_integrity_hardening.sql", "utf8");
 
   it("rejects impossible dates and impossible year-month values", () => {
     expect(isIsoDate("2026-02-28")).toBe(true);
@@ -32,6 +33,19 @@ describe("Kadry 1.6.0 audit hardening", () => {
     expect(inlineApi).toContain('query.neq("id", excludeId)');
     expect(inlineApi).toContain("istnieje już wpis");
     expect(inlineApi).toContain("assertTimesheetHours(hours, overtime)");
+    expect(migration).toContain("timesheets_workspace_employee_date_project_uidx");
+    expect(migration).toContain("nulls not distinct");
+  });
+
+  it("enforces HR integrity in the database even for legacy write paths", () => {
+    expect(migration).toContain("timesheets_valid_hours_check");
+    expect(migration).toContain("assignments_period_check");
+    expect(migration).toContain("assignments_allocation_percent_check");
+    expect(migration).toContain("qualifications_period_check");
+    expect(migration).toContain("medical_exams_period_check");
+    expect(migration).toContain("safety_trainings_period_check");
+    expect(migration).toContain("employee_documents_period_check");
+    expect(migration).toContain("employments_fte_check");
   });
 
   it("validates focused calendar and export dates strictly", () => {
