@@ -19,6 +19,11 @@ const TAB_LABELS = {
   documents: "Dokumenty"
 } as const;
 
+const DASHBOARD_COST_LABELS = new Map([
+  ["Koszt pracy — miesiąc", "Koszt godzinowy zatrudnienia w miesiącu"],
+  ["Koszt stały zatrudnienia", "Koszt stały zatrudnienia w miesiącu"]
+]);
+
 type TabKey = keyof typeof TAB_LABELS;
 
 export function HrWorkspace147(props: Props) {
@@ -117,6 +122,13 @@ export function HrWorkspace147(props: Props) {
     if (!root) return;
     const exportLink = root.querySelector<HTMLElement>('a[href*="/api/company/hr/export"]');
     setActionHost(exportLink?.parentElement ?? null);
+
+    if (dashboardActive) {
+      for (const heading of root.querySelectorAll<HTMLHeadingElement>("h3")) {
+        const replacement = DASHBOARD_COST_LABELS.get((heading.textContent ?? "").trim());
+        if (replacement) heading.textContent = replacement;
+      }
+    }
 
     const attentionPanel = Array.from(root.querySelectorAll<HTMLElement>("article"))
       .find((article) => (article.querySelector("h2")?.textContent ?? "").trim() === "Wymaga uwagi");
