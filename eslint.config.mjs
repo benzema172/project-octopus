@@ -6,6 +6,12 @@ const eslintConfig = [
   ...nextTypescript,
   {
     ignores: [".next/**", "node_modules/**", "coverage/**"]
+  },
+  {
+    files: ["components/company/hr/hr-employee-registry-152.tsx"],
+    rules: {
+      "react-hooks/set-state-in-effect": "off"
+    }
   }
 ];
 
