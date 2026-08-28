@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import { APP_RELEASE, APP_RELEASE_LABEL } from "../lib/app-release";
 
 describe("application release badge", () => {
-  it("publishes the official Project Octopus 1.4.10 release and date", () => {
+  it("publishes the official Project Octopus 1.4.11 release and date", () => {
     const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
-    expect(pkg.version).toBe("1.4.10");
-    expect(APP_RELEASE.version).toBe("1.4.10");
-    expect(APP_RELEASE.introducedAt).toBe("27.08.2026");
-    expect(APP_RELEASE_LABEL).toContain("v1.4.10");
+    expect(pkg.version).toBe("1.4.11");
+    expect(APP_RELEASE.version).toBe("1.4.11");
+    expect(APP_RELEASE.introducedAt).toBe("28.08.2026");
+    expect(APP_RELEASE_LABEL).toContain("v1.4.11");
     expect(APP_RELEASE_LABEL).toContain(APP_RELEASE.introducedAt);
   });
 
