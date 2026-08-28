@@ -7,7 +7,7 @@ describe("Kadry 1.5.4 attention actions", () => {
 
   it("targets only the outer dashboard alert as a keyboard-accessible action", () => {
     expect(workspace).toContain('section[class*="grid2"] [class*="alertList"] > article[class*="alert"]');
-    expect(workspace).not.toContain('section[class*="grid2"] [class*="alertList"] [class*="alert"]'));
+    expect(workspace).not.toContain('section[class*="grid2"] [class*="alertList"] [class*="alert"]');
     expect(workspace).toContain('element.dataset.hrActionIndex = String(index)');
     expect(workspace).toContain('element.setAttribute("role", "button")');
     expect(workspace).toContain('element.setAttribute("tabindex", "0")');
