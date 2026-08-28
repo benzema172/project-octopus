@@ -8,6 +8,7 @@ import { getWorkspaceForUser } from "@/lib/data/workspace";
 import styles from "./hr-employee-list-141.module.css";
 import regression from "./hr-employee-list-1410.module.css";
 import compact from "./hr-profile-compact-143.module.css";
+import createModal from "./hr-employee-create-modal-151.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ export default async function HrPage({ params }: { params: Promise<{ workspaceId
   const canManagePayroll = canApprove || canFinanceWrite;
   const data = await getHrWorkspace140Data(workspace.id, { referenceDate, includePayroll: canViewPayroll });
 
-  return <main className={`co-page ${styles.hr141} ${regression.hr1410} ${compact.profile143}`}>
+  return <main className={`co-page ${styles.hr141} ${regression.hr1410} ${compact.profile143} ${createModal.create151}`}>
     <header className="co-page-heading">
       <div>
         <p className="co-kicker">Kadry 2.0</p>
