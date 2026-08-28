@@ -8,6 +8,7 @@ describe("Kadry audit hardening", () => {
   const exportApi = readFileSync("app/api/company/hr/export/route.ts", "utf8");
   const timeGrid = readFileSync("components/company/hr/hr-time-records-159.tsx", "utf8");
   const upload = readFileSync("components/company/hr/hr-document-upload-157.tsx", "utf8");
+  const loader = readFileSync("lib/data/hr-workspace-140.ts", "utf8");
   const migration = readFileSync("supabase/migrations/20260828133500_hr_integrity_hardening.sql", "utf8");
 
   it("rejects impossible dates and impossible year-month values", () => {
@@ -51,6 +52,15 @@ describe("Kadry audit hardening", () => {
   it("validates focused calendar and export dates strictly", () => {
     expect(calendarApi).toContain("isYearMonth(month)");
     expect(exportApi).toContain("isIsoDate(value)");
+    expect(loader).toContain("isIsoDate(candidate)");
+  });
+
+  it("flags missing time only for the previous Polish working day and excludes approved absence", () => {
+    expect(loader).toContain("previousPolishWorkingDay(referenceDate)");
+    expect(loader).toContain("isPolishWorkingDay(candidate)");
+    expect(loader).toContain("previousAbsent");
+    expect(loader).toContain("inRange(previousWorkDate, row.hired_at, row.terminated_at)");
+    expect(loader).toContain("bez wpisu czasu za ${previousWorkDate}");
   });
 
   it("neutralizes spreadsheet formulas in textual CSV cells", () => {
