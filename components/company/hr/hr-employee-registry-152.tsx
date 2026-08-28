@@ -27,6 +27,7 @@ type RegistryData = {
   qualifications?: Row[];
   exams?: Row[];
   trainings?: Row[];
+  entitlements?: Row[];
 };
 
 type CalendarEntry = {
@@ -153,6 +154,7 @@ export function HrEmployeeRegistry152({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const referenceYear = Number(data.referenceDate.slice(0, 4));
 
   const employeeById = useMemo(() => new Map(data.employees.map((row) => [String(row.id), row])), [data.employees]);
   const projectById = useMemo(() => new Map(data.projects.map((row) => [String(row.id), row])), [data.projects]);
@@ -190,6 +192,7 @@ export function HrEmployeeRegistry152({
   const editEmployeeKey = editEmployee ? String(editEmployee.id) : "";
   const currentExam = editEmployeeKey ? latestEmployeeRecord(data.exams, editEmployeeKey, ["examined_at", "valid_until", "created_at"]) : undefined;
   const currentTraining = editEmployeeKey ? latestEmployeeRecord(data.trainings, editEmployeeKey, ["completed_at", "valid_until", "created_at"]) : undefined;
+  const currentEntitlement = editEmployeeKey ? (data.entitlements ?? []).find((row) => String(row.employee_id) === editEmployeeKey && Number(row.year) === referenceYear) : undefined;
   const employeeQualifications = editEmployeeKey ? (data.qualifications ?? [])
     .filter((row) => String(row.employee_id) === editEmployeeKey)
     .sort((a, b) => String(b.valid_until ?? b.issued_at ?? b.created_at ?? "").localeCompare(String(a.valid_until ?? a.issued_at ?? a.created_at ?? ""))) : [];
@@ -237,14 +240,14 @@ export function HrEmployeeRegistry152({
     setCalendarEmployeeId(employeeId);
   };
 
-  const postHrAction = async (action: "medical_exam_create" | "safety_training_create" | "qualification_create", payload: Record<string, unknown>) => {
+  const postHrAction = async (action: "medical_exam_create" | "safety_training_create" | "qualification_create" | "leave_entitlement_upsert", payload: Record<string, unknown>) => {
     const response = await fetch("/api/company/hr", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ workspaceId, action, payload })
     });
     const result = await response.json().catch(() => ({})) as ApiResponse;
-    if (!response.ok) throw new Error(result.error ?? "Nie udało się zapisać danych BHP pracownika.");
+    if (!response.ok) throw new Error(result.error ?? "Nie udało się zapisać dodatkowych danych pracownika.");
   };
 
   const submitEmployee = (event: FormEvent<HTMLFormElement>) => {
@@ -265,6 +268,18 @@ export function HrEmployeeRegistry152({
 
         const employeeId = String(payload.employeeId ?? editEmployee.id);
         const additions: Array<Promise<void>> = [];
+        const leaveRequested = Boolean(payload.leaveAnnualDays || payload.leaveCarriedOverDays || payload.leaveExtraDays || payload.leaveNotes);
+        if (leaveRequested) {
+          if (!payload.leaveAnnualDays) throw new Error("Dni wolne: uzupełnij podstawowy wymiar urlopu, np. 20 lub 26 dni.");
+          additions.push(postHrAction("leave_entitlement_upsert", {
+            employeeId,
+            year: referenceYear,
+            annualDays: payload.leaveAnnualDays,
+            carriedOverDays: payload.leaveCarriedOverDays,
+            extraDays: payload.leaveExtraDays,
+            notes: payload.leaveNotes
+          }));
+        }
         const medicalRequested = Boolean(payload.medicalExamType || payload.medicalExaminedAt || payload.medicalValidUntil);
         if (medicalRequested) {
           if (!payload.medicalExamType || !payload.medicalValidUntil) throw new Error("Badanie lekarskie: uzupełnij rodzaj badania i datę ważności.");
@@ -301,9 +316,11 @@ export function HrEmployeeRegistry152({
         }
         await Promise.all(additions);
 
-        setMessage(additions.length
-          ? `Dane pracownika zostały zapisane. Dodano ${additions.length} wpis${additions.length === 1 ? "" : "y"} do „Uprawnienia i BHP”.`
-          : "Dane pracownika zostały zapisane.");
+        const messages = ["Dane pracownika zostały zapisane."];
+        if (leaveRequested) messages.push("Limit dni wolnych zsynchronizowano z „Urlopy i absencje”.");
+        const complianceCount = Number(medicalRequested) + Number(trainingRequested) + Number(qualificationRequested);
+        if (complianceCount) messages.push(`Dodano ${complianceCount} wpis${complianceCount === 1 ? "" : "y"} do „Uprawnienia i BHP”.`);
+        setMessage(messages.join(" "));
         setEditEmployeeId(null);
         router.refresh();
       } catch (reason) {
@@ -382,6 +399,8 @@ export function HrEmployeeRegistry152({
       employment={currentEmploymentByEmployee.get(String(editEmployee.id))}
       currentExam={currentExam}
       currentTraining={currentTraining}
+      currentEntitlement={currentEntitlement}
+      referenceYear={referenceYear}
       qualifications={employeeQualifications}
       canWrite={canWrite}
       canManagePayroll={canManagePayroll}
@@ -412,6 +431,8 @@ function EmployeeEditModal({
   employment,
   currentExam,
   currentTraining,
+  currentEntitlement,
+  referenceYear,
   qualifications,
   canWrite,
   canManagePayroll,
@@ -427,6 +448,8 @@ function EmployeeEditModal({
   employment?: Row;
   currentExam?: Row;
   currentTraining?: Row;
+  currentEntitlement?: Row;
+  referenceYear: number;
   qualifications: Row[];
   canWrite: boolean;
   canManagePayroll: boolean;
@@ -441,6 +464,9 @@ function EmployeeEditModal({
   const qualificationSummary = qualifications.length
     ? qualifications.slice(0, 4).map((row) => `${text(row.qualification_type)}${row.valid_until ? ` (do ${safeDateLabel(row.valid_until)})` : ""}`).join(" · ")
     : "brak zapisanych uprawnień";
+  const leaveTotal = currentEntitlement
+    ? Number(currentEntitlement.annual_days ?? 0) + Number(currentEntitlement.carried_over_days ?? 0) + Number(currentEntitlement.extra_days ?? 0)
+    : null;
 
   return <ModalPortal><div className={styles.modalLayer}>
     <button className={styles.backdrop} onClick={close} aria-label="Zamknij edycję pracownika" />
@@ -465,6 +491,16 @@ function EmployeeEditModal({
             <label>Stanowisko<input name="position" defaultValue={text(employment?.position, "")} disabled={!canWrite} /></label>
             <label>Forma zatrudnienia<select name="employmentType" defaultValue={text(employment?.employment_type, "employment_contract")} disabled={!canWrite}><option value="employment_contract">Umowa o pracę</option><option value="contract">Umowa cywilna</option><option value="b2b">B2B</option></select></label>
             <label>Wymiar etatu<input name="fullTimeEquivalent" inputMode="decimal" defaultValue={text(employment?.full_time_equivalent, "1")} disabled={!canWrite} /></label>
+          </div></fieldset>
+          <fieldset><legend>Dni wolne i urlop</legend><div className={styles.formGrid}>
+            <div className={styles.fullWidth}>
+              <strong>Limit na {referenceYear} r.</strong>
+              <div className={styles.subtle}>{leaveTotal === null ? "Brak zapisanego limitu dla tego roku." : `Łącznie zapisano ${number(leaveTotal, 0)} dni. Zmiany w tym miejscu aktualizują tę samą ewidencję co zakładka „Urlopy i absencje”.`}</div>
+            </div>
+            <label>Urlop podstawowy — dni<input name="leaveAnnualDays" inputMode="decimal" placeholder="np. 20 lub 26" defaultValue={text(currentEntitlement?.annual_days, "")} disabled={!canWrite} /></label>
+            <label>Dni przeniesione z poprzedniego roku<input name="leaveCarriedOverDays" inputMode="decimal" placeholder="0" defaultValue={text(currentEntitlement?.carried_over_days, "")} disabled={!canWrite} /></label>
+            <label>Dni dodatkowe<input name="leaveExtraDays" inputMode="decimal" placeholder="0" defaultValue={text(currentEntitlement?.extra_days, "")} disabled={!canWrite} /></label>
+            <label>Uwagi do limitu<input name="leaveNotes" defaultValue={text(currentEntitlement?.notes, "")} placeholder="Opcjonalnie" disabled={!canWrite} /></label>
           </div></fieldset>
           <fieldset><legend>Badania, BHP i uprawnienia</legend><div className={styles.formGrid}>
             <div className={styles.fullWidth}>
