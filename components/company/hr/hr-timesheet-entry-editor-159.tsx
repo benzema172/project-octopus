@@ -115,7 +115,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
   </form>;
 
   const editor = <div className={styles.inlineWrap}>
-    {entries.map((entry) => formFor(entry, String(entry.id ?? Math.random())))}
+    {entries.map((entry, index) => formFor(entry, String(entry.id ?? `${employeeId}-${workDate}-${index}`)))}
     {adding ? formFor(undefined, "new") : null}
     {canWrite && entries.length > 0 && !adding ? <button type="button" className={styles.add} onClick={() => { setAdding(true); setMessage(null); setError(null); }}><Plus size={13} /> Dodaj drugi wpis / inną inwestycję</button> : null}
     {!canWrite ? <div className={styles.readOnly}>Widok tylko do odczytu — zapis czasu pracy wymaga uprawnienia do edycji Kadr.</div> : null}
