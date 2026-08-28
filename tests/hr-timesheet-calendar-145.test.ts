@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const workspace = readFileSync("components/company/hr/hr-workspace-140.tsx", "utf8");
 const calendar = readFileSync("components/company/hr/hr-time-records-145.tsx", "utf8");
+const modalCss = readFileSync("components/company/hr/hr-time-records-155.module.css", "utf8");
 const exportRoute = readFileSync("app/api/company/hr/export/route.ts", "utf8");
 
 describe("Project Octopus 1.4.5 HR timesheet calendar", () => {
@@ -21,6 +22,29 @@ describe("Project Octopus 1.4.5 HR timesheet calendar", () => {
     expect(calendar).toContain("Kalendarz pracy");
     expect(calendar).toContain("projectById");
     expect(calendar).toContain("overtime_hours");
+  });
+
+  it("opens employee time records as a centered viewport modal instead of the old side drawer", () => {
+    expect(calendar).toContain('import { createPortal } from "react-dom"');
+    expect(calendar).toContain("createPortal(");
+    expect(calendar).toContain('aria-labelledby="time-records-employee-title"');
+    expect(calendar).not.toContain("styles.drawer");
+    expect(calendar).not.toContain("styles.profileLayer");
+    expect(modalCss).toContain(".layer{position:fixed;inset:0");
+    expect(modalCss).toContain("place-items:center");
+    expect(modalCss).toContain("width:min(1120px");
+    expect(modalCss).toContain("max-height:min(900px");
+    expect(modalCss).toContain("overflow-y:auto");
+  });
+
+  it("shows a readable vertical day table and complete period summary", () => {
+    expect(calendar).toContain("Inwestycja / zakres");
+    expect(calendar).toContain("Godziny podstawowe");
+    expect(calendar).toContain("Nadgodziny");
+    expect(calendar).toContain("Dni z wpisem");
+    expect(calendar).toContain("selectedBaseHours");
+    expect(calendar).toContain("selectedOvertime");
+    expect(calendar).toContain("selectedTotal");
   });
 
   it("exports the selected timesheet period and optional employee as CSV", () => {
