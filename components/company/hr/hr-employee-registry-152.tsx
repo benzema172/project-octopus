@@ -24,6 +24,9 @@ type RegistryData = {
   projects: Row[];
   employments: Row[];
   assignments: Row[];
+  qualifications?: Row[];
+  exams?: Row[];
+  trainings?: Row[];
 };
 
 type CalendarEntry = {
@@ -38,6 +41,11 @@ type CalendarEntry = {
 
 type CalendarResponse = {
   entries?: CalendarEntry[];
+  error?: string;
+};
+
+type ApiResponse = {
+  id?: string;
   error?: string;
 };
 
@@ -83,6 +91,12 @@ function dateLabel(value: string) {
   return new Date(`${value}T12:00:00`).toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+function safeDateLabel(value: unknown) {
+  const raw = String(value ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return "brak terminu";
+  return dateLabel(raw);
+}
+
 function weekdayLabel(value: string) {
   return new Date(`${value}T12:00:00`).toLocaleDateString("pl-PL", { weekday: "long" });
 }
@@ -99,6 +113,15 @@ function statusLabel(status: string) {
     rejected: "Odrzucony"
   };
   return labels[status] ?? status;
+}
+
+function latestEmployeeRecord(rows: Row[] | undefined, employeeId: string, dateKeys: string[]) {
+  return (rows ?? [])
+    .filter((row) => String(row.employee_id) === employeeId)
+    .sort((a, b) => {
+      const dateValue = (row: Row) => dateKeys.map((key) => String(row[key] ?? "")).find(Boolean) ?? "";
+      return dateValue(b).localeCompare(dateValue(a));
+    })[0];
 }
 
 function ModalPortal({ children }: { children: ReactNode }) {
@@ -164,6 +187,12 @@ export function HrEmployeeRegistry152({
 
   const editEmployee = editEmployeeId ? employeeById.get(editEmployeeId) ?? null : null;
   const calendarEmployee = calendarEmployeeId ? employeeById.get(calendarEmployeeId) ?? null : null;
+  const editEmployeeKey = editEmployee ? String(editEmployee.id) : "";
+  const currentExam = editEmployeeKey ? latestEmployeeRecord(data.exams, editEmployeeKey, ["examined_at", "valid_until", "created_at"]) : undefined;
+  const currentTraining = editEmployeeKey ? latestEmployeeRecord(data.trainings, editEmployeeKey, ["completed_at", "valid_until", "created_at"]) : undefined;
+  const employeeQualifications = editEmployeeKey ? (data.qualifications ?? [])
+    .filter((row) => String(row.employee_id) === editEmployeeKey)
+    .sort((a, b) => String(b.valid_until ?? b.issued_at ?? b.created_at ?? "").localeCompare(String(a.valid_until ?? a.issued_at ?? a.created_at ?? ""))) : [];
 
   useEffect(() => {
     if (!editEmployeeId && !calendarEmployeeId) return;
@@ -208,6 +237,16 @@ export function HrEmployeeRegistry152({
     setCalendarEmployeeId(employeeId);
   };
 
+  const postHrAction = async (action: "medical_exam_create" | "safety_training_create" | "qualification_create", payload: Record<string, unknown>) => {
+    const response = await fetch("/api/company/hr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId, action, payload })
+    });
+    const result = await response.json().catch(() => ({})) as ApiResponse;
+    if (!response.ok) throw new Error(result.error ?? "Nie udało się zapisać danych BHP pracownika.");
+  };
+
   const submitEmployee = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editEmployee) return;
@@ -221,9 +260,50 @@ export function HrEmployeeRegistry152({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ workspaceId, action: "update", payload })
         });
-        const result = await response.json().catch(() => ({})) as { error?: string };
+        const result = await response.json().catch(() => ({})) as ApiResponse;
         if (!response.ok) throw new Error(result.error ?? "Nie udało się zapisać pracownika.");
-        setMessage("Dane pracownika zostały zapisane.");
+
+        const employeeId = String(payload.employeeId ?? editEmployee.id);
+        const additions: Array<Promise<void>> = [];
+        const medicalRequested = Boolean(payload.medicalExamType || payload.medicalExaminedAt || payload.medicalValidUntil);
+        if (medicalRequested) {
+          if (!payload.medicalExamType || !payload.medicalValidUntil) throw new Error("Badanie lekarskie: uzupełnij rodzaj badania i datę ważności.");
+          additions.push(postHrAction("medical_exam_create", {
+            employeeId,
+            examType: payload.medicalExamType,
+            examinedAt: payload.medicalExaminedAt,
+            validUntil: payload.medicalValidUntil,
+            result: payload.medicalExamResult || "fit"
+          }));
+        }
+        const trainingRequested = Boolean(payload.safetyTrainingType || payload.safetyTrainingProvider || payload.safetyTrainingCompletedAt || payload.safetyTrainingValidUntil);
+        if (trainingRequested) {
+          if (!payload.safetyTrainingType || !payload.safetyTrainingCompletedAt) throw new Error("Szkolenie BHP: uzupełnij rodzaj i datę ukończenia.");
+          additions.push(postHrAction("safety_training_create", {
+            employeeId,
+            trainingType: payload.safetyTrainingType,
+            provider: payload.safetyTrainingProvider,
+            completedAt: payload.safetyTrainingCompletedAt,
+            validUntil: payload.safetyTrainingValidUntil,
+            notes: payload.safetyTrainingNotes
+          }));
+        }
+        const qualificationRequested = Boolean(payload.qualificationType || payload.qualificationNumber || payload.qualificationIssuedAt || payload.qualificationValidUntil);
+        if (qualificationRequested) {
+          if (!payload.qualificationType) throw new Error("Uprawnienie: uzupełnij rodzaj uprawnienia lub certyfikatu.");
+          additions.push(postHrAction("qualification_create", {
+            employeeId,
+            qualificationType: payload.qualificationType,
+            number: payload.qualificationNumber,
+            issuedAt: payload.qualificationIssuedAt,
+            validUntil: payload.qualificationValidUntil
+          }));
+        }
+        await Promise.all(additions);
+
+        setMessage(additions.length
+          ? `Dane pracownika zostały zapisane. Dodano ${additions.length} wpis${additions.length === 1 ? "" : "y"} do „Uprawnienia i BHP”.`
+          : "Dane pracownika zostały zapisane.");
         setEditEmployeeId(null);
         router.refresh();
       } catch (reason) {
@@ -300,6 +380,9 @@ export function HrEmployeeRegistry152({
     {editEmployee ? <EmployeeEditModal
       employee={editEmployee}
       employment={currentEmploymentByEmployee.get(String(editEmployee.id))}
+      currentExam={currentExam}
+      currentTraining={currentTraining}
+      qualifications={employeeQualifications}
       canWrite={canWrite}
       canManagePayroll={canManagePayroll}
       pending={pending}
@@ -327,6 +410,9 @@ export function HrEmployeeRegistry152({
 function EmployeeEditModal({
   employee,
   employment,
+  currentExam,
+  currentTraining,
+  qualifications,
   canWrite,
   canManagePayroll,
   pending,
@@ -339,6 +425,9 @@ function EmployeeEditModal({
 }: {
   employee: Row;
   employment?: Row;
+  currentExam?: Row;
+  currentTraining?: Row;
+  qualifications: Row[];
   canWrite: boolean;
   canManagePayroll: boolean;
   pending: boolean;
@@ -349,6 +438,10 @@ function EmployeeEditModal({
   restore: () => void;
   remove: () => void;
 }) {
+  const qualificationSummary = qualifications.length
+    ? qualifications.slice(0, 4).map((row) => `${text(row.qualification_type)}${row.valid_until ? ` (do ${safeDateLabel(row.valid_until)})` : ""}`).join(" · ")
+    : "brak zapisanych uprawnień";
+
   return <ModalPortal><div className={styles.modalLayer}>
     <button className={styles.backdrop} onClick={close} aria-label="Zamknij edycję pracownika" />
     <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="employee-edit-title">
@@ -372,6 +465,28 @@ function EmployeeEditModal({
             <label>Stanowisko<input name="position" defaultValue={text(employment?.position, "")} disabled={!canWrite} /></label>
             <label>Forma zatrudnienia<select name="employmentType" defaultValue={text(employment?.employment_type, "employment_contract")} disabled={!canWrite}><option value="employment_contract">Umowa o pracę</option><option value="contract">Umowa cywilna</option><option value="b2b">B2B</option></select></label>
             <label>Wymiar etatu<input name="fullTimeEquivalent" inputMode="decimal" defaultValue={text(employment?.full_time_equivalent, "1")} disabled={!canWrite} /></label>
+          </div></fieldset>
+          <fieldset><legend>Badania, BHP i uprawnienia</legend><div className={styles.formGrid}>
+            <div className={styles.fullWidth}>
+              <strong>Aktualna ewidencja</strong>
+              <div className={styles.subtle}>Badanie: {currentExam ? `${text(currentExam.exam_type)} · ważne do ${safeDateLabel(currentExam.valid_until)}` : "brak"}</div>
+              <div className={styles.subtle}>BHP: {currentTraining ? `${text(currentTraining.training_type)} · ukończono ${safeDateLabel(currentTraining.completed_at)}${currentTraining.valid_until ? ` · ważne do ${safeDateLabel(currentTraining.valid_until)}` : ""}` : "brak"}</div>
+              <div className={styles.subtle}>Uprawnienia: {qualificationSummary}</div>
+              <div className={styles.subtle}>Poniższe pola dodają nowy wpis do historii. Po zapisie dane pojawią się również w zakładce „Uprawnienia i BHP”.</div>
+            </div>
+            <label>Nowe badanie lekarskie<select name="medicalExamType" defaultValue="" disabled={!canWrite}><option value="">Nie dodawaj</option><option value="Wstępne">Wstępne</option><option value="Okresowe">Okresowe</option><option value="Kontrolne">Kontrolne</option></select></label>
+            <label>Wynik badania<select name="medicalExamResult" defaultValue="fit" disabled={!canWrite}><option value="fit">Zdolny</option><option value="fit_with_restrictions">Zdolny z ograniczeniami</option><option value="unfit">Niezdolny</option></select></label>
+            <label>Data badania<input name="medicalExaminedAt" type="date" disabled={!canWrite} /></label>
+            <label>Badanie ważne do<input name="medicalValidUntil" type="date" disabled={!canWrite} /></label>
+            <label>Nowe szkolenie BHP<select name="safetyTrainingType" defaultValue="" disabled={!canWrite}><option value="">Nie dodawaj</option><option value="Wstępne">Wstępne</option><option value="Okresowe">Okresowe</option><option value="Instruktaż stanowiskowy">Instruktaż stanowiskowy</option></select></label>
+            <label>Organizator BHP<input name="safetyTrainingProvider" placeholder="Firma / osoba prowadząca" disabled={!canWrite} /></label>
+            <label>Ukończono BHP<input name="safetyTrainingCompletedAt" type="date" disabled={!canWrite} /></label>
+            <label>BHP ważne do<input name="safetyTrainingValidUntil" type="date" disabled={!canWrite} /></label>
+            <label className={styles.fullWidth}>Uwagi do szkolenia BHP<input name="safetyTrainingNotes" placeholder="Opcjonalnie" disabled={!canWrite} /></label>
+            <label>Nowe uprawnienie / certyfikat<input name="qualificationType" placeholder="SEP, UDT, F-Gazy, prawo jazdy…" disabled={!canWrite} /></label>
+            <label>Numer uprawnienia<input name="qualificationNumber" disabled={!canWrite} /></label>
+            <label>Wydano<input name="qualificationIssuedAt" type="date" disabled={!canWrite} /></label>
+            <label>Ważne do<input name="qualificationValidUntil" type="date" disabled={!canWrite} /></label>
           </div></fieldset>
           {canManagePayroll ? <fieldset><legend>Wynagrodzenie i koszt zatrudnienia</legend><div className={styles.formGrid}>
             <label>Wypłata netto<input name="netMonthlyPay" inputMode="decimal" defaultValue={text(employment?.net_monthly_pay, "")} /></label>
