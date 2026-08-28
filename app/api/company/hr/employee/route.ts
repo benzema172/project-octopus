@@ -136,7 +136,7 @@ export async function POST(request: Request) {
     };
     if (employmentBase.full_time_equivalent !== null && employmentBase.full_time_equivalent > 1.5) throw new Error("Wymiar etatu nie może być większy niż 1,5.");
 
-    const payrollRequested = ["netMonthlyPay", "grossMonthlyPay", "employerContributions", "otherMonthlyCosts", "nominalMonthlyHours"].some((key) => p[key] !== undefined && p[key] !== "");
+    const payrollRequested = p.grossMonthlyPay !== undefined && p.grossMonthlyPay !== "";
     let employmentPatch: Record<string, unknown> = { ...employmentBase };
     if (payrollRequested) {
       if (!canManagePayroll) return NextResponse.json({ error: "Brak uprawnienia do edycji wynagrodzenia i kosztu pracodawcy." }, { status: 403 });
