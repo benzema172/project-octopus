@@ -34,7 +34,7 @@ describe("Kadry 1.5.2 employee registry actions", () => {
 
   it("replaces only the legacy employee list while keeping the rest of Kadry intact", () => {
     expect(wrapper).toContain("HrEmployeeRegistry152");
-    expect(wrapper).toContain("employeesActive ? registryStyles.enhancedEmployees");
-    expect(wrapper).toContain("employeesActive ? <HrEmployeeRegistry152");
+    expect(wrapper).toContain("registryVisible ? registryStyles.enhancedEmployees");
+    expect(wrapper).toContain("registryVisible ? <HrEmployeeRegistry152");
   });
 });
