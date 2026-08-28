@@ -25,7 +25,7 @@ describe("HR dashboard editable calendar day status", () => {
     expect(calendar).toContain('statusLabel: "Urlop + wpis czasu"');
   });
 
-  it("shows all employees in a sliding selected-day list with investment and editable hours", () => {
+  it("shows all employees in a compact selected-day list with investment and editable hours", () => {
     expect(calendar).toContain("data.employees.map");
     expect(calendar).toContain("Status pracowników");
     expect(calendar).toContain("Inwestycja / edycja");
@@ -34,6 +34,7 @@ describe("HR dashboard editable calendar day status", () => {
     expect(calendar).toContain("row.hours + row.overtime");
     expect(css).toContain("@keyframes drawerIn");
     expect(css).toContain(".employeeRow");
+    expect(css).toContain("max-height:min(52vh,480px)");
   });
 
   it("uses a clear color language for work, absence, missing entries and conflicts", () => {
@@ -59,14 +60,15 @@ describe("HR dashboard editable calendar day status", () => {
     expect(calendar.match(/aria-label=\"Legenda statusów kalendarza\"/g)).toHaveLength(1);
   });
 
-  it("places day counters on the lower status row next to the legend", () => {
+  it("places day counters on the compact status row next to the legend", () => {
     const statusRowIndex = calendar.indexOf("styles.drawerStatusRow");
     const summaryIndex = calendar.indexOf("styles.summaryChips");
     const legendIndex = calendar.indexOf('aria-label="Legenda statusów kalendarza"');
     expect(statusRowIndex).toBeGreaterThan(calendar.indexOf("styles.drawerHeader"));
     expect(summaryIndex).toBeGreaterThan(statusRowIndex);
     expect(legendIndex).toBeGreaterThan(summaryIndex);
-    expect(css).toContain(".drawerHeader{display:flex;align-items:flex-end");
+    expect(css).toContain(".drawerHeader{display:flex;align-items:center");
     expect(css).toContain(".drawerStatusRow{display:flex");
+    expect(css).toContain("position:sticky;top:0");
   });
 });
