@@ -8,8 +8,10 @@ import { requireCurrentUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { isExecutionLayerSchemaReady } from "@/lib/data/operations";
 import { getProjectFinanceData } from "@/lib/data/project-finance";
+import { getProjectLaborFinanceData } from "@/lib/data/project-labor-finance";
 import { getProjectProfile } from "@/lib/data/project-profile";
 import { getProjectForUser } from "@/lib/data/projects";
+import { applyProjectLaborCost } from "@/lib/investments/project-finance-labor";
 import { parseLocalizedNumber } from "@/lib/numbers/parse-localized-number";
 import "../../../../project-finance-dashboard.css";
 
@@ -41,11 +43,18 @@ export default async function ProjectFinancePage({ params }: Props) {
   const contractValue = parseLocalizedNumber(profile.contractValue);
   let data = null;
   try {
-    data = await getProjectFinanceData({
-      workspaceId: project.workspace_id,
-      projectId: project.id,
-      profileContractValue: contractValue > 0 ? contractValue : null
-    });
+    const [financeData, labor] = await Promise.all([
+      getProjectFinanceData({
+        workspaceId: project.workspace_id,
+        projectId: project.id,
+        profileContractValue: contractValue > 0 ? contractValue : null
+      }),
+      getProjectLaborFinanceData({ workspaceId: project.workspace_id, projectId: project.id })
+    ]);
+    data = {
+      ...financeData,
+      summary: applyProjectLaborCost(financeData.summary, labor.actualCost)
+    };
   } catch (error) {
     console.error("Project Octopus: investment finance dashboard unavailable", {
       projectId: project.id,
