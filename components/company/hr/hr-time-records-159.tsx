@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Download } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import { HrTimesheetEntryEditor159 } from "./hr-timesheet-entry-editor-159";
 import styles from "./hr-workspace-140.module.css";
 
@@ -18,14 +18,19 @@ function entryHours(row: Row) { return Number(row.hours ?? 0) + Number(row.overt
 function periodLabel(period: Period, referenceDate: string, dates: string[]) { if (period === "month") { const parsed = new Date(`${referenceDate.slice(0, 7)}-01T00:00:00Z`); return parsed.toLocaleDateString("pl-PL", { month: "long", year: "numeric", timeZone: "UTC" }); } return `${dates[0]?.slice(5) ?? ""}–${dates.at(-1)?.slice(5) ?? ""}`; }
 function exportHref(workspaceId: string, referenceDate: string, period: Period) { const params = new URLSearchParams({ workspaceId, mode: "timesheet", period, referenceDate }); return `/api/company/hr/export?${params.toString()}`; }
 
-export function HrTimeRecords159({ workspaceId, referenceDate, employees, projects, timesheets, canWrite }: { workspaceId: string; referenceDate: string; employees: Row[]; projects: Row[]; timesheets: Row[]; canWrite: boolean }) {
-  const [period, setPeriod] = useState<Period>("week");
+export function HrTimeRecords159({ workspaceId, referenceDate, employees, projects, timesheets, canWrite, initialEmployeeId = null, onClearEmployeeFocus }: { workspaceId: string; referenceDate: string; employees: Row[]; projects: Row[]; timesheets: Row[]; canWrite: boolean; initialEmployeeId?: string | null; onClearEmployeeFocus?: () => void }) {
+  const initialEmployee = initialEmployeeId ? employees.find((row) => String(row.id) === initialEmployeeId) ?? null : null;
+  const [period, setPeriod] = useState<Period>(() => initialEmployee ? "month" : "week");
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(() => initialEmployee ? String(initialEmployee.id) : null);
   const [mount, setMount] = useState<HTMLElement | null>(null);
   const dates = useMemo(() => period === "week" ? Array.from({ length: 7 }, (_, index) => addDays(referenceDate, index - 6)) : monthDates(referenceDate), [period, referenceDate]);
   const dateSet = useMemo(() => new Set(dates), [dates]);
   const activeEmployees = useMemo(() => employees.filter((row) => row.status === "active"), [employees]);
+  const focusedEmployee = useMemo(() => selectedEmployeeId ? employees.find((row) => String(row.id) === selectedEmployeeId) ?? null : null, [employees, selectedEmployeeId]);
+  const visibleEmployees = useMemo(() => focusedEmployee ? [focusedEmployee] : activeEmployees, [focusedEmployee, activeEmployees]);
   const periodEntries = useMemo(() => timesheets.filter((row) => dateSet.has(String(row.work_date).slice(0, 10))), [timesheets, dateSet]);
-  const periodTotal = periodEntries.reduce((sum, row) => sum + entryHours(row), 0);
+  const visiblePeriodEntries = useMemo(() => focusedEmployee ? periodEntries.filter((row) => String(row.employee_id) === String(focusedEmployee.id)) : periodEntries, [focusedEmployee, periodEntries]);
+  const periodTotal = visiblePeriodEntries.reduce((sum, row) => sum + entryHours(row), 0);
 
   useEffect(() => {
     const root = document.querySelector<HTMLElement>('[data-hr-workspace-slot="employees-shell"]');
@@ -61,10 +66,22 @@ export function HrTimeRecords159({ workspaceId, referenceDate, employees, projec
 
   if (!mount) return null;
 
-  return createPortal(<article className={styles.panel} data-hr-editable-time-records="1">
+  const focusedName = focusedEmployee ? employeeName(focusedEmployee) : "";
+  const clearFocus = () => {
+    setSelectedEmployeeId(null);
+    setPeriod("week");
+    onClearEmployeeFocus?.();
+  };
+
+  return createPortal(<article className={styles.panel} data-hr-editable-time-records="1" data-hr-employee-calendar={focusedEmployee ? String(focusedEmployee.id) : undefined}>
     <div className={styles.panelHeader}>
-      <div><p className={styles.kicker}>{period === "week" ? "Ostatnie 7 dni" : "Miesiąc"}</p><h2>Ewidencja czasu pracy</h2><div className={styles.subtle}>{periodLabel(period, referenceDate, dates)} · kliknij dowolny dzień, aby edytować inwestycję i godziny</div></div>
+      <div>
+        <p className={styles.kicker}>{focusedEmployee ? "Kalendarz pracy pracownika" : period === "week" ? "Ostatnie 7 dni" : "Miesiąc"}</p>
+        <h2>{focusedEmployee ? `Kalendarz pracy — ${focusedName}` : "Ewidencja czasu pracy"}</h2>
+        <div className={styles.subtle}>{periodLabel(period, referenceDate, dates)} · {focusedEmployee ? "w komórkach widzisz godziny i inwestycję; kliknij dzień, aby edytować" : "kliknij dowolny dzień, aby edytować inwestycję i godziny"}</div>
+      </div>
       <div className={styles.splitButtons}>
+        {focusedEmployee ? <button type="button" className={styles.buttonSecondary} onClick={clearFocus}><ArrowLeft size={15} /> Wszyscy pracownicy</button> : null}
         <button type="button" className={period === "week" ? styles.button : styles.buttonSecondary} aria-pressed={period === "week"} onClick={() => setPeriod("week")}>7 dni</button>
         <button type="button" className={period === "month" ? styles.button : styles.buttonSecondary} aria-pressed={period === "month"} onClick={() => setPeriod("month")}>Miesiąc</button>
         <a className={styles.buttonSecondary} href={exportHref(workspaceId, referenceDate, period)}><Download size={15} /> Pobierz ewidencję</a>
@@ -74,9 +91,9 @@ export function HrTimeRecords159({ workspaceId, referenceDate, employees, projec
     <div className={styles.tableWrap}>
       <table className={styles.table}>
         <thead><tr><th>Pracownik</th>{dates.map((date) => <th key={date}>{period === "week" ? date.slice(5) : date.slice(8)}</th>)}<th>Razem</th></tr></thead>
-        <tbody>{activeEmployees.map((employee) => {
+        <tbody>{visibleEmployees.map((employee) => {
           const employeeId = String(employee.id);
-          const employeeEntries = periodEntries.filter((row) => String(row.employee_id) === employeeId);
+          const employeeEntries = visiblePeriodEntries.filter((row) => String(row.employee_id) === employeeId);
           const total = employeeEntries.reduce((sum, row) => sum + entryHours(row), 0);
           return <tr key={employeeId}>
             <td><strong>{employeeName(employee)}</strong></td>
@@ -88,7 +105,7 @@ export function HrTimeRecords159({ workspaceId, referenceDate, employees, projec
           </tr>;
         })}</tbody>
       </table>
-      {!activeEmployees.length ? <div className={styles.empty}>Brak aktywnych pracowników.</div> : null}
+      {!visibleEmployees.length ? <div className={styles.empty}>{focusedEmployee ? "Nie znaleziono pracownika." : "Brak aktywnych pracowników."}</div> : null}
     </div>
   </article>, mount);
 }
