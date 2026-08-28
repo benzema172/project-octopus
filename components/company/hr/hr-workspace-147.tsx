@@ -117,16 +117,14 @@ export function HrWorkspace147(props: Props) {
       }
     }
 
-    const attentionPanel = Array.from(root.querySelectorAll<HTMLElement>("article"))
-      .find((article) => (article.querySelector("h2")?.textContent ?? "").trim() === "Wymaga uwagi");
-    const alertCards = attentionPanel ? Array.from(attentionPanel.querySelectorAll<HTMLElement>("article")) : [];
+    const alertCards = Array.from(root.querySelectorAll<HTMLElement>('section[class*="grid2"] [class*="alertList"] [class*="alert"]'));
     alertCards.forEach((element, index) => {
       if (!props.data.alerts[index]) return;
       element.dataset.hrActionIndex = String(index);
       element.setAttribute("role", "button");
       element.setAttribute("tabindex", "0");
-      element.setAttribute("title", "Otwórz miejsce obsługi");
-      element.setAttribute("aria-label", `${String((props.data.alerts[index] as HrRow).title ?? "Sprawa kadrowa")}. Otwórz miejsce obsługi.`);
+      element.setAttribute("title", "Przejdź do miejsca obsługi tej sprawy");
+      element.setAttribute("aria-label", `${String((props.data.alerts[index] as HrRow).title ?? "Sprawa kadrowa")}. Przejdź do miejsca obsługi.`);
     });
 
     return () => {
