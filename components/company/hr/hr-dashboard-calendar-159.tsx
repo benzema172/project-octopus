@@ -32,7 +32,7 @@ function inRange(date: string, from: unknown, to: unknown) { return (from ? Stri
 function employedOn(employee: Row, date: string) { const hiredAt = employee.hired_at ? String(employee.hired_at).slice(0, 10) : "0000-01-01"; const terminatedAt = employee.terminated_at ? String(employee.terminated_at).slice(0, 10) : "9999-12-31"; if (date < hiredAt || date > terminatedAt) return false; if (!employee.hired_at && !employee.terminated_at && employee.status && employee.status !== "active") return false; return true; }
 function formatHours(value: number) { return new Intl.NumberFormat("pl-PL", { maximumFractionDigits: 1 }).format(value); }
 
-export function HrDashboardCalendar159({ workspaceId, canWrite, data, onOpenEmployeeCalendar }: { workspaceId: string; canWrite: boolean; data: CalendarData; onOpenEmployeeCalendar?: (employeeId: string) => void }) {
+export function HrDashboardCalendar159({ workspaceId, canWrite, data, onOpenEmployeeCalendar }: { workspaceId: string; canWrite: boolean; data: CalendarData; onOpenEmployeeCalendar?: (employeeId: string, referenceDate: string) => void }) {
   const reference = useMemo(() => parseIso(data.referenceDate), [data.referenceDate]);
   const [viewDate, setViewDate] = useState(() => startOfMonth(reference));
   const [selectedDate, setSelectedDate] = useState(data.referenceDate);
@@ -96,7 +96,7 @@ export function HrDashboardCalendar159({ workspaceId, canWrite, data, onOpenEmpl
           return <div className={styles.employeeRow} key={employeeId}>
             <div className={styles.employeeCell}>
               <i className={`${styles.statusDot} ${styles[`status_${row.status}`]}`} aria-hidden="true" />
-              <button type="button" className={styles.employeeLink} onClick={() => onOpenEmployeeCalendar?.(employeeId)} title={`Otwórz kalendarz pracy: ${row.name}`}>{row.name}</button>
+              <button type="button" className={styles.employeeLink} onClick={() => onOpenEmployeeCalendar?.(employeeId, selectedDate)} title={`Otwórz kalendarz pracy: ${row.name}`}>{row.name}</button>
               <small className={`${styles.statusBadge} ${styles[`badge_${row.status}`]}`}>{row.statusLabel}</small>
             </div>
             {editable ? <div className={styles.inlineEditorCell}><HrTimesheetEntryEditor159 workspaceId={workspaceId} employeeId={employeeId} employeeName={row.name} workDate={selectedDate} projects={data.projects} entries={entries} canWrite={canWrite} variant="inline" suggestedProjectId={suggestedProjectId} /></div> : <><div className={styles.locationCell}><span>{row.location}</span></div><div className={styles.hoursCell}><strong>{formatHours(row.hours + row.overtime)} h</strong>{row.overtime > 0 ? <small>w tym {formatHours(row.overtime)} nadg.</small> : null}</div></>}
