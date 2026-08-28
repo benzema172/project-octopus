@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
+import { isIsoDate, assertTimesheetHours } from "@/lib/hr/validation";
 import { JsonBodyError, readJsonBody } from "@/lib/http/json-body";
 import { parseLocalizedNumber } from "@/lib/numbers/parse-localized-number";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -19,7 +20,7 @@ function text(value: unknown, label: string, required = false) {
 
 function date(value: unknown, label: string) {
   const result = text(value, label, true)!;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(result)) throw new Error(`Nieprawidłowy format pola: ${label}.`);
+  if (!isIsoDate(result)) throw new Error(`Nieprawidłowa data w polu: ${label}.`);
   return result;
 }
 
@@ -78,6 +79,19 @@ export async function POST(request: Request) {
     if (error) console.error("Project Octopus HR timesheet audit failed", error.message);
   };
 
+  const ensureUniqueEntry = async (employeeId: string, workDate: string, projectId: string | null, excludeId?: string) => {
+    let query = db.from("timesheets")
+      .select("id")
+      .eq("workspace_id", workspace.id)
+      .eq("employee_id", employeeId)
+      .eq("work_date", workDate);
+    query = projectId ? query.eq("project_id", projectId) : query.is("project_id", null);
+    if (excludeId) query = query.neq("id", excludeId);
+    const { data, error } = await query.limit(1).maybeSingle<{ id: string }>();
+    if (error) throw error;
+    if (data) throw new Error("Dla tego pracownika, dnia i inwestycji istnieje już wpis. Edytuj istniejący wpis albo wybierz inną inwestycję.");
+  };
+
   try {
     if (body.action === "delete") {
       const timesheetId = await owned("timesheets", payload.timesheetId, "Wpis czasu");
@@ -90,13 +104,12 @@ export async function POST(request: Request) {
     const projectId = payload.projectId ? await owned("projects", payload.projectId, "Inwestycja", true) : null;
     const hours = numberValue(payload.hours, "godziny", true);
     const overtime = numberValue(payload.overtimeHours, "nadgodziny");
-    if (hours <= 0 || hours > 24 || overtime < 0 || overtime > 24 || hours + overtime > 24) {
-      throw new Error("Godziny podstawowe i nadgodziny muszą łącznie mieścić się w zakresie 0–24 h, a godziny podstawowe muszą być większe od zera.");
-    }
+    assertTimesheetHours(hours, overtime);
 
     if (body.action === "create") {
       const employeeId = await owned("employees", payload.employeeId, "Pracownik");
       const workDate = date(payload.workDate, "data");
+      await ensureUniqueEntry(employeeId!, workDate, projectId);
       const row = {
         workspace_id: workspace.id,
         employee_id: employeeId,
@@ -114,6 +127,15 @@ export async function POST(request: Request) {
     }
 
     const timesheetId = await owned("timesheets", payload.timesheetId, "Wpis czasu");
+    const { data: existing, error: existingError } = await db.from("timesheets")
+      .select("employee_id,work_date")
+      .eq("workspace_id", workspace.id)
+      .eq("id", timesheetId)
+      .single<{ employee_id: string; work_date: string }>();
+    if (existingError || !existing) throw existingError ?? new Error("Nie znaleziono wpisu czasu.");
+    const workDate = String(existing.work_date).slice(0, 10);
+    await ensureUniqueEntry(String(existing.employee_id), workDate, projectId, timesheetId!);
+
     const patch = {
       project_id: projectId,
       hours,
