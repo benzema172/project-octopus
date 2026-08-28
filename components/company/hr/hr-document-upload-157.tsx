@@ -121,13 +121,14 @@ export function HrDocumentUpload157({ workspaceId, canWrite, documentCount }: Pr
       body: JSON.stringify({ workspaceId, versionId: completed.versionId })
     }).catch(() => null);
 
-    if (analysis?.ok) {
-      await fetch("/api/company/hr", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, action: "employee_document_autolink", payload: { documentId: completed.documentId } })
-      }).catch(() => null);
-    }
+    if (!analysis?.ok) return { saved: true, analysisStarted: false, fileName: file.name };
+
+    await fetch("/api/company/hr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId, action: "employee_document_autolink", payload: { documentId: completed.documentId } })
+    }).catch(() => null);
+    return { saved: true, analysisStarted: true, fileName: file.name };
   }
 
   async function uploadFiles(files: File[]) {
@@ -136,18 +137,27 @@ export function HrDocumentUpload157({ workspaceId, canWrite, documentCount }: Pr
     setError(null);
     setStatus(null);
     let done = 0;
+    let analysisStarted = 0;
     const failures: string[] = [];
+    const analysisWarnings: string[] = [];
     try {
       for (const [index, file] of files.entries()) {
         try {
-          await uploadOne(file, index, files.length);
+          const result = await uploadOne(file, index, files.length);
           done += 1;
+          if (result.analysisStarted) analysisStarted += 1;
+          else analysisWarnings.push(`${result.fileName}: plik zapisano, ale analiza Octopus Brain nie została uruchomiona.`);
         } catch (reason) {
           failures.push(reason instanceof Error ? reason.message : `${file.name}: upload nie powiódł się.`);
         }
       }
-      if (done) setStatus(`Gotowe: zapisano ${done} z ${files.length} plików HR. Octopus analizuje treść i dopasowanie do pracowników.`);
-      if (failures.length) setError(failures.join(" · "));
+      if (done) {
+        setStatus(analysisStarted === done
+          ? `Gotowe: zapisano ${done} z ${files.length} plików HR. Octopus analizuje treść i dopasowanie do pracowników.`
+          : `Zapisano ${done} z ${files.length} plików HR. Analiza AI ruszyła dla ${analysisStarted} z ${done}.`);
+      }
+      const problems = [...failures, ...analysisWarnings];
+      if (problems.length) setError(problems.join(" · "));
       router.refresh();
     } finally {
       setUploading(false);
