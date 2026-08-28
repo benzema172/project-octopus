@@ -140,10 +140,6 @@ export function HrWorkspace147(props: Props) {
     };
   }, [dashboardActive, props.data.alerts]);
 
-  useEffect(() => {
-    if (!registryVisible) setEmployeeCreateOpen(false);
-  }, [registryVisible]);
-
   const mirrorTab = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     const clickedButton = target.closest<HTMLButtonElement>("button");
@@ -164,6 +160,7 @@ export function HrWorkspace147(props: Props) {
     if (!button) return;
     const label = button.textContent ?? "";
     const nextTab = (Object.entries(TAB_LABELS).find(([, value]) => label.includes(value))?.[0] ?? "dashboard") as TabKey;
+    if (nextTab !== "employees") setEmployeeCreateOpen(false);
     setActiveTab(nextTab);
   };
 
