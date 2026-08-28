@@ -16,7 +16,7 @@ function addDays(value: string, days: number) { const date = new Date(`${value}T
 function monthDates(referenceDate: string) { const year = Number(referenceDate.slice(0, 4)); const month = Number(referenceDate.slice(5, 7)); const days = new Date(Date.UTC(year, month, 0)).getUTCDate(); return Array.from({ length: days }, (_, index) => `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(index + 1).padStart(2, "0")}`); }
 function entryHours(row: Row) { return Number(row.hours ?? 0) + Number(row.overtime_hours ?? 0); }
 function periodLabel(period: Period, referenceDate: string, dates: string[]) { if (period === "month") { const parsed = new Date(`${referenceDate.slice(0, 7)}-01T00:00:00Z`); return parsed.toLocaleDateString("pl-PL", { month: "long", year: "numeric", timeZone: "UTC" }); } return `${dates[0]?.slice(5) ?? ""}–${dates.at(-1)?.slice(5) ?? ""}`; }
-function exportHref(workspaceId: string, referenceDate: string, period: Period) { const params = new URLSearchParams({ workspaceId, mode: "timesheet", period, referenceDate }); return `/api/company/hr/export?${params.toString()}`; }
+function exportHref(workspaceId: string, referenceDate: string, period: Period, employeeId?: string | null) { const params = new URLSearchParams({ workspaceId, mode: "timesheet", period, referenceDate }); if (employeeId) params.set("employeeId", employeeId); return `/api/company/hr/export?${params.toString()}`; }
 
 export function HrTimeRecords159({ workspaceId, referenceDate, employees, projects, timesheets, canWrite, initialEmployeeId = null, onClearEmployeeFocus }: { workspaceId: string; referenceDate: string; employees: Row[]; projects: Row[]; timesheets: Row[]; canWrite: boolean; initialEmployeeId?: string | null; onClearEmployeeFocus?: () => void }) {
   const initialEmployee = initialEmployeeId ? employees.find((row) => String(row.id) === initialEmployeeId) ?? null : null;
@@ -30,6 +30,22 @@ export function HrTimeRecords159({ workspaceId, referenceDate, employees, projec
   const visibleEmployees = useMemo(() => focusedEmployee ? [focusedEmployee] : activeEmployees, [focusedEmployee, activeEmployees]);
   const periodEntries = useMemo(() => timesheets.filter((row) => dateSet.has(String(row.work_date).slice(0, 10))), [timesheets, dateSet]);
   const visiblePeriodEntries = useMemo(() => focusedEmployee ? periodEntries.filter((row) => String(row.employee_id) === String(focusedEmployee.id)) : periodEntries, [focusedEmployee, periodEntries]);
+  const entriesByEmployee = useMemo(() => {
+    const map = new Map<string, Row[]>();
+    for (const row of visiblePeriodEntries) {
+      const employeeId = String(row.employee_id);
+      map.set(employeeId, [...(map.get(employeeId) ?? []), row]);
+    }
+    return map;
+  }, [visiblePeriodEntries]);
+  const entriesByEmployeeDate = useMemo(() => {
+    const map = new Map<string, Row[]>();
+    for (const row of visiblePeriodEntries) {
+      const key = `${String(row.employee_id)}|${String(row.work_date).slice(0, 10)}`;
+      map.set(key, [...(map.get(key) ?? []), row]);
+    }
+    return map;
+  }, [visiblePeriodEntries]);
   const periodTotal = visiblePeriodEntries.reduce((sum, row) => sum + entryHours(row), 0);
 
   useEffect(() => {
@@ -67,13 +83,14 @@ export function HrTimeRecords159({ workspaceId, referenceDate, employees, projec
   if (!mount) return null;
 
   const focusedName = focusedEmployee ? employeeName(focusedEmployee) : "";
+  const focusedId = focusedEmployee ? String(focusedEmployee.id) : null;
   const clearFocus = () => {
     setSelectedEmployeeId(null);
     setPeriod("week");
     onClearEmployeeFocus?.();
   };
 
-  return createPortal(<article className={styles.panel} data-hr-editable-time-records="1" data-hr-employee-calendar={focusedEmployee ? String(focusedEmployee.id) : undefined}>
+  return createPortal(<article className={styles.panel} data-hr-editable-time-records="1" data-hr-employee-calendar={focusedId ?? undefined}>
     <div className={styles.panelHeader}>
       <div>
         <p className={styles.kicker}>{focusedEmployee ? "Kalendarz pracy pracownika" : period === "week" ? "Ostatnie 7 dni" : "Miesiąc"}</p>
@@ -84,7 +101,7 @@ export function HrTimeRecords159({ workspaceId, referenceDate, employees, projec
         {focusedEmployee ? <button type="button" className={styles.buttonSecondary} onClick={clearFocus}><ArrowLeft size={15} /> Wszyscy pracownicy</button> : null}
         <button type="button" className={period === "week" ? styles.button : styles.buttonSecondary} aria-pressed={period === "week"} onClick={() => setPeriod("week")}>7 dni</button>
         <button type="button" className={period === "month" ? styles.button : styles.buttonSecondary} aria-pressed={period === "month"} onClick={() => setPeriod("month")}>Miesiąc</button>
-        <a className={styles.buttonSecondary} href={exportHref(workspaceId, referenceDate, period)}><Download size={15} /> Pobierz ewidencję</a>
+        <a className={styles.buttonSecondary} href={exportHref(workspaceId, referenceDate, period, focusedId)}><Download size={15} /> Pobierz ewidencję</a>
         <span className={styles.chip}>{num(periodTotal)} h</span>
       </div>
     </div>
@@ -93,12 +110,12 @@ export function HrTimeRecords159({ workspaceId, referenceDate, employees, projec
         <thead><tr><th>Pracownik</th>{dates.map((date) => <th key={date}>{period === "week" ? date.slice(5) : date.slice(8)}</th>)}<th>Razem</th></tr></thead>
         <tbody>{visibleEmployees.map((employee) => {
           const employeeId = String(employee.id);
-          const employeeEntries = visiblePeriodEntries.filter((row) => String(row.employee_id) === employeeId);
+          const employeeEntries = entriesByEmployee.get(employeeId) ?? [];
           const total = employeeEntries.reduce((sum, row) => sum + entryHours(row), 0);
           return <tr key={employeeId}>
             <td><strong>{employeeName(employee)}</strong></td>
             {dates.map((date) => {
-              const dayEntries = employeeEntries.filter((row) => String(row.work_date).slice(0, 10) === date);
+              const dayEntries = entriesByEmployeeDate.get(`${employeeId}|${date}`) ?? [];
               return <td key={date} style={{ minWidth: period === "month" ? 76 : 92, padding: 4 }}><HrTimesheetEntryEditor159 workspaceId={workspaceId} employeeId={employeeId} employeeName={employeeName(employee)} workDate={date} projects={projects} entries={dayEntries} canWrite={canWrite} variant="cell" /></td>;
             })}
             <td><strong>{num(total)} h</strong></td>
