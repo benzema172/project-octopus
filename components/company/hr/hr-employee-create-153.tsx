@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Plus, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, Plus, ShieldCheck, X } from "lucide-react";
 import { HrCompensationFields150 } from "./hr-compensation-fields-150";
 import styles from "./hr-employee-create-153.module.css";
 
@@ -28,6 +28,7 @@ export function HrEmployeeCreate153({ workspaceId, referenceDate, canManagePayro
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [partialCreated, setPartialCreated] = useState(false);
+  const referenceYear = Number(referenceDate.slice(0, 4));
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -63,6 +64,10 @@ export function HrEmployeeCreate153({ workspaceId, referenceDate, canManagePayro
     startTransition(async () => {
       let createdEmployeeId: string | null = null;
       try {
+        const leaveRequested = hasValue(payload.leaveAnnualDays) || hasValue(payload.leaveCarriedOverDays) || hasValue(payload.leaveExtraDays) || hasValue(payload.leaveNotes);
+        if (leaveRequested && !hasValue(payload.leaveAnnualDays)) {
+          throw new Error("Dni wolne: uzupełnij podstawowy wymiar urlopu, np. 20 lub 26 dni.");
+        }
         const medicalRequested = hasValue(payload.medicalExamType) || hasValue(payload.medicalExaminedAt) || hasValue(payload.medicalValidUntil);
         if (medicalRequested && (!hasValue(payload.medicalExamType) || !hasValue(payload.medicalValidUntil))) {
           throw new Error("Badanie lekarskie: uzupełnij rodzaj badania i datę ważności.");
@@ -80,15 +85,23 @@ export function HrEmployeeCreate153({ workspaceId, referenceDate, canManagePayro
         if (!created.id) throw new Error("Pracownik został utworzony bez identyfikatora. Odśwież kartotekę przed ponowną próbą.");
         createdEmployeeId = created.id;
 
-        const complianceCalls: Array<Promise<ApiResponse>> = [];
-        if (medicalRequested) complianceCalls.push(postHr("medical_exam_create", {
+        const relatedCalls: Array<Promise<ApiResponse>> = [];
+        if (leaveRequested) relatedCalls.push(postHr("leave_entitlement_upsert", {
+          employeeId: created.id,
+          year: referenceYear,
+          annualDays: payload.leaveAnnualDays,
+          carriedOverDays: payload.leaveCarriedOverDays,
+          extraDays: payload.leaveExtraDays,
+          notes: payload.leaveNotes
+        }));
+        if (medicalRequested) relatedCalls.push(postHr("medical_exam_create", {
           employeeId: created.id,
           examType: payload.medicalExamType,
           examinedAt: payload.medicalExaminedAt,
           validUntil: payload.medicalValidUntil,
           result: payload.medicalExamResult || "fit"
         }));
-        if (trainingRequested) complianceCalls.push(postHr("safety_training_create", {
+        if (trainingRequested) relatedCalls.push(postHr("safety_training_create", {
           employeeId: created.id,
           trainingType: payload.safetyTrainingType,
           provider: payload.safetyTrainingProvider,
@@ -96,14 +109,14 @@ export function HrEmployeeCreate153({ workspaceId, referenceDate, canManagePayro
           validUntil: payload.safetyTrainingValidUntil,
           notes: payload.safetyTrainingNotes
         }));
-        if (qualificationRequested) complianceCalls.push(postHr("qualification_create", {
+        if (qualificationRequested) relatedCalls.push(postHr("qualification_create", {
           employeeId: created.id,
           qualificationType: payload.qualificationType,
           number: payload.qualificationNumber,
           issuedAt: payload.qualificationIssuedAt,
           validUntil: payload.qualificationValidUntil
         }));
-        await Promise.all(complianceCalls);
+        await Promise.all(relatedCalls);
 
         router.refresh();
         onClose();
@@ -111,7 +124,7 @@ export function HrEmployeeCreate153({ workspaceId, referenceDate, canManagePayro
         const message = reason instanceof Error ? reason.message : "Nie udało się dodać pracownika.";
         if (createdEmployeeId) {
           setPartialCreated(true);
-          setError(`Pracownik został utworzony, ale nie udało się zapisać części danych BHP/uprawnień: ${message} Zamknij okno i uzupełnij brakujące dane w edycji pracownika.`);
+          setError(`Pracownik został utworzony, ale nie udało się zapisać części danych dodatkowych (urlop/BHP/uprawnienia): ${message} Zamknij okno i uzupełnij brakujące dane w edycji pracownika.`);
           router.refresh();
         } else {
           setError(message);
@@ -146,6 +159,16 @@ export function HrEmployeeCreate153({ workspaceId, referenceDate, canManagePayro
             <label>Telefon awaryjny<input name="emergencyContactPhone" disabled={partialCreated} /></label>
             <label>Notatka<input name="notes" disabled={partialCreated} /></label>
           </div></fieldset>
+
+          <fieldset><legend><CalendarDays size={15} /> Dni wolne i urlop</legend>
+            <p className={styles.hint}>Opcjonalnie ustaw od razu limit na {referenceYear} r. Dane zapiszą się do tej samej ewidencji, którą obsługuje zakładka „Urlopy i absencje”. Jeżeli nie chcesz ustalać limitu teraz, pozostaw wymiar podstawowy pusty.</p>
+            <div className={styles.grid}>
+              <label>Urlop podstawowy — dni<input name="leaveAnnualDays" inputMode="decimal" placeholder="np. 20 lub 26" disabled={partialCreated} /></label>
+              <label>Dni przeniesione z poprzedniego roku<input name="leaveCarriedOverDays" inputMode="decimal" placeholder="0" disabled={partialCreated} /></label>
+              <label>Dni dodatkowe<input name="leaveExtraDays" inputMode="decimal" placeholder="0" disabled={partialCreated} /></label>
+              <label>Uwagi do limitu<input name="leaveNotes" placeholder="Opcjonalnie" disabled={partialCreated} /></label>
+            </div>
+          </fieldset>
 
           {canManagePayroll && !partialCreated ? <HrCompensationFields150 /> : !canManagePayroll ? <p className={styles.hint}>Dane wynagrodzenia uzupełni osoba z uprawnieniem Kadry–płace lub Finanse.</p> : null}
 
