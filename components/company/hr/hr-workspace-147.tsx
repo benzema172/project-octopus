@@ -232,7 +232,11 @@ export function HrWorkspace147(props: Props) {
     }
 
     const clickedButton = target.closest<HTMLButtonElement>("button");
-    if (registryVisible && clickedButton && (clickedButton.textContent ?? "").includes("Dodaj pracownika")) {
+    const legacyCreateButton = registryVisible
+      && clickedButton
+      && shellRef.current?.contains(clickedButton)
+      && (clickedButton.textContent ?? "").includes("Dodaj pracownika");
+    if (legacyCreateButton) {
       event.preventDefault();
       event.stopPropagation();
       setEmployeeCreateOpen(true);
