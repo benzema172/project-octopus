@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
+import { isYearMonth } from "@/lib/hr/validation";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
 function nextMonth(month: string) {
-  const value = new Date(`${month}-01T00:00:00Z`);
+  const [year, monthNumber] = month.split("-").map(Number);
+  const value = new Date(Date.UTC(year, monthNumber - 1, 1));
   value.setUTCMonth(value.getUTCMonth() + 1);
   return value.toISOString().slice(0, 10);
 }
@@ -20,7 +22,7 @@ export async function GET(request: Request) {
   const workspaceId = url.searchParams.get("workspaceId")?.trim() ?? "";
   const employeeId = url.searchParams.get("employeeId")?.trim() ?? "";
   const month = url.searchParams.get("month")?.trim() ?? "";
-  if (!workspaceId || !employeeId || !/^\d{4}-\d{2}$/.test(month)) return NextResponse.json({ error: "Nieprawidłowe parametry kalendarza." }, { status: 400 });
+  if (!workspaceId || !employeeId || !isYearMonth(month)) return NextResponse.json({ error: "Nieprawidłowe parametry kalendarza." }, { status: 400 });
 
   const workspace = await getWorkspaceForUser(user, workspaceId);
   if (!workspace) return NextResponse.json({ error: "Brak dostępu do firmy." }, { status: 403 });
