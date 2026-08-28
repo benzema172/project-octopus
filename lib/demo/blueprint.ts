@@ -728,6 +728,7 @@ export function buildDemoBlueprint(userId: string, referenceDate = new Date()) {
   ] as const;
   const employees: DemoRow[] = [];
   const employments: DemoRow[] = [];
+  const employeePayrollMonths: DemoRow[] = [];
   const qualifications: DemoRow[] = [];
   const medicalExams: DemoRow[] = [];
   const leaveRequests: DemoRow[] = [];
@@ -736,8 +737,13 @@ export function buildDemoBlueprint(userId: string, referenceDate = new Date()) {
 
   employeeSpecs.forEach(([employeeNumber, firstName, lastName, position, monthlyCost, hourlyCost], index) => {
     const employeeId = demoId(600, index + 1);
+    const otherMonthlyCosts = index % 3 * 100;
+    const grossMonthlyPay = Math.round((monthlyCost - otherMonthlyCosts) / 1.2);
+    const employerContributions = monthlyCost - grossMonthlyPay - otherMonthlyCosts;
+    const netMonthlyPay = Math.round(grossMonthlyPay * 0.72);
     employees.push({ id: employeeId, workspace_id: workspaceId, employee_number: employeeNumber, first_name: firstName, last_name: lastName, email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@octopus-demo.pl`, phone: `+48 690 ${String(100 + index).slice(-3)} ${String(200 + index).slice(-3)}`, status: "active", hired_at: atDay(reference, -650 + index * 21) });
-    employments.push({ id: demoId(610, index + 1), workspace_id: workspaceId, employee_id: employeeId, employment_type: index < 8 ? "employment_contract" : "b2b", position, valid_from: atDay(reference, -520 + index * 12), full_time_equivalent: 1, monthly_cost: monthlyCost, hourly_cost: hourlyCost, currency: "PLN" });
+    employments.push({ id: demoId(610, index + 1), workspace_id: workspaceId, employee_id: employeeId, employment_type: index < 8 ? "employment_contract" : "b2b", position, valid_from: atDay(reference, -520 + index * 12), full_time_equivalent: 1, monthly_cost: monthlyCost, hourly_cost: hourlyCost, net_monthly_pay: netMonthlyPay, gross_monthly_pay: grossMonthlyPay, employer_contributions: employerContributions, other_monthly_costs: otherMonthlyCosts, nominal_monthly_hours: 160, currency: "PLN" });
+    if (index < 8) employeePayrollMonths.push({ id: demoId(612, index + 1), workspace_id: workspaceId, employee_id: employeeId, period_month: `${atDay(reference, 0).slice(0, 7)}-01`, net_pay: netMonthlyPay, gross_pay: grossMonthlyPay, employer_contributions: employerContributions, other_costs: otherMonthlyCosts, total_employer_cost: monthlyCost, status: index < 4 ? "paid" : "confirmed", paid_at: index < 4 ? atDay(reference, -2) : null, source: "employment_snapshot", notes: "Rozliczenie demonstracyjne", created_by: userId, updated_by: userId });
     qualifications.push({ id: demoId(620, index + 1), workspace_id: workspaceId, employee_id: employeeId, qualification_type: index < 3 ? "Uprawnienia budowlane sanitarne" : index < 8 ? "Szkolenie BHP / prace instalacyjne" : "Szkolenie stanowiskowe", number: `UPR/${2020 + index}/${100 + index}`, issued_at: atDay(reference, -900 + index * 25), valid_until: index === 4 ? atDay(reference, 18) : index === 6 ? atDay(reference, -4) : atDay(reference, 240 + index * 11), status: index === 6 ? "expired" : "valid" });
     medicalExams.push({ id: demoId(630, index + 1), workspace_id: workspaceId, employee_id: employeeId, exam_type: "Badania okresowe", examined_at: atDay(reference, -260 + index * 7), valid_until: index === 2 ? atDay(reference, 12) : atDay(reference, 180 + index * 9), status: "valid" });
     if (index === 1 || index === 8) leaveRequests.push({ id: demoId(640, index + 1), workspace_id: workspaceId, employee_id: employeeId, leave_type: "annual", date_from: atDay(reference, 20 + index), date_to: atDay(reference, 24 + index), days: 5, status: "pending" });
@@ -915,6 +921,7 @@ export function buildDemoBlueprint(userId: string, referenceDate = new Date()) {
     financialAllocations,
     employees,
     employments,
+    employeePayrollMonths,
     qualifications,
     medicalExams,
     leaveRequests,

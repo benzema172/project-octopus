@@ -38,7 +38,8 @@ const TABLE_COLUMNS: Record<string, string[]> = {
   commitments: ["id", "workspace_id", "project_id", "counterparty_id", "source_type", "source_id", "description", "amount", "original_amount", "currency", "expected_date", "status"],
   financial_allocations: ["id", "workspace_id", "project_id", "source_type", "source_id", "source_line_id", "boq_item_id", "wbs_node_id", "cost_code", "amount", "status"],
   employees: ["id", "workspace_id", "employee_number", "first_name", "last_name", "email", "phone", "status", "hired_at", "terminated_at"],
-  employments: ["id", "workspace_id", "employee_id", "employment_type", "position", "valid_from", "valid_to", "full_time_equivalent", "monthly_cost", "hourly_cost", "currency"],
+  employments: ["id", "workspace_id", "employee_id", "employment_type", "position", "valid_from", "valid_to", "full_time_equivalent", "monthly_cost", "hourly_cost", "net_monthly_pay", "gross_monthly_pay", "employer_contributions", "other_monthly_costs", "nominal_monthly_hours", "currency"],
+  employee_payroll_months: ["id", "workspace_id", "employee_id", "period_month", "net_pay", "gross_pay", "employer_contributions", "other_costs", "total_employer_cost", "status", "paid_at", "source", "notes", "created_by", "updated_by"],
   qualifications: ["id", "workspace_id", "employee_id", "qualification_type", "number", "issued_at", "valid_until", "document_id", "status"],
   medical_exams: ["id", "workspace_id", "employee_id", "exam_type", "examined_at", "valid_until", "document_id", "status"],
   leave_requests: ["id", "workspace_id", "employee_id", "leave_type", "date_from", "date_to", "days", "status", "approved_by"],
@@ -221,6 +222,7 @@ export async function seedGuestDemoData(userId: string) {
 
   await write("employees", blueprint.employees);
   await write("employments", blueprint.employments);
+  await write("employee_payroll_months", blueprint.employeePayrollMonths);
   await write("qualifications", blueprint.qualifications);
   await write("medical_exams", blueprint.medicalExams);
   await write("leave_requests", blueprint.leaveRequests);

@@ -28,7 +28,7 @@ describe("Project Octopus 1.4.0 — Kadry 2.0", () => {
   });
 
   it("supports employee cards, teams, compliance, assets and project labor cost", () => {
-    for (const marker of ["Karta pracownika", "timesheet_bulk_team", "team_assign_project", "safety_training_create", "issued_asset_create", "Koszt pracy — miesiąc", "Zdolność do pracy"]) {
+    for (const marker of ["Karta pracownika", "timesheet_bulk_team", "team_assign_project", "safety_training_create", "issued_asset_create", "Pełny koszt zatrudnienia", "Zdolność do pracy"]) {
       expect(ui).toContain(marker);
     }
     expect(loader).toContain("approvedLaborCost");

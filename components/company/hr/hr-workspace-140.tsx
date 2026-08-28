@@ -5,8 +5,9 @@ import { useEffect, useMemo, useState, useTransition, type FormEvent, type React
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle, BriefcaseBusiness, CalendarDays, CheckCircle2, Clock3, Download, FileText,
-  HardHat, PackageCheck, Plus, Search, ShieldCheck, Upload, UsersRound, X
+  HardHat, PackageCheck, Plus, Search, ShieldCheck, Upload, UsersRound, WalletCards, X
 } from "lucide-react";
+import { HrCompensationFields150 } from "./hr-compensation-fields-150";
 import { HrTimeRecords145 } from "./hr-time-records-145";
 import styles from "./hr-workspace-140.module.css";
 
@@ -17,6 +18,7 @@ type HrData = {
   employees: Row[];
   projects: Row[];
   employments: Row[];
+  payrollMonths: Row[];
   qualifications: Row[];
   exams: Row[];
   trainings: Row[];
@@ -66,15 +68,16 @@ function Empty({ children }: { children: ReactNode }) { return <div className={s
 
 function StatusChip({ status }: { status: unknown }) {
   const value = String(status ?? "").toLowerCase();
-  const className = ["approved", "active", "valid", "fit", "completed"].includes(value) ? styles.chipOk : ["expired", "unfit", "terminated", "rejected"].includes(value) ? styles.chipBad : ["pending", "submitted", "review", "draft"].includes(value) ? styles.chipWarn : styles.chip;
-  return <span className={className}>{str(status)}</span>;
+  const labels: Record<string, string> = { planned: "Planowane", confirmed: "Potwierdzone", paid: "Wypłacone" };
+  const className = ["approved", "active", "valid", "fit", "completed", "confirmed", "paid"].includes(value) ? styles.chipOk : ["expired", "unfit", "terminated", "rejected"].includes(value) ? styles.chipBad : ["pending", "submitted", "review", "draft", "planned"].includes(value) ? styles.chipWarn : styles.chip;
+  return <span className={className}>{labels[value] ?? str(status)}</span>;
 }
 
 function FormBlock({ title, children, open = false }: { title: string; children: ReactNode; open?: boolean }) {
   return <details className={styles.details} open={open}><summary><Plus size={14} /> {title}</summary><div className={styles.detailsBody}>{children}</div></details>;
 }
 
-export function HrWorkspace140({ workspaceId, data, canWrite, canApprove }: { workspaceId: string; data: HrData; canWrite: boolean; canApprove: boolean }) {
+export function HrWorkspace140({ workspaceId, data, canWrite, canApprove, canViewPayroll, canManagePayroll }: { workspaceId: string; data: HrData; canWrite: boolean; canApprove: boolean; canViewPayroll: boolean; canManagePayroll: boolean }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("dashboard");
   const [query, setQuery] = useState("");
@@ -173,11 +176,17 @@ export function HrWorkspace140({ workspaceId, data, canWrite, canApprove }: { wo
         <div className={styles.simpleList}>{data.projectStaff.map((row) => <div className={styles.listItem} key={String(row.project_id)}><div><strong>{str(row.name)}</strong><div className={styles.subtle}>{str(row.people, "0")} osób · {num(row.allocation, 0)}% łącznej alokacji</div></div><UsersRound size={18} /></div>)}{!data.projectStaff.length ? <Empty>Brak aktywnych przypisań do inwestycji.</Empty> : null}</div>
       </article>
     </section>
-    <section className={styles.grid3}>
-      <article className={styles.panel}><h3>Koszt pracy — miesiąc</h3><strong>{money(data.summary.approvedLaborCost)}</strong><p className={styles.subtle}>{num(data.summary.monthHours)} h zatwierdzonych + {num(data.summary.monthOvertime)} h nadgodzin.</p></article>
-      <article className={styles.panel}><h3>Koszt stały zatrudnienia</h3><strong>{money(data.summary.monthlyEmploymentCost)}</strong><p className={styles.subtle}>Suma aktywnych kosztów miesięcznych.</p></article>
-      <article className={styles.panel}><h3>Sprzęt i ŚOI</h3><strong>{str(data.summary.issuedAssets, "0")}</strong><p className={styles.subtle}>Aktywnie wydane zasoby pracownikom.</p></article>
-    </section>
+    {canViewPayroll ? <>
+      <section className={styles.grid3} data-hr-payroll-summary>
+        <article className={styles.panel}><h3>Do wypłaty netto</h3><strong>{money(data.summary.monthlyNetPay)}</strong><p className={styles.subtle}>Planowana lub zapisana kwota „na rękę” w tym miesiącu.</p></article>
+        <article className={styles.panel}><h3>ZUS i pozostałe koszty</h3><strong>{money(Number(data.summary.monthlyEmployerContributions ?? 0) + Number(data.summary.monthlyOtherCosts ?? 0))}</strong><p className={styles.subtle}>Składki pracodawcy, PPK, dodatki i inne koszty.</p></article>
+        <article className={styles.panel}><h3>Pełny koszt zatrudnienia</h3><strong>{money(data.summary.monthlyEmploymentCost)}</strong><p className={styles.subtle}>Brutto + składki pracodawcy + pozostałe koszty.</p></article>
+      </section>
+      <article className={styles.payrollControl}>
+        <div><p className={styles.kicker}>Kontrola miesiąca</p><h3>{str(data.summary.payrollConfirmed, "0")} z {str(data.summary.activeEmployees, "0")} rozliczeń potwierdzonych</h3><p className={styles.subtle}>{str(data.summary.payrollMissing, "0")} pracowników korzysta jeszcze z planu wynikającego z warunków zatrudnienia.</p></div>
+        <div className={styles.payrollFigures}><span><small>Rozliczone czasem</small><strong>{money(data.summary.approvedLaborCost)}</strong></span><span><small>Nieprzypisane</small><strong>{money(data.summary.unallocatedEmploymentCost)}</strong></span><span><small>Sprzęt i ŚOI</small><strong>{str(data.summary.issuedAssets, "0")}</strong></span></div>
+      </article>
+    </> : <article className={styles.panel}><h3>Sprzęt i ŚOI</h3><strong>{str(data.summary.issuedAssets, "0")}</strong><p className={styles.subtle}>Dane wynagrodzeń są widoczne tylko dla uprawnionych ról Kadry–płace i Finanse.</p></article>}
   </>;
 
   const employeeTab = <>
@@ -242,14 +251,15 @@ export function HrWorkspace140({ workspaceId, data, canWrite, canApprove }: { wo
       referenceDate={data.referenceDate}
       pending={pending}
       error={error}
+      canManagePayroll={canManagePayroll}
       close={() => setEmployeeCreateOpen(false)}
       submit={submit("employee_create", "Pracownik został dodany.", () => setEmployeeCreateOpen(false))}
     /> : null}
-    {selectedEmployee ? <EmployeeDrawer employee={selectedEmployee} data={data} canWrite={canWrite} pending={pending} perform={perform} submit={submit} close={() => setSelectedEmployeeId(null)} employeeById={employeeById} projectById={projectById} /> : null}
+    {selectedEmployee ? <EmployeeDrawer employee={selectedEmployee} data={data} canWrite={canWrite} canViewPayroll={canViewPayroll} canManagePayroll={canManagePayroll} pending={pending} perform={perform} submit={submit} close={() => setSelectedEmployeeId(null)} employeeById={employeeById} projectById={projectById} /> : null}
   </div>;
 }
 
-function EmployeeCreateModal({ referenceDate, pending, error, close, submit }: { referenceDate: string; pending: boolean; error: string | null; close: () => void; submit: (event: FormEvent<HTMLFormElement>) => void }) {
+function EmployeeCreateModal({ referenceDate, pending, error, canManagePayroll, close, submit }: { referenceDate: string; pending: boolean; error: string | null; canManagePayroll: boolean; close: () => void; submit: (event: FormEvent<HTMLFormElement>) => void }) {
   return <div className={styles.modalLayer}>
     <button type="button" className={styles.modalBackdrop} onClick={close} aria-label="Zamknij dodawanie pracownika" />
     <section className={styles.employeeModal} role="dialog" aria-modal="true" aria-labelledby="employee-create-title">
@@ -265,10 +275,10 @@ function EmployeeCreateModal({ referenceDate, pending, error, close, submit }: {
             <label>Numer pracownika<input name="employeeNumber" /></label><label>Stanowisko<input name="position" /></label>
             <label>E-mail<input name="email" type="email" /></label><label>Telefon<input name="phone" /></label>
             <label>Forma zatrudnienia<select name="employmentType" defaultValue="employment_contract"><option value="employment_contract">Umowa o pracę</option><option value="contract">Umowa cywilna</option><option value="b2b">B2B</option></select></label><label>Data zatrudnienia<input name="hiredAt" type="date" defaultValue={referenceDate} /></label>
-            <label>Wymiar etatu<input name="fullTimeEquivalent" inputMode="decimal" placeholder="1,0" /></label><label>Koszt miesięczny<input name="monthlyCost" inputMode="decimal" /></label>
-            <label>Koszt godzinowy<input name="hourlyCost" inputMode="decimal" /></label><label>Kontakt awaryjny<input name="emergencyContactName" /></label>
+            <label>Wymiar etatu<input name="fullTimeEquivalent" inputMode="decimal" placeholder="1,0" /></label><label>Kontakt awaryjny<input name="emergencyContactName" /></label>
             <label>Telefon awaryjny<input name="emergencyContactPhone" /></label><label>Notatka<input name="notes" /></label>
           </div>
+          {canManagePayroll ? <HrCompensationFields150 /> : <p className={styles.fieldHint}>Dane wynagrodzenia uzupełni osoba z uprawnieniem Kadry–płace lub Finanse.</p>}
           <div className={styles.modalActions}><button type="button" className={styles.buttonSecondary} onClick={close}>Anuluj</button><button className={styles.button} disabled={pending}><Plus size={15} /> {pending ? "Dodawanie…" : "Dodaj pracownika"}</button></div>
         </form>
       </div>
@@ -276,10 +286,11 @@ function EmployeeCreateModal({ referenceDate, pending, error, close, submit }: {
   </div>;
 }
 
-function EmployeeDrawer({ employee, data, canWrite, pending, perform, submit, close, projectById }: { employee: Row; data: HrData; canWrite: boolean; pending: boolean; perform: (action: string, payload: Record<string, unknown>, success: string) => void; submit: (action: string, success: string) => (event: FormEvent<HTMLFormElement>) => void; close: () => void; employeeById: Map<string, Row>; projectById: Map<string, Row> }) {
+function EmployeeDrawer({ employee, data, canWrite, canViewPayroll, canManagePayroll, pending, perform, submit, close, projectById }: { employee: Row; data: HrData; canWrite: boolean; canViewPayroll: boolean; canManagePayroll: boolean; pending: boolean; perform: (action: string, payload: Record<string, unknown>, success: string) => void; submit: (action: string, success: string) => (event: FormEvent<HTMLFormElement>) => void; close: () => void; employeeById: Map<string, Row>; projectById: Map<string, Row> }) {
   const employeeId = String(employee.id);
-  const employments = data.employments.filter((row) => String(row.employee_id) === employeeId);
+  const employments = data.employments.filter((row) => String(row.employee_id) === employeeId).sort((a, b) => String(b.valid_from).localeCompare(String(a.valid_from)));
   const currentEmployment = employments.find((row) => activeOn(row, data.referenceDate));
+  const payrollMonths = data.payrollMonths.filter((row) => String(row.employee_id) === employeeId).sort((a, b) => String(b.period_month).localeCompare(String(a.period_month)));
   const assignments = data.assignments.filter((row) => String(row.employee_id) === employeeId && activeOn(row, data.referenceDate));
   const timesheets = data.timesheets.filter((row) => String(row.employee_id) === employeeId);
   const leaves = data.leaves.filter((row) => String(row.employee_id) === employeeId);
@@ -290,17 +301,76 @@ function EmployeeDrawer({ employee, data, canWrite, pending, perform, submit, cl
   const monthHours = monthEntries.reduce((sum, row) => sum + Number(row.hours ?? 0) + Number(row.overtime_hours ?? 0), 0);
   const hourCost = Number(currentEmployment?.hourly_cost ?? 0);
   const projectCost = new Map<string, number>();
-  for (const row of monthEntries) { const key = String(row.project_id ?? "general"); projectCost.set(key, (projectCost.get(key) ?? 0) + (Number(row.hours ?? 0) + Number(row.overtime_hours ?? 0)) * hourCost); }
+  for (const row of monthEntries) {
+    const key = String(row.project_id ?? "general");
+    projectCost.set(key, (projectCost.get(key) ?? 0) + (Number(row.hours ?? 0) + Number(row.overtime_hours ?? 0)) * hourCost);
+  }
   const maxProjectCost = Math.max(1, ...projectCost.values());
   const balance = data.leaveBalances.find((row) => String(row.employee_id) === employeeId);
+  const totalCost = Number(currentEmployment?.monthly_cost ?? 0);
+  const netPay = Number(currentEmployment?.net_monthly_pay ?? 0);
+  const publicAndOther = Math.max(0, totalCost - netPay);
 
-  return <div className={styles.profileLayer}><button className={styles.backdrop} onClick={close} aria-label="Zamknij profil" /><aside className={styles.drawer} role="dialog" aria-modal="true" aria-label={`Karta pracownika ${employeeName(employee)}`}><header className={styles.drawerHeader}><div><p className={styles.kicker}>Karta pracownika</p><h2>{employeeName(employee)}</h2><div className={styles.subtle}>{str(currentEmployment?.position, "Bez stanowiska")} · {str(currentEmployment?.employment_type, "forma nieuzupełniona")} · <StatusChip status={employee.status} /></div></div><button type="button" className={styles.iconButton} onClick={close} aria-label="Zamknij"><X size={18} /></button></header><div className={styles.profileSections}>
-    <section className={styles.profileSection}><h3>Podsumowanie</h3><div className={styles.miniGrid}><div className={styles.mini}><small>Telefon</small><strong>{str(employee.phone)}</strong></div><div className={styles.mini}><small>E-mail</small><strong>{str(employee.email)}</strong></div><div className={styles.mini}><small>Koszt miesięczny</small><strong>{money(currentEmployment?.monthly_cost)}</strong></div><div className={styles.mini}><small>Koszt godzinowy</small><strong>{money(currentEmployment?.hourly_cost)}</strong></div><div className={styles.mini}><small>Godziny w miesiącu</small><strong>{num(monthHours)} h</strong></div><div className={styles.mini}><small>Urlop pozostały</small><strong>{num(balance?.remaining_days)} dni</strong></div></div></section>
-    <section className={styles.profileSection}><h3>Inwestycje i koszt pracy</h3>{assignments.map((row) => <p key={String(row.id)}><strong>{str(projectById.get(String(row.project_id))?.name)}</strong> · {str(row.role)} · {num(row.allocation_percent, 0)}%</p>)}{!assignments.length ? <p className={styles.subtle}>Brak aktywnego przypisania.</p> : null}<div className={styles.simpleList}>{Array.from(projectCost.entries()).map(([projectId, value]) => <div className={styles.costBar} key={projectId}><span>{projectId === "general" ? "Koszty ogólne" : str(projectById.get(projectId)?.name)}</span><div className={styles.costTrack}><span style={{ width: `${Math.max(4, value / maxProjectCost * 100)}%` }} /></div><strong>{money(value)}</strong></div>)}</div></section>
-    <section className={styles.profileSection}><h3>Zdolność do pracy</h3>{compliance.map((row) => <p key={`${str(row.item_kind)}-${str(row.id)}`}><strong>{str(row.item_type)}</strong> · ważne do {dateLabel(row.valid_until)} · <StatusChip status={row.valid_until && String(row.valid_until) < data.referenceDate ? "expired" : row.status} /></p>)}{!compliance.length ? <p className={styles.subtle}>Brak badań, BHP i uprawnień.</p> : null}</section>
-    <section className={styles.profileSection}><h3>Urlopy i czas pracy</h3><p>Ostatnie wpisy czasu: {timesheets.slice(0, 5).map((row) => `${dateLabel(row.work_date)} — ${num(row.hours)} h`).join(" · ") || "brak"}</p><p>Ostatnie absencje: {leaves.slice(0, 4).map((row) => `${dateLabel(row.date_from)}–${dateLabel(row.date_to)} (${str(row.status)})`).join(" · ") || "brak"}</p></section>
-    <section className={styles.profileSection}><h3>Dokumenty</h3>{documents.map((row) => <p key={String(row.id)}><strong>{str(row.document_type)}</strong> · {str(row.document_number)} · ważne do {dateLabel(row.valid_until)}</p>)}{!documents.length ? <p className={styles.subtle}>Brak przypisanych dokumentów HR.</p> : null}</section>
-    <section className={styles.profileSection}><h3>Sprzęt i ŚOI</h3>{assets.map((row) => <div className={styles.member} key={String(row.id)}><div><strong>{str(row.description)}</strong><div className={styles.subtle}>{str(row.asset_type)} · wydano {dateLabel(String(row.issued_at).slice(0, 10))}{row.returned_at ? ` · zwrócono ${dateLabel(String(row.returned_at).slice(0, 10))}` : ""}</div></div>{canWrite && !row.returned_at ? <button className={styles.buttonSecondary} disabled={pending} onClick={() => perform("issued_asset_return", { assetId: row.id, conditionIn: "dobry" }, "Sprzęt został zwrócony.")}>Zwróć</button> : null}</div>)}{canWrite ? <form className={styles.form} onSubmit={submit("issued_asset_create", "Sprzęt został wydany pracownikowi.")}><input type="hidden" name="employeeId" value={employeeId} /><div className={styles.formGrid}><label>Rodzaj<select name="assetType" defaultValue="ppe"><option value="ppe">ŚOI</option><option value="tool">Narzędzie</option><option value="device">Urządzenie</option><option value="other">Inne</option></select></label><label>Opis<input name="description" required placeholder="Kask / Hilti TE 30 / detektor" /></label></div><button className={styles.buttonSecondary} disabled={pending}><PackageCheck size={15} /> Wydaj</button></form> : null}</section>
-    {canWrite ? <section className={styles.profileSection}><h3>Edytuj kartę</h3><form className={styles.form} onSubmit={submit("employee_update", "Dane pracownika zostały zaktualizowane.")}><input type="hidden" name="employeeId" value={employeeId} /><div className={styles.formGrid}><label>Imię<input name="firstName" defaultValue={str(employee.first_name, "")} required /></label><label>Nazwisko<input name="lastName" defaultValue={str(employee.last_name, "")} required /></label><label>Numer<input name="employeeNumber" defaultValue={str(employee.employee_number, "")} /></label><label>Telefon<input name="phone" defaultValue={str(employee.phone, "")} /></label><label>E-mail<input name="email" type="email" defaultValue={str(employee.email, "")} /></label><label>Kontakt awaryjny<input name="emergencyContactName" defaultValue={str(employee.emergency_contact_name, "")} /></label><label>Telefon awaryjny<input name="emergencyContactPhone" defaultValue={str(employee.emergency_contact_phone, "")} /></label><label>Notatki<input name="notes" defaultValue={str(employee.notes, "")} /></label></div><button className={styles.button} disabled={pending}>Zapisz dane</button></form><FormBlock title="Nowe warunki zatrudnienia"><form className={styles.form} onSubmit={submit("employment_create", "Nowy okres zatrudnienia został zapisany.")}><input type="hidden" name="employeeId" value={employeeId} /><div className={styles.formGrid}><label>Forma<select name="employmentType" defaultValue="employment_contract"><option value="employment_contract">Umowa o pracę</option><option value="contract">Umowa cywilna</option><option value="b2b">B2B</option></select></label><label>Stanowisko<input name="position" /></label><label>Od<input name="validFrom" type="date" defaultValue={data.referenceDate} required /></label><label>Do<input name="validTo" type="date" /></label><label>Etat<input name="fullTimeEquivalent" inputMode="decimal" /></label><label>Koszt miesięczny<input name="monthlyCost" inputMode="decimal" /></label><label>Koszt godzinowy<input name="hourlyCost" inputMode="decimal" /></label></div><button className={styles.buttonSecondary} disabled={pending}>Dodaj okres</button></form></FormBlock><FormBlock title="Przypisz do inwestycji"><form className={styles.form} onSubmit={submit("assignment_create", "Pracownik został przypisany do inwestycji.")}><input type="hidden" name="employeeId" value={employeeId} /><label>Inwestycja<select name="projectId" required><option value="">Wybierz</option>{data.projects.map((row) => <option key={String(row.id)} value={String(row.id)}>{str(row.name)}</option>)}</select></label><div className={styles.formGrid}><label>Rola<input name="role" required /></label><label>Zaangażowanie %<input name="allocationPercent" defaultValue="100" /></label><label>Od<input name="dateFrom" type="date" defaultValue={data.referenceDate} /></label><label>Do<input name="dateTo" type="date" /></label></div><button className={styles.buttonSecondary} disabled={pending}>Przypisz</button></form></FormBlock></section> : null}
-  </div></aside></div>;
+  return <div className={styles.profileLayer}>
+    <button className={styles.backdrop} onClick={close} aria-label="Zamknij profil" />
+    <aside className={styles.drawer} role="dialog" aria-modal="true" aria-label={`Karta pracownika ${employeeName(employee)}`}>
+      <header className={styles.drawerHeader}>
+        <div><p className={styles.kicker}>Karta pracownika</p><h2>{employeeName(employee)}</h2><div className={styles.subtle}>{str(currentEmployment?.position, "Bez stanowiska")} · {str(currentEmployment?.employment_type, "forma nieuzupełniona")} · <StatusChip status={employee.status} /></div></div>
+        <button type="button" className={styles.iconButton} onClick={close} aria-label="Zamknij"><X size={18} /></button>
+      </header>
+      <div className={styles.profileSections}>
+        <section className={styles.profileSection} data-hr-employee-summary>
+          <h3>Podsumowanie</h3>
+          <div className={styles.miniGrid}>
+            <div className={styles.mini}><small>Telefon</small><strong>{str(employee.phone)}</strong></div>
+            <div className={styles.mini}><small>E-mail</small><strong>{str(employee.email)}</strong></div>
+            <div className={styles.mini}><small>Godziny w miesiącu</small><strong>{num(monthHours)} h</strong></div>
+            <div className={styles.mini}><small>Urlop pozostały</small><strong>{num(balance?.remaining_days)} dni</strong></div>
+          </div>
+        </section>
+
+        {canViewPayroll ? <section className={`${styles.profileSection} ${styles.payrollSection}`} data-hr-employee-payroll>
+          <div className={styles.sectionLead}><div><p className={styles.kicker}>Dane chronione</p><h3>Wynagrodzenie i koszt pracodawcy</h3></div><WalletCards size={20} /></div>
+          <div className={styles.compensationGrid}>
+            <div className={styles.mini}><small>Do wypłaty netto</small><strong>{money(currentEmployment?.net_monthly_pay)}</strong></div>
+            <div className={styles.mini}><small>Wynagrodzenie brutto</small><strong>{money(currentEmployment?.gross_monthly_pay)}</strong></div>
+            <div className={styles.mini}><small>ZUS / składki pracodawcy</small><strong>{money(currentEmployment?.employer_contributions)}</strong></div>
+            <div className={styles.mini}><small>Pozostałe koszty</small><strong>{money(currentEmployment?.other_monthly_costs)}</strong></div>
+            <div className={`${styles.mini} ${styles.totalCost}`}><small>Pełny koszt firmy</small><strong>{money(currentEmployment?.monthly_cost)}</strong></div>
+            <div className={styles.mini}><small>Pełny koszt 1 r-g</small><strong>{money(currentEmployment?.hourly_cost)}</strong></div>
+          </div>
+          {currentEmployment?.gross_monthly_pay == null && currentEmployment?.monthly_cost != null ? <p className={styles.fieldHint}>Starszy zapis zawiera pełny koszt bez szczegółowego rozbicia. Dodaj nowe warunki zatrudnienia, aby uzupełnić netto, brutto i ZUS.</p> : null}
+          {totalCost > 0 && netPay > 0 ? <div className={styles.compensationBar} aria-label="Struktura kosztu pracownika"><span style={{ width: `${Math.min(100, netPay / totalCost * 100)}%` }}>Netto</span><span style={{ width: `${Math.min(100, publicAndOther / totalCost * 100)}%` }}>Obciążenia i inne</span></div> : null}
+
+          <h4>Historia warunków</h4>
+          <div className={styles.tableWrap}><table className={`${styles.table} ${styles.compactTable}`}><thead><tr><th>Okres</th><th>Netto</th><th>Brutto</th><th>ZUS pracodawcy</th><th>Pełny koszt</th></tr></thead><tbody>{employments.map((row) => <tr key={String(row.id)}><td>{dateLabel(row.valid_from)}–{row.valid_to ? dateLabel(row.valid_to) : "obecnie"}<div className={styles.subtle}>{str(row.position)}</div></td><td>{row.net_monthly_pay == null ? "—" : money(row.net_monthly_pay)}</td><td>{row.gross_monthly_pay == null ? "—" : money(row.gross_monthly_pay)}</td><td>{row.employer_contributions == null ? "—" : money(row.employer_contributions)}</td><td><strong>{money(row.monthly_cost)}</strong></td></tr>)}</tbody></table></div>
+
+          <h4>Rozliczenia miesięczne</h4>
+          <div className={styles.simpleList}>{payrollMonths.map((row) => <div className={styles.payrollRow} key={String(row.id)}><div><strong>{new Date(`${String(row.period_month).slice(0, 10)}T00:00:00`).toLocaleDateString("pl-PL", { month: "long", year: "numeric" })}</strong><div className={styles.subtle}>Netto {money(row.net_pay)} · brutto {money(row.gross_pay)} · ZUS pracodawcy {money(row.employer_contributions)} · pełny koszt {money(row.total_employer_cost)}</div></div><div className={styles.payrollRowActions}><StatusChip status={row.status} />{canManagePayroll && row.status === "planned" ? <button type="button" className={styles.buttonSecondary} disabled={pending} onClick={() => perform("payroll_status", { payrollId: row.id, status: "confirmed" }, "Rozliczenie zostało potwierdzone.")}>Potwierdź</button> : null}{canManagePayroll && row.status === "confirmed" ? <button type="button" className={styles.buttonSecondary} disabled={pending} onClick={() => perform("payroll_status", { payrollId: row.id, status: "paid" }, "Rozliczenie oznaczono jako wypłacone.")}>Oznacz wypłatę</button> : null}</div></div>)}{!payrollMonths.length ? <Empty>Brak zapisanych rozliczeń miesięcznych. Pulpit korzysta z planowanych warunków zatrudnienia.</Empty> : null}</div>
+
+          {canManagePayroll ? <FormBlock title="Dodaj lub aktualizuj rozliczenie miesiąca">
+            <form className={styles.form} onSubmit={submit("payroll_upsert", "Rozliczenie miesiąca zostało zapisane.")}>
+              <input type="hidden" name="employeeId" value={employeeId} />
+              <div className={styles.formGrid}><label>Miesiąc<input name="periodMonth" type="month" defaultValue={data.referenceDate.slice(0, 7)} required /></label><label>Status<select name="status" defaultValue="planned"><option value="planned">Planowane</option><option value="confirmed">Potwierdzone</option><option value="paid">Wypłacone</option></select></label><label>Data wypłaty<input name="paidAt" type="date" /></label><label>Notatka<input name="notes" /></label></div>
+              <HrCompensationFields150 requireGross defaults={{ netMonthlyPay: currentEmployment?.net_monthly_pay, grossMonthlyPay: currentEmployment?.gross_monthly_pay, employerContributions: currentEmployment?.employer_contributions, otherMonthlyCosts: currentEmployment?.other_monthly_costs, nominalMonthlyHours: currentEmployment?.nominal_monthly_hours }} />
+              <button className={styles.button} disabled={pending}><WalletCards size={15} /> Zapisz rozliczenie</button>
+            </form>
+          </FormBlock> : null}
+        </section> : null}
+
+        <section className={styles.profileSection}><h3>{canViewPayroll ? "Inwestycje i koszt pracy" : "Inwestycje"}</h3>{assignments.map((row) => <p key={String(row.id)}><strong>{str(projectById.get(String(row.project_id))?.name)}</strong> · {str(row.role)} · {num(row.allocation_percent, 0)}%</p>)}{!assignments.length ? <p className={styles.subtle}>Brak aktywnego przypisania.</p> : null}{canViewPayroll ? <div className={styles.simpleList}>{Array.from(projectCost.entries()).map(([projectId, value]) => <div className={styles.costBar} key={projectId}><span>{projectId === "general" ? "Koszty ogólne" : str(projectById.get(projectId)?.name)}</span><div className={styles.costTrack}><span style={{ width: `${Math.max(4, value / maxProjectCost * 100)}%` }} /></div><strong>{money(value)}</strong></div>)}</div> : null}</section>
+        <section className={styles.profileSection}><h3>Zdolność do pracy</h3>{compliance.map((row) => <p key={`${str(row.item_kind)}-${str(row.id)}`}><strong>{str(row.item_type)}</strong> · ważne do {dateLabel(row.valid_until)} · <StatusChip status={row.valid_until && String(row.valid_until) < data.referenceDate ? "expired" : row.status} /></p>)}{!compliance.length ? <p className={styles.subtle}>Brak badań, BHP i uprawnień.</p> : null}</section>
+        <section className={styles.profileSection}><h3>Urlopy i czas pracy</h3><p>Ostatnie wpisy czasu: {timesheets.slice(0, 5).map((row) => `${dateLabel(row.work_date)} — ${num(row.hours)} h`).join(" · ") || "brak"}</p><p>Ostatnie absencje: {leaves.slice(0, 4).map((row) => `${dateLabel(row.date_from)}–${dateLabel(row.date_to)} (${str(row.status)})`).join(" · ") || "brak"}</p></section>
+        <section className={styles.profileSection}><h3>Dokumenty</h3>{documents.map((row) => <p key={String(row.id)}><strong>{str(row.document_type)}</strong> · {str(row.document_number)} · ważne do {dateLabel(row.valid_until)}</p>)}{!documents.length ? <p className={styles.subtle}>Brak przypisanych dokumentów HR.</p> : null}</section>
+        <section className={styles.profileSection}><h3>Sprzęt i ŚOI</h3>{assets.map((row) => <div className={styles.member} key={String(row.id)}><div><strong>{str(row.description)}</strong><div className={styles.subtle}>{str(row.asset_type)} · wydano {dateLabel(String(row.issued_at).slice(0, 10))}{row.returned_at ? ` · zwrócono ${dateLabel(String(row.returned_at).slice(0, 10))}` : ""}</div></div>{canWrite && !row.returned_at ? <button className={styles.buttonSecondary} disabled={pending} onClick={() => perform("issued_asset_return", { assetId: row.id, conditionIn: "dobry" }, "Sprzęt został zwrócony.")}>Zwróć</button> : null}</div>)}{canWrite ? <form className={styles.form} onSubmit={submit("issued_asset_create", "Sprzęt został wydany pracownikowi.")}><input type="hidden" name="employeeId" value={employeeId} /><div className={styles.formGrid}><label>Rodzaj<select name="assetType" defaultValue="ppe"><option value="ppe">ŚOI</option><option value="tool">Narzędzie</option><option value="device">Urządzenie</option><option value="other">Inne</option></select></label><label>Opis<input name="description" required placeholder="Kask / Hilti TE 30 / detektor" /></label></div><button className={styles.buttonSecondary} disabled={pending}><PackageCheck size={15} /> Wydaj</button></form> : null}</section>
+
+        {canWrite ? <section className={styles.profileSection} data-hr-employee-edit>
+          <h3>Edytuj kartę</h3>
+          <form className={styles.form} onSubmit={submit("employee_update", "Dane pracownika zostały zaktualizowane.")}><input type="hidden" name="employeeId" value={employeeId} /><div className={styles.formGrid}><label>Imię<input name="firstName" defaultValue={str(employee.first_name, "")} required /></label><label>Nazwisko<input name="lastName" defaultValue={str(employee.last_name, "")} required /></label><label>Numer<input name="employeeNumber" defaultValue={str(employee.employee_number, "")} /></label><label>Telefon<input name="phone" defaultValue={str(employee.phone, "")} /></label><label>E-mail<input name="email" type="email" defaultValue={str(employee.email, "")} /></label><label>Kontakt awaryjny<input name="emergencyContactName" defaultValue={str(employee.emergency_contact_name, "")} /></label><label>Telefon awaryjny<input name="emergencyContactPhone" defaultValue={str(employee.emergency_contact_phone, "")} /></label><label>Notatki<input name="notes" defaultValue={str(employee.notes, "")} /></label></div><button className={styles.button} disabled={pending}>Zapisz dane</button></form>
+          <FormBlock title="Nowe warunki zatrudnienia"><form className={styles.form} onSubmit={submit("employment_create", "Nowy okres zatrudnienia został zapisany.")}><input type="hidden" name="employeeId" value={employeeId} /><div className={styles.formGrid}><label>Forma<select name="employmentType" defaultValue="employment_contract"><option value="employment_contract">Umowa o pracę</option><option value="contract">Umowa cywilna</option><option value="b2b">B2B</option></select></label><label>Stanowisko<input name="position" /></label><label>Od<input name="validFrom" type="date" defaultValue={data.referenceDate} required /></label><label>Do<input name="validTo" type="date" /></label><label>Etat<input name="fullTimeEquivalent" inputMode="decimal" /></label></div>{canManagePayroll ? <HrCompensationFields150 /> : <p className={styles.fieldHint}>Nowy okres zostanie zapisany bez danych płacowych.</p>}<button className={styles.buttonSecondary} disabled={pending}>Dodaj okres</button></form></FormBlock>
+          <FormBlock title="Przypisz do inwestycji"><form className={styles.form} onSubmit={submit("assignment_create", "Pracownik został przypisany do inwestycji.")}><input type="hidden" name="employeeId" value={employeeId} /><label>Inwestycja<select name="projectId" required><option value="">Wybierz</option>{data.projects.map((row) => <option key={String(row.id)} value={String(row.id)}>{str(row.name)}</option>)}</select></label><div className={styles.formGrid}><label>Rola<input name="role" required /></label><label>Zaangażowanie %<input name="allocationPercent" defaultValue="100" /></label><label>Od<input name="dateFrom" type="date" defaultValue={data.referenceDate} /></label><label>Do<input name="dateTo" type="date" /></label></div><button className={styles.buttonSecondary} disabled={pending}>Przypisz</button></form></FormBlock>
+        </section> : null}
+      </div>
+    </aside>
+  </div>;
 }

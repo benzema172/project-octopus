@@ -45,7 +45,12 @@ export async function GET(request: Request) {
   if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "hr", level: "read" })) return NextResponse.json({ error: "Brak dostępu do Kadr." }, { status: 403 });
 
   const referenceDate = safeReferenceDate(url.searchParams.get("referenceDate"));
-  const data = await getHrWorkspace140Data(workspace.id, { referenceDate });
+  const [canHrApprove, canFinanceRead] = await Promise.all([
+    hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "hr", level: "approve" }),
+    hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "finance", level: "read" })
+  ]);
+  const canViewPayroll = canHrApprove || canFinanceRead;
+  const data = await getHrWorkspace140Data(workspace.id, { referenceDate, includePayroll: canViewPayroll });
   const mode = url.searchParams.get("mode");
 
   if (mode === "timesheet") {
@@ -90,13 +95,15 @@ export async function GET(request: Request) {
   for (const row of data.assignments) assignmentByEmployee.set(String(row.employee_id), [...(assignmentByEmployee.get(String(row.employee_id)) ?? []), row]);
   const projectNames = new Map(data.projects.map((row) => [String(row.id), String(row.name)]));
   const balances = new Map(data.leaveBalances.map((row) => [String(row.employee_id), row]));
+  const payrollHeaders = canViewPayroll ? ["Netto miesięcznie", "Brutto miesięcznie", "ZUS / składki pracodawcy", "Pozostałe koszty", "Pełny koszt pracodawcy", "Pełny koszt godzinowy"] : [];
   const rows = [
-    ["Numer", "Imię", "Nazwisko", "Status", "Stanowisko", "Forma zatrudnienia", "Telefon", "E-mail", "Inwestycje", "Koszt miesięczny", "Koszt godzinowy", `Urlop pozostały ${data.year}`],
+    ["Numer", "Imię", "Nazwisko", "Status", "Stanowisko", "Forma zatrudnienia", "Telefon", "E-mail", "Inwestycje", ...payrollHeaders, `Urlop pozostały ${data.year}`],
     ...data.employees.map((employee) => {
       const employment = employmentByEmployee.get(String(employee.id));
       const projects = (assignmentByEmployee.get(String(employee.id)) ?? []).map((row) => projectNames.get(String(row.project_id)) ?? "").filter(Boolean).join(" | ");
       const balance = balances.get(String(employee.id));
-      return [employee.employee_number, employee.first_name, employee.last_name, employee.status, employment?.position, employment?.employment_type, employee.phone, employee.email, projects, employment?.monthly_cost, employment?.hourly_cost, balance?.remaining_days];
+      const payrollValues = canViewPayroll ? [employment?.net_monthly_pay, employment?.gross_monthly_pay, employment?.employer_contributions, employment?.other_monthly_costs, employment?.monthly_cost, employment?.hourly_cost] : [];
+      return [employee.employee_number, employee.first_name, employee.last_name, employee.status, employment?.position, employment?.employment_type, employee.phone, employee.email, projects, ...payrollValues, balance?.remaining_days];
     })
   ];
   const csv = "\uFEFF" + rows.map((row) => row.map(csvCell).join(";")).join("\r\n");

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
+import { calculateCompensation } from "@/lib/hr/compensation";
 import { JsonBodyError, readJsonBody } from "@/lib/http/json-body";
 import { parseLocalizedNumber } from "@/lib/numbers/parse-localized-number";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -13,6 +14,8 @@ type HrAction =
   | "employee_update"
   | "employee_status"
   | "employment_create"
+  | "payroll_upsert"
+  | "payroll_status"
   | "assignment_create"
   | "qualification_create"
   | "medical_exam_create"
@@ -55,6 +58,37 @@ function numberValue(value: unknown, label: string, required = false) {
   const result = parseLocalizedNumber(value as string | number);
   if (!Number.isFinite(result)) throw new Error(`Nieprawidłowa wartość: ${label}.`);
   return result;
+}
+
+function optionalNumberValue(value: unknown, label: string) {
+  if (value === undefined || value === null || value === "") return null;
+  const result = parseLocalizedNumber(value as string | number);
+  if (!Number.isFinite(result)) throw new Error(`Nieprawidłowa wartość: ${label}.`);
+  if (result < 0) throw new Error(`${label} nie może być ujemne.`);
+  return result;
+}
+
+function compensationPayload(payload: Record<string, unknown>) {
+  const netMonthlyPay = optionalNumberValue(payload.netMonthlyPay, "wynagrodzenie netto");
+  const grossMonthlyPay = optionalNumberValue(payload.grossMonthlyPay, "wynagrodzenie brutto");
+  const employerContributions = optionalNumberValue(payload.employerContributions, "składki pracodawcy / ZUS");
+  const otherMonthlyCosts = optionalNumberValue(payload.otherMonthlyCosts, "pozostałe koszty miesięczne");
+  const nominalMonthlyHours = optionalNumberValue(payload.nominalMonthlyHours, "nominalna liczba godzin");
+  const legacyMonthlyCost = optionalNumberValue(payload.monthlyCost, "pełny koszt pracodawcy");
+  const legacyHourlyCost = optionalNumberValue(payload.hourlyCost, "pełny koszt godzinowy");
+  const hasBreakdown = netMonthlyPay !== null || grossMonthlyPay !== null || Number(employerContributions ?? 0) > 0 || Number(otherMonthlyCosts ?? 0) > 0;
+  if (hasBreakdown && grossMonthlyPay === null) throw new Error("Uzupełnij wynagrodzenie brutto, aby wyliczyć pełny koszt pracodawcy.");
+  if (netMonthlyPay !== null && grossMonthlyPay !== null && netMonthlyPay > grossMonthlyPay) throw new Error("Wynagrodzenie netto nie może być wyższe od wynagrodzenia brutto.");
+  if (nominalMonthlyHours !== null && (nominalMonthlyHours <= 0 || nominalMonthlyHours > 300)) throw new Error("Nominalna liczba godzin musi mieścić się w zakresie 1–300.");
+  return calculateCompensation({
+    netMonthlyPay,
+    grossMonthlyPay,
+    employerContributions,
+    otherMonthlyCosts,
+    nominalMonthlyHours,
+    legacyMonthlyCost,
+    legacyHourlyCost
+  });
 }
 
 function normalize(value: unknown) {
@@ -122,9 +156,24 @@ export async function POST(request: Request) {
   if (!workspace) return NextResponse.json({ error: "Brak dostępu do firmy." }, { status: 403 });
 
   const approvalActions = new Set<HrAction>(["leave_decision", "timesheet_decision"]);
-  const requiredLevel = approvalActions.has(body.action) ? "approve" : "write";
-  if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "hr", level: requiredLevel })) {
-    return NextResponse.json({ error: "Brak odpowiedniego uprawnienia w module Kadry." }, { status: 403 });
+  const payrollActions = new Set<HrAction>(["payroll_upsert", "payroll_status"]);
+  const payrollFields = ["netMonthlyPay", "grossMonthlyPay", "employerContributions", "otherMonthlyCosts", "nominalMonthlyHours", "monthlyCost", "hourlyCost"];
+  const includesPayroll = payrollFields.some((key) => body.payload?.[key] !== undefined && body.payload?.[key] !== "");
+  const [hrWrite, hrApprove, financeWrite] = await Promise.all([
+    hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "hr", level: "write" }),
+    hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "hr", level: "approve" }),
+    hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "finance", level: "write" })
+  ]);
+  const canManagePayroll = hrApprove || financeWrite;
+  if (payrollActions.has(body.action)) {
+    if (!canManagePayroll) return NextResponse.json({ error: "Brak uprawnienia do danych płacowych." }, { status: 403 });
+  } else if (approvalActions.has(body.action)) {
+    if (!hrApprove) return NextResponse.json({ error: "Brak uprawnienia do zatwierdzania w module Kadry." }, { status: 403 });
+  } else if (!hrWrite) {
+    return NextResponse.json({ error: "Brak uprawnienia do zapisu w module Kadry." }, { status: 403 });
+  }
+  if (["employee_create", "employment_create"].includes(body.action) && includesPayroll && !canManagePayroll) {
+    return NextResponse.json({ error: "Brak uprawnienia do zapisu wynagrodzenia i kosztu pracodawcy." }, { status: 403 });
   }
 
   const db = createServiceSupabaseClient();
@@ -157,6 +206,7 @@ export async function POST(request: Request) {
 
     if (body.action === "employee_create") {
       const hiredAt = date(p.hiredAt, "data zatrudnienia") ?? new Date().toISOString().slice(0, 10);
+      const compensation = compensationPayload(p);
       const { data, error } = await db.from("employees").insert({
         workspace_id: workspace.id,
         employee_number: text(p.employeeNumber, "numer pracownika"),
@@ -173,7 +223,7 @@ export async function POST(request: Request) {
       if (error || !data) throw error ?? new Error("Nie utworzono pracownika.");
       id = data.id;
       const employmentType = text(p.employmentType, "forma zatrudnienia") ?? "employment_contract";
-      if (p.position || p.monthlyCost || p.hourlyCost || p.employmentType) {
+      if (p.position || p.monthlyCost || p.hourlyCost || p.grossMonthlyPay || p.netMonthlyPay || p.employmentType) {
         const { error: employmentError } = await db.from("employments").insert({
           workspace_id: workspace.id,
           employee_id: id,
@@ -181,8 +231,13 @@ export async function POST(request: Request) {
           position: text(p.position, "stanowisko"),
           valid_from: hiredAt,
           full_time_equivalent: numberValue(p.fullTimeEquivalent, "wymiar etatu") || null,
-          monthly_cost: numberValue(p.monthlyCost, "koszt miesięczny") || null,
-          hourly_cost: numberValue(p.hourlyCost, "koszt godzinowy") || null
+          monthly_cost: compensation.totalEmployerCost || null,
+          hourly_cost: compensation.effectiveHourlyCost || null,
+          net_monthly_pay: compensation.netMonthlyPay,
+          gross_monthly_pay: compensation.grossMonthlyPay,
+          employer_contributions: compensation.hasDetailedBreakdown ? compensation.employerContributions : null,
+          other_monthly_costs: compensation.hasDetailedBreakdown ? compensation.otherMonthlyCosts : null,
+          nominal_monthly_hours: compensation.nominalMonthlyHours
         });
         if (employmentError) { await db.from("employees").delete().eq("id", id); throw employmentError; }
       }
@@ -218,6 +273,7 @@ export async function POST(request: Request) {
       const validFrom = date(p.validFrom, "od", true)!;
       const validTo = date(p.validTo, "do");
       if (validTo && validTo < validFrom) throw new Error("Koniec zatrudnienia nie może być przed początkiem.");
+      const compensation = compensationPayload(p);
       const { data, error } = await db.rpc("create_employment_atomic", {
         p_workspace_id: workspace.id,
         p_employee_id: employeeId,
@@ -226,12 +282,55 @@ export async function POST(request: Request) {
         p_valid_from: validFrom,
         p_valid_to: validTo,
         p_full_time_equivalent: numberValue(p.fullTimeEquivalent, "wymiar etatu") || null,
-        p_monthly_cost: numberValue(p.monthlyCost, "koszt miesięczny") || null,
-        p_hourly_cost: numberValue(p.hourlyCost, "koszt godzinowy") || null,
+        p_monthly_cost: compensation.totalEmployerCost || null,
+        p_hourly_cost: compensation.effectiveHourlyCost || null,
+        p_net_monthly_pay: compensation.netMonthlyPay,
+        p_gross_monthly_pay: compensation.grossMonthlyPay,
+        p_employer_contributions: compensation.hasDetailedBreakdown ? compensation.employerContributions : null,
+        p_other_monthly_costs: compensation.hasDetailedBreakdown ? compensation.otherMonthlyCosts : null,
+        p_nominal_monthly_hours: compensation.nominalMonthlyHours,
         p_actor_id: user.id
       });
       if (error || !data) throw new Error(`Nie udało się zapisać warunków zatrudnienia: ${error?.message ?? "brak danych"}`);
       id = String(data);
+    } else if (body.action === "payroll_upsert") {
+      const employeeId = await owned("employees", p.employeeId, "Pracownik");
+      const period = text(p.periodMonth, "miesiąc", true)!;
+      if (!/^\d{4}-\d{2}$/.test(period)) throw new Error("Nieprawidłowy miesiąc rozliczenia.");
+      const compensation = compensationPayload(p);
+      if (compensation.grossMonthlyPay === null) throw new Error("Uzupełnij wynagrodzenie brutto dla rozliczenia miesiąca.");
+      const status = text(p.status, "status") ?? "planned";
+      if (!["planned", "confirmed", "paid"].includes(status)) throw new Error("Nieprawidłowy status rozliczenia.");
+      const paidAt = status === "paid" ? date(p.paidAt, "data wypłaty") ?? new Date().toISOString().slice(0, 10) : date(p.paidAt, "data wypłaty");
+      const row = {
+        workspace_id: workspace.id,
+        employee_id: employeeId,
+        period_month: `${period}-01`,
+        net_pay: compensation.netMonthlyPay,
+        gross_pay: compensation.grossMonthlyPay,
+        employer_contributions: compensation.employerContributions,
+        other_costs: compensation.otherMonthlyCosts,
+        total_employer_cost: compensation.totalEmployerCost,
+        status,
+        paid_at: paidAt,
+        source: "manual",
+        notes: text(p.notes, "notatki"),
+        updated_by: user.id,
+        updated_at: new Date().toISOString()
+      };
+      const { data, error } = await db.from("employee_payroll_months").upsert({ ...row, created_by: user.id }, { onConflict: "workspace_id,employee_id,period_month" }).select("id").single<{ id: string }>();
+      if (error || !data) throw error ?? new Error("Nie zapisano rozliczenia miesiąca.");
+      id = data.id;
+      await audit("employee_payroll_month", id, "payroll_upserted", row);
+    } else if (body.action === "payroll_status") {
+      const payrollId = await owned("employee_payroll_months", p.payrollId, "Rozliczenie");
+      const status = text(p.status, "status", true)!;
+      if (!["planned", "confirmed", "paid"].includes(status)) throw new Error("Nieprawidłowy status rozliczenia.");
+      const patch = { status, paid_at: status === "paid" ? date(p.paidAt, "data wypłaty") ?? new Date().toISOString().slice(0, 10) : null, updated_by: user.id, updated_at: new Date().toISOString() };
+      const { error } = await db.from("employee_payroll_months").update(patch).eq("workspace_id", workspace.id).eq("id", payrollId);
+      if (error) throw error;
+      id = payrollId!;
+      await audit("employee_payroll_month", id, "payroll_status", patch);
     } else if (body.action === "assignment_create") {
       const employeeId = await owned("employees", p.employeeId, "Pracownik");
       const projectId = await owned("projects", p.projectId, "Inwestycja");

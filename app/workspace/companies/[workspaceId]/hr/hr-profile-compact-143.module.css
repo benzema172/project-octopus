@@ -65,7 +65,8 @@
 }
 
 .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:first-child),
-.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(7)) {
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section[data-hr-employee-payroll]),
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section[data-hr-employee-edit]) {
   grid-column: 1 / -1 !important;
 }
 
@@ -145,19 +146,19 @@
 }
 
 /* Edycja pozostaje na pełną szerokość, ale zamiast wysokiej kolumny jest zwartym panelem. */
-.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(7)) {
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section[data-hr-employee-edit]) {
   display: grid !important;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 6px !important;
   row-gap: 4px !important;
 }
 
-.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(7) > h3),
-.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(7) > form) {
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section[data-hr-employee-edit] > h3),
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section[data-hr-employee-edit] > form) {
   grid-column: 1 / -1;
 }
 
-.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(7) > form > div) {
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section[data-hr-employee-edit] > form > div) {
   grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
 }
 
@@ -185,13 +186,14 @@
   font-size: .72rem !important;
 }
 
-/* Długie listy nie mogą rozpychać karty w pionie; pełne dane nadal są dostępne w odpowiednich zakładkach Kadr. */
-.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(2) .simpleList),
-.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(3)),
-.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(4)),
-.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(5)) {
-  max-height: 92px;
-  overflow: hidden;
+/* Rozbudowane dane płacowe mają własny zwarty panel, a cała karta może się przewijać. */
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div) {
+  overflow-y: auto !important;
+}
+
+.profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section[data-hr-employee-payroll]) {
+  max-height: none !important;
+  overflow: visible !important;
 }
 
 @media (max-width: 940px) {
@@ -199,7 +201,7 @@
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 
-  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(7) > form > div) {
+  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section[data-hr-employee-edit] > form > div) {
     grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
   }
 }
@@ -218,11 +220,12 @@
   }
 
   .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:first-child),
-  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(7)) {
+  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section[data-hr-employee-payroll]),
+  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section[data-hr-employee-edit]) {
     grid-column: 1 / -1 !important;
   }
 
-  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(7) > form > div) {
+  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section[data-hr-employee-edit] > form > div) {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
@@ -234,13 +237,14 @@
 
   .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section),
   .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:first-child),
-  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(7)) {
+  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section[data-hr-employee-payroll]),
+  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section[data-hr-employee-edit]) {
     grid-column: 1 !important;
   }
 
   .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:first-child > div),
-  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(7) > form > div),
-  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section:nth-child(7)) {
+  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section[data-hr-employee-edit] > form > div),
+  .profile143 :global([role="dialog"][aria-label^="Karta pracownika"] > div > section[data-hr-employee-edit]) {
     grid-template-columns: 1fr !important;
   }
 }

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { calculateCompensation } from "@/lib/hr/compensation";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 type Row = Record<string, unknown>;
@@ -7,6 +8,7 @@ type Row = Record<string, unknown>;
 type Options = {
   query?: string;
   referenceDate?: string;
+  includePayroll?: boolean;
 };
 
 function list(result: { data: unknown; error: { message: string } | null }, label: string) {
@@ -48,10 +50,11 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
   const query = normalized(options.query).trim();
   const year = Number(referenceDate.slice(0, 4));
 
-  const [employeesResult, projectsResult, employmentsResult, qualificationsResult, examsResult, trainingsResult, leavesResult, timesheetsResult, assignmentsResult, teamsResult, membersResult, documentsResult, employeeDocumentsResult, entitlementsResult, issuedAssetsResult] = await Promise.all([
+  const [employeesResult, projectsResult, employmentsResult, payrollResult, qualificationsResult, examsResult, trainingsResult, leavesResult, timesheetsResult, assignmentsResult, teamsResult, membersResult, documentsResult, employeeDocumentsResult, entitlementsResult, issuedAssetsResult] = await Promise.all([
     db.from("employees").select("id,employee_number,first_name,last_name,email,phone,status,hired_at,terminated_at,emergency_contact_name,emergency_contact_phone,notes,created_at,updated_at").eq("workspace_id", workspaceId).order("last_name").order("first_name").limit(500),
     db.from("projects").select("id,name,status").eq("workspace_id", workspaceId).order("name").limit(500),
-    db.from("employments").select("id,employee_id,employment_type,position,valid_from,valid_to,full_time_equivalent,monthly_cost,hourly_cost,currency,created_at").eq("workspace_id", workspaceId).order("valid_from", { ascending: false }).limit(2000),
+    db.from("employments").select("id,employee_id,employment_type,position,valid_from,valid_to,full_time_equivalent,monthly_cost,hourly_cost,net_monthly_pay,gross_monthly_pay,employer_contributions,other_monthly_costs,nominal_monthly_hours,currency,created_at").eq("workspace_id", workspaceId).order("valid_from", { ascending: false }).limit(2000),
+    options.includePayroll ? db.from("employee_payroll_months").select("id,employee_id,period_month,net_pay,gross_pay,employer_contributions,other_costs,total_employer_cost,status,paid_at,source,notes,created_at,updated_at").eq("workspace_id", workspaceId).order("period_month", { ascending: false }).limit(5000) : Promise.resolve({ data: [], error: null }),
     db.from("qualifications").select("id,employee_id,qualification_type,number,issued_at,valid_until,status,document_id,created_at").eq("workspace_id", workspaceId).order("valid_until").limit(3000),
     db.from("medical_exams").select("id,employee_id,exam_type,examined_at,valid_until,status,document_id,created_at").eq("workspace_id", workspaceId).order("valid_until").limit(2000),
     db.from("safety_trainings").select("id,employee_id,training_type,provider,completed_at,valid_until,status,document_id,notes,created_at").eq("workspace_id", workspaceId).order("valid_until").limit(2000),
@@ -69,6 +72,7 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
   let employees = list(employeesResult, "pracowników");
   const projects = list(projectsResult, "inwestycji");
   const employments = list(employmentsResult, "warunków zatrudnienia");
+  const payrollMonths = list(payrollResult, "miesięcznych rozliczeń wynagrodzeń");
   const qualifications = list(qualificationsResult, "uprawnień");
   const exams = list(examsResult, "badań medycznych");
   const trainings = list(trainingsResult, "szkoleń BHP");
@@ -129,7 +133,53 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
   const approvedMonthTimesheets = monthTimesheets.filter((row) => row.status === "approved");
   const monthHours = approvedMonthTimesheets.reduce((sum, row) => sum + Number(row.hours ?? 0), 0);
   const monthOvertime = approvedMonthTimesheets.reduce((sum, row) => sum + Number(row.overtime_hours ?? 0), 0);
-  const monthlyEmploymentCost = Array.from(employmentByEmployee.values()).reduce((sum, row) => sum + Number(row.monthly_cost ?? 0), 0);
+  const payrollMonth = `${monthKey(referenceDate)}-01`;
+  const payrollByEmployee = new Map<string, Row>();
+  for (const row of payrollMonths) {
+    if (String(row.period_month).slice(0, 10) !== payrollMonth) continue;
+    payrollByEmployee.set(String(row.employee_id), row);
+  }
+  const payrollSnapshots = activeEmployees.map((employee) => {
+    const employeeId = String(employee.id);
+    const payroll = payrollByEmployee.get(employeeId);
+    const employment = employmentByEmployee.get(employeeId);
+    if (payroll) return {
+      employee_id: employee.id,
+      net_pay: Number(payroll.net_pay ?? 0),
+      gross_pay: Number(payroll.gross_pay ?? 0),
+      employer_contributions: Number(payroll.employer_contributions ?? 0),
+      other_costs: Number(payroll.other_costs ?? 0),
+      total_employer_cost: Number(payroll.total_employer_cost ?? 0),
+      status: String(payroll.status ?? "planned"),
+      recorded: true
+    };
+    const planned = calculateCompensation({
+      netMonthlyPay: employment?.net_monthly_pay == null ? null : Number(employment.net_monthly_pay),
+      grossMonthlyPay: employment?.gross_monthly_pay == null ? null : Number(employment.gross_monthly_pay),
+      employerContributions: employment?.employer_contributions == null ? null : Number(employment.employer_contributions),
+      otherMonthlyCosts: employment?.other_monthly_costs == null ? null : Number(employment.other_monthly_costs),
+      nominalMonthlyHours: employment?.nominal_monthly_hours == null ? null : Number(employment.nominal_monthly_hours),
+      legacyMonthlyCost: employment?.monthly_cost == null ? null : Number(employment.monthly_cost),
+      legacyHourlyCost: employment?.hourly_cost == null ? null : Number(employment.hourly_cost)
+    });
+    return {
+      employee_id: employee.id,
+      net_pay: planned.netMonthlyPay ?? 0,
+      gross_pay: planned.grossMonthlyPay ?? 0,
+      employer_contributions: planned.employerContributions,
+      other_costs: planned.otherMonthlyCosts,
+      total_employer_cost: planned.totalEmployerCost,
+      status: "planned",
+      recorded: false
+    };
+  });
+  const monthlyNetPay = payrollSnapshots.reduce((sum, row) => sum + row.net_pay, 0);
+  const monthlyGrossPay = payrollSnapshots.reduce((sum, row) => sum + row.gross_pay, 0);
+  const monthlyEmployerContributions = payrollSnapshots.reduce((sum, row) => sum + row.employer_contributions, 0);
+  const monthlyOtherCosts = payrollSnapshots.reduce((sum, row) => sum + row.other_costs, 0);
+  const monthlyEmploymentCost = payrollSnapshots.reduce((sum, row) => sum + row.total_employer_cost, 0);
+  const payrollRecorded = payrollSnapshots.filter((row) => row.recorded).length;
+  const payrollConfirmed = payrollSnapshots.filter((row) => row.recorded && ["confirmed", "paid"].includes(row.status)).length;
   const approvedLaborCost = approvedMonthTimesheets.reduce((sum, row) => {
     const employment = employmentByEmployee.get(String(row.employee_id));
     const rate = Number(employment?.hourly_cost ?? 0);
@@ -171,12 +221,19 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
   const linkedDocumentIds = new Set(employeeDocuments.map((row) => String(row.document_id ?? "")).filter(Boolean));
   const unlinkedDocuments = documents.filter((row) => !linkedDocumentIds.has(String(row.id)));
 
+  const visibleEmployments = options.includePayroll ? employments : employments.map((row) => {
+    const visible = { ...row };
+    for (const key of ["monthly_cost", "hourly_cost", "net_monthly_pay", "gross_monthly_pay", "employer_contributions", "other_monthly_costs", "nominal_monthly_hours"]) delete visible[key];
+    return visible;
+  });
+
   return {
     referenceDate,
     year,
     employees,
     projects,
-    employments,
+    employments: visibleEmployments,
+    payrollMonths: options.includePayroll ? payrollMonths : [],
     qualifications,
     exams,
     trainings,
@@ -207,8 +264,16 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
       pendingDecisions: pendingLeaves.length + pendingTimesheets.length,
       monthHours,
       monthOvertime,
-      monthlyEmploymentCost,
-      approvedLaborCost,
+      monthlyNetPay: options.includePayroll ? monthlyNetPay : null,
+      monthlyGrossPay: options.includePayroll ? monthlyGrossPay : null,
+      monthlyEmployerContributions: options.includePayroll ? monthlyEmployerContributions : null,
+      monthlyOtherCosts: options.includePayroll ? monthlyOtherCosts : null,
+      monthlyEmploymentCost: options.includePayroll ? monthlyEmploymentCost : null,
+      approvedLaborCost: options.includePayroll ? approvedLaborCost : null,
+      unallocatedEmploymentCost: options.includePayroll ? Math.max(0, monthlyEmploymentCost - approvedLaborCost) : null,
+      payrollRecorded: options.includePayroll ? payrollRecorded : null,
+      payrollConfirmed: options.includePayroll ? payrollConfirmed : null,
+      payrollMissing: options.includePayroll ? Math.max(0, activeEmployees.length - payrollRecorded) : null,
       missingYesterday,
       activeTeams: teams.filter((row) => row.active !== false).length,
       issuedAssets: issuedAssets.filter((row) => !row.returned_at).length
