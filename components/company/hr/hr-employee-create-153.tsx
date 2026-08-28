@@ -28,6 +28,17 @@ function positiveNumber(value: unknown) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+function fieldLabel(name: string) {
+  const labels: Record<string, string> = {
+    firstName: "Imię",
+    lastName: "Nazwisko",
+    email: "E-mail",
+    operationalNetHourlyRate: "Stawka operacyjna netto / h",
+    grossMonthlyPay: "Wynagrodzenie brutto / formalna podstawa brutto"
+  };
+  return labels[name] ?? "wymagane pole";
+}
+
 export function HrEmployeeCreate153({ workspaceId, referenceDate, canManagePayroll, onClose }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -77,10 +88,25 @@ export function HrEmployeeCreate153({ workspaceId, referenceDate, canManagePayro
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (partialCreated) return;
+    if (partialCreated || pending) return;
+
     const form = event.currentTarget;
-    const payload = Object.fromEntries(new FormData(form).entries());
     setError(null);
+
+    const invalidField = form.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(":invalid");
+    if (invalidField) {
+      const message = invalidField.validity.typeMismatch
+        ? `Popraw wartość w polu „${fieldLabel(invalidField.name)}”.`
+        : `Uzupełnij pole „${fieldLabel(invalidField.name)}”.`;
+      setError(message);
+      requestAnimationFrame(() => {
+        invalidField.focus({ preventScroll: true });
+        invalidField.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+      return;
+    }
+
+    const payload = Object.fromEntries(new FormData(form).entries());
 
     startTransition(async () => {
       let createdEmployeeId: string | null = null;
@@ -177,7 +203,7 @@ export function HrEmployeeCreate153({ workspaceId, referenceDate, canManagePayro
       </header>
       <div className={styles.body}>
         {error ? <div className={styles.error} role="alert"><AlertTriangle size={16} /> <span>{error}</span></div> : null}
-        <form className={styles.form} onSubmit={submit}>
+        <form className={styles.form} onSubmit={submit} noValidate>
           <fieldset><legend>Dane pracownika</legend><div className={styles.grid}>
             <label>Imię<input name="firstName" autoFocus required disabled={partialCreated} /></label>
             <label>Nazwisko<input name="lastName" required disabled={partialCreated} /></label>
@@ -231,8 +257,11 @@ export function HrEmployeeCreate153({ workspaceId, referenceDate, canManagePayro
           </fieldset>
 
           <div className={styles.actions}>
+            <div className={error ? styles.actionError : styles.actionHint} aria-live="polite">
+              {error ? <><AlertTriangle size={14} /><span>{error}</span></> : <span>Imię i nazwisko są wymagane. Pozostałe dane możesz uzupełnić teraz lub później.</span>}
+            </div>
             <button type="button" className={styles.secondary} onClick={onClose}>{partialCreated ? "Zamknij" : "Anuluj"}</button>
-            {!partialCreated ? <button className={styles.primary} disabled={pending}><Plus size={15} /> {pending ? "Dodawanie…" : "Dodaj pracownika"}</button> : null}
+            {!partialCreated ? <button type="submit" className={styles.primary} disabled={pending}><Plus size={15} /> {pending ? "Dodawanie…" : "Dodaj pracownika"}</button> : null}
           </div>
         </form>
       </div>
