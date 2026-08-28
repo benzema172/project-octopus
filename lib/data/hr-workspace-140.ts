@@ -1,6 +1,7 @@
 import "server-only";
 
 import { calculateCompensation } from "@/lib/hr/compensation";
+import { isIsoDate } from "@/lib/hr/validation";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 type Row = Record<string, unknown>;
@@ -17,7 +18,9 @@ function list(result: { data: unknown; error: { message: string } | null }, labe
 }
 
 function dateOnly(value?: string) {
-  return (value || new Date().toISOString()).slice(0, 10);
+  const fallback = new Date().toISOString().slice(0, 10);
+  const candidate = value?.slice(0, 10) ?? fallback;
+  return isIsoDate(candidate) ? candidate : fallback;
 }
 
 function inRange(date: string, from: unknown, to: unknown) {
@@ -34,6 +37,51 @@ function addDays(date: string, days: number) {
   const value = new Date(`${date}T00:00:00Z`);
   value.setUTCDate(value.getUTCDate() + days);
   return value.toISOString().slice(0, 10);
+}
+
+function easterSunday(year: number) {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function polishHolidays(year: number) {
+  const easter = easterSunday(year);
+  return new Set([
+    `${year}-01-01`, `${year}-01-06`, `${year}-05-01`, `${year}-05-03`, `${year}-08-15`, `${year}-11-01`, `${year}-11-11`, `${year}-12-25`, `${year}-12-26`,
+    easter,
+    addDays(easter, 1),
+    addDays(easter, 49),
+    addDays(easter, 60)
+  ]);
+}
+
+function isPolishWorkingDay(date: string) {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  const weekday = parsed.getUTCDay();
+  if (weekday === 0 || weekday === 6) return false;
+  return !polishHolidays(parsed.getUTCFullYear()).has(date);
+}
+
+function previousPolishWorkingDay(referenceDate: string) {
+  let candidate = addDays(referenceDate, -1);
+  for (let guard = 0; guard < 14; guard += 1) {
+    if (isPolishWorkingDay(candidate)) return candidate;
+    candidate = addDays(candidate, -1);
+  }
+  return addDays(referenceDate, -1);
 }
 
 function monthKey(date: string) {
@@ -196,9 +244,10 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
     return { employee_id: employee.id, annual_days: annual, carried_over_days: carried, extra_days: extra, used_days: used, remaining_days: Math.max(0, annual + carried + extra - used) };
   });
 
-  const yesterday = addDays(referenceDate, -1);
-  const yesterdayRecorded = new Set(timesheets.filter((row) => String(row.work_date) === yesterday).map((row) => String(row.employee_id)));
-  const missingYesterday = activeEmployees.filter((row) => !yesterdayRecorded.has(String(row.id))).length;
+  const previousWorkDate = previousPolishWorkingDay(referenceDate);
+  const previousRecorded = new Set(timesheets.filter((row) => String(row.work_date).slice(0, 10) === previousWorkDate).map((row) => String(row.employee_id)));
+  const previousAbsent = new Set(leaves.filter((row) => row.status === "approved" && inRange(previousWorkDate, row.date_from, row.date_to)).map((row) => String(row.employee_id)));
+  const missingYesterday = activeEmployees.filter((row) => inRange(previousWorkDate, row.hired_at, row.terminated_at) && !previousAbsent.has(String(row.id)) && !previousRecorded.has(String(row.id))).length;
 
   const employeeNames = new Map(employees.map((row) => [String(row.id), fullName(row)]));
   const projectNames = new Map(projects.map((row) => [String(row.id), String(row.name)]));
@@ -211,7 +260,7 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
   }
   if (pendingLeaves.length) alerts.push({ severity: "info", type: "decision", title: `${pendingLeaves.length} wniosków urlopowych czeka na decyzję`, detail: "Otwórz Urlopy i absencje." });
   if (pendingTimesheets.length) alerts.push({ severity: "info", type: "decision", title: `${pendingTimesheets.length} kart czasu czeka na decyzję`, detail: "Otwórz Czas pracy." });
-  if (missingYesterday) alerts.push({ severity: "info", type: "timesheet", title: `${missingYesterday} aktywnych osób bez wpisu czasu za ${yesterday}`, detail: "Uzupełnij dzień zbiorczo dla brygady lub pojedynczo." });
+  if (missingYesterday) alerts.push({ severity: "info", type: "timesheet", title: `${missingYesterday} aktywnych osób bez wpisu czasu za ${previousWorkDate}`, detail: "Uzupełnij poprzedni dzień roboczy zbiorczo dla brygady lub pojedynczo." });
 
   const projectStaff = projects.map((project) => {
     const projectAssignments = activeAssignments.filter((row) => String(row.project_id) === String(project.id));
