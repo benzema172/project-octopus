@@ -38,14 +38,39 @@ export function HrDashboardCalendar159({ workspaceId, canWrite, data, onOpenEmpl
   const [selectedDate, setSelectedDate] = useState(data.referenceDate);
   const projectNames = useMemo(() => new Map(data.projects.map((row) => [String(row.id), String(row.name ?? "Inwestycja")])), [data.projects]);
   const teamProjects = useMemo(() => new Map(data.teams.map((row) => [String(row.id), row.project_id ? String(row.project_id) : ""])), [data.teams]);
+  const timesheetIndex = useMemo(() => {
+    const map = new Map<string, Row[]>();
+    for (const row of data.timesheets) {
+      const key = `${String(row.employee_id)}|${String(row.work_date).slice(0, 10)}`;
+      map.set(key, [...(map.get(key) ?? []), row]);
+    }
+    return map;
+  }, [data.timesheets]);
+  const assignmentIndex = useMemo(() => {
+    const map = new Map<string, Row[]>();
+    for (const row of data.assignments) {
+      const employeeId = String(row.employee_id);
+      map.set(employeeId, [...(map.get(employeeId) ?? []), row]);
+    }
+    return map;
+  }, [data.assignments]);
+  const approvedLeaveIndex = useMemo(() => {
+    const map = new Map<string, Row[]>();
+    for (const row of data.leaves) {
+      if (String(row.status) !== "approved") continue;
+      const employeeId = String(row.employee_id);
+      map.set(employeeId, [...(map.get(employeeId) ?? []), row]);
+    }
+    return map;
+  }, [data.leaves]);
 
-  const employeeEntries = (employeeId: string, date: string) => data.timesheets.filter((row) => String(row.employee_id) === employeeId && String(row.work_date).slice(0, 10) === date);
-  const assignmentIds = (employeeId: string, date: string) => data.assignments.filter((row) => String(row.employee_id) === employeeId && inRange(date, row.date_from, row.date_to)).map((row) => String(row.project_id ?? "")).filter(Boolean);
+  const employeeEntries = (employeeId: string, date: string) => timesheetIndex.get(`${employeeId}|${date}`) ?? [];
+  const assignmentIds = (employeeId: string, date: string) => (assignmentIndex.get(employeeId) ?? []).filter((row) => inRange(date, row.date_from, row.date_to)).map((row) => String(row.project_id ?? "")).filter(Boolean);
 
   const employeeDay = (employee: Row, date: string): EmployeeDay => {
     const employeeId = String(employee.id);
     if (!employedOn(employee, date)) return { employee, name: fullName(employee), status: "outside", statusLabel: "Poza zatrudnieniem", location: "—", hours: 0, overtime: 0 };
-    const leaves = data.leaves.filter((row) => String(row.employee_id) === employeeId && String(row.status) === "approved" && inRange(date, row.date_from, row.date_to));
+    const leaves = (approvedLeaveIndex.get(employeeId) ?? []).filter((row) => inRange(date, row.date_from, row.date_to));
     const sheets = employeeEntries(employeeId, date);
     const hours = sheets.reduce((sum, row) => sum + Number(row.hours ?? 0), 0);
     const overtime = sheets.reduce((sum, row) => sum + Number(row.overtime_hours ?? 0), 0);
@@ -59,8 +84,8 @@ export function HrDashboardCalendar159({ workspaceId, canWrite, data, onOpenEmpl
     return { employee, name: fullName(employee), status: "missing", statusLabel: assignmentProjectIds.length ? "Brak wpisu czasu" : "Brak danych", location: assignmentProjectIds.length ? location : "Brak przypisania", hours: 0, overtime: 0 };
   };
 
-  const selectedRows = useMemo(() => data.employees.map((employee) => employeeDay(employee, selectedDate)), [data.employees, data.leaves, data.timesheets, data.assignments, data.teams, data.projects, selectedDate, projectNames, teamProjects]);
-  const selectedSummary = useMemo(() => ({ work: selectedRows.filter((row) => row.status === "work").length, absence: selectedRows.filter((row) => row.status === "absence").length, missing: selectedRows.filter((row) => row.status === "missing").length, conflict: selectedRows.filter((row) => row.status === "conflict").length }), [selectedRows]);
+  const selectedRows = data.employees.map((employee) => employeeDay(employee, selectedDate));
+  const selectedSummary = { work: selectedRows.filter((row) => row.status === "work").length, absence: selectedRows.filter((row) => row.status === "absence").length, missing: selectedRows.filter((row) => row.status === "missing").length, conflict: selectedRows.filter((row) => row.status === "conflict").length };
   const days = useMemo(() => { const first = calendarStart(viewDate); return Array.from({ length: 42 }, (_, index) => { const date = new Date(first); date.setDate(first.getDate() + index); return date; }); }, [viewDate]);
   const monthLabel = viewDate.toLocaleDateString("pl-PL", { month: "long", year: "numeric" });
   const selected = parseIso(selectedDate);
