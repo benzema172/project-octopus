@@ -31,12 +31,14 @@ const DASHBOARD_COST_LABELS = new Map([
 ]);
 
 type TabKey = keyof typeof TAB_LABELS;
+type TimeFocus = { employeeId: string; referenceDate: string };
 
 export function HrWorkspace147(props: Props) {
   const router = useRouter();
   const shellRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
   const [employeeCreateOpen, setEmployeeCreateOpen] = useState(false);
+  const [timeFocus, setTimeFocus] = useState<TimeFocus | null>(null);
   const dashboardActive = activeTab === "dashboard";
   const registryVisible = activeTab === "employees";
   const timeVisible = activeTab === "time";
@@ -63,6 +65,11 @@ export function HrWorkspace147(props: Props) {
     if (!button) return;
     button.click();
     window.setTimeout(() => after?.(), 60);
+  };
+
+  const openEmployeeWorkCalendar = (employeeId: string, referenceDate: string) => {
+    setTimeFocus({ employeeId, referenceDate });
+    activateTab("time");
   };
 
   const setWorkDateAndFocus = (date: string) => {
@@ -279,11 +286,11 @@ export function HrWorkspace147(props: Props) {
     <div className={styles.workspaceSlot} data-hr-workspace-slot="employees-shell">
       <HrWorkspace140 {...props} />
       {registryVisible ? <HrEmployeeRegistry152 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canManagePayroll={props.canManagePayroll} /> : null}
-      {timeVisible ? <HrTimeRecords159 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} employees={props.data.employees} projects={props.data.projects} timesheets={props.data.timesheets} canWrite={props.canWrite} /> : null}
+      {timeVisible ? <HrTimeRecords159 key={timeFocus ? `${timeFocus.employeeId}-${timeFocus.referenceDate}` : "all"} workspaceId={props.workspaceId} referenceDate={timeFocus?.referenceDate ?? props.data.referenceDate} employees={props.data.employees} projects={props.data.projects} timesheets={props.data.timesheets} canWrite={props.canWrite} initialEmployeeId={timeFocus?.employeeId ?? null} onClearEmployeeFocus={() => setTimeFocus(null)} /> : null}
       {teamsVisible ? <HrTeamCostControl156 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} /> : null}
       {documentsVisible ? <HrDocumentUpload157 workspaceId={props.workspaceId} canWrite={props.canWrite} documentCount={props.data.documents.length} /> : null}
     </div>
-    {dashboardActive ? <HrDashboardCalendar159 workspaceId={props.workspaceId} canWrite={props.canWrite} data={props.data} /> : null}
+    {dashboardActive ? <HrDashboardCalendar159 workspaceId={props.workspaceId} canWrite={props.canWrite} data={props.data} onOpenEmployeeCalendar={openEmployeeWorkCalendar} /> : null}
     {employeeCreateOpen ? <HrEmployeeCreate153 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} canManagePayroll={props.canManagePayroll} onClose={() => setEmployeeCreateOpen(false)} /> : null}
   </div>;
 }
