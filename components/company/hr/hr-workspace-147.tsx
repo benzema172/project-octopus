@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type MouseEvent } from "react";
 import { HrWorkspace140 } from "./hr-workspace-140";
 import { HrDashboardCalendar147 } from "./hr-dashboard-calendar-147";
+import { HrEmployeeCreate153 } from "./hr-employee-create-153";
 import { HrEmployeeRegistry152 } from "./hr-employee-registry-152";
 import styles from "./hr-workspace-146.module.css";
 import registryStyles from "./hr-employee-registry-152.module.css";
@@ -30,6 +31,7 @@ type TabKey = keyof typeof TAB_LABELS;
 export function HrWorkspace147(props: Props) {
   const shellRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
+  const [employeeCreateOpen, setEmployeeCreateOpen] = useState(false);
   const dashboardActive = activeTab === "dashboard";
   const registryVisible = activeTab === "employees";
 
@@ -138,8 +140,20 @@ export function HrWorkspace147(props: Props) {
     };
   }, [dashboardActive, props.data.alerts]);
 
+  useEffect(() => {
+    if (!registryVisible) setEmployeeCreateOpen(false);
+  }, [registryVisible]);
+
   const mirrorTab = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
+    const clickedButton = target.closest<HTMLButtonElement>("button");
+    if (registryVisible && clickedButton && (clickedButton.textContent ?? "").includes("Dodaj pracownika")) {
+      event.preventDefault();
+      event.stopPropagation();
+      setEmployeeCreateOpen(true);
+      return;
+    }
+
     const attention = target.closest<HTMLElement>("[data-hr-action-index]");
     if (attention) {
       event.preventDefault();
@@ -178,5 +192,11 @@ export function HrWorkspace147(props: Props) {
       /> : null}
     </div>
     {dashboardActive ? <HrDashboardCalendar147 data={props.data} /> : null}
+    {employeeCreateOpen ? <HrEmployeeCreate153
+      workspaceId={props.workspaceId}
+      referenceDate={props.data.referenceDate}
+      canManagePayroll={props.canManagePayroll}
+      onClose={() => setEmployeeCreateOpen(false)}
+    /> : null}
   </div>;
 }
