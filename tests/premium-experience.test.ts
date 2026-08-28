@@ -38,13 +38,16 @@ describe("premium workspace experience", () => {
     expect(css).toContain(".pw-octo-tentacle--8 { animation: none; }");
   });
 
-  it("keeps secondary navigation from prefetching every heavy route and splits optional UI", () => {
+  it("keeps heavy navigation from prefetching routes and splits optional UI", () => {
     const shell = read("components/layout/company-shell.tsx");
+    const companySelector = read("components/companies/company-selector.tsx");
     const navigation = read("components/projects/project-navigation.tsx");
     const intakeSlot = read("components/projects/project-intake-slot.tsx");
-    expect(shell).toContain('prefetch={item.group === "tools" ? false : undefined}');
+    expect(shell).toContain("prefetch={false}");
+    expect(companySelector).toContain("prefetch={false}");
     expect(shell).toContain('import("@/components/ai/octopus-assistant")');
     expect(shell).toContain("assistantReady");
+    expect(shell).toContain("2500");
     expect(intakeSlot).toContain('import("@/components/projects/project-intake-pipeline")');
     expect(navigation).toContain("prefetch={false}");
   });
