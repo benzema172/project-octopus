@@ -23,6 +23,11 @@ function hasValue(value: unknown) {
   return value !== undefined && value !== null && String(value).trim() !== "";
 }
 
+function positiveNumber(value: unknown) {
+  const parsed = Number(String(value ?? "").trim().replace(/\s/g, "").replace(",", "."));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 export function HrEmployeeCreate153({ workspaceId, referenceDate, canManagePayroll, onClose }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -54,6 +59,22 @@ export function HrEmployeeCreate153({ workspaceId, referenceDate, canManagePayro
     return result;
   };
 
+  const postCompensationModel = async (employeeId: string, payload: Record<string, FormDataEntryValue>) => {
+    const settlementModel = String(payload.settlementModel ?? "monthly");
+    const response = await fetch("/api/company/hr/employee-compensation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId,
+        employeeId,
+        settlementModel,
+        operationalNetHourlyRate: payload.operationalNetHourlyRate ?? null
+      })
+    });
+    const result = await response.json().catch(() => ({})) as ApiResponse;
+    if (!response.ok) throw new Error(result.error ?? "Nie udało się zapisać modelu rozliczenia pracownika.");
+  };
+
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (partialCreated) return;
@@ -64,6 +85,14 @@ export function HrEmployeeCreate153({ workspaceId, referenceDate, canManagePayro
     startTransition(async () => {
       let createdEmployeeId: string | null = null;
       try {
+        const hybrid = String(payload.settlementModel ?? "monthly") === "hourly_with_monthly_base";
+        if (canManagePayroll && hybrid && !positiveNumber(payload.operationalNetHourlyRate)) {
+          throw new Error("Model godzinowy: uzupełnij dodatnią stawkę operacyjną netto za godzinę.");
+        }
+        if (canManagePayroll && hybrid && !hasValue(payload.grossMonthlyPay)) {
+          throw new Error("Model godzinowy: uzupełnij formalną podstawę brutto miesięczną.");
+        }
+
         const leaveRequested = hasValue(payload.leaveAnnualDays) || hasValue(payload.leaveCarriedOverDays) || hasValue(payload.leaveExtraDays) || hasValue(payload.leaveNotes);
         if (leaveRequested && !hasValue(payload.leaveAnnualDays)) {
           throw new Error("Dni wolne: uzupełnij podstawowy wymiar urlopu, np. 20 lub 26 dni.");
@@ -84,6 +113,10 @@ export function HrEmployeeCreate153({ workspaceId, referenceDate, canManagePayro
         const created = await postHr("employee_create", payload);
         if (!created.id) throw new Error("Pracownik został utworzony bez identyfikatora. Odśwież kartotekę przed ponowną próbą.");
         createdEmployeeId = created.id;
+
+        if (canManagePayroll && hasValue(payload.settlementModel)) {
+          await postCompensationModel(created.id, payload);
+        }
 
         const relatedCalls: Array<Promise<ApiResponse>> = [];
         if (leaveRequested) relatedCalls.push(postHr("leave_entitlement_upsert", {
@@ -124,7 +157,7 @@ export function HrEmployeeCreate153({ workspaceId, referenceDate, canManagePayro
         const message = reason instanceof Error ? reason.message : "Nie udało się dodać pracownika.";
         if (createdEmployeeId) {
           setPartialCreated(true);
-          setError(`Pracownik został utworzony, ale nie udało się zapisać części danych dodatkowych (urlop/BHP/uprawnienia): ${message} Zamknij okno i uzupełnij brakujące dane w edycji pracownika.`);
+          setError(`Pracownik został utworzony, ale nie udało się zapisać części danych dodatkowych (model rozliczenia/urlop/BHP/uprawnienia): ${message} Zamknij okno i uzupełnij brakujące dane w kartotece.`);
           router.refresh();
         } else {
           setError(message);
@@ -170,7 +203,7 @@ export function HrEmployeeCreate153({ workspaceId, referenceDate, canManagePayro
             </div>
           </fieldset>
 
-          {canManagePayroll && !partialCreated ? <HrCompensationFields150 /> : !canManagePayroll ? <p className={styles.hint}>Dane wynagrodzenia uzupełni osoba z uprawnieniem Kadry–płace lub Finanse.</p> : null}
+          {canManagePayroll && !partialCreated ? <HrCompensationFields150 /> : !canManagePayroll ? <p className={styles.hint}>Dane wynagrodzenia i model rozliczenia uzupełni osoba z uprawnieniem Kadry–płace lub Finanse.</p> : null}
 
           <fieldset><legend><ShieldCheck size={15} /> Badania, BHP i uprawnienia</legend>
             <p className={styles.hint}>Ta sekcja jest opcjonalna. Wpisane dane zapisują się bezpośrednio do centralnej ewidencji i po utworzeniu pracownika będą widoczne w zakładce „Uprawnienia i BHP”. Kolejne badania i szkolenia dodawaj jako nowe wpisy, aby zachować historię.</p>
