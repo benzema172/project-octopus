@@ -117,7 +117,7 @@ export function HrWorkspace147(props: Props) {
       }
     }
 
-    const alertCards = Array.from(root.querySelectorAll<HTMLElement>('section[class*="grid2"] [class*="alertList"] [class*="alert"]'));
+    const alertCards = Array.from(root.querySelectorAll<HTMLElement>('section[class*="grid2"] [class*="alertList"] > article[class*="alert"]'));
     alertCards.forEach((element, index) => {
       if (!props.data.alerts[index]) return;
       element.dataset.hrActionIndex = String(index);
