@@ -13,6 +13,13 @@ describe("Kadry 1.5.4 attention actions", () => {
     expect(workspace).toContain('element.setAttribute("tabindex", "0")');
   });
 
+  it("restores the action affordance whenever dashboard alert DOM is remounted", () => {
+    expect(workspace).toContain("const syncAttentionActions = () =>");
+    expect(workspace).toContain("const observer = new MutationObserver(() => syncDashboardEnhancements())");
+    expect(workspace).toContain("observer.observe(root, { childList: true, subtree: true })");
+    expect(workspace).toContain("return () => observer.disconnect()");
+  });
+
   it("routes time and leave decisions directly to their handling sections", () => {
     expect(workspace).toContain('activateTab("time", () => scrollToHeading("Do zatwierdzenia"))');
     expect(workspace).toContain('activateTab("leaves", () => scrollToHeading("Wnioski do decyzji"))');
