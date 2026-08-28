@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type MouseEvent } from "react";
 import { HrWorkspace140 } from "./hr-workspace-140";
 import { HrDashboardCalendar147 } from "./hr-dashboard-calendar-147";
+import { HrEmployeeRegistry152 } from "./hr-employee-registry-152";
 import styles from "./hr-workspace-146.module.css";
+import registryStyles from "./hr-employee-registry-152.module.css";
 
 type Props = ComponentProps<typeof HrWorkspace140>;
 type HrRow = Record<string, unknown>;
@@ -29,6 +31,7 @@ export function HrWorkspace147(props: Props) {
   const shellRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
   const dashboardActive = activeTab === "dashboard";
+  const employeesActive = activeTab === "employees";
 
   const findTabButton = (label: string) => {
     const root = shellRef.current;
@@ -161,12 +164,18 @@ export function HrWorkspace147(props: Props) {
 
   return <div
     ref={shellRef}
-    className={`${styles.shell} ${dashboardActive ? styles.dashboardCompact : ""}`}
+    className={`${styles.shell} ${dashboardActive ? styles.dashboardCompact : ""} ${employeesActive ? registryStyles.enhancedEmployees : ""}`}
     onClickCapture={mirrorTab}
     onKeyDownCapture={handleKeyDown}
   >
     <div className={styles.workspaceSlot} data-hr-workspace-slot="employees-shell">
       <HrWorkspace140 {...props} />
+      {employeesActive ? <HrEmployeeRegistry152
+        workspaceId={props.workspaceId}
+        data={props.data}
+        canWrite={props.canWrite}
+        canManagePayroll={props.canManagePayroll}
+      /> : null}
     </div>
     {dashboardActive ? <HrDashboardCalendar147 data={props.data} /> : null}
   </div>;
