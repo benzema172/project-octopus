@@ -9,7 +9,7 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-type Action = "update" | "archive" | "restore" | "delete";
+type Action = "update" | "archive" | "restore" | "delete" | "force_delete";
 type Body = { workspaceId?: string; action?: Action; payload?: Record<string, unknown> };
 
 function text(value: unknown, required = false) {
@@ -79,7 +79,11 @@ export async function POST(request: Request) {
 
   const db = createServiceSupabaseClient();
   const employeeId = text(body.payload.employeeId, true)!;
-  const { data: employee, error: employeeError } = await db.from("employees").select("id,status").eq("workspace_id", workspace.id).eq("id", employeeId).maybeSingle<{ id: string; status: string }>();
+  const { data: employee, error: employeeError } = await db.from("employees")
+    .select("id,status,employee_number,first_name,last_name")
+    .eq("workspace_id", workspace.id)
+    .eq("id", employeeId)
+    .maybeSingle<{ id: string; status: string; employee_number: string | null; first_name: string | null; last_name: string | null }>();
   if (employeeError || !employee) return NextResponse.json({ error: "Pracownik nie należy do aktywnej firmy." }, { status: 404 });
 
   const audit = async (event: string, after: unknown) => {
@@ -111,6 +115,25 @@ export async function POST(request: Request) {
       if (error) throw error;
       await audit("employee_deleted", { deleted: true });
       return NextResponse.json({ ok: true, deleted: true });
+    }
+
+    if (body.action === "force_delete") {
+      if (!hrApprove) return NextResponse.json({ error: "Trwałe usunięcie pracownika wraz z historią wymaga uprawnienia do zatwierdzania w Kadrach." }, { status: 403 });
+      if (text(body.payload.confirmation) !== "USUŃ") return NextResponse.json({ error: "Aby trwale usunąć pracownika, potwierdź operację dokładnym hasłem USUŃ." }, { status: 400 });
+
+      const snapshot = {
+        id: employee.id,
+        employeeNumber: employee.employee_number,
+        firstName: employee.first_name,
+        lastName: employee.last_name,
+        status: employee.status,
+        reason: text(body.payload.reason) ?? "manual_test_reset",
+        cascadedHistory: true
+      };
+      const { error } = await db.from("employees").delete().eq("workspace_id", workspace.id).eq("id", employeeId);
+      if (error) throw error;
+      await audit("employee_force_deleted", snapshot);
+      return NextResponse.json({ ok: true, deleted: true, cascadedHistory: true });
     }
 
     const p = body.payload;
