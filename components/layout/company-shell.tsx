@@ -57,7 +57,9 @@ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomai
   const base = `/workspace/companies/${workspaceId}`;
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => setAssistantReady(true), 650);
+    // Nie dokładamy OctopusAI do krytycznej ścieżki renderowania. Wcześniejsze
+    // uruchamianie po 650 ms zbiegało się z ładowaniem danych modułu firmy.
+    const timeoutId = window.setTimeout(() => setAssistantReady(true), 2500);
     return () => window.clearTimeout(timeoutId);
   }, []);
 
@@ -123,7 +125,7 @@ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomai
       <Link
         href={item.href}
         key={item.href}
-        prefetch={item.group === "tools" ? false : undefined}
+        prefetch={false}
         className={active ? "is-active" : undefined}
         aria-current={active ? "page" : undefined}
         onClick={closeMobileMenu}
@@ -141,17 +143,17 @@ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomai
           <Menu size={19} aria-hidden="true" />
         </button>
         <span><small>Aktywna firma</small><strong>{companyName}</strong></span>
-        <Link href="/workspace" className="co-mobile-menu-button" aria-label="Zmień firmę" title="Zmień firmę"><ArrowLeftRight size={18} aria-hidden="true" /></Link>
+        <Link prefetch={false} href="/workspace" className="co-mobile-menu-button" aria-label="Zmień firmę" title="Zmień firmę"><ArrowLeftRight size={18} aria-hidden="true" /></Link>
       </header>
 
       <button type="button" className={`co-sidebar-backdrop${mobileOpen ? " is-visible" : ""}`} aria-label="Zamknij menu" aria-hidden={!mobileOpen} onClick={closeMobileMenu} tabIndex={mobileOpen ? 0 : -1} />
 
       <aside className={`co-sidebar${mobileOpen ? " is-mobile-open" : ""}`} id="company-navigation" aria-label="Nawigacja firmy" inert={isMobile && !mobileOpen ? true : undefined}>
         <div className="co-sidebar-mobile-head"><strong>Menu firmy</strong><button type="button" onClick={closeMobileMenu} aria-label="Zamknij menu firmy"><X size={18} aria-hidden="true" /></button></div>
-        <Link href="/workspace" className="co-sidebar-brand" onClick={closeMobileMenu}><strong>OCTOPUS</strong><span>Project Octopus</span></Link>
+        <Link prefetch={false} href="/workspace" className="co-sidebar-brand" onClick={closeMobileMenu}><strong>OCTOPUS</strong><span>Project Octopus</span></Link>
 
         <div className="co-company-switcher">
-          <div className="co-company-switcher__topline"><small>Aktywna firma</small><Link href="/workspace" className="co-company-switcher__change" aria-label="Zmień firmę" title="Zmień firmę"><ArrowLeftRight size={15} aria-hidden="true" /></Link></div>
+          <div className="co-company-switcher__topline"><small>Aktywna firma</small><Link prefetch={false} href="/workspace" className="co-company-switcher__change" aria-label="Zmień firmę" title="Zmień firmę"><ArrowLeftRight size={15} aria-hidden="true" /></Link></div>
           <strong>{companyName}</strong>
         </div>
 
