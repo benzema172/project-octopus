@@ -16,7 +16,7 @@ describe("HR dashboard compact layout 1.4.8", () => {
     expect(wrapperCss).toContain('[class*="grid3"] [class*="subtle"]');
     expect(wrapperCss).toContain("display:none!important");
     expect(calendarCss).toContain(".titleBlock>div>p:not(.kicker){display:none}");
-    expect(calendarCss).toContain(".monthBar span{display:none");
+    expect(calendarCss).toContain(".monthTitle{");
   });
 
   it("reduces vertical padding and gaps in the dashboard summary cards", () => {

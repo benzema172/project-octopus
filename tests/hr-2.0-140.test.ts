@@ -67,7 +67,7 @@ describe("Project Octopus 1.4.0 — Kadry 2.0", () => {
     expect(css141).toContain("counter-increment: employee-row");
     expect(css141).toContain('content: "LP."');
     expect(css141).toContain("content: counter(employee-row)");
-    expect(css141).toContain("justify-self: end");
-    expect(css141).toContain("width: max-content");
+    expect(css141).toContain("[data-hr-employee-list]");
+    expect(ui).toContain("data-hr-employee-list");
   });
 });

@@ -29,7 +29,6 @@ export function HrWorkspace147(props: Props) {
   const shellRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
   const dashboardActive = activeTab === "dashboard";
-  const employeesActive = activeTab === "employees";
 
   const findTabButton = (label: string) => {
     const root = shellRef.current;
@@ -162,7 +161,7 @@ export function HrWorkspace147(props: Props) {
 
   return <div
     ref={shellRef}
-    className={`${styles.shell} ${dashboardActive ? styles.dashboardCompact : ""} ${employeesActive ? styles.employeesActive : ""}`}
+    className={`${styles.shell} ${dashboardActive ? styles.dashboardCompact : ""}`}
     onClickCapture={mirrorTab}
     onKeyDownCapture={handleKeyDown}
   >

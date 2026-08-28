@@ -50,9 +50,22 @@ describe("HR dashboard calendar day status 1.4.7", () => {
   it("keeps the status legend in the selected-day panel instead of above the month grid", () => {
     const drawerIndex = calendar.indexOf("styles.dayDrawer");
     const legendIndex = calendar.indexOf('aria-label="Legenda statusów kalendarza"');
-    const monthBarIndex = calendar.indexOf("styles.monthBar");
-    expect(drawerIndex).toBeGreaterThan(monthBarIndex);
+    const monthTitleIndex = calendar.indexOf("styles.monthTitle");
+    expect(monthTitleIndex).toBeGreaterThan(calendar.indexOf("styles.titleBlock"));
+    expect(monthTitleIndex).toBeLessThan(calendar.indexOf("styles.controls"));
+    expect(drawerIndex).toBeGreaterThan(monthTitleIndex);
     expect(legendIndex).toBeGreaterThan(drawerIndex);
     expect(calendar.match(/aria-label=\"Legenda statusów kalendarza\"/g)).toHaveLength(1);
+  });
+
+  it("places day counters on the lower status row next to the legend", () => {
+    const statusRowIndex = calendar.indexOf("styles.drawerStatusRow");
+    const summaryIndex = calendar.indexOf("styles.summaryChips");
+    const legendIndex = calendar.indexOf('aria-label="Legenda statusów kalendarza"');
+    expect(statusRowIndex).toBeGreaterThan(calendar.indexOf("styles.drawerHeader"));
+    expect(summaryIndex).toBeGreaterThan(statusRowIndex);
+    expect(legendIndex).toBeGreaterThan(summaryIndex);
+    expect(css).toContain(".drawerHeader{display:flex;align-items:flex-end");
+    expect(css).toContain(".drawerStatusRow{display:flex");
   });
 });

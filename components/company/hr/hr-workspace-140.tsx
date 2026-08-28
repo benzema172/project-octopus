@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle, BriefcaseBusiness, CalendarDays, CheckCircle2, Clock3, Download, FileText,
-  HardHat, PackageCheck, Plus, Search, ShieldCheck, Upload, UserCheck, UsersRound, X
+  HardHat, PackageCheck, Plus, Search, ShieldCheck, Upload, UsersRound, X
 } from "lucide-react";
 import { HrTimeRecords145 } from "./hr-time-records-145";
 import styles from "./hr-workspace-140.module.css";
@@ -81,9 +81,24 @@ export function HrWorkspace140({ workspaceId, data, canWrite, canApprove }: { wo
   const [statusFilter, setStatusFilter] = useState("active");
   const [projectFilter, setProjectFilter] = useState("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [employeeCreateOpen, setEmployeeCreateOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!employeeCreateOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setEmployeeCreateOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [employeeCreateOpen]);
 
   const employeeById = useMemo(() => new Map(data.employees.map((row) => [String(row.id), row])), [data.employees]);
   const projectById = useMemo(() => new Map(data.projects.map((row) => [String(row.id), row])), [data.projects]);
@@ -99,7 +114,7 @@ export function HrWorkspace140({ workspaceId, data, canWrite, canApprove }: { wo
     return map;
   }, [activeAssignments]);
 
-  const perform = (action: string, payload: Record<string, unknown>, success: string) => {
+  const perform = (action: string, payload: Record<string, unknown>, success: string, onSuccess?: () => void) => {
     setMessage(null); setError(null);
     startTransition(async () => {
       try {
@@ -108,17 +123,20 @@ export function HrWorkspace140({ workspaceId, data, canWrite, canApprove }: { wo
         if (!response.ok) { setError(result.error ?? "Nie udało się wykonać operacji."); return; }
         const extra = result.meta?.calculatedDays ? ` (${result.meta.calculatedDays} dni roboczych)` : result.meta?.people ? ` (${result.meta.people} osób)` : "";
         setMessage(`${success}${extra}`);
+        onSuccess?.();
         router.refresh();
       } catch { setError("Nie udało się połączyć z modułem Kadry."); }
     });
   };
 
-  const submit = (action: string, success: string) => (event: FormEvent<HTMLFormElement>) => {
+  const submit = (action: string, success: string, onSuccess?: () => void) => (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const payload = Object.fromEntries(new FormData(form).entries());
-    perform(action, payload, success);
-    form.reset();
+    perform(action, payload, success, () => {
+      form.reset();
+      onSuccess?.();
+    });
   };
 
   const filteredEmployees = useMemo(() => data.employees.filter((employee) => {
@@ -163,20 +181,7 @@ export function HrWorkspace140({ workspaceId, data, canWrite, canApprove }: { wo
   </>;
 
   const employeeTab = <>
-    {canWrite ? <FormBlock title="Dodaj pracownika">
-      <form className={styles.form} onSubmit={submit("employee_create", "Pracownik został dodany.")}>
-        <div className={styles.formGrid}>
-          <label>Imię<input name="firstName" required /></label><label>Nazwisko<input name="lastName" required /></label>
-          <label>Numer pracownika<input name="employeeNumber" /></label><label>Stanowisko<input name="position" /></label>
-          <label>E-mail<input name="email" type="email" /></label><label>Telefon<input name="phone" /></label>
-          <label>Forma zatrudnienia<select name="employmentType" defaultValue="employment_contract"><option value="employment_contract">Umowa o pracę</option><option value="contract">Umowa cywilna</option><option value="b2b">B2B</option></select></label><label>Data zatrudnienia<input name="hiredAt" type="date" defaultValue={data.referenceDate} /></label>
-          <label>Wymiar etatu<input name="fullTimeEquivalent" inputMode="decimal" placeholder="1,0" /></label><label>Koszt miesięczny<input name="monthlyCost" inputMode="decimal" /></label>
-          <label>Koszt godzinowy<input name="hourlyCost" inputMode="decimal" /></label><label>Kontakt awaryjny<input name="emergencyContactName" /></label>
-          <label>Telefon awaryjny<input name="emergencyContactPhone" /></label><label>Notatka<input name="notes" /></label>
-        </div><button className={styles.button} disabled={pending}><Plus size={15} /> Dodaj pracownika</button>
-      </form>
-    </FormBlock> : null}
-    <article className={styles.panel}>
+    <article className={styles.panel} data-hr-employee-list>
       <div className={styles.sectionLead}><div><p className={styles.kicker}>Kartoteka</p><h2>Pracownicy</h2></div><span className={styles.chip}>{filteredEmployees.length}</span></div>
       <div className={styles.searchRow}><div style={{ display: "contents" }}><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Imię, stanowisko, inwestycja, telefon, e-mail…" /></div><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">Wszystkie statusy</option><option value="active">Aktywni</option><option value="inactive">Nieaktywni</option><option value="terminated">Zakończone</option></select><select value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}><option value="">Wszystkie inwestycje</option>{data.projects.map((row) => <option key={String(row.id)} value={String(row.id)}>{str(row.name)}</option>)}</select></div>
       <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Pracownik</th><th>Stanowisko</th><th>Aktualna inwestycja</th><th>Obłożenie</th><th>Kontakt</th><th>Status</th></tr></thead><tbody>{filteredEmployees.map((row) => { const employment = employmentByEmployee.get(String(row.id)); const assignments = assignmentsByEmployee.get(String(row.id)) ?? []; const load = assignments.reduce((sum, item) => sum + Number(item.allocation_percent ?? 0), 0); return <tr key={String(row.id)} onClick={() => setSelectedEmployeeId(String(row.id))}><td><strong>{employeeName(row)}</strong><div className={styles.subtle}>{str(row.employee_number)}</div></td><td>{str(employment?.position, "Bez stanowiska")}</td><td>{assignments.map((item) => str(projectById.get(String(item.project_id))?.name)).join(" · ") || "Bez przypisania"}</td><td><div className={styles.load}><progress max="120" value={Math.min(120, load)} /><strong>{num(load, 0)}%</strong></div></td><td>{str(row.phone)}<div className={styles.subtle}>{str(row.email)}</div></td><td><StatusChip status={row.status} /></td></tr>; })}</tbody></table>{!filteredEmployees.length ? <Empty>Brak pracowników dla wybranych filtrów.</Empty> : null}</div>
@@ -229,11 +234,45 @@ export function HrWorkspace140({ workspaceId, data, canWrite, canApprove }: { wo
   const content = tab === "dashboard" ? dashboard : tab === "employees" ? employeeTab : tab === "time" ? timeTab : tab === "leaves" ? leavesTab : tab === "compliance" ? complianceTab : tab === "teams" ? teamsTab : documentsTab;
 
   return <div className={styles.root}>
-    <div className={styles.toolbar}><nav className={styles.tabs} aria-label="Sekcje modułu Kadry">{tabs.map((item) => <button key={item.id} type="button" className={`${styles.tab} ${tab === item.id ? styles.tabActive : ""}`} onClick={() => setTab(item.id)}>{item.icon} {item.label}</button>)}</nav><div className={styles.actions}><Link className={styles.buttonSecondary} href={`/api/company/hr/export?workspaceId=${encodeURIComponent(workspaceId)}`}><Download size={15} /> Raport CSV</Link></div></div>
+    <div className={styles.toolbar}><nav className={styles.tabs} aria-label="Sekcje modułu Kadry">{tabs.map((item) => <button key={item.id} type="button" className={`${styles.tab} ${tab === item.id ? styles.tabActive : ""}`} onClick={() => setTab(item.id)}>{item.icon} {item.label}</button>)}</nav><div className={styles.actions}>{canWrite && tab === "employees" ? <button type="button" className={styles.button} onClick={() => { setError(null); setEmployeeCreateOpen(true); }}><Plus size={15} /> Dodaj pracownika</button> : null}<Link className={styles.buttonSecondary} href={`/api/company/hr/export?workspaceId=${encodeURIComponent(workspaceId)}`}><Download size={15} /> Raport CSV</Link></div></div>
     {message ? <div className={styles.feedback} role="status"><CheckCircle2 size={16} /> {message}</div> : null}
     {error ? <div className={`${styles.feedback} ${styles.feedbackError}`} role="alert"><AlertTriangle size={16} /> {error}</div> : null}
     {content}
+    {employeeCreateOpen ? <EmployeeCreateModal
+      referenceDate={data.referenceDate}
+      pending={pending}
+      error={error}
+      close={() => setEmployeeCreateOpen(false)}
+      submit={submit("employee_create", "Pracownik został dodany.", () => setEmployeeCreateOpen(false))}
+    /> : null}
     {selectedEmployee ? <EmployeeDrawer employee={selectedEmployee} data={data} canWrite={canWrite} pending={pending} perform={perform} submit={submit} close={() => setSelectedEmployeeId(null)} employeeById={employeeById} projectById={projectById} /> : null}
+  </div>;
+}
+
+function EmployeeCreateModal({ referenceDate, pending, error, close, submit }: { referenceDate: string; pending: boolean; error: string | null; close: () => void; submit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return <div className={styles.modalLayer}>
+    <button type="button" className={styles.modalBackdrop} onClick={close} aria-label="Zamknij dodawanie pracownika" />
+    <section className={styles.employeeModal} role="dialog" aria-modal="true" aria-labelledby="employee-create-title">
+      <header className={styles.modalHeader}>
+        <div><p className={styles.kicker}>Kartoteka pracowników</p><h2 id="employee-create-title">Dodaj pracownika</h2></div>
+        <button type="button" className={styles.iconButton} onClick={close} aria-label="Zamknij"><X size={18} /></button>
+      </header>
+      <div className={styles.modalBody}>
+        {error ? <div className={`${styles.feedback} ${styles.feedbackError}`} role="alert"><AlertTriangle size={16} /> {error}</div> : null}
+        <form className={styles.form} onSubmit={submit}>
+          <div className={styles.formGrid}>
+            <label>Imię<input name="firstName" autoFocus required /></label><label>Nazwisko<input name="lastName" required /></label>
+            <label>Numer pracownika<input name="employeeNumber" /></label><label>Stanowisko<input name="position" /></label>
+            <label>E-mail<input name="email" type="email" /></label><label>Telefon<input name="phone" /></label>
+            <label>Forma zatrudnienia<select name="employmentType" defaultValue="employment_contract"><option value="employment_contract">Umowa o pracę</option><option value="contract">Umowa cywilna</option><option value="b2b">B2B</option></select></label><label>Data zatrudnienia<input name="hiredAt" type="date" defaultValue={referenceDate} /></label>
+            <label>Wymiar etatu<input name="fullTimeEquivalent" inputMode="decimal" placeholder="1,0" /></label><label>Koszt miesięczny<input name="monthlyCost" inputMode="decimal" /></label>
+            <label>Koszt godzinowy<input name="hourlyCost" inputMode="decimal" /></label><label>Kontakt awaryjny<input name="emergencyContactName" /></label>
+            <label>Telefon awaryjny<input name="emergencyContactPhone" /></label><label>Notatka<input name="notes" /></label>
+          </div>
+          <div className={styles.modalActions}><button type="button" className={styles.buttonSecondary} onClick={close}>Anuluj</button><button className={styles.button} disabled={pending}><Plus size={15} /> {pending ? "Dodawanie…" : "Dodaj pracownika"}</button></div>
+        </form>
+      </div>
+    </section>
   </div>;
 }
 

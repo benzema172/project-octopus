@@ -1,67 +1,43 @@
-/* 1.4.10 — trwałe przywrócenie wyglądu listy pracowników z 1.4.1.
-   Selektory opierają się na stabilnym data-hooku wrappera Kadr 1.4.7+, a nie na liczbie wrapperów DOM. */
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div > details {
-  justify-self: end;
-  width: max-content;
-  min-width: 0;
-  border-radius: 11px;
-}
-
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div > details > summary {
-  width: max-content;
-  padding: 8px 11px;
-  font-size: .9rem;
-  line-height: 1;
-}
-
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div > details[open] {
-  justify-self: stretch;
-  width: 100%;
-}
-
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div > details[open] > summary {
-  margin-left: auto;
-}
-
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div:has(> details) > article table {
+/* 1.4.15 — lista pracowników oparta na stabilnym data-hooku, niezależna od modala dodawania. */
+.hr1410 [data-hr-workspace-slot="employees-shell"] [data-hr-employee-list] table {
   border-collapse: separate;
   border-spacing: 0;
 }
 
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div:has(> details) > article table thead th {
+.hr1410 [data-hr-workspace-slot="employees-shell"] [data-hr-employee-list] table thead th {
   padding-top: 12px;
   padding-bottom: 12px;
   background: #f7f8fa;
   border-bottom: 1px solid #dfe3e8;
 }
 
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div:has(> details) > article table tbody {
+.hr1410 [data-hr-workspace-slot="employees-shell"] [data-hr-employee-list] table tbody {
   counter-reset: employee-row;
 }
 
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div:has(> details) > article table tbody tr {
+.hr1410 [data-hr-workspace-slot="employees-shell"] [data-hr-employee-list] table tbody tr {
   counter-increment: employee-row;
 }
 
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div:has(> details) > article table tbody td {
+.hr1410 [data-hr-workspace-slot="employees-shell"] [data-hr-employee-list] table tbody td {
   padding-top: 14px;
   padding-bottom: 14px;
   vertical-align: middle;
 }
 
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div:has(> details) > article table th + th,
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div:has(> details) > article table td + td {
+.hr1410 [data-hr-workspace-slot="employees-shell"] [data-hr-employee-list] table th + th,
+.hr1410 [data-hr-workspace-slot="employees-shell"] [data-hr-employee-list] table td + td {
   border-left: 1px solid #eef0f3;
 }
 
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div:has(> details) > article table thead th:first-child,
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div:has(> details) > article table tbody td:first-child {
+.hr1410 [data-hr-workspace-slot="employees-shell"] [data-hr-employee-list] table thead th:first-child,
+.hr1410 [data-hr-workspace-slot="employees-shell"] [data-hr-employee-list] table tbody td:first-child {
   position: relative;
   padding-left: 78px;
   min-width: 280px;
 }
 
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div:has(> details) > article table thead th:first-child::before {
+.hr1410 [data-hr-workspace-slot="employees-shell"] [data-hr-employee-list] table thead th:first-child::before {
   content: "LP.";
   position: absolute;
   left: 18px;
@@ -75,7 +51,7 @@
   text-align: center;
 }
 
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div:has(> details) > article table tbody td:first-child::before {
+.hr1410 [data-hr-workspace-slot="employees-shell"] [data-hr-employee-list] table tbody td:first-child::before {
   content: counter(employee-row);
   position: absolute;
   left: 18px;
@@ -87,8 +63,8 @@
   text-align: center;
 }
 
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div:has(> details) > article table thead th:first-child::after,
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div:has(> details) > article table tbody td:first-child::after {
+.hr1410 [data-hr-workspace-slot="employees-shell"] [data-hr-employee-list] table thead th:first-child::after,
+.hr1410 [data-hr-workspace-slot="employees-shell"] [data-hr-employee-list] table tbody td:first-child::after {
   content: "";
   position: absolute;
   left: 62px;
@@ -97,27 +73,14 @@
   border-left: 1px solid #e7eaee;
 }
 
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div:has(> details) > article table tbody td:first-child > div {
+.hr1410 [data-hr-workspace-slot="employees-shell"] [data-hr-employee-list] table tbody td:first-child > div {
   display: none;
 }
 
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div:has(> details) > article table tbody td:first-child strong {
+.hr1410 [data-hr-workspace-slot="employees-shell"] [data-hr-employee-list] table tbody td:first-child strong {
   font-size: .96rem;
 }
 
-.hr1410 [data-hr-workspace-slot="employees-shell"] > div:has(> details) > article table tbody tr:hover td {
+.hr1410 [data-hr-workspace-slot="employees-shell"] [data-hr-employee-list] table tbody tr:hover td {
   background: #fafbfc;
-}
-
-@media (max-width: 680px) {
-  .hr1410 [data-hr-workspace-slot="employees-shell"] > div > details,
-  .hr1410 [data-hr-workspace-slot="employees-shell"] > div > details[open] {
-    justify-self: stretch;
-    width: 100%;
-  }
-
-  .hr1410 [data-hr-workspace-slot="employees-shell"] > div > details > summary,
-  .hr1410 [data-hr-workspace-slot="employees-shell"] > div > details[open] > summary {
-    margin-left: auto;
-  }
 }

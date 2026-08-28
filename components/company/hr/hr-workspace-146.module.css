@@ -20,12 +20,5 @@
 .dashboardCompact .workspaceSlot [data-hr-action-index]:hover{transform:translateY(-1px);border-color:#a8b7d5!important;box-shadow:0 4px 14px rgba(15,23,42,.08);background:#fbfcff!important}
 .dashboardCompact .workspaceSlot [data-hr-action-index]:hover::after{border-color:#b8b0fb;color:#5546d8;background:#f8f7ff}
 .dashboardCompact .workspaceSlot [data-hr-action-index]:focus-visible{outline:2px solid #6d5dfc;outline-offset:2px}
-.employeesActive .workspaceSlot>div{position:relative}
-.employeesActive .workspaceSlot>div>details:not([open]){display:block!important;position:absolute;z-index:6;top:4px;right:126px;width:max-content!important;min-width:0!important;margin:0!important;border-radius:10px!important;background:#fff!important}
-.employeesActive .workspaceSlot>div>details:not([open])>summary{display:flex!important;align-items:center!important;justify-content:center!important;width:max-content!important;min-height:36px!important;padding:8px 12px!important;border-radius:10px!important;font-size:.9rem!important;line-height:1!important;white-space:nowrap!important}
-.employeesActive .workspaceSlot>div>details:not([open])>summary:hover{background:#fafbfc!important}
-.employeesActive .workspaceSlot>div>details[open]{display:block!important;position:static!important;width:100%!important;justify-self:stretch!important;margin:0 0 10px!important}
-.employeesActive .workspaceSlot>div>details[open]>summary{display:none!important}
 @media(max-width:1100px){.dashboardCompact .workspaceSlot section[class*="grid2"],.dashboardCompact .workspaceSlot section[class*="grid3"]{gap:8px!important}}
-@media(max-width:760px){.employeesActive .workspaceSlot>div>details:not([open]){position:static!important;margin:0 0 8px auto!important}.dashboardCompact .workspaceSlot [data-hr-action-index]{padding-right:9px!important;padding-bottom:36px!important}.dashboardCompact .workspaceSlot [data-hr-action-index]::after{right:auto;left:9px;top:auto;bottom:7px;transform:none}}
-@media(max-width:680px){.employeesActive .workspaceSlot>div>details[open]{margin-bottom:8px!important}}
+@media(max-width:760px){.dashboardCompact .workspaceSlot [data-hr-action-index]{padding-right:9px!important;padding-bottom:36px!important}.dashboardCompact .workspaceSlot [data-hr-action-index]::after{right:auto;left:9px;top:auto;bottom:7px;transform:none}}

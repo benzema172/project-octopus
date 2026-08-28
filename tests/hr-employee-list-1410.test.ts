@@ -17,9 +17,9 @@ describe("Project Octopus 1.4.10 — HR employee list regression", () => {
     expect(css).toContain("counter-increment: employee-row");
   });
 
-  it("restores the compact add button and hides the technical employee number in the list", () => {
-    expect(css).toContain("justify-self: end");
-    expect(css).toContain("width: max-content");
+  it("keeps list styling independent from the add-employee modal", () => {
+    expect(css).toContain("[data-hr-employee-list]");
+    expect(css).not.toContain(":has(> details)");
     expect(css).toContain("tbody td:first-child > div");
     expect(css).toContain("display: none");
     expect(css).toContain("border-left: 1px solid #eef0f3");

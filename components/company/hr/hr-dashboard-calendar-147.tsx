@@ -170,17 +170,13 @@ export function HrDashboardCalendar147({ data }: { data: CalendarData }) {
           <p>Kolory pokazują pracę, nieobecności i brakujące wpisy. Kliknij dzień, aby rozwinąć listę wszystkich pracowników.</p>
         </div>
       </div>
+      <strong className={styles.monthTitle}>{monthLabel}</strong>
       <div className={styles.controls}>
         <button type="button" className={styles.iconButton} onClick={() => setViewDate((current) => addMonths(current, -1))} aria-label="Poprzedni miesiąc"><ChevronLeft size={17} /></button>
         <button type="button" className={styles.todayButton} onClick={() => { setViewDate(startOfMonth(reference)); setSelectedDate(data.referenceDate); }}>Dzisiaj</button>
         <button type="button" className={styles.iconButton} onClick={() => setViewDate((current) => addMonths(current, 1))} aria-label="Następny miesiąc"><ChevronRight size={17} /></button>
       </div>
     </header>
-
-    <div className={styles.monthBar}>
-      <strong>{monthLabel}</strong>
-      <span>Kliknij dzień, aby zobaczyć obsadę i czas pracy</span>
-    </div>
 
     <div className={styles.calendarScroll}>
       <div className={styles.calendarGrid} role="grid" aria-label={monthLabel}>
@@ -233,14 +229,14 @@ export function HrDashboardCalendar147({ data }: { data: CalendarData }) {
           <small>Wybrany dzień</small>
           <h3>{selectedLabel}</h3>
         </div>
-        <div style={{ display: "grid", justifyItems: "end", gap: 5 }}>
+        <div className={styles.drawerStatusRow}>
           <div className={styles.summaryChips}>
             <span className={styles.summaryWork}>{selectedSummary.work} praca</span>
             <span className={styles.summaryAbsence}>{selectedSummary.absence} nieobecność</span>
             <span className={styles.summaryMissing}>{selectedSummary.missing} brak wpisu</span>
             {selectedSummary.conflict ? <span className={styles.summaryConflict}>{selectedSummary.conflict} konflikt</span> : null}
           </div>
-          <div className={styles.legend} aria-label="Legenda statusów kalendarza" style={{ border: 0, background: "transparent", padding: 0, borderRadius: 0, justifyContent: "flex-end" }}>
+          <div className={styles.legend} aria-label="Legenda statusów kalendarza">
             <span><i className={styles.legendWork} /> Praca</span>
             <span><i className={styles.legendAbsence} /> Nieobecność</span>
             <span><i className={styles.legendMissing} /> Brak wpisu</span>
