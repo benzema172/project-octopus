@@ -1,0 +1,193 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
+import { CheckCircle2, FileUp, LoaderCircle, UploadCloud } from "lucide-react";
+import { SUPPORTED_UPLOAD_ACCEPT, validateUploadFile } from "@/lib/r2/sanitize";
+import styles from "./hr-document-upload-157.module.css";
+
+type UploadResponse = { uploadUrl: string; token: string; headers: Record<string, string> };
+type CompleteResponse = { documentId: string; versionId: string };
+
+type Props = {
+  workspaceId: string;
+  canWrite: boolean;
+  documentCount: number;
+};
+
+export function HrDocumentUpload157({ workspaceId, canWrite, documentCount }: Props) {
+  const router = useRouter();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [mount, setMount] = useState<HTMLElement | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const root = document.querySelector<HTMLElement>('[data-hr-workspace-slot="employees-shell"]');
+    if (!root) return;
+
+    let currentPanel: HTMLElement | null = null;
+    let currentMount: HTMLElement | null = null;
+    let legacyParagraph: HTMLElement | null = null;
+    let legacyLink: HTMLElement | null = null;
+    let paragraphDisplay = "";
+    let linkDisplay = "";
+
+    const sync = () => {
+      const panel = Array.from(root.querySelectorAll<HTMLElement>("article"))
+        .find((item) => item.querySelector("h2")?.textContent?.trim() === "Wrzutnia dokumentów HR") ?? null;
+      if (!panel || panel === currentPanel) return;
+
+      if (legacyParagraph) legacyParagraph.style.display = paragraphDisplay;
+      if (legacyLink) legacyLink.style.display = linkDisplay;
+      currentMount?.remove();
+
+      currentPanel = panel;
+      legacyParagraph = panel.querySelector<HTMLElement>(":scope > p");
+      legacyLink = panel.querySelector<HTMLElement>(":scope > a");
+      paragraphDisplay = legacyParagraph?.style.display ?? "";
+      linkDisplay = legacyLink?.style.display ?? "";
+      if (legacyParagraph) legacyParagraph.style.display = "none";
+      if (legacyLink) legacyLink.style.display = "none";
+
+      currentMount = document.createElement("div");
+      currentMount.dataset.hrUploadMount = "1";
+      panel.appendChild(currentMount);
+      setMount(currentMount);
+    };
+
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(root, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      if (legacyParagraph) legacyParagraph.style.display = paragraphDisplay;
+      if (legacyLink) legacyLink.style.display = linkDisplay;
+      currentMount?.remove();
+      setMount(null);
+    };
+  }, [documentCount]);
+
+  async function uploadOne(file: File, index: number, total: number) {
+    const mimeType = file.type || "application/octet-stream";
+    const validationError = validateUploadFile(file.name, mimeType, file.size);
+    if (validationError) throw new Error(`${file.name}: ${validationError}`);
+
+    setStatus(`Plik ${index + 1} z ${total}: przygotowywanie ${file.name}`);
+    const prepare = await fetch("/api/storage/upload-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId,
+        projectId: null,
+        documentId: null,
+        fileName: file.name,
+        mimeType,
+        fileSize: file.size,
+        category: "hr",
+        categoryLocked: true
+      })
+    });
+    const prepared = await prepare.json().catch(() => ({})) as Partial<UploadResponse> & { error?: string };
+    if (!prepare.ok || !prepared.uploadUrl || !prepared.token || !prepared.headers) {
+      throw new Error(prepared.error ?? `Nie udało się przygotować uploadu pliku ${file.name}.`);
+    }
+
+    setStatus(`Plik ${index + 1} z ${total}: wysyłanie do bezpiecznego magazynu`);
+    const put = await fetch(prepared.uploadUrl, { method: "PUT", headers: prepared.headers, body: file });
+    if (!put.ok) throw new Error(`${file.name}: magazyn plików odrzucił wysyłkę (HTTP ${put.status}).`);
+
+    setStatus(`Plik ${index + 1} z ${total}: zapis i analiza AI`);
+    const complete = await fetch("/api/storage/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: prepared.token })
+    });
+    const completed = await complete.json().catch(() => ({})) as Partial<CompleteResponse> & { error?: string };
+    if (!complete.ok || !completed.documentId || !completed.versionId) {
+      throw new Error(completed.error ?? `${file.name}: nie udało się zapisać dokumentu.`);
+    }
+
+    const analysis = await fetch("/api/brain/process", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId, versionId: completed.versionId })
+    }).catch(() => null);
+
+    if (analysis?.ok) {
+      await fetch("/api/company/hr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId, action: "employee_document_autolink", payload: { documentId: completed.documentId } })
+      }).catch(() => null);
+    }
+  }
+
+  async function uploadFiles(files: File[]) {
+    if (!canWrite || uploading || !files.length) return;
+    setUploading(true);
+    setError(null);
+    setStatus(null);
+    let done = 0;
+    const failures: string[] = [];
+    try {
+      for (const [index, file] of files.entries()) {
+        try {
+          await uploadOne(file, index, files.length);
+          done += 1;
+        } catch (reason) {
+          failures.push(reason instanceof Error ? reason.message : `${file.name}: upload nie powiódł się.`);
+        }
+      }
+      if (done) setStatus(`Gotowe: zapisano ${done} z ${files.length} plików HR. Octopus analizuje treść i dopasowanie do pracowników.`);
+      if (failures.length) setError(failures.join(" · "));
+      router.refresh();
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  if (!mount) return null;
+
+  return createPortal(
+    <div className={styles.wrap} data-hr-functional-upload="1">
+      <p className={styles.intro}>Wrzuć tutaj dokumenty kadrowe. Pliki są oznaczane jako <strong>Kadry</strong>, trafiają do prywatnego magazynu i do analizy Octopus Brain.</p>
+      <button
+        type="button"
+        className={`${styles.dropzone} ${dragging ? styles.dragging : ""}`}
+        disabled={!canWrite || uploading}
+        onClick={() => inputRef.current?.click()}
+        onDragEnter={(event) => { event.preventDefault(); if (canWrite && !uploading) setDragging(true); }}
+        onDragOver={(event) => { event.preventDefault(); if (canWrite && !uploading) setDragging(true); }}
+        onDragLeave={(event) => { event.preventDefault(); if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          void uploadFiles(Array.from(event.dataTransfer.files ?? []));
+        }}
+      >
+        <span className={styles.icon}>{uploading ? <LoaderCircle size={24} className={styles.spin} /> : <UploadCloud size={24} />}</span>
+        <span className={styles.copy}><strong>{uploading ? "Wysyłanie dokumentów…" : "Przeciągnij pliki tutaj lub kliknij, aby wybrać"}</strong><small>PDF, Word, Excel i inne obsługiwane dokumenty · maks. 50 MB na plik</small></span>
+        <span className={styles.pick}><FileUp size={16} /> Wybierz pliki</span>
+      </button>
+      <input
+        ref={inputRef}
+        className={styles.input}
+        type="file"
+        accept={SUPPORTED_UPLOAD_ACCEPT}
+        multiple
+        disabled={!canWrite || uploading}
+        onChange={(event) => void uploadFiles(Array.from(event.target.files ?? []))}
+      />
+      {!canWrite ? <div className={styles.notice}>Masz dostęp tylko do odczytu. Uprawnienie do zapisu w Kadrach jest wymagane do wysyłania dokumentów.</div> : null}
+      {status ? <div className={styles.status} role="status"><CheckCircle2 size={15} /> <span>{status}</span></div> : null}
+      {error ? <div className={styles.error} role="alert"><span>{error}</span></div> : null}
+      <a className={styles.libraryLink} href={`/workspace/companies/${workspaceId}/documents?upload=1`}>Otwórz pełną bibliotekę dokumentów →</a>
+    </div>,
+    mount
+  );
+}
