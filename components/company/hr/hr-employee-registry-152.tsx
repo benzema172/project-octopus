@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   Archive,
@@ -98,6 +99,11 @@ function statusLabel(status: string) {
     rejected: "Odrzucony"
   };
   return labels[status] ?? status;
+}
+
+function ModalPortal({ children }: { children: ReactNode }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(children, document.body);
 }
 
 export function HrEmployeeRegistry152({
@@ -344,7 +350,7 @@ function EmployeeEditModal({
   restore: () => void;
   remove: () => void;
 }) {
-  return <div className={styles.modalLayer}>
+  return <ModalPortal><div className={styles.modalLayer}>
     <button className={styles.backdrop} onClick={close} aria-label="Zamknij edycję pracownika" />
     <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="employee-edit-title">
       <header className={styles.modalHeader}><div><p className={styles.kicker}>Kartoteka pracownika</p><h2 id="employee-edit-title">{employeeName(employee)}</h2></div><button type="button" className={styles.closeButton} onClick={close} aria-label="Zamknij"><X size={18} /></button></header>
@@ -380,7 +386,7 @@ function EmployeeEditModal({
         {canWrite ? <section className={styles.dangerZone}><div><strong>Zarządzanie kartą</strong><p>Archiwizacja zachowuje pełną historię. Trwałe usunięcie jest dozwolone tylko dla karty bez historii kadrowej.</p></div><div className={styles.dangerActions}>{String(employee.status) === "inactive" ? <button type="button" className={styles.secondaryButton} onClick={restore} disabled={pending}><RotateCcw size={15} /> Przywróć</button> : <button type="button" className={styles.secondaryButton} onClick={archive} disabled={pending}><Archive size={15} /> Archiwizuj</button>}<button type="button" className={styles.dangerButton} onClick={remove} disabled={pending}><Trash2 size={15} /> Usuń trwale</button></div></section> : null}
       </div>
     </section>
-  </div>;
+  </div></ModalPortal>;
 }
 
 function EmployeeCalendarModal({
@@ -410,9 +416,10 @@ function EmployeeCalendarModal({
   const days = Array.from({ length: daysInMonth(month) }, (_, index) => `${month}-${String(index + 1).padStart(2, "0")}`);
   const totalHours = entries.reduce((sum, row) => sum + Number(row.hours ?? 0), 0);
   const overtimeHours = entries.reduce((sum, row) => sum + Number(row.overtime_hours ?? 0), 0);
+  const allHours = totalHours + overtimeHours;
   const workedDays = new Set(entries.filter((row) => Number(row.hours ?? 0) + Number(row.overtime_hours ?? 0) > 0).map((row) => row.work_date)).size;
 
-  return <div className={styles.modalLayer}>
+  return <ModalPortal><div className={styles.modalLayer}>
     <button className={styles.backdrop} onClick={close} aria-label="Zamknij kalendarz pracownika" />
     <section className={`${styles.modal} ${styles.calendarModal}`} role="dialog" aria-modal="true" aria-labelledby="employee-calendar-title">
       <header className={styles.modalHeader}><div><p className={styles.kicker}>Kalendarz pracy</p><h2 id="employee-calendar-title">{employeeName(employee)}</h2></div><button type="button" className={styles.closeButton} onClick={close} aria-label="Zamknij"><X size={18} /></button></header>
@@ -441,7 +448,12 @@ function EmployeeCalendarModal({
           </table>
           {loading ? <div className={styles.loading}>Pobieranie ewidencji czasu…</div> : null}
         </div>
+        <section className={styles.calendarSummary} aria-label="Podsumowanie czasu pracy w miesiącu">
+          <div><span>Godziny podstawowe</span><strong>{number(totalHours)} h</strong></div>
+          <div><span>Nadgodziny</span><strong>{number(overtimeHours)} h</strong></div>
+          <div className={styles.calendarSummaryTotal}><span>Łącznie w miesiącu</span><strong>{number(allHours)} h</strong></div>
+        </section>
       </div>
     </section>
-  </div>;
+  </div></ModalPortal>;
 }
