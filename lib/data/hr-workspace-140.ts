@@ -1,6 +1,7 @@
 import "server-only";
 
 import { calculateCompensation } from "@/lib/hr/compensation";
+import { countPolishWorkingDaysInYear, daysBetween, previousPolishWorkingDay } from "@/lib/hr/polish-work-calendar";
 import { isIsoDate } from "@/lib/hr/validation";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
@@ -39,51 +40,6 @@ function addDays(date: string, days: number) {
   return value.toISOString().slice(0, 10);
 }
 
-function easterSunday(year: number) {
-  const a = year % 19;
-  const b = Math.floor(year / 100);
-  const c = year % 100;
-  const d = Math.floor(b / 4);
-  const e = b % 4;
-  const f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3);
-  const h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4);
-  const k = c % 4;
-  const l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const month = Math.floor((h + l - 7 * m + 114) / 31);
-  const day = ((h + l - 7 * m + 114) % 31) + 1;
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-function polishHolidays(year: number) {
-  const easter = easterSunday(year);
-  return new Set([
-    `${year}-01-01`, `${year}-01-06`, `${year}-05-01`, `${year}-05-03`, `${year}-08-15`, `${year}-11-01`, `${year}-11-11`, `${year}-12-25`, `${year}-12-26`,
-    easter,
-    addDays(easter, 1),
-    addDays(easter, 49),
-    addDays(easter, 60)
-  ]);
-}
-
-function isPolishWorkingDay(date: string) {
-  const parsed = new Date(`${date}T00:00:00Z`);
-  const weekday = parsed.getUTCDay();
-  if (weekday === 0 || weekday === 6) return false;
-  return !polishHolidays(parsed.getUTCFullYear()).has(date);
-}
-
-function previousPolishWorkingDay(referenceDate: string) {
-  let candidate = addDays(referenceDate, -1);
-  for (let guard = 0; guard < 14; guard += 1) {
-    if (isPolishWorkingDay(candidate)) return candidate;
-    candidate = addDays(candidate, -1);
-  }
-  return addDays(referenceDate, -1);
-}
-
 function monthKey(date: string) {
   return date.slice(0, 7);
 }
@@ -98,7 +54,7 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
   const query = normalized(options.query).trim();
   const year = Number(referenceDate.slice(0, 4));
 
-  const [employeesResult, projectsResult, employmentsResult, payrollResult, qualificationsResult, examsResult, trainingsResult, leavesResult, timesheetsResult, assignmentsResult, teamsResult, membersResult, documentsResult, employeeDocumentsResult, entitlementsResult, issuedAssetsResult] = await Promise.all([
+  const [employeesResult, projectsResult, employmentsResult, payrollResult, qualificationsResult, examsResult, trainingsResult, leavesResult, timesheetsResult, assignmentsResult, teamsResult, membersResult, documentsResult, employeeDocumentsResult, entitlementsResult, issuedAssetsResult, auditEventsResult] = await Promise.all([
     db.from("employees").select("id,employee_number,first_name,last_name,email,phone,status,hired_at,terminated_at,emergency_contact_name,emergency_contact_phone,notes,created_at,updated_at").eq("workspace_id", workspaceId).order("last_name").order("first_name").limit(500),
     db.from("projects").select("id,name,status").eq("workspace_id", workspaceId).order("name").limit(500),
     db.from("employments").select("id,employee_id,employment_type,position,valid_from,valid_to,full_time_equivalent,monthly_cost,hourly_cost,net_monthly_pay,gross_monthly_pay,employer_contributions,other_monthly_costs,nominal_monthly_hours,currency,created_at").eq("workspace_id", workspaceId).order("valid_from", { ascending: false }).limit(2000),
@@ -114,7 +70,8 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
     db.from("documents").select("id,name,category,project_id,ai_status,review_status,updated_at").eq("workspace_id", workspaceId).is("deleted_at", null).order("updated_at", { ascending: false }).limit(300),
     db.from("employee_documents").select("id,employee_id,document_id,document_type,document_number,issued_at,valid_until,status,source,ai_confidence,ai_explanation,created_at").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(3000),
     db.from("leave_entitlements").select("id,employee_id,year,annual_days,carried_over_days,extra_days,notes,updated_at").eq("workspace_id", workspaceId).eq("year", year).limit(1000),
-    db.from("issued_assets").select("id,employee_id,asset_type,asset_id,description,issued_at,returned_at,condition_out,condition_in").eq("workspace_id", workspaceId).order("issued_at", { ascending: false }).limit(3000)
+    db.from("issued_assets").select("id,employee_id,asset_type,asset_id,description,issued_at,returned_at,condition_out,condition_in").eq("workspace_id", workspaceId).order("issued_at", { ascending: false }).limit(3000),
+    db.from("audit_events").select("id,event_type,entity_type,entity_id,actor_type,created_at").eq("workspace_id", workspaceId).like("event_type", "hr.%").order("created_at", { ascending: false }).limit(500)
   ]);
 
   let employees = list(employeesResult, "pracowników");
@@ -133,6 +90,7 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
   const employeeDocuments = list(employeeDocumentsResult, "dokumentów pracowników");
   const entitlements = list(entitlementsResult, "limitów urlopowych");
   const issuedAssets = list(issuedAssetsResult, "wydanego sprzętu");
+  const auditEvents = list(auditEventsResult, "historii zmian kadr");
 
   const employmentByEmployee = new Map<string, Row>();
   for (const row of employments) {
@@ -169,10 +127,15 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
     ...exams.map((row) => ({ ...row, item_kind: "medical_exam", item_type: row.exam_type, issued_on: row.examined_at })),
     ...trainings.map((row) => ({ ...row, item_kind: "safety_training", item_type: row.training_type, issued_on: row.completed_at }))
   ] as Row[];
+  const limit7 = addDays(referenceDate, 7);
+  const limit14 = addDays(referenceDate, 14);
   const limit30 = addDays(referenceDate, 30);
   const limit90 = addDays(referenceDate, 90);
   const expiredItems = complianceItems.filter((row) => row.valid_until && String(row.valid_until) < referenceDate && row.status !== "archived");
-  const expiring30Items = complianceItems.filter((row) => row.valid_until && String(row.valid_until) >= referenceDate && String(row.valid_until) <= limit30 && row.status !== "archived");
+  const expiring7Items = complianceItems.filter((row) => row.valid_until && String(row.valid_until) >= referenceDate && String(row.valid_until) <= limit7 && row.status !== "archived");
+  const expiring14Items = complianceItems.filter((row) => row.valid_until && String(row.valid_until) > limit7 && String(row.valid_until) <= limit14 && row.status !== "archived");
+  const expiring30Items = complianceItems.filter((row) => row.valid_until && String(row.valid_until) > limit14 && String(row.valid_until) <= limit30 && row.status !== "archived");
+  const expiringWithin30Items = [...expiring7Items, ...expiring14Items, ...expiring30Items];
   const expiring90Items = complianceItems.filter((row) => row.valid_until && String(row.valid_until) > limit30 && String(row.valid_until) <= limit90 && row.status !== "archived");
 
   const pendingLeaves = leaves.filter((row) => ["pending", "submitted", "review"].includes(String(row.status)));
@@ -235,14 +198,29 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
   }, 0);
 
   const entitlementByEmployee = new Map(entitlements.map((row) => [String(row.employee_id), row]));
+  const annualLeaveRows = leaves.filter((row) => row.status === "approved" && ["annual", "on_demand"].includes(String(row.leave_type)));
   const leaveBalances = activeEmployees.map((employee) => {
-    const entitlement = entitlementByEmployee.get(String(employee.id));
-    const annual = Number(entitlement?.annual_days ?? 26);
-    const carried = Number(entitlement?.carried_over_days ?? 0);
-    const extra = Number(entitlement?.extra_days ?? 0);
-    const used = leaves.filter((row) => String(row.employee_id) === String(employee.id) && row.status === "approved" && String(row.date_from).startsWith(String(year)) && ["annual", "on_demand"].includes(String(row.leave_type))).reduce((sum, row) => sum + Number(row.days ?? 0), 0);
-    return { employee_id: employee.id, annual_days: annual, carried_over_days: carried, extra_days: extra, used_days: used, remaining_days: Math.max(0, annual + carried + extra - used) };
+    const employeeId = String(employee.id);
+    const entitlement = entitlementByEmployee.get(employeeId);
+    const annual = entitlement ? Number(entitlement.annual_days ?? 0) : null;
+    const carried = entitlement ? Number(entitlement.carried_over_days ?? 0) : 0;
+    const extra = entitlement ? Number(entitlement.extra_days ?? 0) : 0;
+    const used = annualLeaveRows
+      .filter((row) => String(row.employee_id) === employeeId && String(row.date_to).slice(0, 10) >= `${year}-01-01` && String(row.date_from).slice(0, 10) <= `${year}-12-31`)
+      .reduce((sum, row) => sum + countPolishWorkingDaysInYear(String(row.date_from).slice(0, 10), String(row.date_to).slice(0, 10), year), 0);
+    const entitlementConfigured = Boolean(entitlement);
+    const total = entitlementConfigured ? Number(annual ?? 0) + carried + extra : null;
+    return {
+      employee_id: employee.id,
+      entitlement_configured: entitlementConfigured,
+      annual_days: annual,
+      carried_over_days: carried,
+      extra_days: extra,
+      used_days: used,
+      remaining_days: total === null ? null : Math.max(0, total - used)
+    };
   });
+  const missingEntitlements = leaveBalances.filter((row) => !row.entitlement_configured).length;
 
   const previousWorkDate = previousPolishWorkingDay(referenceDate);
   const previousRecorded = new Set(timesheets.filter((row) => String(row.work_date).slice(0, 10) === previousWorkDate).map((row) => String(row.employee_id)));
@@ -250,14 +228,25 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
   const missingYesterday = activeEmployees.filter((row) => inRange(previousWorkDate, row.hired_at, row.terminated_at) && !previousAbsent.has(String(row.id)) && !previousRecorded.has(String(row.id))).length;
 
   const employeeNames = new Map(employees.map((row) => [String(row.id), fullName(row)]));
-  const projectNames = new Map(projects.map((row) => [String(row.id), String(row.name)]));
   const alerts: Row[] = [];
   for (const row of expiredItems.slice(0, 12)) alerts.push({ severity: "critical", type: "compliance", employee_id: row.employee_id, title: `${employeeNames.get(String(row.employee_id)) ?? "Pracownik"}: ${String(row.item_type)} wygasło`, detail: `Termin: ${String(row.valid_until)}` });
-  for (const row of expiring30Items.slice(0, 12)) alerts.push({ severity: "warning", type: "compliance", employee_id: row.employee_id, title: `${employeeNames.get(String(row.employee_id)) ?? "Pracownik"}: ${String(row.item_type)} wygasa`, detail: `Termin: ${String(row.valid_until)}` });
+  for (const row of expiring7Items.slice(0, 12)) {
+    const days = daysBetween(referenceDate, String(row.valid_until)) ?? 0;
+    alerts.push({ severity: "critical", type: "compliance", employee_id: row.employee_id, window_days: 7, title: `${employeeNames.get(String(row.employee_id)) ?? "Pracownik"}: ${String(row.item_type)} wygasa za ${days} dni`, detail: `Termin: ${String(row.valid_until)} · próg 7 dni` });
+  }
+  for (const row of expiring14Items.slice(0, 12)) {
+    const days = daysBetween(referenceDate, String(row.valid_until)) ?? 0;
+    alerts.push({ severity: "warning", type: "compliance", employee_id: row.employee_id, window_days: 14, title: `${employeeNames.get(String(row.employee_id)) ?? "Pracownik"}: ${String(row.item_type)} wygasa za ${days} dni`, detail: `Termin: ${String(row.valid_until)} · próg 14 dni` });
+  }
+  for (const row of expiring30Items.slice(0, 12)) {
+    const days = daysBetween(referenceDate, String(row.valid_until)) ?? 0;
+    alerts.push({ severity: "warning", type: "compliance", employee_id: row.employee_id, window_days: 30, title: `${employeeNames.get(String(row.employee_id)) ?? "Pracownik"}: ${String(row.item_type)} wygasa za ${days} dni`, detail: `Termin: ${String(row.valid_until)} · próg 30 dni` });
+  }
   for (const employee of activeEmployees) {
     const load = (assignmentByEmployee.get(String(employee.id)) ?? []).reduce((sum, row) => sum + Number(row.allocation_percent ?? 0), 0);
     if (load > 100) alerts.push({ severity: "warning", type: "allocation", employee_id: employee.id, title: `${fullName(employee)} ma ${load}% obłożenia`, detail: "Nakładające się przypisania do inwestycji." });
   }
+  if (missingEntitlements) alerts.push({ severity: "info", type: "leave_entitlement", title: `${missingEntitlements} pracowników bez ustawionego limitu urlopu na ${year} r.`, detail: "Ustaw właściwy wymiar 20/26 dni albo indywidualny limit w Urlopach i absencjach." });
   if (pendingLeaves.length) alerts.push({ severity: "info", type: "decision", title: `${pendingLeaves.length} wniosków urlopowych czeka na decyzję`, detail: "Otwórz Urlopy i absencje." });
   if (pendingTimesheets.length) alerts.push({ severity: "info", type: "decision", title: `${pendingTimesheets.length} kart czasu czeka na decyzję`, detail: "Otwórz Czas pracy." });
   if (missingYesterday) alerts.push({ severity: "info", type: "timesheet", title: `${missingYesterday} aktywnych osób bez wpisu czasu za ${previousWorkDate}`, detail: "Uzupełnij poprzedni dzień roboczy zbiorczo dla brygady lub pojedynczo." });
@@ -299,6 +288,7 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
     issuedAssets,
     complianceItems,
     projectStaff,
+    auditEvents,
     alerts: alerts.slice(0, 30),
     summary: {
       activeEmployees: activeEmployees.length,
@@ -306,8 +296,11 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
       absentToday: absentEmployeeIds.size,
       unassigned,
       expired: expiredItems.length,
-      expiring30: expiring30Items.length,
+      expiring7: expiring7Items.length,
+      expiring14: expiring7Items.length + expiring14Items.length,
+      expiring30: expiringWithin30Items.length,
       expiring90: expiring90Items.length,
+      missingEntitlements,
       pendingLeaves: pendingLeaves.length,
       pendingTimesheets: pendingTimesheets.length,
       pendingDecisions: pendingLeaves.length + pendingTimesheets.length,
