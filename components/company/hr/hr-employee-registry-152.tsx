@@ -119,7 +119,7 @@ function auditEventLabel(value: unknown) {
     medical_exam_created: "Dodano badanie lekarskie",
     safety_training_created: "Dodano szkolenie BHP"
   };
-  return labels[key] ?? key.replaceAll("_", " ") || "Zmiana kadrowa";
+  return labels[key] ?? (key.replaceAll("_", " ") || "Zmiana kadrowa");
 }
 
 function weekdayLabel(value: string) {
