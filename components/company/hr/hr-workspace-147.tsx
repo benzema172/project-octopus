@@ -106,6 +106,10 @@ export function HrWorkspace147(props: Props) {
       activateTab("leaves", () => scrollToHeading("Wnioski do decyzji"));
       return;
     }
+    if (type === "leave_entitlement") {
+      activateTab("leaves", () => scrollToHeading(`Limit urlopowy ${props.data.year}`));
+      return;
+    }
     if (type === "compliance") {
       activateTab("compliance", () => scrollToHeading("Uprawnienia, badania i BHP"));
       return;
@@ -170,41 +174,23 @@ export function HrWorkspace147(props: Props) {
 
   useEffect(() => {
     const root = shellRef.current;
-    if (!root) return;
+    if (!root || !dashboardActive) return;
 
-    const syncDashboardLabels = () => {
-      if (!dashboardActive) return;
-      for (const heading of root.querySelectorAll<HTMLHeadingElement>("h3")) {
-        const replacement = DASHBOARD_COST_LABELS.get((heading.textContent ?? "").trim());
-        if (replacement) heading.textContent = replacement;
-      }
-    };
+    for (const heading of root.querySelectorAll<HTMLHeadingElement>("h3")) {
+      const replacement = DASHBOARD_COST_LABELS.get((heading.textContent ?? "").trim());
+      if (replacement) heading.textContent = replacement;
+    }
 
-    const syncAttentionActions = () => {
-      if (!dashboardActive) return;
-      const alertCards = Array.from(root.querySelectorAll<HTMLElement>('section[class*="grid2"] [class*="alertList"] > article[class*="alert"]'));
-      alertCards.forEach((element, index) => {
-        const alert = props.data.alerts[index] as HrRow | undefined;
-        if (!alert) return;
-        element.dataset.hrActionIndex = String(index);
-        element.setAttribute("role", "button");
-        element.setAttribute("tabindex", "0");
-        element.setAttribute("title", "Przejdź do miejsca obsługi tej sprawy");
-        element.setAttribute("aria-label", `${String(alert.title ?? "Sprawa kadrowa")}. Przejdź do miejsca obsługi.`);
-      });
-    };
-
-    const syncDashboardEnhancements = () => {
-      syncDashboardLabels();
-      syncAttentionActions();
-    };
-
-    syncDashboardEnhancements();
-    if (!dashboardActive) return;
-
-    const observer = new MutationObserver(() => syncDashboardEnhancements());
-    observer.observe(root, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    const alertCards = Array.from(root.querySelectorAll<HTMLElement>('section[class*="grid2"] [class*="alertList"] > article[class*="alert"]'));
+    alertCards.forEach((element, index) => {
+      const alert = props.data.alerts[index] as HrRow | undefined;
+      if (!alert) return;
+      element.dataset.hrActionIndex = String(index);
+      element.setAttribute("role", "button");
+      element.setAttribute("tabindex", "0");
+      element.setAttribute("title", "Przejdź do miejsca obsługi tej sprawy");
+      element.setAttribute("aria-label", `${String(alert.title ?? "Sprawa kadrowa")}. Przejdź do miejsca obsługi.`);
+    });
   }, [dashboardActive, props.data.alerts]);
 
   useEffect(() => {
