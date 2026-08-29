@@ -3,6 +3,8 @@ import { getRequestUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { calculateCompensation } from "@/lib/hr/compensation";
+import { countPolishWorkingDays } from "@/lib/hr/polish-work-calendar";
+import { assertTimesheetHours, isIsoDate, isYearMonth } from "@/lib/hr/validation";
 import { JsonBodyError, readJsonBody } from "@/lib/http/json-body";
 import { parseLocalizedNumber } from "@/lib/numbers/parse-localized-number";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -46,7 +48,7 @@ function text(value: unknown, label: string, required = false) {
 function date(value: unknown, label = "data", required = false) {
   const result = text(value, label, required);
   if (!result) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(result)) throw new Error(`Nieprawidłowy format pola: ${label}.`);
+  if (!isIsoDate(result)) throw new Error(`Nieprawidłowa data w polu: ${label}.`);
   return result;
 }
 
@@ -93,50 +95,6 @@ function compensationPayload(payload: Record<string, unknown>) {
 
 function normalize(value: unknown) {
   return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[łŁ]/g, "l").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-function addDays(dateValue: string, days: number) {
-  const result = new Date(`${dateValue}T00:00:00Z`);
-  result.setUTCDate(result.getUTCDate() + days);
-  return result.toISOString().slice(0, 10);
-}
-
-function easterSunday(year: number) {
-  const a = year % 19;
-  const b = Math.floor(year / 100);
-  const c = year % 100;
-  const d = Math.floor(b / 4);
-  const e = b % 4;
-  const f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3);
-  const h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4);
-  const k = c % 4;
-  const l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const month = Math.floor((h + l - 7 * m + 114) / 31);
-  const day = ((h + l - 7 * m + 114) % 31) + 1;
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-function polishHolidays(year: number) {
-  const easter = easterSunday(year);
-  const fixed = ["01-01", "01-06", "05-01", "05-03", "08-15", "11-01", "11-11", "12-24", "12-25", "12-26"].map((day) => `${year}-${day}`);
-  return new Set([...fixed, addDays(easter, 1), addDays(easter, 60)]);
-}
-
-function workingDaysPl(from: string, to: string) {
-  if (from > to) throw new Error("Początek nieobecności nie może być po jej końcu.");
-  let cursor = from;
-  let count = 0;
-  while (cursor <= to) {
-    const current = new Date(`${cursor}T00:00:00Z`);
-    const weekday = current.getUTCDay();
-    const holidays = polishHolidays(current.getUTCFullYear());
-    if (weekday !== 0 && weekday !== 6 && !holidays.has(cursor)) count += 1;
-    cursor = addDays(cursor, 1);
-  }
-  return count;
 }
 
 export async function POST(request: Request) {
@@ -293,10 +251,11 @@ export async function POST(request: Request) {
       });
       if (error || !data) throw new Error(`Nie udało się zapisać warunków zatrudnienia: ${error?.message ?? "brak danych"}`);
       id = String(data);
+      await audit("employee", employeeId!, "employment_created", { employmentId: id, validFrom, validTo });
     } else if (body.action === "payroll_upsert") {
       const employeeId = await owned("employees", p.employeeId, "Pracownik");
       const period = text(p.periodMonth, "miesiąc", true)!;
-      if (!/^\d{4}-\d{2}$/.test(period)) throw new Error("Nieprawidłowy miesiąc rozliczenia.");
+      if (!isYearMonth(period)) throw new Error("Nieprawidłowy miesiąc rozliczenia.");
       const compensation = compensationPayload(p);
       if (compensation.grossMonthlyPay === null) throw new Error("Uzupełnij wynagrodzenie brutto dla rozliczenia miesiąca.");
       const status = text(p.status, "status") ?? "planned";
@@ -336,66 +295,89 @@ export async function POST(request: Request) {
       const projectId = await owned("projects", p.projectId, "Inwestycja");
       const from = date(p.dateFrom, "od") ?? new Date().toISOString().slice(0, 10);
       const to = date(p.dateTo, "do");
+      if (to && to < from) throw new Error("Koniec przypisania nie może być przed początkiem.");
       const allocation = numberValue(p.allocationPercent, "zaangażowanie", true);
       if (allocation <= 0 || allocation > 100) throw new Error("Zaangażowanie musi wynosić 1–100%.");
       const { data, error } = await db.from("assignments").insert({ workspace_id: workspace.id, employee_id: employeeId, project_id: projectId, role: text(p.role, "rola", true), date_from: from, date_to: to, allocation_percent: allocation }).select("id").single<{ id: string }>();
       if (error || !data) throw error ?? new Error("Nie utworzono przypisania.");
       id = data.id;
       await audit("assignment", id, "assignment_created", p);
+      await audit("employee", employeeId!, "assignment_created", { assignmentId: id, projectId, from, to, allocation });
     } else if (body.action === "qualification_create") {
       const employeeId = await owned("employees", p.employeeId, "Pracownik");
       const documentId = p.documentId ? await owned("documents", p.documentId, "Dokument", true) : null;
-      const { data, error } = await db.from("qualifications").insert({ workspace_id: workspace.id, employee_id: employeeId, qualification_type: text(p.qualificationType, "rodzaj", true), number: text(p.number, "numer"), issued_at: date(p.issuedAt, "wydano"), valid_until: date(p.validUntil, "ważne do"), status: "valid", document_id: documentId }).select("id").single<{ id: string }>();
+      const issuedAt = date(p.issuedAt, "wydano");
+      const validUntil = date(p.validUntil, "ważne do");
+      if (issuedAt && validUntil && validUntil < issuedAt) throw new Error("Termin ważności uprawnienia nie może być przed datą wydania.");
+      const { data, error } = await db.from("qualifications").insert({ workspace_id: workspace.id, employee_id: employeeId, qualification_type: text(p.qualificationType, "rodzaj", true), number: text(p.number, "numer"), issued_at: issuedAt, valid_until: validUntil, status: "valid", document_id: documentId }).select("id").single<{ id: string }>();
       if (error || !data) throw error ?? new Error("Nie zapisano uprawnienia.");
       id = data.id;
+      await audit("employee", employeeId!, "qualification_created", { qualificationId: id, qualificationType: p.qualificationType, validUntil });
     } else if (body.action === "medical_exam_create") {
       const employeeId = await owned("employees", p.employeeId, "Pracownik");
       const documentId = p.documentId ? await owned("documents", p.documentId, "Dokument", true) : null;
       const result = text(p.result, "wynik") ?? "fit";
       if (!["fit", "fit_with_restrictions", "unfit"].includes(result)) throw new Error("Nieprawidłowy wynik badania.");
-      const { data, error } = await db.from("medical_exams").insert({ workspace_id: workspace.id, employee_id: employeeId, exam_type: text(p.examType, "rodzaj", true), examined_at: date(p.examinedAt, "data badania"), valid_until: date(p.validUntil, "ważne do", true), status: result === "fit" ? "valid" : result, document_id: documentId }).select("id").single<{ id: string }>();
+      const examinedAt = date(p.examinedAt, "data badania");
+      const validUntil = date(p.validUntil, "ważne do", true)!;
+      if (examinedAt && validUntil < examinedAt) throw new Error("Termin ważności badania nie może być przed datą badania.");
+      const { data, error } = await db.from("medical_exams").insert({ workspace_id: workspace.id, employee_id: employeeId, exam_type: text(p.examType, "rodzaj", true), examined_at: examinedAt, valid_until: validUntil, status: result === "fit" ? "valid" : result, document_id: documentId }).select("id").single<{ id: string }>();
       if (error || !data) throw error ?? new Error("Nie zapisano badania.");
       id = data.id;
+      await audit("employee", employeeId!, "medical_exam_created", { medicalExamId: id, examType: p.examType, result, validUntil });
     } else if (body.action === "safety_training_create") {
       const employeeId = await owned("employees", p.employeeId, "Pracownik");
       const documentId = p.documentId ? await owned("documents", p.documentId, "Dokument", true) : null;
-      const { data, error } = await db.from("safety_trainings").insert({ workspace_id: workspace.id, employee_id: employeeId, training_type: text(p.trainingType, "rodzaj szkolenia", true), provider: text(p.provider, "organizator"), completed_at: date(p.completedAt, "data szkolenia"), valid_until: date(p.validUntil, "ważne do"), status: "valid", document_id: documentId, notes: text(p.notes, "uwagi") }).select("id").single<{ id: string }>();
+      const completedAt = date(p.completedAt, "data szkolenia");
+      const validUntil = date(p.validUntil, "ważne do");
+      if (completedAt && validUntil && validUntil < completedAt) throw new Error("Termin ważności szkolenia nie może być przed datą ukończenia.");
+      const { data, error } = await db.from("safety_trainings").insert({ workspace_id: workspace.id, employee_id: employeeId, training_type: text(p.trainingType, "rodzaj szkolenia", true), provider: text(p.provider, "organizator"), completed_at: completedAt, valid_until: validUntil, status: "valid", document_id: documentId, notes: text(p.notes, "uwagi") }).select("id").single<{ id: string }>();
       if (error || !data) throw error ?? new Error("Nie zapisano szkolenia BHP.");
       id = data.id;
+      await audit("employee", employeeId!, "safety_training_created", { safetyTrainingId: id, trainingType: p.trainingType, validUntil });
     } else if (body.action === "leave_create") {
       const employeeId = await owned("employees", p.employeeId, "Pracownik");
       const from = date(p.dateFrom, "od", true)!;
       const to = date(p.dateTo, "do", true)!;
-      const days = workingDaysPl(from, to);
+      const days = countPolishWorkingDays(from, to);
       if (days <= 0) throw new Error("W podanym zakresie nie ma dni roboczych.");
       const { data, error } = await db.from("leave_requests").insert({ workspace_id: workspace.id, employee_id: employeeId, leave_type: text(p.leaveType, "rodzaj") ?? "annual", date_from: from, date_to: to, days, status: "pending" }).select("id").single<{ id: string }>();
       if (error || !data) throw error ?? new Error("Nie zapisano urlopu.");
       id = data.id;
       meta = { calculatedDays: days };
       await audit("leave_request", id, "leave_created", { ...p, days });
+      await audit("employee", employeeId!, "leave_created", { leaveId: id, from, to, days, leaveType: p.leaveType });
     } else if (body.action === "leave_decision") {
       const leaveId = await owned("leave_requests", p.leaveId, "Wniosek urlopowy");
       const decision = text(p.decision, "decyzja", true)!;
       if (!["approved", "rejected"].includes(decision)) throw new Error("Nieprawidłowa decyzja.");
+      const { data: leave, error: leaveReadError } = await db.from("leave_requests").select("employee_id").eq("workspace_id", workspace.id).eq("id", leaveId).maybeSingle<{ employee_id: string }>();
+      if (leaveReadError || !leave) throw leaveReadError ?? new Error("Nie znaleziono wniosku urlopowego.");
       const { error } = await db.from("leave_requests").update({ status: decision, approved_by: user.id }).eq("workspace_id", workspace.id).eq("id", leaveId);
       if (error) throw error;
       id = leaveId!;
       await audit("leave_request", id, "leave_decision", { decision });
+      await audit("employee", leave.employee_id, "leave_decision", { leaveId: id, decision });
     } else if (body.action === "leave_entitlement_upsert") {
       const employeeId = await owned("employees", p.employeeId, "Pracownik");
       const year = Math.floor(numberValue(p.year, "rok", true));
       if (year < 2000 || year > 2200) throw new Error("Nieprawidłowy rok.");
-      const row = { workspace_id: workspace.id, employee_id: employeeId, year, annual_days: numberValue(p.annualDays, "wymiar", true), carried_over_days: numberValue(p.carriedOverDays, "zaległe"), extra_days: numberValue(p.extraDays, "dodatkowe"), notes: text(p.notes, "uwagi"), updated_at: new Date().toISOString() };
+      const annualDays = numberValue(p.annualDays, "wymiar", true);
+      const carriedOverDays = numberValue(p.carriedOverDays, "zaległe");
+      const extraDays = numberValue(p.extraDays, "dodatkowe");
+      if (annualDays < 0 || annualDays > 366 || carriedOverDays < 0 || extraDays < 0) throw new Error("Limity dni wolnych nie mogą być ujemne ani przekraczać rozsądnego zakresu.");
+      const row = { workspace_id: workspace.id, employee_id: employeeId, year, annual_days: annualDays, carried_over_days: carriedOverDays, extra_days: extraDays, notes: text(p.notes, "uwagi"), updated_at: new Date().toISOString() };
       const { data, error } = await db.from("leave_entitlements").upsert(row, { onConflict: "workspace_id,employee_id,year" }).select("id").single<{ id: string }>();
       if (error || !data) throw error ?? new Error("Nie zapisano limitu urlopowego.");
       id = data.id;
+      await audit("employee", employeeId!, "leave_entitlement_upserted", { entitlementId: id, year, annualDays, carriedOverDays, extraDays });
     } else if (body.action === "timesheet_create") {
       const employeeId = await owned("employees", p.employeeId, "Pracownik");
       const projectId = p.projectId ? await owned("projects", p.projectId, "Inwestycja", true) : null;
       const workDate = date(p.workDate, "data") ?? new Date().toISOString().slice(0, 10);
       const hours = numberValue(p.hours, "godziny", true);
       const overtime = numberValue(p.overtimeHours, "nadgodziny");
-      if (hours <= 0 || hours > 24 || overtime < 0 || overtime > 24) throw new Error("Sprawdź liczbę godzin.");
+      assertTimesheetHours(hours, overtime);
       const { data, error } = await db.from("timesheets").insert({ workspace_id: workspace.id, employee_id: employeeId, project_id: projectId, work_date: workDate, hours, overtime_hours: overtime, status: "submitted", source: "manual" }).select("id").single<{ id: string }>();
       if (error || !data) throw error ?? new Error("Nie zapisano czasu pracy.");
       id = data.id;
@@ -405,7 +387,7 @@ export async function POST(request: Request) {
       const workDate = date(p.workDate, "data") ?? new Date().toISOString().slice(0, 10);
       const hours = numberValue(p.hours, "godziny", true);
       const overtime = numberValue(p.overtimeHours, "nadgodziny");
-      if (hours <= 0 || hours > 24 || overtime < 0 || overtime > 24) throw new Error("Sprawdź liczbę godzin.");
+      assertTimesheetHours(hours, overtime);
       const { data: members, error: membersError } = await db.from("hr_team_members").select("employee_id,date_from,date_to").eq("workspace_id", workspace.id).eq("team_id", teamId);
       if (membersError) throw membersError;
       const activeMembers = (members ?? []).filter((row) => String(row.date_from) <= workDate && (!row.date_to || String(row.date_to) >= workDate));
@@ -448,7 +430,9 @@ export async function POST(request: Request) {
       const employeeId = await owned("employees", p.employeeId, "Pracownik");
       const from = date(p.dateFrom, "od") ?? new Date().toISOString().slice(0, 10);
       const to = date(p.dateTo, "do");
+      if (to && to < from) throw new Error("Koniec członkostwa nie może być przed początkiem.");
       const allocation = numberValue(p.allocationPercent, "zaangażowanie") || null;
+      if (allocation !== null && (allocation <= 0 || allocation > 100)) throw new Error("Zaangażowanie musi wynosić 1–100%.");
       const { data, error } = await db.from("hr_team_members").insert({ workspace_id: workspace.id, team_id: teamId, employee_id: employeeId, role: text(p.role, "rola"), date_from: from, date_to: to, allocation_percent: allocation }).select("id").single<{ id: string }>();
       if (error || !data) throw error ?? new Error("Nie dodano pracownika do brygady.");
       id = data.id;
@@ -462,6 +446,7 @@ export async function POST(request: Request) {
       const projectId = await owned("projects", p.projectId, "Inwestycja");
       const from = date(p.dateFrom, "od") ?? new Date().toISOString().slice(0, 10);
       const to = date(p.dateTo, "do");
+      if (to && to < from) throw new Error("Koniec przypisania nie może być przed początkiem.");
       const { data: members, error: memberError } = await db.from("hr_team_members").select("employee_id,role,allocation_percent,date_from,date_to").eq("workspace_id", workspace.id).eq("team_id", teamId);
       if (memberError) throw memberError;
       const activeMembers = (members ?? []).filter((row) => String(row.date_from) <= from && (!row.date_to || String(row.date_to) >= from));
@@ -477,9 +462,13 @@ export async function POST(request: Request) {
     } else if (body.action === "employee_document_link") {
       const employeeId = await owned("employees", p.employeeId, "Pracownik");
       const documentId = p.documentId ? await owned("documents", p.documentId, "Dokument", true) : null;
-      const { data, error } = await db.from("employee_documents").insert({ workspace_id: workspace.id, employee_id: employeeId, document_id: documentId, document_type: text(p.documentType, "rodzaj dokumentu", true), document_number: text(p.documentNumber, "numer"), issued_at: date(p.issuedAt, "wydano"), valid_until: date(p.validUntil, "ważne do"), source: "manual", created_by: user.id }).select("id").single<{ id: string }>();
+      const issuedAt = date(p.issuedAt, "wydano");
+      const validUntil = date(p.validUntil, "ważne do");
+      if (issuedAt && validUntil && validUntil < issuedAt) throw new Error("Termin ważności dokumentu nie może być przed datą wydania.");
+      const { data, error } = await db.from("employee_documents").insert({ workspace_id: workspace.id, employee_id: employeeId, document_id: documentId, document_type: text(p.documentType, "rodzaj dokumentu", true), document_number: text(p.documentNumber, "numer"), issued_at: issuedAt, valid_until: validUntil, source: "manual", created_by: user.id }).select("id").single<{ id: string }>();
       if (error || !data) throw error ?? new Error("Nie powiązano dokumentu.");
       id = data.id;
+      await audit("employee", employeeId!, "employee_document_linked", { employeeDocumentId: id, documentType: p.documentType, validUntil });
     } else if (body.action === "employee_document_autolink") {
       const documentId = await owned("documents", p.documentId, "Dokument");
       const { data: document, error: documentError } = await db.from("documents").select("id,name,category").eq("workspace_id", workspace.id).eq("id", documentId).single<{ id: string; name: string; category: string | null }>();
@@ -500,17 +489,22 @@ export async function POST(request: Request) {
       id = data.id;
       meta = { employeeId: employee.id, documentType: type, confidence, explanation };
       await audit("employee_document", id, "document_autolinked", meta);
+      await audit("employee", String(employee.id), "employee_document_autolinked", { employeeDocumentId: id, documentId, type, confidence });
     } else if (body.action === "issued_asset_create") {
       const employeeId = await owned("employees", p.employeeId, "Pracownik");
       const issuedAt = text(p.issuedAt, "wydano") ?? new Date().toISOString();
       const { data, error } = await db.from("issued_assets").insert({ workspace_id: workspace.id, employee_id: employeeId, asset_type: text(p.assetType, "rodzaj", true), description: text(p.description, "opis", true), issued_at: issuedAt, condition_out: text(p.conditionOut, "stan") ?? "dobry" }).select("id").single<{ id: string }>();
       if (error || !data) throw error ?? new Error("Nie zapisano wydania sprzętu.");
       id = data.id;
+      await audit("employee", employeeId!, "asset_issued", { issuedAssetId: id, assetType: p.assetType, description: p.description });
     } else if (body.action === "issued_asset_return") {
       const assetId = await owned("issued_assets", p.assetId, "Wydany sprzęt");
+      const { data: asset, error: assetReadError } = await db.from("issued_assets").select("employee_id").eq("workspace_id", workspace.id).eq("id", assetId).maybeSingle<{ employee_id: string }>();
+      if (assetReadError || !asset) throw assetReadError ?? new Error("Nie znaleziono wydanego sprzętu.");
       const { error } = await db.from("issued_assets").update({ returned_at: new Date().toISOString(), condition_in: text(p.conditionIn, "stan zwrotu") ?? "dobry" }).eq("workspace_id", workspace.id).eq("id", assetId);
       if (error) throw error;
       id = assetId!;
+      await audit("employee", asset.employee_id, "asset_returned", { issuedAssetId: id, conditionIn: p.conditionIn });
     }
 
     return NextResponse.json({ ok: true, id, meta });
