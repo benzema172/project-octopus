@@ -28,6 +28,7 @@ type RegistryData = {
   exams?: Row[];
   trainings?: Row[];
   entitlements?: Row[];
+  auditEvents?: Row[];
 };
 
 type CalendarEntry = {
@@ -96,6 +97,29 @@ function safeDateLabel(value: unknown) {
   const raw = String(value ?? "").slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return "brak terminu";
   return dateLabel(raw);
+}
+
+function auditDateLabel(value: unknown) {
+  const parsed = new Date(String(value ?? ""));
+  return Number.isNaN(parsed.getTime()) ? "brak daty" : parsed.toLocaleString("pl-PL", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function auditEventLabel(value: unknown) {
+  const key = String(value ?? "").replace(/^hr\./, "");
+  const labels: Record<string, string> = {
+    employee_created: "Utworzono kartę pracownika",
+    employee_updated: "Zmieniono dane pracownika",
+    employee_managed: "Zmieniono dane lub zatrudnienie",
+    employee_status: "Zmieniono status pracownika",
+    employee_archived: "Zarchiwizowano pracownika",
+    employee_restored: "Przywrócono pracownika",
+    employment_created: "Dodano warunki zatrudnienia",
+    leave_entitlement_upserted: "Zmieniono limit urlopowy",
+    qualification_created: "Dodano uprawnienie",
+    medical_exam_created: "Dodano badanie lekarskie",
+    safety_training_created: "Dodano szkolenie BHP"
+  };
+  return labels[key] ?? key.replaceAll("_", " ") || "Zmiana kadrowa";
 }
 
 function weekdayLabel(value: string) {
@@ -196,6 +220,10 @@ export function HrEmployeeRegistry152({
   const employeeQualifications = editEmployeeKey ? (data.qualifications ?? [])
     .filter((row) => String(row.employee_id) === editEmployeeKey)
     .sort((a, b) => String(b.valid_until ?? b.issued_at ?? b.created_at ?? "").localeCompare(String(a.valid_until ?? a.issued_at ?? a.created_at ?? ""))) : [];
+  const employeeAuditEvents = editEmployeeKey ? (data.auditEvents ?? [])
+    .filter((row) => String(row.entity_type) === "employee" && String(row.entity_id) === editEmployeeKey)
+    .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")))
+    .slice(0, 10) : [];
 
   useEffect(() => {
     if (!editEmployeeId && !calendarEmployeeId) return;
@@ -402,6 +430,7 @@ export function HrEmployeeRegistry152({
       currentEntitlement={currentEntitlement}
       referenceYear={referenceYear}
       qualifications={employeeQualifications}
+      history={employeeAuditEvents}
       canWrite={canWrite}
       canManagePayroll={canManagePayroll}
       pending={pending}
@@ -434,6 +463,7 @@ function EmployeeEditModal({
   currentEntitlement,
   referenceYear,
   qualifications,
+  history,
   canWrite,
   canManagePayroll,
   pending,
@@ -451,6 +481,7 @@ function EmployeeEditModal({
   currentEntitlement?: Row;
   referenceYear: number;
   qualifications: Row[];
+  history: Row[];
   canWrite: boolean;
   canManagePayroll: boolean;
   pending: boolean;
@@ -495,7 +526,7 @@ function EmployeeEditModal({
           <fieldset><legend>Dni wolne i urlop</legend><div className={styles.formGrid}>
             <div className={styles.fullWidth}>
               <strong>Limit na {referenceYear} r.</strong>
-              <div className={styles.subtle}>{leaveTotal === null ? "Brak zapisanego limitu dla tego roku." : `Łącznie zapisano ${number(leaveTotal, 0)} dni. Zmiany w tym miejscu aktualizują tę samą ewidencję co zakładka „Urlopy i absencje”.`}</div>
+              <div className={styles.subtle}>{leaveTotal === null ? "Brak zapisanego limitu dla tego roku — system nie zakłada automatycznie 26 dni." : `Łącznie zapisano ${number(leaveTotal, 0)} dni. Zmiany w tym miejscu aktualizują tę samą ewidencję co zakładka „Urlopy i absencje”.`}</div>
             </div>
             <label>Urlop podstawowy — dni<input name="leaveAnnualDays" inputMode="decimal" placeholder="np. 20 lub 26" defaultValue={text(currentEntitlement?.annual_days, "")} disabled={!canWrite} /></label>
             <label>Dni przeniesione z poprzedniego roku<input name="leaveCarriedOverDays" inputMode="decimal" placeholder="0" defaultValue={text(currentEntitlement?.carried_over_days, "")} disabled={!canWrite} /></label>
@@ -531,6 +562,9 @@ function EmployeeEditModal({
             <label>Pozostałe koszty<input name="otherMonthlyCosts" inputMode="decimal" defaultValue={text(employment?.other_monthly_costs, "0")} /></label>
             <label>Nominalne godziny miesiąca<input name="nominalMonthlyHours" inputMode="decimal" defaultValue={text(employment?.nominal_monthly_hours, "168")} /></label>
           </div></fieldset> : null}
+          <fieldset><legend>Historia zmian</legend><div className={styles.fullWidth}>
+            {history.length ? history.map((row) => <div key={String(row.id)}><strong>{auditEventLabel(row.event_type)}</strong><div className={styles.subtle}>{auditDateLabel(row.created_at)} · {String(row.actor_type ?? "user") === "user" ? "użytkownik" : text(row.actor_type)}</div></div>) : <div className={styles.subtle}>Brak zapisanych zdarzeń audytowych dla tej karty.</div>}
+          </div></fieldset>
           {canWrite ? <div className={styles.modalActions}><button type="button" className={styles.secondaryButton} onClick={close}>Anuluj</button><button className={styles.primaryButton} disabled={pending}>{pending ? "Zapisywanie…" : "Zapisz zmiany"}</button></div> : null}
         </form>
         {canWrite ? <section className={styles.dangerZone}><div><strong>Zarządzanie kartą</strong><p>Archiwizacja zachowuje pełną historię. Trwałe usunięcie jest dozwolone tylko dla karty bez historii kadrowej.</p></div><div className={styles.dangerActions}>{String(employee.status) === "inactive" ? <button type="button" className={styles.secondaryButton} onClick={restore} disabled={pending}><RotateCcw size={15} /> Przywróć</button> : <button type="button" className={styles.secondaryButton} onClick={archive} disabled={pending}><Archive size={15} /> Archiwizuj</button>}<button type="button" className={styles.dangerButton} onClick={remove} disabled={pending}><Trash2 size={15} /> Usuń trwale</button></div></section> : null}
