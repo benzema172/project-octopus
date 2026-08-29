@@ -36,7 +36,8 @@ describe("Kadry permission matrix", () => {
     expect(mainApi).toContain('.eq("workspace_id", workspace.id).eq("id", id)');
     expect(timesheetApi).toContain('.eq("workspace_id", workspace.id)');
     expect(calendarApi).toContain('.eq("employee_id", employeeId)');
-    expect(employeeApi).toContain('.eq("employee_id", employeeId)');
+    expect(employeeApi).toContain('.eq("workspace_id", workspaceId).eq("employee_id", employeeId)');
+    expect(employeeApi).toContain('.eq("workspace_id", workspace.id)');
   });
 
   it("uses the shared Polish calendar and strict date/hour validation in the legacy write API", () => {
