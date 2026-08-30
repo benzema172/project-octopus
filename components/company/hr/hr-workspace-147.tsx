@@ -9,6 +9,9 @@ import { HrEmployeeCreate153 } from "./hr-employee-create-153";
 import { HrEmployeeRegistry152 } from "./hr-employee-registry-152";
 import { HrTeamCostControl156 } from "./hr-team-cost-control-156";
 import { HrDocumentUpload157 } from "./hr-document-upload-157";
+import { HrWorkCost160 } from "./hr-work-cost-160";
+import { HrFormalDocuments160 } from "./hr-formal-documents-160";
+import { HrAccountingBridge160 } from "./hr-accounting-bridge-160";
 import styles from "./hr-workspace-146.module.css";
 import registryStyles from "./hr-employee-registry-152.module.css";
 
@@ -272,9 +275,16 @@ export function HrWorkspace147(props: Props) {
     <div className={styles.workspaceSlot} data-hr-workspace-slot="employees-shell">
       <HrWorkspace140 {...props} />
       {registryVisible ? <HrEmployeeRegistry152 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canManagePayroll={props.canManagePayroll} /> : null}
-      {timeVisible ? <HrTimeRecords159 key={timeFocus ? `${timeFocus.employeeId}-${timeFocus.referenceDate}` : "all"} workspaceId={props.workspaceId} referenceDate={timeFocus?.referenceDate ?? props.data.referenceDate} employees={props.data.employees} projects={props.data.projects} timesheets={props.data.timesheets} canWrite={props.canWrite} initialEmployeeId={timeFocus?.employeeId ?? null} onClearEmployeeFocus={() => setTimeFocus(null)} /> : null}
+      {timeVisible ? <>
+        <HrTimeRecords159 key={timeFocus ? `${timeFocus.employeeId}-${timeFocus.referenceDate}` : "all"} workspaceId={props.workspaceId} referenceDate={timeFocus?.referenceDate ?? props.data.referenceDate} employees={props.data.employees} projects={props.data.projects} timesheets={props.data.timesheets} canWrite={props.canWrite} initialEmployeeId={timeFocus?.employeeId ?? null} onClearEmployeeFocus={() => setTimeFocus(null)} />
+        <HrWorkCost160 workspaceId={props.workspaceId} referenceDate={timeFocus?.referenceDate ?? props.data.referenceDate} employees={props.data.employees} projects={props.data.projects} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} />
+      </> : null}
       {teamsVisible ? <HrTeamCostControl156 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} /> : null}
-      {documentsVisible ? <HrDocumentUpload157 workspaceId={props.workspaceId} canWrite={props.canWrite} documentCount={props.data.documents.length} /> : null}
+      {documentsVisible ? <>
+        <HrDocumentUpload157 workspaceId={props.workspaceId} canWrite={props.canWrite} documentCount={props.data.documents.length} />
+        <HrFormalDocuments160 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} data={props.data} />
+        <HrAccountingBridge160 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} />
+      </> : null}
     </div>
     {dashboardActive ? <HrDashboardCalendar159 workspaceId={props.workspaceId} canWrite={props.canWrite} data={props.data} onOpenEmployeeCalendar={openEmployeeWorkCalendar} /> : null}
     {employeeCreateOpen ? <HrEmployeeCreate153 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} canManagePayroll={props.canManagePayroll} onClose={() => setEmployeeCreateOpen(false)} /> : null}
