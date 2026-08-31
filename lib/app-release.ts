@@ -1,4 +1,4 @@
-import packageJson from "@/package.json";
+import packageJson from "../package.json";
 
 function formatDeploymentDate(value: string) {
   const parsed = new Date(value);
