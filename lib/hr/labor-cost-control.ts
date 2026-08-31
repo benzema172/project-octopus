@@ -1,3 +1,5 @@
+import { countPolishWorkingDays } from "./polish-work-calendar";
+
 export type HrLaborRow = Record<string, unknown>;
 
 export type LaborEmployeeCost = {
@@ -57,23 +59,29 @@ function activeOn(row: HrLaborRow, date: string, fromKey = "valid_from", toKey =
 function monthBounds(month: string) {
   const [year, monthNumber] = month.split("-").map(Number);
   const days = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  const start = `${month}-01`;
+  const end = `${month}-${String(days).padStart(2, "0")}`;
   return {
-    start: `${month}-01`,
-    end: `${month}-${String(days).padStart(2, "0")}`,
-    days
+    start,
+    end,
+    days,
+    workingDays: countPolishWorkingDays(start, end)
   };
 }
 
-function overlapDays(row: HrLaborRow, month: string) {
+function overlapBounds(row: HrLaborRow, month: string) {
   const { start, end } = monthBounds(month);
   const rowStart = dateOnly(row.date_from) || start;
   const rowEnd = dateOnly(row.date_to) || end;
   const overlapStart = rowStart > start ? rowStart : start;
   const overlapEnd = rowEnd < end ? rowEnd : end;
+  return { overlapStart, overlapEnd };
+}
+
+function overlapWorkingDays(row: HrLaborRow, month: string) {
+  const { overlapStart, overlapEnd } = overlapBounds(row, month);
   if (overlapStart > overlapEnd) return 0;
-  const from = new Date(`${overlapStart}T00:00:00Z`).getTime();
-  const to = new Date(`${overlapEnd}T00:00:00Z`).getTime();
-  return Math.floor((to - from) / 86_400_000) + 1;
+  return countPolishWorkingDays(overlapStart, overlapEnd);
 }
 
 export function employmentForDate(employments: HrLaborRow[], employeeId: string, date: string) {
@@ -88,6 +96,24 @@ export function hourlyEmployerCost(employment?: HrLaborRow) {
   const nominal = Number(employment.nominal_monthly_hours ?? 0);
   if (!Number.isFinite(monthly) || !Number.isFinite(nominal) || monthly <= 0 || nominal <= 0) return 0;
   return monthly / nominal;
+}
+
+function snapshotRate(entry: HrLaborRow, fallbackRate: number) {
+  const snapshot = entry.hourly_cost_snapshot;
+  if (snapshot !== null && snapshot !== undefined) {
+    const value = Number(snapshot);
+    if (Number.isFinite(value) && value >= 0) return value;
+  }
+  return fallbackRate;
+}
+
+function snapshotCost(entry: HrLaborRow, fallbackCost: number) {
+  const snapshot = entry.labor_cost_snapshot;
+  if (snapshot !== null && snapshot !== undefined) {
+    const value = Number(snapshot);
+    if (Number.isFinite(value) && value >= 0) return value;
+  }
+  return fallbackCost;
 }
 
 function complianceRisk(complianceItems: HrLaborRow[], employeeId: string, referenceDate: string): "expired" | "expiring" | null {
@@ -128,7 +154,7 @@ export function calculateLaborControl({
 }): LaborControlResult {
   const bounds = monthBounds(month);
   const monthTimesheets = timesheets.filter((row) => dateOnly(row.work_date).startsWith(month));
-  const monthAssignments = assignments.filter((row) => overlapDays(row, month) > 0);
+  const monthAssignments = assignments.filter((row) => overlapWorkingDays(row, month) > 0);
   const approvedStatuses = new Set(["approved"]);
   const pendingStatuses = new Set(["draft", "pending", "submitted", "review"]);
 
@@ -147,14 +173,14 @@ export function calculateLaborControl({
       let plannedHours = 0;
       let plannedCost = 0;
       for (const assignment of employeeAssignments) {
-        const days = overlapDays(assignment, month);
-        const employmentDate = dateOnly(assignment.date_from) > bounds.start ? dateOnly(assignment.date_from) : bounds.start;
-        const employment = employmentForDate(employments, employeeId, employmentDate || bounds.start);
+        const workingDays = overlapWorkingDays(assignment, month);
+        const { overlapStart } = overlapBounds(assignment, month);
+        const employment = employmentForDate(employments, employeeId, overlapStart || bounds.start);
         const rate = hourlyEmployerCost(employment);
         const nominalHours = Number(employment?.nominal_monthly_hours ?? 168) || 168;
         const allocation = Math.max(0, Number(assignment.allocation_percent ?? 0));
         allocationPercent += allocation;
-        const hours = nominalHours * (allocation / 100) * (days / bounds.days);
+        const hours = bounds.workingDays > 0 ? nominalHours * (allocation / 100) * (workingDays / bounds.workingDays) : 0;
         plannedHours += hours;
         plannedCost += hours * rate;
       }
@@ -167,17 +193,18 @@ export function calculateLaborControl({
       let pendingCost = 0;
       let lastRate = 0;
       for (const entry of employeeTimesheets) {
-        const base = Number(entry.hours ?? 0);
-        const overtime = Number(entry.overtime_hours ?? 0);
-        const total = Math.max(0, base) + Math.max(0, overtime);
+        const base = Math.max(0, Number(entry.hours ?? 0));
+        const overtime = Math.max(0, Number(entry.overtime_hours ?? 0));
+        const total = base + overtime;
         const employment = employmentForDate(employments, employeeId, dateOnly(entry.work_date));
-        const rate = hourlyEmployerCost(employment);
+        const fallbackRate = hourlyEmployerCost(employment);
+        const rate = snapshotRate(entry, fallbackRate);
         if (rate > 0) lastRate = rate;
         const status = String(entry.status ?? "");
         if (approvedStatuses.has(status)) {
-          approvedHours += Math.max(0, base);
-          overtimeHours += Math.max(0, overtime);
-          actualCost += total * rate;
+          approvedHours += base;
+          overtimeHours += overtime;
+          actualCost += snapshotCost(entry, total * rate);
         } else if (pendingStatuses.has(status)) {
           pendingHours += total;
           pendingCost += total * rate;
@@ -242,11 +269,12 @@ export function calculateLaborControl({
     const base = Math.max(0, Number(entry.hours ?? 0));
     const overtime = Math.max(0, Number(entry.overtime_hours ?? 0));
     const total = base + overtime;
-    const rate = hourlyEmployerCost(employmentForDate(employments, employeeId, dateOnly(entry.work_date)));
+    const fallbackRate = hourlyEmployerCost(employmentForDate(employments, employeeId, dateOnly(entry.work_date)));
+    const rate = snapshotRate(entry, fallbackRate);
     const status = String(entry.status ?? "");
     if (approvedStatuses.has(status)) {
       unassignedApprovedHours += total;
-      unassignedActualCost += total * rate;
+      unassignedActualCost += snapshotCost(entry, total * rate);
     } else if (pendingStatuses.has(status)) {
       unassignedPendingHours += total;
       unassignedPendingCost += total * rate;
