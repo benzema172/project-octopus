@@ -7,12 +7,16 @@ describe("post-merge performance contract", () => {
   it("keeps authenticated server hot paths on verified JWT claims", () => {
     const auth = read("lib/auth.ts");
     const proxy = read("proxy.ts");
+    const sessionProxy = read("lib/supabase/proxy.ts");
 
     expect(auth).toContain("auth.getClaims()");
     expect(auth).toContain("auth.getClaims(token)");
     expect(auth).not.toContain("auth.getUser(");
-    expect(proxy).toContain("auth.getClaims()");
+    expect(proxy).toContain('updateSession(request)');
+    expect(proxy).toContain('@/lib/supabase/proxy');
     expect(proxy).not.toContain("auth.getUser(");
+    expect(sessionProxy).toContain("auth.getClaims()");
+    expect(sessionProxy).not.toContain("auth.getUser(");
   });
 
   it("reuses the stateless service client without weakening its inferred database types", () => {
