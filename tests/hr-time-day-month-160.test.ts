@@ -13,7 +13,9 @@ describe("HR simplified time records", () => {
     expect(source).toContain(">Miesiąc</button>");
     expect(source).toContain("Pracownicy i czas pracy");
     expect(source).toContain("prosty spis pracowników — wybierz inwestycję i wpisz godziny");
-    expect(source).toContain("<HrTimesheetEntryEditor159");
+    expect(source).toContain('period === "day"');
+    expect(source).toContain('variant="inline"');
+    expect(source).toContain('variant="cell"');
   });
 
   it("keeps daily CSV export while preserving the legacy 7-day API fallback", () => {
