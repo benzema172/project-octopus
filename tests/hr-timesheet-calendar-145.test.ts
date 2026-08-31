@@ -52,7 +52,8 @@ describe("Project Octopus 1.4.5 HR timesheet calendar", () => {
     expect(calendar).toContain('mode: "timesheet"');
     expect(calendar).toContain('params.set("employeeId", employeeId)');
     expect(exportRoute).toContain('if (mode === "timesheet")');
-    expect(exportRoute).toContain('url.searchParams.get("period") === "month"');
+    expect(exportRoute).toContain('const periodParam = url.searchParams.get("period")');
+    expect(exportRoute).toContain('periodParam === "month" ? "month" : periodParam === "day" ? "day" : "week"');
     expect(exportRoute).toContain('url.searchParams.get("employeeId")');
     expect(exportRoute).toContain("ewidencja-czasu-");
   });
