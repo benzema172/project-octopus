@@ -68,6 +68,10 @@ function dateLabel(value: unknown) {
   const parsed = new Date(`${raw}T00:00:00Z`);
   return parsed.toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", timeZone: "UTC" });
 }
+function totalHours(row?: Row | null) {
+  if (!row) return 0;
+  return Number(row.hours ?? 0) + Number(row.overtime_hours ?? 0);
+}
 
 export function HrWorkCost160({ workspaceId, referenceDate, employees, projects, canWrite, canViewPayroll, fixedEmployeeId = null, fixedWorkDate = null, embedded = false, initialProjectId = null }: Props) {
   const router = useRouter();
@@ -202,6 +206,9 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
   const periodLabel = data?.period ? new Date(`${data.period}-01T00:00:00Z`).toLocaleDateString("pl-PL", { month: "long", year: "numeric", timeZone: "UTC" }) : referenceDate.slice(0, 7);
   const editKey = editing?.id ? String(editing.id) : `new-${fixedEmployeeId ?? "all"}-${fixedWorkDate ?? referenceDate}-${reloadKey}`;
   const fixedDate = fixedWorkDate ?? referenceDate;
+  const contextRow = editing ?? (rows.length === 1 ? rows[0] : null);
+  const contextProject = selectedProjectId ? projectById.get(selectedProjectId) : contextRow?.project_id ? projectById.get(String(contextRow.project_id)) : null;
+  const contextStatus = contextRow ? str(contextRow.status, "") : "";
 
   return <section className={`${styles.panel} ${embedded ? styles.embedded : ""}`} data-hr-work-cost-control="1" data-hr-work-cost-embedded={embedded ? "1" : undefined}>
     {!embedded ? <>
@@ -223,27 +230,24 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
       </div>
     </> : <div className={styles.embeddedContext}>
       <div>
-        <span>Ewidencja szczegółowa</span>
-        <strong>{employeeName(fixedEmployee)} · {dateLabel(fixedDate)}</strong>
+        <span>Szczegóły robocizny</span>
+        <strong>{dateLabel(fixedDate)} · {contextProject ? str(contextProject.name) : "Koszt ogólny"}{contextRow ? ` · ${num(totalHours(contextRow), 2)} h` : ""}</strong>
       </div>
-      <small>Rozszerza wpis z wiersza powyżej o WBS, zakres prac, godziny od–do, ilość i kod kosztowy.</small>
+      {contextRow ? <div className={styles.embeddedMeta}>
+        {data?.canViewCosts && contextRow.labor_cost_snapshot != null ? <b>{money(contextRow.labor_cost_snapshot)}</b> : null}
+        {contextStatus ? <span className={`${styles.chip} ${contextStatus === "approved" ? styles.ok : ""}`}>{contextStatus}</span> : null}
+      </div> : <small>Uzupełnij zakres pracy bez tworzenia osobnego modułu.</small>}
     </div>}
 
     <div className={styles.body}>
       <form className={styles.formCard} key={editKey} onSubmit={submit}>
         <div className={styles.formTitle}>
-          <h3>{editing ? `${embedded ? "Rozszerz wpis" : "Edytuj wpis"} · ${dateLabel(editing.work_date)}` : embedded ? "Dodaj drugi szczegółowy wpis" : "Dodaj szczegółowy wpis z budowy"}</h3>
-          <span>{editing ? "Zmieniasz ten sam wpis czasu — nie tworzymy duplikatu. Koszt zostanie ponownie wyliczony według stawki z dnia pracy." : "Godziny możesz wpisać ręcznie albo zostawić puste i podać od–do."}</span>
+          <h3>{editing ? (embedded ? "Edytuj szczegóły wpisu" : `Edytuj wpis · ${dateLabel(editing.work_date)}`) : embedded ? "Dodaj kolejny zakres" : "Dodaj szczegółowy wpis z budowy"}</h3>
+          <span>{editing ? "Edytujesz ten sam wpis czasu — bez duplikowania godzin. Koszt zostanie ponownie wyliczony według stawki z dnia pracy." : "Godziny możesz wpisać ręcznie albo zostawić puste i podać od–do."}</span>
         </div>
         <div className={styles.grid}>
-          {fixedEmployeeId ? <>
-            <input type="hidden" name="employeeId" value={fixedEmployeeId} />
-            <label className={styles.field}><span>Pracownik</span><input value={employeeName(fixedEmployee)} readOnly disabled /></label>
-          </> : <label className={styles.field}><span>Pracownik</span><select name="employeeId" defaultValue={editing ? String(editing.employee_id ?? "") : ""} required disabled={!canWrite || busy || Boolean(editing)}><option value="">Wybierz</option>{activeEmployees.map((employee) => <option key={String(employee.id)} value={String(employee.id)}>{employeeName(employee)}</option>)}</select></label>}
-          {fixedWorkDate ? <>
-            <input type="hidden" name="workDate" value={fixedWorkDate} />
-            <label className={styles.field}><span>Data</span><input value={fixedWorkDate} readOnly disabled /></label>
-          </> : <label className={styles.field}><span>Data</span><input name="workDate" type="date" defaultValue={editing ? String(editing.work_date ?? "").slice(0, 10) : referenceDate} required disabled={!canWrite || busy || Boolean(editing)} /></label>}
+          {fixedEmployeeId ? <input type="hidden" name="employeeId" value={fixedEmployeeId} /> : <label className={styles.field}><span>Pracownik</span><select name="employeeId" defaultValue={editing ? String(editing.employee_id ?? "") : ""} required disabled={!canWrite || busy || Boolean(editing)}><option value="">Wybierz</option>{activeEmployees.map((employee) => <option key={String(employee.id)} value={String(employee.id)}>{employeeName(employee)}</option>)}</select></label>}
+          {fixedWorkDate ? <input type="hidden" name="workDate" value={fixedWorkDate} /> : <label className={styles.field}><span>Data</span><input name="workDate" type="date" defaultValue={editing ? String(editing.work_date ?? "").slice(0, 10) : referenceDate} required disabled={!canWrite || busy || Boolean(editing)} /></label>}
           <label className={styles.fieldWide}><span>Inwestycja</span><select name="projectId" value={selectedProjectId} onChange={(event) => setSelectedProjectId(event.target.value)} disabled={!canWrite || busy}><option value="">Koszt ogólny firmy / bez inwestycji</option>{projects.map((project) => <option key={String(project.id)} value={String(project.id)}>{str(project.name, "Inwestycja")}</option>)}</select></label>
           <label className={styles.fieldWide}><span>WBS / zakres kosztorysowy</span><select name="wbsNodeId" defaultValue={editing?.wbs_node_id ? String(editing.wbs_node_id) : ""} disabled={!canWrite || busy || !selectedProjectId}><option value="">Bez WBS</option>{availableWbs.map((node) => <option key={String(node.id)} value={String(node.id)}>{str(node.code, "WBS")} · {str(node.name)}</option>)}</select></label>
           <label className={styles.field}><span>Rodzaj czasu</span><select name="workType" defaultValue={str(editing?.work_type, "regular")} disabled={!canWrite || busy}>{WORK_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
@@ -259,8 +263,8 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
           <label className={`${styles.field} ${styles.fieldFull}`}><span>Uwagi</span><textarea name="note" defaultValue={str(editing?.note, "")} placeholder="Przeszkody, przestój, front robót, dodatkowa informacja dla kierownika" disabled={!canWrite || busy} /></label>
           <div className={`${styles.note} ${styles.fieldFull}`}><Clock3 size={13} /> WBS pochodzi bezpośrednio z inwestycji. Snapshot kosztu wykorzystuje stawkę obowiązującą w dacie pracy; nadgodziny są liczone godzinowo bez automatycznego mnożnika płacowego.</div>
           <div className={styles.actions}>
-            {editing ? <button className={styles.secondary} type="button" onClick={resetForm} disabled={busy}><X size={14} /> {embedded ? "Nowy wpis" : "Anuluj edycję"}</button> : null}
-            <button className={styles.primary} type="submit" disabled={!canWrite || busy}><Save size={14} /> {busy ? "Zapisywanie…" : editing ? "Zapisz szczegóły" : "Dodaj wpis"}</button>
+            {editing ? <button className={styles.secondary} type="button" onClick={resetForm} disabled={busy}><X size={14} /> {embedded ? "+ Dodaj kolejny zakres" : "Anuluj edycję"}</button> : null}
+            <button className={styles.primary} type="submit" disabled={!canWrite || busy}><Save size={14} /> {busy ? "Zapisywanie…" : editing ? "Zapisz szczegóły" : embedded ? "Dodaj zakres" : "Dodaj wpis"}</button>
           </div>
         </div>
       </form>
@@ -268,7 +272,20 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
       {message ? <div className={styles.success} role="status">{message}</div> : null}
       {error ? <div className={styles.error} role="alert">{error}</div> : null}
 
-      <div className={styles.tableWrap}>
+      {embedded ? rows.length > 1 ? <div className={styles.splitBlock} data-hr-day-split="1">
+        <div className={styles.splitHeader}><strong>Podział dnia · {rows.length} wpisy</strong><span>Lista pojawia się tylko wtedy, gdy dzień faktycznie został rozbity na kilka zakresów.</span></div>
+        <div className={styles.splitList}>{rows.map((row, index) => {
+          const project = row.project_id ? projectById.get(String(row.project_id)) : null;
+          const wbs = row.wbs_node_id ? wbsById.get(String(row.wbs_node_id)) : null;
+          const workType = WORK_TYPES.find(([value]) => value === str(row.work_type, "regular"))?.[1] ?? str(row.work_type);
+          return <div className={styles.splitRow} key={String(row.id)}>
+            <span className={styles.splitIndex}>{index + 1}</span>
+            <div className={styles.splitMain}><strong>{num(totalHours(row), 2)} h · {project ? str(project.name) : "Koszt ogólny"}</strong><span>{wbs ? `${str(wbs.code, "WBS")} · ${str(wbs.name)}` : str(row.work_scope, workType)}</span></div>
+            {data?.canViewCosts && row.labor_cost_snapshot != null ? <b className={styles.splitCost}>{money(row.labor_cost_snapshot)}</b> : null}
+            {canWrite ? <button type="button" className={styles.edit} onClick={() => beginEdit(row)} disabled={busy}><Pencil size={13} /> Edytuj</button> : null}
+          </div>;
+        })}</div>
+      </div> : null : <div className={styles.tableWrap}>
         <table className={styles.table}>
           <thead><tr><th>Data / pracownik</th><th>Inwestycja</th><th>WBS / kod</th><th>Rodzaj</th><th>Zakres / ilość</th><th>Godziny</th><th>Status</th>{data?.canViewCosts ? <th>Koszt</th> : null}<th /></tr></thead>
           <tbody>{rows.slice(0, 120).map((row) => {
@@ -276,22 +293,22 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
             const project = row.project_id ? projectById.get(String(row.project_id)) : null;
             const wbs = row.wbs_node_id ? wbsById.get(String(row.wbs_node_id)) : null;
             const workType = WORK_TYPES.find(([value]) => value === str(row.work_type, "regular"))?.[1] ?? str(row.work_type);
-            const totalHours = Number(row.hours ?? 0) + Number(row.overtime_hours ?? 0);
+            const rowTotalHours = totalHours(row);
             return <tr key={String(row.id)}>
               <td><div className={styles.mainCell}><strong>{dateLabel(row.work_date)} · {employeeName(employee)}</strong><span>{row.started_at ? `${str(row.started_at).slice(0, 5)}–${str(row.ended_at).slice(0, 5)} · przerwa ${str(row.break_minutes, "0")} min` : str(row.source, "ręcznie")}</span></div></td>
               <td>{project ? str(project.name) : <span className={styles.chip}>Koszt ogólny</span>}</td>
               <td><div className={styles.mainCell}><strong>{wbs ? `${str(wbs.code, "WBS")} · ${str(wbs.name)}` : "—"}</strong><span>{str(row.cost_code, "bez kodu kosztowego")}</span></div></td>
               <td><span className={styles.chip}>{workType}</span></td>
               <td className={styles.scope}><div className={styles.mainCell}><strong>{str(row.work_scope)}</strong><span>{row.quantity != null ? `${num(row.quantity, 3)} ${str(row.unit, "j.")}` : "bez ilości wykonanej"}</span></div></td>
-              <td><strong>{num(totalHours, 2)} h</strong>{Number(row.overtime_hours ?? 0) > 0 ? <div className={`${styles.chip} ${styles.warn}`}>+{num(row.overtime_hours)} nadg.</div> : null}</td>
+              <td><strong>{num(rowTotalHours, 2)} h</strong>{Number(row.overtime_hours ?? 0) > 0 ? <div className={`${styles.chip} ${styles.warn}`}>+{num(row.overtime_hours)} nadg.</div> : null}</td>
               <td><span className={`${styles.chip} ${row.status === "approved" ? styles.ok : ""}`}>{str(row.status)}</span></td>
               {data?.canViewCosts ? <td><span className={styles.cost}>{row.labor_cost_snapshot == null ? "brak stawki" : money(row.labor_cost_snapshot)}</span><div className={styles.mainCell}><span>{row.hourly_cost_snapshot == null ? "" : `${money(row.hourly_cost_snapshot)}/h`}</span></div></td> : null}
               <td>{canWrite ? <button type="button" className={styles.edit} onClick={() => beginEdit(row)} disabled={busy}><Pencil size={13} /> Edytuj</button> : null}</td>
             </tr>;
           })}</tbody>
         </table>
-        {!rows.length && !error ? <div className={styles.empty}>{embedded ? "Brak wpisu szczegółowego dla tego pracownika i dnia. Formularz powyżej utworzy pierwszy." : "Brak szczegółowych wpisów czasu w tym miesiącu. Dodaj pierwszy wpis powyżej."}</div> : null}
-      </div>
+        {!rows.length && !error ? <div className={styles.empty}>Brak szczegółowych wpisów czasu w tym miesiącu. Dodaj pierwszy wpis powyżej.</div> : null}
+      </div>}
     </div>
   </section>;
 }
