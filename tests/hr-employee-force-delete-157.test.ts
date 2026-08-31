@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 describe("Project Octopus HR employee force delete", () => {
   const api = readFileSync("app/api/company/hr/employee/route.ts", "utf8");
-  const workspace = readFileSync("components/company/hr/hr-workspace-147.tsx", "utf8");
+  const registry = readFileSync("components/company/hr/hr-employee-registry-152.tsx", "utf8");
 
   it("keeps ordinary delete protected while exposing an explicit force-delete path", () => {
     expect(api).toContain('"delete" | "force_delete"');
@@ -15,12 +15,12 @@ describe("Project Octopus HR employee force delete", () => {
     expect(api).toContain('await audit("employee_force_deleted", snapshot)');
   });
 
-  it("requires a conscious two-step confirmation in the employee card", () => {
-    expect(workspace).toContain("Trwale usunąć");
-    expect(workspace).toContain('window.prompt("Aby potwierdzić świadome trwałe usunięcie, wpisz dokładnie: USUŃ")');
-    expect(workspace).toContain('action: "force_delete"');
-    expect(workspace).toContain('confirmation: "USUŃ"');
-    expect(workspace).toContain('data-hr-force-delete="1"');
-    expect(workspace).toContain("powiązaną historię HR");
+  it("requires a conscious two-step confirmation in the active employee card", () => {
+    expect(registry).toContain("Trwale usunąć");
+    expect(registry).toContain('window.prompt("Aby potwierdzić świadome trwałe usunięcie, wpisz dokładnie: USUŃ")');
+    expect(registry).toContain('action === "force_delete"');
+    expect(registry).toContain('confirmation: "USUŃ"');
+    expect(registry).toContain('canApprove ? "force_delete" : "delete"');
+    expect(registry).toContain("powiązaną historię HR");
   });
 });
