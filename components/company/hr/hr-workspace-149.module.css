@@ -1,0 +1,11 @@
+.root{display:contents}
+.root :global(tr[data-hr-leave-inline-host="1"]){cursor:default!important;background:#f8f8ff!important}
+.root :global(tr[data-hr-leave-inline-host="1"]:hover){background:#f8f8ff!important}
+.root :global(.hr-leave-inline-cell){padding:0 12px 12px!important;border-top:0!important;background:#f8f8ff!important}
+.root :global(.hr-leave-inline-shell){position:relative}
+.root :global(.hr-leave-inline-details){margin:0!important;border-radius:0 0 14px 14px!important;border-top:0!important;box-shadow:0 2px 5px rgba(15,23,42,.05)!important;background:linear-gradient(180deg,#fbfbff 0%,#fff 100%)!important}
+.root :global(section[data-hr-leaves-163="1"] tbody tr[aria-expanded="true"]){background:#f5f4ff!important}
+.root :global(section[data-hr-leaves-163="1"] tbody tr[aria-expanded="true"] td){border-bottom-color:transparent!important}
+.root :global(section[data-hr-leaves-163="1"] tbody tr[aria-expanded="true"] td:first-child){box-shadow:inset 3px 0 0 #625cf6}
+.root :global(section[data-hr-leaves-163="1"] tbody tr[aria-expanded="true"] td:last-child){border-bottom-right-radius:0}
+.root :global(section[data-hr-leaves-163="1"] tbody tr[aria-expanded="true"] td:first-child){border-bottom-left-radius:0}
