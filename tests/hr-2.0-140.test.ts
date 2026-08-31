@@ -8,6 +8,7 @@ const css141 = readFileSync("app/workspace/companies/[workspaceId]/hr/hr-employe
 const api = readFileSync("app/api/company/hr/route.ts", "utf8");
 const loader = readFileSync("lib/data/hr-workspace-140.ts", "utf8");
 const exportRoute = readFileSync("app/api/company/hr/export/route.ts", "utf8");
+const workCalendar = readFileSync("lib/hr/polish-work-calendar.ts", "utf8");
 
 describe("Project Octopus 1.4.0 — Kadry 2.0", () => {
   it("adds the missing HR domain model without replacing existing employee data", () => {
@@ -37,11 +38,11 @@ describe("Project Octopus 1.4.0 — Kadry 2.0", () => {
   });
 
   it("calculates Polish working leave days instead of trusting a manually typed count", () => {
-    expect(api).toContain("function workingDaysPl");
-    expect(api).toContain('"12-24"');
-    expect(api).toContain("addDays(easter, 1)");
-    expect(api).toContain("addDays(easter, 60)");
-    expect(api).toContain("const days = workingDaysPl(from, to)");
+    expect(api).toContain('import { countPolishWorkingDays } from "@/lib/hr/polish-work-calendar"');
+    expect(api).toContain("const days = countPolishWorkingDays(from, to)");
+    expect(workCalendar).toContain('fixed.push(`${year}-12-24`)');
+    expect(workCalendar).toContain("addDays(easter, 1)");
+    expect(workCalendar).toContain("addDays(easter, 60)");
     expect(ui).not.toContain('name="days"');
   });
 
