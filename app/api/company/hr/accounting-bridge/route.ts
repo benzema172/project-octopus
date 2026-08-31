@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
+import { countPolishWorkingDays } from "@/lib/hr/polish-work-calendar";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -32,6 +33,15 @@ function number(value: unknown) {
 }
 function inRange(date: string, from: unknown, to: unknown) {
   return String(from ?? "0000-01-01") <= date && (!to || String(to) >= date);
+}
+function leaveDaysInMonth(row: Row, range: { from: string; to: string }) {
+  const from = String(row.date_from ?? "").slice(0, 10);
+  const to = String(row.date_to ?? "").slice(0, 10);
+  const clippedFrom = from > range.from ? from : range.from;
+  const clippedTo = to < range.to ? to : range.to;
+  if (!clippedFrom || !clippedTo || clippedFrom > clippedTo) return 0;
+  try { return countPolishWorkingDays(clippedFrom, clippedTo); }
+  catch { return 0; }
 }
 
 export async function GET(request: Request) {
@@ -88,9 +98,9 @@ export async function GET(request: Request) {
     const payrollRow = payrollByEmployee.get(employeeId);
     const employeeTimesheets = timesheets.filter((row) => String(row.employee_id) === employeeId);
     const approvedTimesheets = employeeTimesheets.filter((row) => row.status === "approved");
-    const pendingTimesheets = employeeTimesheets.filter((row) => ["draft", "submitted", "pending"].includes(String(row.status)));
+    const pendingTimesheets = employeeTimesheets.filter((row) => ["draft", "submitted", "pending", "review"].includes(String(row.status)));
     const employeeLeaves = leaves.filter((row) => String(row.employee_id) === employeeId && row.status === "approved");
-    const approvedLeaveDays = employeeLeaves.reduce((sum, row) => sum + number(row.days), 0);
+    const approvedLeaveDays = employeeLeaves.reduce((sum, row) => sum + leaveDaysInMonth(row, range), 0);
     const crossMonthLeave = employeeLeaves.some((row) => String(row.date_from).slice(0, 7) !== period || String(row.date_to).slice(0, 7) !== period);
     const missingSnapshots = approvedTimesheets.filter((row) => row.labor_cost_snapshot == null).length;
     const projectCodes = Array.from(new Set(employeeTimesheets.map((row) => {
