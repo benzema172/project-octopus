@@ -35,11 +35,19 @@ const contentSecurityPolicy = [
   "upgrade-insecure-requests"
 ].join("; ");
 
+// Baked into every build so the UI always identifies the exact deployment.
+const octopusBuildTimestamp = new Date().toISOString();
+const octopusBuildCommit = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || "local";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   agentRules: false,
   reactStrictMode: true,
   poweredByHeader: false,
+  env: {
+    NEXT_PUBLIC_OCTOPUS_BUILD_TIMESTAMP: octopusBuildTimestamp,
+    NEXT_PUBLIC_OCTOPUS_BUILD_COMMIT: octopusBuildCommit
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: "2mb"
