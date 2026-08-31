@@ -1,0 +1,4 @@
+.root{display:contents}
+.root[data-leave-card-revealed="false"] :global(section[data-hr-leaves-161="1"] article[class*="employeeDetails"]){display:none!important}
+.root[data-leave-card-revealed="false"] :global(section[data-hr-leaves-161="1"] tr[class*="rowSelected"]){background:#fff!important}
+.root[data-leave-card-revealed="false"] :global(section[data-hr-leaves-161="1"] svg[class*="chevronOpen"]){transform:rotate(0deg)!important;color:#667085!important}
