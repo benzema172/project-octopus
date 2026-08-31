@@ -57,9 +57,14 @@ export async function GET(request: Request) {
   const mode = url.searchParams.get("mode");
 
   if (mode === "timesheet") {
-    const period = url.searchParams.get("period") === "month" ? "month" : "week";
+    const periodParam = url.searchParams.get("period");
+    const period = periodParam === "month" ? "month" : periodParam === "day" ? "day" : "week";
     const employeeId = url.searchParams.get("employeeId");
-    const range = period === "month" ? monthRange(referenceDate) : { from: addDays(referenceDate, -6), to: referenceDate };
+    const range = period === "month"
+      ? monthRange(referenceDate)
+      : period === "day"
+        ? { from: referenceDate, to: referenceDate }
+        : { from: addDays(referenceDate, -6), to: referenceDate };
     const employeeById = new Map(data.employees.map((row) => [String(row.id), row]));
     if (employeeId && !employeeById.has(employeeId)) return NextResponse.json({ error: "Pracownik nie należy do aktywnej firmy." }, { status: 404 });
     const projectNames = new Map(data.projects.map((row) => [String(row.id), String(row.name)]));
@@ -88,7 +93,11 @@ export async function GET(request: Request) {
       })
     ];
     const csv = "\uFEFF" + rows.map((row) => row.map(csvCell).join(";")).join("\r\n");
-    const periodName = period === "month" ? `miesiac-${referenceDate.slice(0, 7)}` : `7-dni-${range.from}-${range.to}`;
+    const periodName = period === "month"
+      ? `miesiac-${referenceDate.slice(0, 7)}`
+      : period === "day"
+        ? `dzien-${referenceDate}`
+        : `7-dni-${range.from}-${range.to}`;
     const employeeSuffix = employeeId ? `-pracownik-${employeeId}` : "";
     return new Response(csv, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="ewidencja-czasu-${periodName}${employeeSuffix}.csv"`, "Cache-Control": "no-store" } });
   }
