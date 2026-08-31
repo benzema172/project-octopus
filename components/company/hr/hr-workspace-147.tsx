@@ -10,7 +10,7 @@ import { HrTeamCostControl156 } from "./hr-team-cost-control-156";
 import { HrDocumentUpload157 } from "./hr-document-upload-157";
 import { HrFormalDocuments160 } from "./hr-formal-documents-160";
 import { HrAccountingBridge160 } from "./hr-accounting-bridge-160";
-import { HrLeaves161 } from "./hr-leaves-161";
+import { HrLeaves162 } from "./hr-leaves-162";
 import styles from "./hr-workspace-146.module.css";
 import registryStyles from "./hr-employee-registry-152.module.css";
 
@@ -189,7 +189,7 @@ export function HrWorkspace147(props: Props) {
         initialEmployeeId={timeFocus?.employeeId ?? null}
         onClearEmployeeFocus={() => setTimeFocus(null)}
       /> : null}
-      {leavesVisible ? <HrLeaves161 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canApprove={props.canApprove} /> : null}
+      {leavesVisible ? <HrLeaves162 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canApprove={props.canApprove} /> : null}
       {teamsVisible ? <HrTeamCostControl156 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} /> : null}
       {documentsVisible ? <>
         <HrDocumentUpload157 workspaceId={props.workspaceId} canWrite={props.canWrite} documentCount={props.data.documents.length} />
