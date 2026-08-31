@@ -84,7 +84,11 @@ export function HrTimeRecords159({ workspaceId, referenceDate, employees, projec
             <td><strong>{employeeName(employee)}</strong></td>
             {dates.map((date) => {
               const dayEntries = entriesByEmployeeDate.get(`${employeeId}|${date}`) ?? [];
-              return <td key={date} style={{ minWidth: period === "month" ? 76 : 280, padding: 4 }}><HrTimesheetEntryEditor159 workspaceId={workspaceId} employeeId={employeeId} employeeName={employeeName(employee)} workDate={date} projects={projects} entries={dayEntries} canWrite={canWrite} variant="cell" /></td>;
+              return <td key={date} style={{ minWidth: period === "month" ? 76 : 430, padding: 4 }}>
+                {period === "day"
+                  ? <HrTimesheetEntryEditor159 workspaceId={workspaceId} employeeId={employeeId} employeeName={employeeName(employee)} workDate={date} projects={projects} entries={dayEntries} canWrite={canWrite} variant="inline" />
+                  : <HrTimesheetEntryEditor159 workspaceId={workspaceId} employeeId={employeeId} employeeName={employeeName(employee)} workDate={date} projects={projects} entries={dayEntries} canWrite={canWrite} variant="cell" />}
+              </td>;
             })}
             <td><strong>{num(total)} h</strong></td>
           </tr>;
