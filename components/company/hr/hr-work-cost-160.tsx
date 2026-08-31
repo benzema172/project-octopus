@@ -75,22 +75,29 @@ function totalHours(row?: Row | null) {
 
 export function HrWorkCost160({ workspaceId, referenceDate, employees, projects, canWrite, canViewPayroll, fixedEmployeeId = null, fixedWorkDate = null, embedded = false, initialProjectId = null }: Props) {
   const router = useRouter();
-  const autoAttachedRef = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const contextRef = useRef(`${fixedEmployeeId ?? ""}|${fixedWorkDate ?? ""}`);
   const [data, setData] = useState<LaborResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [editing, setEditing] = useState<Row | null>(null);
+  const [explicitNew, setExplicitNew] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId ?? "");
 
   useEffect(() => {
-    autoAttachedRef.current = false;
+    const nextContext = `${fixedEmployeeId ?? ""}|${fixedWorkDate ?? ""}`;
+    if (contextRef.current === nextContext) return;
+    contextRef.current = nextContext;
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
       setEditing(null);
+      setExplicitNew(false);
       setSelectedProjectId(initialProjectId ?? "");
+      setMessage(null);
+      setError(null);
     });
     return () => { cancelled = true; };
   }, [fixedEmployeeId, fixedWorkDate, initialProjectId]);
@@ -123,32 +130,25 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
     if (fixedWorkDate && String(row.work_date ?? "").slice(0, 10) !== fixedWorkDate) return false;
     return true;
   }), [data?.rows, fixedEmployeeId, fixedWorkDate]);
-
-  useEffect(() => {
-    if (!embedded || !fixedEmployeeId || !fixedWorkDate || !data || autoAttachedRef.current) return;
-    autoAttachedRef.current = true;
-    if (rows.length !== 1) return;
-    const row = rows[0];
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setEditing(row);
-      setSelectedProjectId(row.project_id ? String(row.project_id) : initialProjectId ?? "");
-    });
-    return () => { cancelled = true; };
-  }, [data, embedded, fixedEmployeeId, fixedWorkDate, initialProjectId, rows]);
+  const formEditing = editing ?? (!explicitNew && embedded && rows.length === 1 ? rows[0] : null);
 
   const resetForm = () => {
     setEditing(null);
+    setExplicitNew(true);
     setSelectedProjectId(initialProjectId ?? "");
     setMessage(null);
   };
 
   const beginEdit = (row: Row) => {
     setEditing(row);
+    setExplicitNew(false);
     setSelectedProjectId(row.project_id ? String(row.project_id) : "");
     setMessage(null);
     setError(null);
+    window.requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      formRef.current?.querySelector<HTMLElement>('[name="projectId"]')?.focus({ preventScroll: true });
+    });
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -170,8 +170,8 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
       unit: values.unit,
       note: values.note
     };
-    const action = editing?.id ? "update" : "create";
-    if (editing?.id) payload.timesheetId = editing.id;
+    const action = formEditing?.id ? "update" : "create";
+    if (formEditing?.id) payload.timesheetId = formEditing.id;
     else {
       payload.employeeId = values.employeeId;
       payload.workDate = values.workDate;
@@ -186,13 +186,16 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspaceId, action, payload })
       });
-      const result = await response.json().catch(() => ({})) as { error?: string; calculatedHours?: number | null; laborCostSnapshot?: number | null };
+      const result = await response.json().catch(() => ({})) as { id?: string; error?: string; calculatedHours?: number | null; laborCostSnapshot?: number | null };
       if (!response.ok) throw new Error(result.error ?? "Nie udało się zapisać czasu pracy.");
       const calculated = result.calculatedHours != null ? ` Wyliczono ${num(result.calculatedHours, 2)} h z godzin od–do.` : "";
       const cost = canViewPayroll && result.laborCostSnapshot != null ? ` Zamrożony koszt wpisu: ${money(result.laborCostSnapshot)}.` : "";
       setMessage(`${action === "create" ? "Wpis dodano." : "Wpis zaktualizowano."}${calculated}${cost}`);
-      setEditing(null);
-      setSelectedProjectId(initialProjectId ?? "");
+      if (action === "create") {
+        setEditing(null);
+        setExplicitNew(true);
+        setSelectedProjectId(initialProjectId ?? "");
+      }
       setReloadKey((value) => value + 1);
       router.refresh();
     } catch (reason) {
@@ -204,9 +207,9 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
 
   const summary = data?.summary;
   const periodLabel = data?.period ? new Date(`${data.period}-01T00:00:00Z`).toLocaleDateString("pl-PL", { month: "long", year: "numeric", timeZone: "UTC" }) : referenceDate.slice(0, 7);
-  const editKey = editing?.id ? String(editing.id) : `new-${fixedEmployeeId ?? "all"}-${fixedWorkDate ?? referenceDate}-${reloadKey}`;
+  const editKey = formEditing?.id ? String(formEditing.id) : `new-${fixedEmployeeId ?? "all"}-${fixedWorkDate ?? referenceDate}-${reloadKey}`;
   const fixedDate = fixedWorkDate ?? referenceDate;
-  const contextRow = editing ?? (rows.length === 1 ? rows[0] : null);
+  const contextRow = formEditing ?? (rows.length === 1 ? rows[0] : null);
   const contextProject = selectedProjectId ? projectById.get(selectedProjectId) : contextRow?.project_id ? projectById.get(String(contextRow.project_id)) : null;
   const contextStatus = contextRow ? str(contextRow.status, "") : "";
 
@@ -240,31 +243,32 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
     </div>}
 
     <div className={styles.body}>
-      <form className={styles.formCard} key={editKey} onSubmit={submit}>
+      {!data && !error ? <div className={styles.empty} role="status">Wczytywanie szczegółów robocizny…</div> : <>
+      <form ref={formRef} className={styles.formCard} key={editKey} onSubmit={submit} data-hr-labor-edit-form="1">
         <div className={styles.formTitle}>
-          <h3>{editing ? (embedded ? "Edytuj szczegóły wpisu" : `Edytuj wpis · ${dateLabel(editing.work_date)}`) : embedded ? "Dodaj kolejny zakres" : "Dodaj szczegółowy wpis z budowy"}</h3>
-          <span>{editing ? "Edytujesz ten sam wpis czasu — bez duplikowania godzin. Koszt zostanie ponownie wyliczony według stawki z dnia pracy." : "Godziny możesz wpisać ręcznie albo zostawić puste i podać od–do."}</span>
+          <h3>{formEditing ? (embedded ? "Edytuj szczegóły wpisu" : `Edytuj wpis · ${dateLabel(formEditing.work_date)}`) : embedded ? "Dodaj kolejny zakres" : "Dodaj szczegółowy wpis z budowy"}</h3>
+          <span>{formEditing ? "Edytujesz ten sam wpis czasu — bez duplikowania godzin. Koszt zostanie ponownie wyliczony według stawki z dnia pracy." : "Godziny możesz wpisać ręcznie albo zostawić puste i podać od–do."}</span>
         </div>
         <div className={styles.grid}>
-          {fixedEmployeeId ? <input type="hidden" name="employeeId" value={fixedEmployeeId} /> : <label className={styles.field}><span>Pracownik</span><select name="employeeId" defaultValue={editing ? String(editing.employee_id ?? "") : ""} required disabled={!canWrite || busy || Boolean(editing)}><option value="">Wybierz</option>{activeEmployees.map((employee) => <option key={String(employee.id)} value={String(employee.id)}>{employeeName(employee)}</option>)}</select></label>}
-          {fixedWorkDate ? <input type="hidden" name="workDate" value={fixedWorkDate} /> : <label className={styles.field}><span>Data</span><input name="workDate" type="date" defaultValue={editing ? String(editing.work_date ?? "").slice(0, 10) : referenceDate} required disabled={!canWrite || busy || Boolean(editing)} /></label>}
+          {fixedEmployeeId ? <input type="hidden" name="employeeId" value={fixedEmployeeId} /> : <label className={styles.field}><span>Pracownik</span><select name="employeeId" defaultValue={formEditing ? String(formEditing.employee_id ?? "") : ""} required disabled={!canWrite || busy || Boolean(formEditing)}><option value="">Wybierz</option>{activeEmployees.map((employee) => <option key={String(employee.id)} value={String(employee.id)}>{employeeName(employee)}</option>)}</select></label>}
+          {fixedWorkDate ? <input type="hidden" name="workDate" value={fixedWorkDate} /> : <label className={styles.field}><span>Data</span><input name="workDate" type="date" defaultValue={formEditing ? String(formEditing.work_date ?? "").slice(0, 10) : referenceDate} required disabled={!canWrite || busy || Boolean(formEditing)} /></label>}
           <label className={styles.fieldWide}><span>Inwestycja</span><select name="projectId" value={selectedProjectId} onChange={(event) => setSelectedProjectId(event.target.value)} disabled={!canWrite || busy}><option value="">Koszt ogólny firmy / bez inwestycji</option>{projects.map((project) => <option key={String(project.id)} value={String(project.id)}>{str(project.name, "Inwestycja")}</option>)}</select></label>
-          <label className={styles.fieldWide}><span>WBS / zakres kosztorysowy</span><select name="wbsNodeId" defaultValue={editing?.wbs_node_id ? String(editing.wbs_node_id) : ""} disabled={!canWrite || busy || !selectedProjectId}><option value="">Bez WBS</option>{availableWbs.map((node) => <option key={String(node.id)} value={String(node.id)}>{str(node.code, "WBS")} · {str(node.name)}</option>)}</select></label>
-          <label className={styles.field}><span>Rodzaj czasu</span><select name="workType" defaultValue={str(editing?.work_type, "regular")} disabled={!canWrite || busy}>{WORK_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <label className={styles.field}><span>Kod kosztowy</span><input name="costCode" defaultValue={str(editing?.cost_code, "")} placeholder="np. ROB-WENT-01" disabled={!canWrite || busy} /></label>
-          <label className={styles.fieldWide}><span>Zakres wykonanych prac</span><input name="workScope" defaultValue={str(editing?.work_scope, "")} placeholder="np. montaż kanałów wentylacyjnych — budynek A" disabled={!canWrite || busy} /></label>
-          <label className={styles.fieldSmall}><span>Od</span><input name="startedAt" type="time" defaultValue={str(editing?.started_at, "").slice(0, 5)} disabled={!canWrite || busy} /></label>
-          <label className={styles.fieldSmall}><span>Do</span><input name="endedAt" type="time" defaultValue={str(editing?.ended_at, "").slice(0, 5)} disabled={!canWrite || busy} /></label>
-          <label className={styles.fieldSmall}><span>Przerwa min</span><input name="breakMinutes" inputMode="numeric" defaultValue={str(editing?.break_minutes, "0")} disabled={!canWrite || busy} /></label>
-          <label className={styles.fieldSmall}><span>Godziny</span><input name="hours" inputMode="decimal" defaultValue={editing ? str(editing.hours, "") : "8"} placeholder="auto z od–do" disabled={!canWrite || busy} /></label>
-          <label className={styles.fieldSmall}><span>Nadgodziny</span><input name="overtimeHours" inputMode="decimal" defaultValue={editing ? str(editing.overtime_hours, "0") : "0"} disabled={!canWrite || busy} /></label>
-          <label className={styles.fieldSmall}><span>Ilość</span><input name="quantity" inputMode="decimal" defaultValue={str(editing?.quantity, "")} placeholder="np. 32" disabled={!canWrite || busy} /></label>
-          <label className={styles.fieldSmall}><span>Jednostka</span><input name="unit" defaultValue={str(editing?.unit, "")} placeholder="mb / szt. / m²" disabled={!canWrite || busy} /></label>
-          <label className={`${styles.field} ${styles.fieldFull}`}><span>Uwagi</span><textarea name="note" defaultValue={str(editing?.note, "")} placeholder="Przeszkody, przestój, front robót, dodatkowa informacja dla kierownika" disabled={!canWrite || busy} /></label>
+          <label className={styles.fieldWide}><span>WBS / zakres kosztorysowy</span><select name="wbsNodeId" defaultValue={formEditing?.wbs_node_id ? String(formEditing.wbs_node_id) : ""} disabled={!canWrite || busy || !selectedProjectId}><option value="">Bez WBS</option>{availableWbs.map((node) => <option key={String(node.id)} value={String(node.id)}>{str(node.code, "WBS")} · {str(node.name)}</option>)}</select></label>
+          <label className={styles.field}><span>Rodzaj czasu</span><select name="workType" defaultValue={str(formEditing?.work_type, "regular")} disabled={!canWrite || busy}>{WORK_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label className={styles.field}><span>Kod kosztowy</span><input name="costCode" defaultValue={str(formEditing?.cost_code, "")} placeholder="np. ROB-WENT-01" disabled={!canWrite || busy} /></label>
+          <label className={styles.fieldWide}><span>Zakres wykonanych prac</span><input name="workScope" defaultValue={str(formEditing?.work_scope, "")} placeholder="np. montaż kanałów wentylacyjnych — budynek A" disabled={!canWrite || busy} /></label>
+          <label className={styles.fieldSmall}><span>Od</span><input name="startedAt" type="time" defaultValue={str(formEditing?.started_at, "").slice(0, 5)} disabled={!canWrite || busy} /></label>
+          <label className={styles.fieldSmall}><span>Do</span><input name="endedAt" type="time" defaultValue={str(formEditing?.ended_at, "").slice(0, 5)} disabled={!canWrite || busy} /></label>
+          <label className={styles.fieldSmall}><span>Przerwa min</span><input name="breakMinutes" inputMode="numeric" defaultValue={str(formEditing?.break_minutes, "0")} disabled={!canWrite || busy} /></label>
+          <label className={styles.fieldSmall}><span>Godziny</span><input name="hours" inputMode="decimal" defaultValue={formEditing ? str(formEditing.hours, "") : "8"} placeholder="auto z od–do" disabled={!canWrite || busy} /></label>
+          <label className={styles.fieldSmall}><span>Nadgodziny</span><input name="overtimeHours" inputMode="decimal" defaultValue={formEditing ? str(formEditing.overtime_hours, "0") : "0"} disabled={!canWrite || busy} /></label>
+          <label className={styles.fieldSmall}><span>Ilość</span><input name="quantity" inputMode="decimal" defaultValue={str(formEditing?.quantity, "")} placeholder="np. 32" disabled={!canWrite || busy} /></label>
+          <label className={styles.fieldSmall}><span>Jednostka</span><input name="unit" defaultValue={str(formEditing?.unit, "")} placeholder="mb / szt. / m²" disabled={!canWrite || busy} /></label>
+          <label className={`${styles.field} ${styles.fieldFull}`}><span>Uwagi</span><textarea name="note" defaultValue={str(formEditing?.note, "")} placeholder="Przeszkody, przestój, front robót, dodatkowa informacja dla kierownika" disabled={!canWrite || busy} /></label>
           <div className={`${styles.note} ${styles.fieldFull}`}><Clock3 size={13} /> WBS pochodzi bezpośrednio z inwestycji. Snapshot kosztu wykorzystuje stawkę obowiązującą w dacie pracy; nadgodziny są liczone godzinowo bez automatycznego mnożnika płacowego.</div>
           <div className={styles.actions}>
-            {editing ? <button className={styles.secondary} type="button" onClick={resetForm} disabled={busy}><X size={14} /> {embedded ? "+ Dodaj kolejny zakres" : "Anuluj edycję"}</button> : null}
-            <button className={styles.primary} type="submit" disabled={!canWrite || busy}><Save size={14} /> {busy ? "Zapisywanie…" : editing ? "Zapisz szczegóły" : embedded ? "Dodaj zakres" : "Dodaj wpis"}</button>
+            {formEditing ? <button className={styles.secondary} type="button" onClick={resetForm} disabled={busy}><X size={14} /> {embedded ? "+ Dodaj kolejny zakres" : "Anuluj edycję"}</button> : null}
+            <button className={styles.primary} type="submit" disabled={!canWrite || busy}><Save size={14} /> {busy ? "Zapisywanie…" : formEditing ? "Zapisz szczegóły" : embedded ? "Dodaj zakres" : "Dodaj wpis"}</button>
           </div>
         </div>
       </form>
@@ -282,7 +286,7 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
             <span className={styles.splitIndex}>{index + 1}</span>
             <div className={styles.splitMain}><strong>{num(totalHours(row), 2)} h · {project ? str(project.name) : "Koszt ogólny"}</strong><span>{wbs ? `${str(wbs.code, "WBS")} · ${str(wbs.name)}` : str(row.work_scope, workType)}</span></div>
             {data?.canViewCosts && row.labor_cost_snapshot != null ? <b className={styles.splitCost}>{money(row.labor_cost_snapshot)}</b> : null}
-            {canWrite ? <button type="button" className={styles.edit} onClick={() => beginEdit(row)} disabled={busy}><Pencil size={13} /> Edytuj</button> : null}
+            {canWrite ? <button type="button" className={styles.edit} onClick={() => beginEdit(row)} disabled={busy} aria-label={`Edytuj zakres ${index + 1}`}><Pencil size={13} /> Edytuj</button> : null}
           </div>;
         })}</div>
       </div> : null : <div className={styles.tableWrap}>
@@ -309,6 +313,7 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
         </table>
         {!rows.length && !error ? <div className={styles.empty}>Brak szczegółowych wpisów czasu w tym miesiącu. Dodaj pierwszy wpis powyżej.</div> : null}
       </div>}
+      </>}
     </div>
   </section>;
 }
