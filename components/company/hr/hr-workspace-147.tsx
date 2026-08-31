@@ -8,7 +8,6 @@ import { HrEmployeeCreate153 } from "./hr-employee-create-153";
 import { HrEmployeeRegistry152 } from "./hr-employee-registry-152";
 import { HrTeamCostControl156 } from "./hr-team-cost-control-156";
 import { HrDocumentUpload157 } from "./hr-document-upload-157";
-import { HrWorkCost160 } from "./hr-work-cost-160";
 import { HrFormalDocuments160 } from "./hr-formal-documents-160";
 import { HrAccountingBridge160 } from "./hr-accounting-bridge-160";
 import styles from "./hr-workspace-146.module.css";
@@ -176,26 +175,18 @@ export function HrWorkspace147(props: Props) {
     <div className={styles.workspaceSlot} data-hr-workspace-slot="employees-shell">
       <HrWorkspace140 {...props} activeTab={activeTab} onTabChange={handleTabChange} hiddenTabs={["employees", "time", "documents"]} />
       {registryVisible ? <HrEmployeeRegistry152 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canApprove={props.canApprove} canManagePayroll={props.canManagePayroll} /> : null}
-      {timeVisible ? <>
-        <HrTimeRecords159 key={timeFocus ? `${timeFocus.employeeId}-${timeFocus.referenceDate}` : "all"} workspaceId={props.workspaceId} referenceDate={timeFocus?.referenceDate ?? props.data.referenceDate} employees={props.data.employees} projects={props.data.projects} timesheets={props.data.timesheets} canWrite={props.canWrite} initialEmployeeId={timeFocus?.employeeId ?? null} onClearEmployeeFocus={() => setTimeFocus(null)} />
-        <details className={styles.advancedTimeDetails} data-hr-advanced-time-details="1">
-          <summary className={styles.advancedTimeSummary}>
-            <span className={styles.advancedTimeCopy}>
-              <span className={styles.advancedTimeEyebrow}>Ewidencja szczegółowa</span>
-              <strong>Szczegóły robocizny, WBS i kosztów</strong>
-              <small>Opcjonalny widok do opisu zakresów prac, kodów kosztowych, godzin od–do i kosztów robocizny.</small>
-            </span>
-            <span className={styles.advancedTimeAction} aria-hidden="true">
-              <span className={styles.advancedTimeClosed}>Rozwiń</span>
-              <span className={styles.advancedTimeOpen}>Zwiń</span>
-              <span className={styles.advancedTimeChevron}>⌄</span>
-            </span>
-          </summary>
-          <div className={styles.advancedTimeBody}>
-            <HrWorkCost160 workspaceId={props.workspaceId} referenceDate={timeFocus?.referenceDate ?? props.data.referenceDate} employees={props.data.employees} projects={props.data.projects} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} />
-          </div>
-        </details>
-      </> : null}
+      {timeVisible ? <HrTimeRecords159
+        key={timeFocus ? `${timeFocus.employeeId}-${timeFocus.referenceDate}` : "all"}
+        workspaceId={props.workspaceId}
+        referenceDate={timeFocus?.referenceDate ?? props.data.referenceDate}
+        employees={props.data.employees}
+        projects={props.data.projects}
+        timesheets={props.data.timesheets}
+        canWrite={props.canWrite}
+        canViewPayroll={props.canViewPayroll}
+        initialEmployeeId={timeFocus?.employeeId ?? null}
+        onClearEmployeeFocus={() => setTimeFocus(null)}
+      /> : null}
       {teamsVisible ? <HrTeamCostControl156 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} /> : null}
       {documentsVisible ? <>
         <HrDocumentUpload157 workspaceId={props.workspaceId} canWrite={props.canWrite} documentCount={props.data.documents.length} />
