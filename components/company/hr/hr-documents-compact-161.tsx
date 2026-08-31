@@ -5,10 +5,10 @@ import { ChevronDown, FileText, FolderOpen, Sparkles } from "lucide-react";
 import type { ComponentProps } from "react";
 import { HrAccountingBridge160 } from "./hr-accounting-bridge-160";
 import { HrDocumentUpload157 } from "./hr-document-upload-157";
-import { HrFormalDocuments160 } from "./hr-formal-documents-160";
+import { HrFormalDocuments162 } from "./hr-formal-documents-162";
 import styles from "./hr-documents-compact-161.module.css";
 
-type FormalData = ComponentProps<typeof HrFormalDocuments160>["data"];
+type FormalData = ComponentProps<typeof HrFormalDocuments162>["data"];
 
 type Props = {
   workspaceId: string;
@@ -40,7 +40,7 @@ export function HrDocumentsCompact161({ workspaceId, referenceDate, canWrite, do
       <strong>Akta i kompletność</strong>
       <span>Umowy, badania, BHP, uprawnienia i terminy</span>
     </div>
-    <HrFormalDocuments160 workspaceId={workspaceId} referenceDate={referenceDate} data={data} />
+    <HrFormalDocuments162 workspaceId={workspaceId} referenceDate={referenceDate} canWrite={canWrite} data={data} />
 
     <details className={styles.accounting}>
       <summary>
