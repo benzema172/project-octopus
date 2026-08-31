@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { ProjectOctopusLogin } from "@/components/auth/project-octopus-login";
+import { ProjectOctopusLoginClient } from "@/components/auth/project-octopus-login-client";
 import { getCurrentUser } from "@/lib/auth";
 import { getPublicSupabaseConfig } from "@/lib/env";
 
@@ -12,5 +12,5 @@ export default async function HomePage() {
     redirect("/workspace");
   }
 
-  return <ProjectOctopusLogin configReady={Boolean(getPublicSupabaseConfig())} />;
+  return <ProjectOctopusLoginClient configReady={Boolean(getPublicSupabaseConfig())} />;
 }
