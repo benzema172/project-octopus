@@ -3,7 +3,7 @@ import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { HrWorkspace149 } from "@/components/company/hr/hr-workspace-149";
 import { requireCurrentUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
-import { getHrWorkspace140Data } from "@/lib/data/hr-workspace-140";
+import { getHrWorkspace141Data } from "@/lib/data/hr-workspace-141";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import styles from "./hr-employee-list-141.module.css";
 import regression from "./hr-employee-list-1410.module.css";
@@ -28,7 +28,7 @@ export default async function HrPage({ params }: { params: Promise<{ workspaceId
   ]);
   const canViewPayroll = canApprove || canFinanceRead;
   const canManagePayroll = canApprove || canFinanceWrite;
-  const data = await getHrWorkspace140Data(workspace.id, { referenceDate, includePayroll: canViewPayroll });
+  const data = await getHrWorkspace141Data(workspace.id, { referenceDate, includePayroll: canViewPayroll });
 
   return <main className={`co-page ${styles.hr141} ${regression.hr1410} ${compact.profile143} ${createModal.create151}`}>
     <header className="co-page-heading">
