@@ -108,7 +108,7 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
   const wbsById = useMemo(() => new Map((data?.wbsNodes ?? []).map((row) => [String(row.id), row])), [data?.wbsNodes]);
   const availableWbs = useMemo(() => (data?.wbsNodes ?? []).filter((row) => selectedProjectId && String(row.project_id) === selectedProjectId), [data?.wbsNodes, selectedProjectId]);
   const activeEmployees = useMemo(() => employees.filter((row) => row.status === "active"), [employees]);
-  const fixedEmployee = fixedEmployeeId ? employeeById.get(fixedEmployeeId) : null;
+  const fixedEmployee = fixedEmployeeId ? employeeById.get(fixedEmployeeId) : undefined;
   const allRows = data?.rows ?? [];
   const rows = useMemo(() => allRows.filter((row) => {
     if (fixedEmployeeId && String(row.employee_id) !== fixedEmployeeId) return false;
