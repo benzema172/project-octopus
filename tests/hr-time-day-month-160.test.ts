@@ -12,7 +12,9 @@ describe("HR simplified time records", () => {
     expect(source).toContain(">Dzień</button>");
     expect(source).toContain(">Miesiąc</button>");
     expect(source).toContain("Pracownicy i czas pracy");
-    expect(source).toContain("prosty spis pracowników — wybierz inwestycję i wpisz godziny");
+    expect(source).toContain("prosty spis pracowników — wybierz inwestycję, wpisz godziny, a szczegóły rozwiń przy konkretnej osobie");
+    expect(source).toContain("Szczegóły robocizny");
+    expect(source).toContain('data-hr-employee-detail-row="1"');
     expect(source).toContain('period === "day"');
     expect(source).toContain('variant="inline"');
     expect(source).toContain('variant="cell"');
