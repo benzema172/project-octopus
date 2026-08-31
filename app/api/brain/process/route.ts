@@ -5,6 +5,7 @@ import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
+import { processHrDocumentIntake, type HrDocumentIntakeResult } from "@/lib/hr/document-intelligence";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -94,7 +95,26 @@ export async function POST(request: Request) {
       projectId: version.project_id ?? analysis.proposedProjectId,
       actorId: user.id
     });
-    return NextResponse.json({ ok: true, analysis, autopilot }, { headers: { "Cache-Control": "no-store" } });
+
+    let hrIntake: HrDocumentIntakeResult | null = null;
+    if (analysis.effectiveCategory === "hr") {
+      try {
+        hrIntake = await processHrDocumentIntake({
+          workspaceId: workspace.id,
+          documentId: version.document_id,
+          actorId: user.id
+        });
+      } catch (error) {
+        console.error("[brain/process] HR document routing failed", error);
+        hrIntake = {
+          attempted: true,
+          matched: false,
+          reason: error instanceof Error ? error.message : "Nie udało się automatycznie przypisać dokumentu HR."
+        };
+      }
+    }
+
+    return NextResponse.json({ ok: true, analysis, autopilot, hrIntake }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Analiza nie powiodła się.", queued: true },
