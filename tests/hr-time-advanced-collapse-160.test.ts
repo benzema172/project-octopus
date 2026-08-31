@@ -28,8 +28,10 @@ describe("HR time tab advanced labor controls", () => {
     expect(workCost).toContain("fixedWorkDate?: string | null");
     expect(workCost).toContain("if (rows.length !== 1) return");
     expect(workCost).toContain("setEditing(row)");
-    expect(workCost).toContain("Zmieniasz ten sam wpis czasu — nie tworzymy duplikatu");
+    expect(workCost).toContain("Edytujesz ten sam wpis czasu — bez duplikowania godzin");
     expect(workCost).toContain('data-hr-work-cost-embedded={embedded ? "1" : undefined}');
+    expect(workCost).toContain("embedded ? rows.length > 1 ?");
+    expect(workCost).toContain("Podział dnia · {rows.length} wpisy");
     expect(detailCss).toContain(".detailRow>td{");
     expect(detailCss).toContain(".detailShell{");
   });
