@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { BriefcaseBusiness, CalendarDays, Clock3, Download, FileText, HardHat, Plus, ShieldCheck, UsersRound } from "lucide-react";
 import type { HrWorkspaceData, HrWorkspaceTab } from "@/lib/hr/types";
 import { HrComplianceCore300 } from "./hr-compliance-core-300";
 import { HrDashboardCore300 } from "./hr-dashboard-core-300";
 import { HrDashboardCalendar159 } from "./hr-dashboard-calendar-159";
 import { HrDocumentsCompact161 } from "./hr-documents-compact-161";
-import { HrEmployeeCreate153 } from "./hr-employee-create-153";
+import { HrEmployeeCreate300 } from "./hr-employee-create-300";
 import { HrEmployeeRegistry152 } from "./hr-employee-registry-152";
 import { HrLeavesStable165 } from "./hr-leaves-stable-165";
 import { HrTeamCostControl156 } from "./hr-team-cost-control-156";
@@ -26,7 +26,7 @@ type Props = {
 
 type TimeFocus = { employeeId: string; referenceDate: string } | null;
 
-const tabs: Array<{ id: HrWorkspaceTab; label: string; icon: React.ReactNode }> = [
+const tabs: Array<{ id: HrWorkspaceTab; label: string; icon: ReactNode }> = [
   { id: "dashboard", label: "Pulpit", icon: <BriefcaseBusiness size={15} /> },
   { id: "employees", label: "Pracownicy", icon: <UsersRound size={15} /> },
   { id: "time", label: "Czas pracy", icon: <Clock3 size={15} /> },
@@ -68,6 +68,6 @@ export function HrWorkspaceCore300(props: Props) {
     {tab === "teams" ? <HrTeamCostControl156 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} /> : null}
     {tab === "documents" ? <HrDocumentsCompact161 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} canWrite={props.canWrite} documentCount={props.data.documents.length} data={props.data} /> : null}
 
-    {employeeCreateOpen ? <HrEmployeeCreate153 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} canManagePayroll={props.canManagePayroll} onClose={() => setEmployeeCreateOpen(false)} /> : null}
+    {employeeCreateOpen ? <HrEmployeeCreate300 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} canManagePayroll={props.canManagePayroll} onClose={() => setEmployeeCreateOpen(false)} /> : null}
   </div>;
 }
