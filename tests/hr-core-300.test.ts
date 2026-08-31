@@ -32,7 +32,7 @@ describe("HR Core 3.0 issue center", () => {
       leaveBalances: [{ employee_id: "e1", entitlement_configured: true, remaining_days: -2 }],
       exams: [{ employee_id: "e1", valid_until: "2027-01-01", status: "valid" }],
       trainings: [{ employee_id: "e1", valid_until: "2027-01-01", status: "valid" }]
-    }, { canViewPayroll: true });
+    }), { canViewPayroll: true });
     expect(result.issues.some((row) => row.kind === "allocation")).toBe(true);
     expect(result.issues.some((row) => row.kind === "timesheet")).toBe(true);
     expect(result.issues.filter((row) => row.kind === "leave").length).toBeGreaterThanOrEqual(2);
