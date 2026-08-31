@@ -178,7 +178,23 @@ export function HrWorkspace147(props: Props) {
       {registryVisible ? <HrEmployeeRegistry152 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canApprove={props.canApprove} canManagePayroll={props.canManagePayroll} /> : null}
       {timeVisible ? <>
         <HrTimeRecords159 key={timeFocus ? `${timeFocus.employeeId}-${timeFocus.referenceDate}` : "all"} workspaceId={props.workspaceId} referenceDate={timeFocus?.referenceDate ?? props.data.referenceDate} employees={props.data.employees} projects={props.data.projects} timesheets={props.data.timesheets} canWrite={props.canWrite} initialEmployeeId={timeFocus?.employeeId ?? null} onClearEmployeeFocus={() => setTimeFocus(null)} />
-        <HrWorkCost160 workspaceId={props.workspaceId} referenceDate={timeFocus?.referenceDate ?? props.data.referenceDate} employees={props.data.employees} projects={props.data.projects} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} />
+        <details className={styles.advancedTimeDetails} data-hr-advanced-time-details="1">
+          <summary className={styles.advancedTimeSummary}>
+            <span className={styles.advancedTimeCopy}>
+              <span className={styles.advancedTimeEyebrow}>Ewidencja szczegółowa</span>
+              <strong>Szczegóły robocizny, WBS i kosztów</strong>
+              <small>Opcjonalny widok do opisu zakresów prac, kodów kosztowych, godzin od–do i kosztów robocizny.</small>
+            </span>
+            <span className={styles.advancedTimeAction} aria-hidden="true">
+              <span className={styles.advancedTimeClosed}>Rozwiń</span>
+              <span className={styles.advancedTimeOpen}>Zwiń</span>
+              <span className={styles.advancedTimeChevron}>⌄</span>
+            </span>
+          </summary>
+          <div className={styles.advancedTimeBody}>
+            <HrWorkCost160 workspaceId={props.workspaceId} referenceDate={timeFocus?.referenceDate ?? props.data.referenceDate} employees={props.data.employees} projects={props.data.projects} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} />
+          </div>
+        </details>
       </> : null}
       {teamsVisible ? <HrTeamCostControl156 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} /> : null}
       {documentsVisible ? <>
