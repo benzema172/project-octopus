@@ -7,6 +7,7 @@ describe("Kadry 1.6.0 — dokumenty, czas i księgowość", () => {
   const timesheetApi = readFileSync("app/api/company/hr/timesheet-entry/route.ts", "utf8");
   const laborApi = readFileSync("app/api/company/hr/labor-control/route.ts", "utf8");
   const laborUi = readFileSync("components/company/hr/hr-work-cost-160.tsx", "utf8");
+  const timeRecordsUi = readFileSync("components/company/hr/hr-time-records-159.tsx", "utf8");
   const formalUi = readFileSync("components/company/hr/hr-formal-documents-160.tsx", "utf8");
   const accountingApi = readFileSync("app/api/company/hr/accounting-bridge/route.ts", "utf8");
   const accountingUi = readFileSync("components/company/hr/hr-accounting-bridge-160.tsx", "utf8");
@@ -66,7 +67,8 @@ describe("Kadry 1.6.0 — dokumenty, czas i księgowość", () => {
   });
 
   it("mounts all three new HR capabilities in their existing tabs", () => {
-    expect(workspace).toContain("HrWorkCost160");
+    expect(timeRecordsUi).toContain("HrWorkCost160");
+    expect(timeRecordsUi).toContain("fixedEmployeeId={employeeId}");
     expect(workspace).toContain("HrFormalDocuments160");
     expect(workspace).toContain("HrAccountingBridge160");
     expect(workspace).toContain('section[class*="grid2"] [class*="alertList"] > article[class*="alert"]');
