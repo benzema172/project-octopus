@@ -33,9 +33,9 @@ export default async function HrPage({ params }: { params: Promise<{ workspaceId
   return <main className={`co-page ${styles.hr141} ${regression.hr1410} ${compact.profile143} ${createModal.create151}`}>
     <header className="co-page-heading">
       <div>
-        <p className="co-kicker">Kadry 2.0</p>
+        <p className="co-kicker">Kadry Core 3.0</p>
         <h1>Kadry i zasoby ludzkie</h1>
-        <p>Pracownicy, brygady, inwestycje, czas pracy, urlopy, uprawnienia, BHP, dokumenty i koszt pracy w jednym miejscu.</p>
+        <p>Pracownicy, czas pracy, urlopy, BHP i uprawnienia, dokumenty OCR/AI, zespoły, inwestycje oraz koszt pracy w jednym spójnym obiegu.</p>
       </div>
     </header>
     <HrWorkspace149
