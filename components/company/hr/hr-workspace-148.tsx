@@ -7,10 +7,8 @@ import { HrTimeRecords159 } from "./hr-time-records-159";
 import { HrEmployeeCreate153 } from "./hr-employee-create-153";
 import { HrEmployeeRegistry152 } from "./hr-employee-registry-152";
 import { HrTeamCostControl156 } from "./hr-team-cost-control-156";
-import { HrDocumentUpload157 } from "./hr-document-upload-157";
-import { HrFormalDocuments160 } from "./hr-formal-documents-160";
-import { HrAccountingBridge160 } from "./hr-accounting-bridge-160";
 import { HrLeaves163 } from "./hr-leaves-163";
+import { HrDocumentsCompact161 } from "./hr-documents-compact-161";
 import styles from "./hr-workspace-146.module.css";
 import registryStyles from "./hr-employee-registry-152.module.css";
 
@@ -191,11 +189,13 @@ export function HrWorkspace148(props: Props) {
       /> : null}
       {leavesVisible ? <HrLeaves163 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canApprove={props.canApprove} /> : null}
       {teamsVisible ? <HrTeamCostControl156 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} /> : null}
-      {documentsVisible ? <>
-        <HrDocumentUpload157 workspaceId={props.workspaceId} canWrite={props.canWrite} documentCount={props.data.documents.length} />
-        <HrFormalDocuments160 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} data={props.data} />
-        <HrAccountingBridge160 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} />
-      </> : null}
+      {documentsVisible ? <HrDocumentsCompact161
+        workspaceId={props.workspaceId}
+        referenceDate={props.data.referenceDate}
+        canWrite={props.canWrite}
+        documentCount={props.data.documents.length}
+        data={props.data}
+      /> : null}
     </div>
     {dashboardActive ? <HrDashboardCalendar159 workspaceId={props.workspaceId} canWrite={props.canWrite} data={props.data} onOpenEmployeeCalendar={openEmployeeWorkCalendar} /> : null}
     {employeeCreateOpen ? <HrEmployeeCreate153 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} canManagePayroll={props.canManagePayroll} onClose={() => setEmployeeCreateOpen(false)} /> : null}
