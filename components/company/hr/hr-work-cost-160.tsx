@@ -82,8 +82,13 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
 
   useEffect(() => {
     autoAttachedRef.current = false;
-    setEditing(null);
-    setSelectedProjectId(initialProjectId ?? "");
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setEditing(null);
+      setSelectedProjectId(initialProjectId ?? "");
+    });
+    return () => { cancelled = true; };
   }, [fixedEmployeeId, fixedWorkDate, initialProjectId]);
 
   useEffect(() => {
@@ -109,20 +114,24 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
   const availableWbs = useMemo(() => (data?.wbsNodes ?? []).filter((row) => selectedProjectId && String(row.project_id) === selectedProjectId), [data?.wbsNodes, selectedProjectId]);
   const activeEmployees = useMemo(() => employees.filter((row) => row.status === "active"), [employees]);
   const fixedEmployee = fixedEmployeeId ? employeeById.get(fixedEmployeeId) : undefined;
-  const allRows = data?.rows ?? [];
-  const rows = useMemo(() => allRows.filter((row) => {
+  const rows = useMemo(() => (data?.rows ?? []).filter((row) => {
     if (fixedEmployeeId && String(row.employee_id) !== fixedEmployeeId) return false;
     if (fixedWorkDate && String(row.work_date ?? "").slice(0, 10) !== fixedWorkDate) return false;
     return true;
-  }), [allRows, fixedEmployeeId, fixedWorkDate]);
+  }), [data?.rows, fixedEmployeeId, fixedWorkDate]);
 
   useEffect(() => {
     if (!embedded || !fixedEmployeeId || !fixedWorkDate || !data || autoAttachedRef.current) return;
     autoAttachedRef.current = true;
     if (rows.length !== 1) return;
     const row = rows[0];
-    setEditing(row);
-    setSelectedProjectId(row.project_id ? String(row.project_id) : initialProjectId ?? "");
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setEditing(row);
+      setSelectedProjectId(row.project_id ? String(row.project_id) : initialProjectId ?? "");
+    });
+    return () => { cancelled = true; };
   }, [data, embedded, fixedEmployeeId, fixedWorkDate, initialProjectId, rows]);
 
   const resetForm = () => {
