@@ -30,10 +30,29 @@ function currentEmploymentMap(rows: HrRow[], referenceDate: string) {
   return map;
 }
 
-function currentCompliance(rows: HrRow[]) {
+function eventDate(row: HrRow, keys: string[]) {
+  for (const key of keys) {
+    const value = str(row[key]);
+    if (value) return value.slice(0, 10);
+  }
+  return "0000-01-01";
+}
+
+function latestCompliance(rows: HrRow[], eventKeys: string[]) {
   return [...rows]
     .filter((row) => normalize(row.status) !== "archived")
-    .sort((a, b) => str(b.valid_until ?? b.created_at).localeCompare(str(a.valid_until ?? a.created_at)));
+    .sort((a, b) => eventDate(b, eventKeys).localeCompare(eventDate(a, eventKeys)) || str(b.created_at).localeCompare(str(a.created_at)))[0];
+}
+
+function latestQualifications(rows: HrRow[]) {
+  const latest = new Map<string, HrRow>();
+  for (const row of rows) {
+    if (normalize(row.status) === "archived") continue;
+    const type = normalize(row.qualification_type) || String(row.id ?? "unknown");
+    const current = latest.get(type);
+    if (!current || eventDate(row, ["issued_at", "created_at"]).localeCompare(eventDate(current, ["issued_at", "created_at"])) > 0) latest.set(type, row);
+  }
+  return [...latest.values()];
 }
 
 export function buildHrEmployeeIssues(data: HrWorkspaceData, options: { canViewPayroll?: boolean } = {}): HrEmployeeIssueSummary {
@@ -66,12 +85,12 @@ export function buildHrEmployeeIssues(data: HrWorkspaceData, options: { canViewP
     });
     if (!hasContract) push({ employeeId, employeeName: name, kind: "contract", severity: "warning", title: "Brak umowy w aktach", detail: "Wrzutnia może rozpoznać dokument i przypisać go automatycznie.", targetTab: "documents" });
 
-    const medical = currentCompliance(examsByEmployee.get(employeeId) ?? [])[0];
+    const medical = latestCompliance(examsByEmployee.get(employeeId) ?? [], ["examined_at", "created_at"]);
     const medicalStatus = normalize(medical?.status);
     if (!medical || !medical.valid_until) {
       push({ employeeId, employeeName: name, kind: "medical", severity: "critical", title: "Brak ważnego badania lekarskiego", detail: "Dodaj aktualne orzeczenie z terminem ważności.", targetTab: "compliance" });
     } else if (medicalStatus === "unfit") {
-      push({ employeeId, employeeName: name, kind: "medical", severity: "critical", title: "Orzeczenie: pracownik niezdolny do pracy", detail: "Status orzeczenia blokuje traktowanie badania jako prawidłowego, niezależnie od daty ważności.", targetTab: "compliance", dueDate: str(medical.valid_until).slice(0, 10) });
+      push({ employeeId, employeeName: name, kind: "medical", severity: "critical", title: "Orzeczenie: pracownik niezdolny do pracy", detail: "Status najnowszego orzeczenia blokuje traktowanie badania jako prawidłowego, niezależnie od daty ważności starszych badań.", targetTab: "compliance", dueDate: str(medical.valid_until).slice(0, 10) });
     } else {
       const due = str(medical.valid_until).slice(0, 10);
       const days = daysBetween(referenceDate, due);
@@ -80,18 +99,18 @@ export function buildHrEmployeeIssues(data: HrWorkspaceData, options: { canViewP
       else if (days <= 30) push({ employeeId, employeeName: name, kind: "medical", severity: days <= 7 ? "critical" : "warning", title: `Badanie wygasa za ${days} dni`, detail: `Ważne do ${due}.`, targetTab: "compliance", dueDate: due, daysToDue: days });
     }
 
-    const safety = currentCompliance(trainingsByEmployee.get(employeeId) ?? []).find((row) => row.valid_until);
-    if (!safety) {
+    const safety = latestCompliance(trainingsByEmployee.get(employeeId) ?? [], ["completed_at", "created_at"]);
+    if (!safety || !safety.valid_until) {
       push({ employeeId, employeeName: name, kind: "safety", severity: "critical", title: "Brak ważnego szkolenia BHP", detail: "Dodaj szkolenie z terminem ważności.", targetTab: "compliance" });
     } else {
       const due = str(safety.valid_until).slice(0, 10);
       const days = daysBetween(referenceDate, due);
       const status = normalize(safety.status);
-      if (status === "expired" || status === "invalid" || days < 0) push({ employeeId, employeeName: name, kind: "safety", severity: "critical", title: "Szkolenie BHP wygasło", detail: days < 0 ? `Termin minął ${Math.abs(days)} dni temu.` : "Wpis ma status nieważny.", targetTab: "compliance", dueDate: due, daysToDue: days });
+      if (status === "expired" || status === "invalid" || days < 0) push({ employeeId, employeeName: name, kind: "safety", severity: "critical", title: "Szkolenie BHP wygasło", detail: days < 0 ? `Termin minął ${Math.abs(days)} dni temu.` : "Najnowszy wpis ma status nieważny.", targetTab: "compliance", dueDate: due, daysToDue: days });
       else if (days <= 30) push({ employeeId, employeeName: name, kind: "safety", severity: days <= 7 ? "critical" : "warning", title: `BHP wygasa za ${days} dni`, detail: `Ważne do ${due}.`, targetTab: "compliance", dueDate: due, daysToDue: days });
     }
 
-    const qualifications = currentCompliance(qualificationsByEmployee.get(employeeId) ?? []);
+    const qualifications = latestQualifications(qualificationsByEmployee.get(employeeId) ?? []);
     const expiredQualifications = qualifications.filter((row) => normalize(row.status) === "expired" || (row.valid_until && str(row.valid_until).slice(0, 10) < referenceDate));
     const expiringQualifications = qualifications.filter((row) => {
       if (!row.valid_until || normalize(row.status) === "expired") return false;
