@@ -158,11 +158,13 @@ export function HrEmployeeRegistry152({
   workspaceId,
   data,
   canWrite,
+  canApprove,
   canManagePayroll
 }: {
   workspaceId: string;
   data: RegistryData;
   canWrite: boolean;
+  canApprove: boolean;
   canManagePayroll: boolean;
 }) {
   const router = useRouter();
@@ -357,24 +359,39 @@ export function HrEmployeeRegistry152({
     });
   };
 
-  const changeEmployeeState = (employeeId: string, action: "archive" | "restore" | "delete") => {
+  const changeEmployeeState = (employeeId: string, action: "archive" | "restore" | "delete" | "force_delete") => {
     const employee = employeeById.get(employeeId);
     if (!employee) return;
     if (action === "archive" && !window.confirm(`Archiwizować pracownika ${employeeName(employee)}? Dane i historia pozostaną w systemie.`)) return;
     if (action === "restore" && !window.confirm(`Przywrócić pracownika ${employeeName(employee)} do aktywnych?`)) return;
     if (action === "delete" && !window.confirm(`Usunąć trwale pracownika ${employeeName(employee)}? Operacja zadziała tylko, jeżeli pracownik nie ma żadnej historii kadrowej.`)) return;
+    if (action === "force_delete") {
+      if (!canApprove) {
+        window.alert("Trwałe usunięcie pracownika wraz z historią wymaga uprawnienia do zatwierdzania w Kadrach.");
+        return;
+      }
+      if (!window.confirm(`Trwale usunąć ${employeeName(employee)}?\n\nZostanie usunięta karta pracownika oraz powiązana historia HR. Ta operacja służy m.in. do wyzerowania danych testowych i jest nieodwracalna.`)) return;
+      const phrase = window.prompt("Aby potwierdzić świadome trwałe usunięcie, wpisz dokładnie: USUŃ");
+      if (phrase?.trim() !== "USUŃ") {
+        window.alert("Usuwanie anulowane — nie wpisano poprawnego hasła potwierdzającego.");
+        return;
+      }
+    }
     setMessage(null);
     setError(null);
     startTransition(async () => {
       try {
+        const payload = action === "force_delete"
+          ? { employeeId, confirmation: "USUŃ", reason: "manual_test_reset" }
+          : { employeeId };
         const response = await fetch("/api/company/hr/employee", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ workspaceId, action, payload: { employeeId } })
+          body: JSON.stringify({ workspaceId, action, payload })
         });
         const result = await response.json().catch(() => ({})) as { error?: string };
         if (!response.ok) throw new Error(result.error ?? "Nie udało się zmienić statusu pracownika.");
-        setMessage(action === "archive" ? "Pracownik został zarchiwizowany." : action === "restore" ? "Pracownik został przywrócony." : "Pracownik został usunięty.");
+        setMessage(action === "archive" ? "Pracownik został zarchiwizowany." : action === "restore" ? "Pracownik został przywrócony." : action === "force_delete" ? "Pracownik i powiązana historia HR zostały trwale usunięte." : "Pracownik został usunięty.");
         setEditEmployeeId(null);
         router.refresh();
       } catch (reason) {
@@ -439,7 +456,8 @@ export function HrEmployeeRegistry152({
       submit={submitEmployee}
       archive={() => changeEmployeeState(String(editEmployee.id), "archive")}
       restore={() => changeEmployeeState(String(editEmployee.id), "restore")}
-      remove={() => changeEmployeeState(String(editEmployee.id), "delete")}
+      remove={() => changeEmployeeState(String(editEmployee.id), canApprove ? "force_delete" : "delete")}
+      canApprove={canApprove}
     /> : null}
 
     {calendarEmployee ? <EmployeeCalendarModal
@@ -466,6 +484,7 @@ function EmployeeEditModal({
   history,
   canWrite,
   canManagePayroll,
+  canApprove,
   pending,
   error,
   close,
@@ -484,6 +503,7 @@ function EmployeeEditModal({
   history: Row[];
   canWrite: boolean;
   canManagePayroll: boolean;
+  canApprove: boolean;
   pending: boolean;
   error: string | null;
   close: () => void;
@@ -567,7 +587,7 @@ function EmployeeEditModal({
           </div></fieldset>
           {canWrite ? <div className={styles.modalActions}><button type="button" className={styles.secondaryButton} onClick={close}>Anuluj</button><button className={styles.primaryButton} disabled={pending}>{pending ? "Zapisywanie…" : "Zapisz zmiany"}</button></div> : null}
         </form>
-        {canWrite ? <section className={styles.dangerZone}><div><strong>Zarządzanie kartą</strong><p>Archiwizacja zachowuje pełną historię. Trwałe usunięcie jest dozwolone tylko dla karty bez historii kadrowej.</p></div><div className={styles.dangerActions}>{String(employee.status) === "inactive" ? <button type="button" className={styles.secondaryButton} onClick={restore} disabled={pending}><RotateCcw size={15} /> Przywróć</button> : <button type="button" className={styles.secondaryButton} onClick={archive} disabled={pending}><Archive size={15} /> Archiwizuj</button>}<button type="button" className={styles.dangerButton} onClick={remove} disabled={pending}><Trash2 size={15} /> Usuń trwale</button></div></section> : null}
+        {canWrite ? <section className={styles.dangerZone}><div><strong>Zarządzanie kartą</strong><p>{canApprove ? "Archiwizacja zachowuje pełną historię. Trwałe usunięcie kasuje kartę i powiązaną historię HR; wymaga dodatkowego potwierdzenia hasłem USUŃ." : "Archiwizacja zachowuje pełną historię. Trwałe usunięcie wraz z historią jest dostępne tylko dla osoby z uprawnieniem do zatwierdzania w Kadrach."}</p></div><div className={styles.dangerActions}>{String(employee.status) === "inactive" ? <button type="button" className={styles.secondaryButton} onClick={restore} disabled={pending}><RotateCcw size={15} /> Przywróć</button> : <button type="button" className={styles.secondaryButton} onClick={archive} disabled={pending}><Archive size={15} /> Archiwizuj</button>}<button type="button" className={styles.dangerButton} onClick={remove} disabled={pending} title={canApprove ? "Usuń pracownika razem z historią po dodatkowym potwierdzeniu" : "Trwałe usunięcie wymaga uprawnienia do zatwierdzania w Kadrach"}><Trash2 size={15} /> Usuń trwale</button></div></section> : null}
       </div>
     </section>
   </div></ModalPortal>;

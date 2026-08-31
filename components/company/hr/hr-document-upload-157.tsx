@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, FileUp, LoaderCircle, UploadCloud } from "lucide-react";
 import { SUPPORTED_UPLOAD_ACCEPT, validateUploadFile } from "@/lib/r2/sanitize";
@@ -19,61 +18,10 @@ type Props = {
 export function HrDocumentUpload157({ workspaceId, canWrite, documentCount }: Props) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [mount, setMount] = useState<HTMLElement | null>(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const root = document.querySelector<HTMLElement>('[data-hr-workspace-slot="employees-shell"]');
-    if (!root) return;
-
-    let cancelled = false;
-    let currentPanel: HTMLElement | null = null;
-    let currentMount: HTMLElement | null = null;
-    let legacyParagraph: HTMLElement | null = null;
-    let legacyLink: HTMLElement | null = null;
-    let paragraphDisplay = "";
-    let linkDisplay = "";
-
-    const sync = () => {
-      const panel = Array.from(root.querySelectorAll<HTMLElement>("article"))
-        .find((item) => item.querySelector("h2")?.textContent?.trim() === "Wrzutnia dokumentów HR") ?? null;
-      if (!panel || panel === currentPanel) return;
-
-      if (legacyParagraph) legacyParagraph.style.display = paragraphDisplay;
-      if (legacyLink) legacyLink.style.display = linkDisplay;
-      currentMount?.remove();
-
-      currentPanel = panel;
-      legacyParagraph = panel.querySelector<HTMLElement>(":scope > p");
-      legacyLink = panel.querySelector<HTMLElement>(":scope > a");
-      paragraphDisplay = legacyParagraph?.style.display ?? "";
-      linkDisplay = legacyLink?.style.display ?? "";
-      if (legacyParagraph) legacyParagraph.style.display = "none";
-      if (legacyLink) legacyLink.style.display = "none";
-
-      currentMount = document.createElement("div");
-      currentMount.dataset.hrUploadMount = "1";
-      panel.appendChild(currentMount);
-      const nextMount = currentMount;
-      queueMicrotask(() => {
-        if (!cancelled && nextMount.isConnected) setMount(nextMount);
-      });
-    };
-
-    sync();
-    const observer = new MutationObserver(sync);
-    observer.observe(root, { childList: true, subtree: true });
-    return () => {
-      cancelled = true;
-      observer.disconnect();
-      if (legacyParagraph) legacyParagraph.style.display = paragraphDisplay;
-      if (legacyLink) legacyLink.style.display = linkDisplay;
-      currentMount?.remove();
-    };
-  }, [documentCount]);
 
   async function uploadOne(file: File, index: number, total: number) {
     const mimeType = file.type || "application/octet-stream";
@@ -165,10 +113,7 @@ export function HrDocumentUpload157({ workspaceId, canWrite, documentCount }: Pr
     }
   }
 
-  if (!mount) return null;
-
-  return createPortal(
-    <div className={styles.wrap} data-hr-functional-upload="1">
+  return <div className={styles.wrap} data-hr-functional-upload="1" data-hr-document-count={documentCount}>
       <p className={styles.intro}>Wrzuć tutaj dokumenty kadrowe. Pliki są oznaczane jako <strong>Kadry</strong>, trafiają do prywatnego magazynu i do analizy Octopus Brain.</p>
       <button
         type="button"
@@ -201,7 +146,5 @@ export function HrDocumentUpload157({ workspaceId, canWrite, documentCount }: Pr
       {status ? <div className={styles.status} role="status"><CheckCircle2 size={15} /> <span>{status}</span></div> : null}
       {error ? <div className={styles.error} role="alert"><span>{error}</span></div> : null}
       <a className={styles.libraryLink} href={`/workspace/companies/${workspaceId}/documents?upload=1`}>Otwórz pełną bibliotekę dokumentów →</a>
-    </div>,
-    mount
-  );
+    </div>;
 }

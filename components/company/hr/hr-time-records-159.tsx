@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
+import { useMemo, useState } from "react";
 import { ArrowLeft, Download } from "lucide-react";
 import { HrTimesheetEntryEditor159 } from "./hr-timesheet-entry-editor-159";
 import styles from "./hr-workspace-140.module.css";
@@ -22,7 +21,6 @@ export function HrTimeRecords159({ workspaceId, referenceDate, employees, projec
   const initialEmployee = initialEmployeeId ? employees.find((row) => String(row.id) === initialEmployeeId) ?? null : null;
   const [period, setPeriod] = useState<Period>(() => initialEmployee ? "month" : "week");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(() => initialEmployee ? String(initialEmployee.id) : null);
-  const [mount, setMount] = useState<HTMLElement | null>(null);
   const dates = useMemo(() => period === "week" ? Array.from({ length: 7 }, (_, index) => addDays(referenceDate, index - 6)) : monthDates(referenceDate), [period, referenceDate]);
   const dateSet = useMemo(() => new Set(dates), [dates]);
   const activeEmployees = useMemo(() => employees.filter((row) => row.status === "active"), [employees]);
@@ -48,40 +46,6 @@ export function HrTimeRecords159({ workspaceId, referenceDate, employees, projec
   }, [visiblePeriodEntries]);
   const periodTotal = visiblePeriodEntries.reduce((sum, row) => sum + entryHours(row), 0);
 
-  useEffect(() => {
-    const root = document.querySelector<HTMLElement>('[data-hr-workspace-slot="employees-shell"]');
-    if (!root) return;
-    let legacyPanel: HTMLElement | null = null;
-    let legacyDisplay = "";
-    let currentMount: HTMLElement | null = null;
-
-    const sync = () => {
-      const panel = Array.from(root.querySelectorAll<HTMLElement>("article"))
-        .find((item) => item.querySelector("h2")?.textContent?.trim() === "Ewidencja czasu pracy") ?? null;
-      if (!panel || panel === legacyPanel) return;
-      if (legacyPanel) legacyPanel.style.display = legacyDisplay;
-      currentMount?.remove();
-      legacyPanel = panel;
-      legacyDisplay = panel.style.display;
-      panel.style.display = "none";
-      currentMount = document.createElement("div");
-      currentMount.dataset.hrEditableTimeRecordsMount = "1";
-      panel.parentElement?.insertBefore(currentMount, panel);
-      setMount(currentMount);
-    };
-
-    sync();
-    const observer = new MutationObserver(sync);
-    observer.observe(root, { childList: true, subtree: true });
-    return () => {
-      observer.disconnect();
-      if (legacyPanel) legacyPanel.style.display = legacyDisplay;
-      currentMount?.remove();
-    };
-  }, []);
-
-  if (!mount) return null;
-
   const focusedName = focusedEmployee ? employeeName(focusedEmployee) : "";
   const focusedId = focusedEmployee ? String(focusedEmployee.id) : null;
   const clearFocus = () => {
@@ -90,7 +54,7 @@ export function HrTimeRecords159({ workspaceId, referenceDate, employees, projec
     onClearEmployeeFocus?.();
   };
 
-  return createPortal(<article className={styles.panel} data-hr-editable-time-records="1" data-hr-employee-calendar={focusedId ?? undefined}>
+  return <article className={styles.panel} data-hr-editable-time-records="1" data-hr-employee-calendar={focusedId ?? undefined}>
     <div className={styles.panelHeader}>
       <div>
         <p className={styles.kicker}>{focusedEmployee ? "Kalendarz pracy pracownika" : period === "week" ? "Ostatnie 7 dni" : "Miesiąc"}</p>
@@ -124,5 +88,5 @@ export function HrTimeRecords159({ workspaceId, referenceDate, employees, projec
       </table>
       {!visibleEmployees.length ? <div className={styles.empty}>{focusedEmployee ? "Nie znaleziono pracownika." : "Brak aktywnych pracowników."}</div> : null}
     </div>
-  </article>, mount);
+  </article>;
 }

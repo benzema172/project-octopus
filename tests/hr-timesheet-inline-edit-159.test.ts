@@ -51,7 +51,9 @@ describe("Kadry 1.5.9 editable daily timesheets", () => {
   it("replaces the legacy records matrix with an editable day-cell grid", () => {
     expect(records).toContain('variant="cell"');
     expect(records).toContain("data-hr-editable-time-records");
-    expect(records).toContain('panel.style.display = "none"');
+    expect(wrapper).toContain('hiddenTabs={["employees", "time", "documents"]}');
+    expect(records).not.toContain("MutationObserver");
+    expect(records).not.toContain("createPortal");
     expect(records).toContain("kliknij dowolny dzień, aby edytować inwestycję i godziny");
   });
 
