@@ -10,6 +10,7 @@ import { HrTeamCostControl156 } from "./hr-team-cost-control-156";
 import { HrDocumentUpload157 } from "./hr-document-upload-157";
 import { HrFormalDocuments160 } from "./hr-formal-documents-160";
 import { HrAccountingBridge160 } from "./hr-accounting-bridge-160";
+import { HrLeaves161 } from "./hr-leaves-161";
 import styles from "./hr-workspace-146.module.css";
 import registryStyles from "./hr-employee-registry-152.module.css";
 
@@ -33,6 +34,7 @@ export function HrWorkspace147(props: Props) {
   const dashboardActive = activeTab === "dashboard";
   const registryVisible = activeTab === "employees";
   const timeVisible = activeTab === "time";
+  const leavesVisible = activeTab === "leaves";
   const teamsVisible = activeTab === "teams";
   const documentsVisible = activeTab === "documents";
 
@@ -92,7 +94,7 @@ export function HrWorkspace147(props: Props) {
       return;
     }
     if (id === "pending-leave" || title.includes("wniosków urlopowych")) {
-      activateTab("leaves", () => scrollToHeading("Wnioski do decyzji"));
+      activateTab("leaves", () => scrollToHeading("Pracownicy i urlopy"));
       return;
     }
     if (type === "leave_entitlement") {
@@ -173,7 +175,7 @@ export function HrWorkspace147(props: Props) {
     onKeyDownCapture={handleKeyDown}
   >
     <div className={styles.workspaceSlot} data-hr-workspace-slot="employees-shell">
-      <HrWorkspace140 {...props} activeTab={activeTab} onTabChange={handleTabChange} hiddenTabs={["employees", "time", "documents"]} />
+      <HrWorkspace140 {...props} activeTab={activeTab} onTabChange={handleTabChange} hiddenTabs={["employees", "time", "leaves", "documents"]} />
       {registryVisible ? <HrEmployeeRegistry152 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canApprove={props.canApprove} canManagePayroll={props.canManagePayroll} /> : null}
       {timeVisible ? <HrTimeRecords159
         key={timeFocus ? `${timeFocus.employeeId}-${timeFocus.referenceDate}` : "all"}
@@ -187,6 +189,7 @@ export function HrWorkspace147(props: Props) {
         initialEmployeeId={timeFocus?.employeeId ?? null}
         onClearEmployeeFocus={() => setTimeFocus(null)}
       /> : null}
+      {leavesVisible ? <HrLeaves161 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canApprove={props.canApprove} /> : null}
       {teamsVisible ? <HrTeamCostControl156 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} /> : null}
       {documentsVisible ? <>
         <HrDocumentUpload157 workspaceId={props.workspaceId} canWrite={props.canWrite} documentCount={props.data.documents.length} />
