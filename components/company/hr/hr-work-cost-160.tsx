@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Clock3, Pencil, RefreshCw, Save, X } from "lucide-react";
+import { Clock3, Pencil, Plus, RefreshCw, Save, X } from "lucide-react";
 import styles from "./hr-work-cost-160.module.css";
 
 type Row = Record<string, unknown>;
@@ -132,11 +132,36 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
   }), [data?.rows, fixedEmployeeId, fixedWorkDate]);
   const formEditing = editing ?? (!explicitNew && embedded && rows.length === 1 ? rows[0] : null);
 
-  const resetForm = () => {
+  const focusFormField = (fieldName: string, block: ScrollLogicalPosition = "center") => {
+    window.requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block });
+      formRef.current?.querySelector<HTMLElement>(`[name="${fieldName}"]`)?.focus({ preventScroll: true });
+    });
+  };
+
+  const startNewRange = () => {
+    const projectId = formEditing?.project_id ? String(formEditing.project_id) : initialProjectId ?? "";
     setEditing(null);
     setExplicitNew(true);
-    setSelectedProjectId(initialProjectId ?? "");
+    setSelectedProjectId(projectId);
     setMessage(null);
+    setError(null);
+    focusFormField("workScope");
+  };
+
+  const cancelNewRange = () => {
+    setExplicitNew(false);
+    setMessage(null);
+    setError(null);
+    if (rows.length === 1) {
+      const row = rows[0];
+      setEditing(row);
+      setSelectedProjectId(row.project_id ? String(row.project_id) : "");
+    } else {
+      setEditing(null);
+      setSelectedProjectId(initialProjectId ?? "");
+    }
+    focusFormField("projectId");
   };
 
   const beginEdit = (row: Row) => {
@@ -145,10 +170,7 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
     setSelectedProjectId(row.project_id ? String(row.project_id) : "");
     setMessage(null);
     setError(null);
-    window.requestAnimationFrame(() => {
-      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      formRef.current?.querySelector<HTMLElement>('[name="projectId"]')?.focus({ preventScroll: true });
-    });
+    focusFormField("projectId", "start");
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -244,10 +266,11 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
 
     <div className={styles.body}>
       {!data && !error ? <div className={styles.empty} role="status">Wczytywanie szczegółów robocizny…</div> : <>
-      <form ref={formRef} className={styles.formCard} key={editKey} onSubmit={submit} data-hr-labor-edit-form="1">
+      {explicitNew && embedded ? <div className={styles.success} role="status" data-hr-new-range-state="1"><strong>Nowy zakres robocizny.</strong> Istniejący wpis pozostaje bez zmian. Uzupełnij poniżej drugi zakres i zapisz go przyciskiem „Dodaj nowy zakres”.</div> : null}
+      <form ref={formRef} className={styles.formCard} key={editKey} onSubmit={submit} data-hr-labor-edit-form="1" data-hr-new-range={explicitNew && embedded ? "1" : undefined}>
         <div className={styles.formTitle}>
-          <h3>{formEditing ? (embedded ? "Edytuj szczegóły wpisu" : `Edytuj wpis · ${dateLabel(formEditing.work_date)}`) : embedded ? "Dodaj kolejny zakres" : "Dodaj szczegółowy wpis z budowy"}</h3>
-          <span>{formEditing ? "Edytujesz ten sam wpis czasu — bez duplikowania godzin. Koszt zostanie ponownie wyliczony według stawki z dnia pracy." : "Godziny możesz wpisać ręcznie albo zostawić puste i podać od–do."}</span>
+          <h3>{formEditing ? (embedded ? "Edytuj szczegóły wpisu" : `Edytuj wpis · ${dateLabel(formEditing.work_date)}`) : embedded ? "Nowy zakres robocizny" : "Dodaj szczegółowy wpis z budowy"}</h3>
+          <span>{formEditing ? "Edytujesz ten sam wpis czasu — bez duplikowania godzin. Koszt zostanie ponownie wyliczony według stawki z dnia pracy." : embedded ? "To będzie osobny wpis tego samego dnia. Istniejących godzin i szczegółów nie zmieniamy." : "Godziny możesz wpisać ręcznie albo zostawić puste i podać od–do."}</span>
         </div>
         <div className={styles.grid}>
           {fixedEmployeeId ? <input type="hidden" name="employeeId" value={fixedEmployeeId} /> : <label className={styles.field}><span>Pracownik</span><select name="employeeId" defaultValue={formEditing ? String(formEditing.employee_id ?? "") : ""} required disabled={!canWrite || busy || Boolean(formEditing)}><option value="">Wybierz</option>{activeEmployees.map((employee) => <option key={String(employee.id)} value={String(employee.id)}>{employeeName(employee)}</option>)}</select></label>}
@@ -260,15 +283,15 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
           <label className={styles.fieldSmall}><span>Od</span><input name="startedAt" type="time" defaultValue={str(formEditing?.started_at, "").slice(0, 5)} disabled={!canWrite || busy} /></label>
           <label className={styles.fieldSmall}><span>Do</span><input name="endedAt" type="time" defaultValue={str(formEditing?.ended_at, "").slice(0, 5)} disabled={!canWrite || busy} /></label>
           <label className={styles.fieldSmall}><span>Przerwa min</span><input name="breakMinutes" inputMode="numeric" defaultValue={str(formEditing?.break_minutes, "0")} disabled={!canWrite || busy} /></label>
-          <label className={styles.fieldSmall}><span>Godziny</span><input name="hours" inputMode="decimal" defaultValue={formEditing ? str(formEditing.hours, "") : "8"} placeholder="auto z od–do" disabled={!canWrite || busy} /></label>
+          <label className={styles.fieldSmall}><span>Godziny</span><input name="hours" inputMode="decimal" defaultValue={formEditing ? str(formEditing.hours, "") : explicitNew && embedded ? "" : "8"} placeholder="wpisz godziny lub podaj od–do" disabled={!canWrite || busy} /></label>
           <label className={styles.fieldSmall}><span>Nadgodziny</span><input name="overtimeHours" inputMode="decimal" defaultValue={formEditing ? str(formEditing.overtime_hours, "0") : "0"} disabled={!canWrite || busy} /></label>
           <label className={styles.fieldSmall}><span>Ilość</span><input name="quantity" inputMode="decimal" defaultValue={str(formEditing?.quantity, "")} placeholder="np. 32" disabled={!canWrite || busy} /></label>
           <label className={styles.fieldSmall}><span>Jednostka</span><input name="unit" defaultValue={str(formEditing?.unit, "")} placeholder="mb / szt. / m²" disabled={!canWrite || busy} /></label>
           <label className={`${styles.field} ${styles.fieldFull}`}><span>Uwagi</span><textarea name="note" defaultValue={str(formEditing?.note, "")} placeholder="Przeszkody, przestój, front robót, dodatkowa informacja dla kierownika" disabled={!canWrite || busy} /></label>
           <div className={`${styles.note} ${styles.fieldFull}`}><Clock3 size={13} /> WBS pochodzi bezpośrednio z inwestycji. Snapshot kosztu wykorzystuje stawkę obowiązującą w dacie pracy; nadgodziny są liczone godzinowo bez automatycznego mnożnika płacowego.</div>
           <div className={styles.actions}>
-            {formEditing ? <button className={styles.secondary} type="button" onClick={resetForm} disabled={busy}><X size={14} /> {embedded ? "+ Dodaj kolejny zakres" : "Anuluj edycję"}</button> : null}
-            <button className={styles.primary} type="submit" disabled={!canWrite || busy}><Save size={14} /> {busy ? "Zapisywanie…" : formEditing ? "Zapisz szczegóły" : embedded ? "Dodaj zakres" : "Dodaj wpis"}</button>
+            {formEditing ? <button className={styles.secondary} type="button" onClick={embedded ? startNewRange : () => setEditing(null)} disabled={busy}>{embedded ? <Plus size={14} /> : <X size={14} />} {embedded ? "Dodaj kolejny zakres" : "Anuluj edycję"}</button> : explicitNew && embedded ? <button className={styles.secondary} type="button" onClick={cancelNewRange} disabled={busy}><X size={14} /> Anuluj dodawanie</button> : null}
+            <button className={styles.primary} type="submit" disabled={!canWrite || busy}><Save size={14} /> {busy ? "Zapisywanie…" : formEditing ? "Zapisz szczegóły" : embedded ? "Dodaj nowy zakres" : "Dodaj wpis"}</button>
           </div>
         </div>
       </form>
