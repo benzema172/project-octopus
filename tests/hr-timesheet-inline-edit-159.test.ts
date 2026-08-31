@@ -45,16 +45,19 @@ describe("Kadry 1.5.9 editable daily timesheets", () => {
     expect(records).toContain("Kalendarz pracy —");
     expect(records).toContain("visibleEmployees");
     expect(records).toContain("Wszyscy pracownicy");
-    expect(records).toContain('initialEmployee ? "month" : "week"');
+    expect(records).toContain('initialEmployee ? "month" : "day"');
   });
 
-  it("replaces the legacy records matrix with an editable day-cell grid", () => {
+  it("replaces the legacy records matrix with a simple editable day/month employee grid", () => {
+    expect(records).toContain('type Period = "day" | "month"');
     expect(records).toContain('variant="cell"');
     expect(records).toContain("data-hr-editable-time-records");
     expect(wrapper).toContain('hiddenTabs={["employees", "time", "documents"]}');
     expect(records).not.toContain("MutationObserver");
     expect(records).not.toContain("createPortal");
-    expect(records).toContain("kliknij dowolny dzień, aby edytować inwestycję i godziny");
+    expect(records).toContain("prosty spis pracowników — wybierz inwestycję i wpisz godziny");
+    expect(records).toContain(">Dzień</button>");
+    expect(records).toContain(">Miesiąc</button>");
   });
 
   it("updates existing records instead of creating duplicates and can remove bad entries", () => {
