@@ -30,8 +30,8 @@ describe("HR Core 3.0 issue center", () => {
       leaves: [{ employee_id: "e1", status: "pending" }],
       timesheets: [{ employee_id: "e1", status: "submitted" }],
       leaveBalances: [{ employee_id: "e1", entitlement_configured: true, remaining_days: -2 }],
-      exams: [{ employee_id: "e1", valid_until: "2027-01-01", status: "valid" }],
-      trainings: [{ employee_id: "e1", valid_until: "2027-01-01", status: "valid" }]
+      exams: [{ employee_id: "e1", examined_at: "2026-01-01", valid_until: "2027-01-01", status: "valid" }],
+      trainings: [{ employee_id: "e1", completed_at: "2026-01-01", valid_until: "2027-01-01", status: "valid" }]
     }), { canViewPayroll: true });
     expect(result.issues.some((row) => row.kind === "allocation")).toBe(true);
     expect(result.issues.some((row) => row.kind === "timesheet")).toBe(true);
@@ -41,11 +41,24 @@ describe("HR Core 3.0 issue center", () => {
   it("treats an unfit medical result as critical even when its date is still current", () => {
     const result = buildHrEmployeeIssues(data({
       employments: [{ id: "em1", employee_id: "e1", valid_from: "2026-01-01", monthly_cost: 9000, hourly_cost: 60 }],
-      exams: [{ employee_id: "e1", valid_until: "2027-08-31", status: "unfit" }],
-      trainings: [{ employee_id: "e1", valid_until: "2027-08-31", status: "valid" }],
+      exams: [{ employee_id: "e1", examined_at: "2026-08-01", valid_until: "2027-08-31", status: "unfit" }],
+      trainings: [{ employee_id: "e1", completed_at: "2026-01-01", valid_until: "2027-08-31", status: "valid" }],
       leaveBalances: [{ employee_id: "e1", entitlement_configured: true, remaining_days: 20 }]
     }));
     expect(result.issues.some((row) => row.kind === "medical" && row.severity === "critical" && row.title.includes("niezdolny"))).toBe(true);
+  });
+
+  it("uses the newest medical event instead of an older record with a later expiry", () => {
+    const result = buildHrEmployeeIssues(data({
+      employments: [{ id: "em1", employee_id: "e1", valid_from: "2026-01-01", monthly_cost: 9000, hourly_cost: 60 }],
+      exams: [
+        { id: "old", employee_id: "e1", examined_at: "2025-12-01", valid_until: "2027-12-31", status: "valid" },
+        { id: "new", employee_id: "e1", examined_at: "2026-08-20", valid_until: "2026-09-05", status: "unfit" }
+      ],
+      trainings: [{ employee_id: "e1", completed_at: "2026-01-01", valid_until: "2027-08-31", status: "valid" }],
+      leaveBalances: [{ employee_id: "e1", entitlement_configured: true, remaining_days: 20 }]
+    }));
+    expect(result.issues.some((row) => row.kind === "medical" && row.title.includes("niezdolny"))).toBe(true);
   });
 });
 
@@ -59,6 +72,7 @@ describe("HR Core 3.0 architecture contracts", () => {
   const createMigration = readFileSync("supabase/migrations/20260831203000_hr_core_300_atomic_employee.sql", "utf8");
   const updateMigration = readFileSync("supabase/migrations/20260831204500_hr_core_300_atomic_employee_update.sql", "utf8");
   const intelligence = readFileSync("lib/hr/document-intelligence.ts", "utf8");
+  const packageJson = readFileSync("package.json", "utf8");
 
   it("has one direct shell and no legacy workspace monoliths", () => {
     expect(shell).toContain("HrDashboardCore300");
@@ -71,6 +85,14 @@ describe("HR Core 3.0 architecture contracts", () => {
     expect(existsSync("components/company/hr/hr-workspace-148.tsx")).toBe(false);
     expect(existsSync("components/company/hr/hr-workspace-146.tsx")).toBe(false);
     expect(existsSync("components/company/hr/hr-workspace-147.tsx")).toBe(false);
+  });
+
+  it("lazy-loads heavy HR sections and keeps the annual lifecycle test in the build gate", () => {
+    expect(shell).toContain('import dynamic from "next/dynamic"');
+    expect(shell).toContain("dynamic(() => import(\"./hr-employee-registry-300\")");
+    expect(shell).toContain("dynamic(() => import(\"./hr-time-records-159\")");
+    expect(shell).toContain("dynamic(() => import(\"./hr-documents-compact-161\")");
+    expect(packageJson).toContain("tests/hr-year-lifecycle-10-workers.test.ts");
   });
 
   it("creates and edits employee bundles through atomic database functions", () => {
