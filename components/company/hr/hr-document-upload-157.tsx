@@ -8,6 +8,21 @@ import styles from "./hr-document-upload-157.module.css";
 
 type UploadResponse = { uploadUrl: string; token: string; headers: Record<string, string> };
 type CompleteResponse = { documentId: string; versionId: string };
+type BrainResponse = {
+  ok?: boolean;
+  hrIntake?: {
+    matched?: boolean;
+    employeeName?: string;
+    documentType?: string;
+    reason?: string;
+    leaveRequest?: {
+      detected?: boolean;
+      created?: boolean;
+      days?: number;
+      reason?: string;
+    };
+  } | null;
+};
 
 type Props = {
   workspaceId: string;
@@ -52,7 +67,7 @@ export function HrDocumentUpload157({ workspaceId, canWrite, documentCount }: Pr
     const put = await fetch(prepared.uploadUrl, { method: "PUT", headers: prepared.headers, body: file });
     if (!put.ok) throw new Error(`${file.name}: magazyn plików odrzucił wysyłkę (HTTP ${put.status}).`);
 
-    setStatus(`Plik ${index + 1} z ${total}: zapis i analiza AI`);
+    setStatus(`Plik ${index + 1} z ${total}: OCR, analiza i przypisanie do pracownika`);
     const complete = await fetch("/api/storage/complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -69,14 +84,18 @@ export function HrDocumentUpload157({ workspaceId, canWrite, documentCount }: Pr
       body: JSON.stringify({ workspaceId, versionId: completed.versionId })
     }).catch(() => null);
 
-    if (!analysis?.ok) return { saved: true, analysisStarted: false, fileName: file.name };
-
-    await fetch("/api/company/hr", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ workspaceId, action: "employee_document_autolink", payload: { documentId: completed.documentId } })
-    }).catch(() => null);
-    return { saved: true, analysisStarted: true, fileName: file.name };
+    if (!analysis?.ok) return { saved: true, analysisStarted: false, fileName: file.name, assignment: "" };
+    const result = await analysis.json().catch(() => ({})) as BrainResponse;
+    const intake = result.hrIntake;
+    let assignment = "";
+    if (intake?.matched && intake.employeeName) {
+      assignment = `${intake.documentType ?? "Dokument HR"} → ${intake.employeeName}`;
+      if (intake.leaveRequest?.created) assignment += ` · utworzono wniosek urlopowy (${intake.leaveRequest.days ?? 0} dni)`;
+      else if (intake.leaveRequest?.detected && intake.leaveRequest.reason) assignment += ` · ${intake.leaveRequest.reason}`;
+    } else if (intake?.reason) {
+      assignment = `wymaga decyzji: ${intake.reason}`;
+    }
+    return { saved: true, analysisStarted: true, fileName: file.name, assignment };
   }
 
   async function uploadFiles(files: File[]) {
@@ -88,6 +107,7 @@ export function HrDocumentUpload157({ workspaceId, canWrite, documentCount }: Pr
     let analysisStarted = 0;
     const failures: string[] = [];
     const analysisWarnings: string[] = [];
+    const assignments: string[] = [];
     try {
       for (const [index, file] of files.entries()) {
         try {
@@ -95,14 +115,16 @@ export function HrDocumentUpload157({ workspaceId, canWrite, documentCount }: Pr
           done += 1;
           if (result.analysisStarted) analysisStarted += 1;
           else analysisWarnings.push(`${result.fileName}: plik zapisano, ale analiza Octopus Brain nie została uruchomiona.`);
+          if (result.assignment) assignments.push(`${result.fileName}: ${result.assignment}`);
         } catch (reason) {
           failures.push(reason instanceof Error ? reason.message : `${file.name}: upload nie powiódł się.`);
         }
       }
       if (done) {
-        setStatus(analysisStarted === done
-          ? `Gotowe: zapisano ${done} z ${files.length} plików HR. Octopus analizuje treść i dopasowanie do pracowników.`
-          : `Zapisano ${done} z ${files.length} plików HR. Analiza AI ruszyła dla ${analysisStarted} z ${done}.`);
+        const base = analysisStarted === done
+          ? `Gotowe: zapisano i przeanalizowano ${done} z ${files.length} plików HR.`
+          : `Zapisano ${done} z ${files.length} plików HR. Analiza AI zakończyła się dla ${analysisStarted} z ${done}.`;
+        setStatus(assignments.length ? `${base} ${assignments.join(" · ")}` : base);
       }
       const problems = [...failures, ...analysisWarnings];
       if (problems.length) setError(problems.join(" · "));
@@ -114,7 +136,7 @@ export function HrDocumentUpload157({ workspaceId, canWrite, documentCount }: Pr
   }
 
   return <div className={styles.wrap} data-hr-functional-upload="1" data-hr-document-count={documentCount}>
-      <p className={styles.intro}>Wrzuć tutaj dokumenty kadrowe. Pliki są oznaczane jako <strong>Kadry</strong>, trafiają do prywatnego magazynu i do analizy Octopus Brain.</p>
+      <p className={styles.intro}>Wrzuć tutaj dokumenty kadrowe. OCR i Octopus Brain rozpoznają typ dokumentu oraz próbują automatycznie przypisać go do właściwego pracownika.</p>
       <button
         type="button"
         className={`${styles.dropzone} ${dragging ? styles.dragging : ""}`}
@@ -130,7 +152,7 @@ export function HrDocumentUpload157({ workspaceId, canWrite, documentCount }: Pr
         }}
       >
         <span className={styles.icon}>{uploading ? <LoaderCircle size={24} className={styles.spin} /> : <UploadCloud size={24} />}</span>
-        <span className={styles.copy}><strong>{uploading ? "Wysyłanie dokumentów…" : "Przeciągnij pliki tutaj lub kliknij, aby wybrać"}</strong><small>PDF, Word, Excel i inne obsługiwane dokumenty · maks. 50 MB na plik</small></span>
+        <span className={styles.copy}><strong>{uploading ? "Wysyłanie i rozpoznawanie dokumentów…" : "Przeciągnij pliki tutaj lub kliknij, aby wybrać"}</strong><small>PDF, zdjęcia, Word, Excel i inne obsługiwane dokumenty · maks. 50 MB na plik</small></span>
         <span className={styles.pick}><FileUp size={16} /> Wybierz pliki</span>
       </button>
       <input
