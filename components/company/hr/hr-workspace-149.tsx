@@ -1,10 +1,10 @@
 "use client";
 
 import { useRef, type ComponentProps, type MouseEvent } from "react";
-import { HrWorkspace148 } from "./hr-workspace-148";
+import { HrWorkspaceCore300 } from "./hr-workspace-core-300";
 import styles from "./hr-workspace-149.module.css";
 
-type Props = ComponentProps<typeof HrWorkspace148> & {
+type Props = ComponentProps<typeof HrWorkspaceCore300> & {
   companyCity?: string | null;
 };
 
@@ -71,13 +71,10 @@ export function HrWorkspace149({ companyCity, ...props }: Props) {
       const restore = patchDocumentGenerators(city);
       window.setTimeout(restore, 0);
     }
-
-    // Podgląd i formularz są renderowane przez React. Po zakończeniu bieżącego kliknięcia
-    // uzupełniamy wyłącznie pole miejscowości — bez obserwowania i przenoszenia całego DOM-u.
     window.requestAnimationFrame(() => applyCityToPreview(rootRef.current, city));
   };
 
   return <div ref={rootRef} className={styles.root} onClickCapture={handleClickCapture}>
-    <HrWorkspace148 {...props} />
+    <HrWorkspaceCore300 {...props} />
   </div>;
 }
