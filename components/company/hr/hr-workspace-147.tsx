@@ -10,7 +10,7 @@ import { HrTeamCostControl156 } from "./hr-team-cost-control-156";
 import { HrDocumentUpload157 } from "./hr-document-upload-157";
 import { HrFormalDocuments160 } from "./hr-formal-documents-160";
 import { HrAccountingBridge160 } from "./hr-accounting-bridge-160";
-import { HrLeaves162 } from "./hr-leaves-162";
+import { HrLeaves161 } from "./hr-leaves-161";
 import styles from "./hr-workspace-146.module.css";
 import registryStyles from "./hr-employee-registry-152.module.css";
 
@@ -27,6 +27,7 @@ type TimeFocus = { employeeId: string; referenceDate: string };
 
 export function HrWorkspace147(props: Props) {
   const shellRef = useRef<HTMLDivElement>(null);
+  const leaveAutoCollapseRef = useRef(false);
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
   const [, startTabTransition] = useTransition();
   const [employeeCreateOpen, setEmployeeCreateOpen] = useState(false);
@@ -137,6 +138,23 @@ export function HrWorkspace147(props: Props) {
     });
   }, [dashboardActive, props.data.alerts]);
 
+  useEffect(() => {
+    if (!leavesVisible) {
+      leaveAutoCollapseRef.current = false;
+      return;
+    }
+    if (leaveAutoCollapseRef.current) return;
+    leaveAutoCollapseRef.current = true;
+
+    const timer = window.setTimeout(() => {
+      const root = shellRef.current;
+      const expandedRow = root?.querySelector<HTMLTableRowElement>('section[data-hr-leaves-161="1"] tr[aria-expanded="true"]');
+      expandedRow?.click();
+    }, 120);
+
+    return () => window.clearTimeout(timer);
+  }, [leavesVisible]);
+
   const mirrorTab = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     const clickedButton = target.closest<HTMLButtonElement>("button");
@@ -189,7 +207,7 @@ export function HrWorkspace147(props: Props) {
         initialEmployeeId={timeFocus?.employeeId ?? null}
         onClearEmployeeFocus={() => setTimeFocus(null)}
       /> : null}
-      {leavesVisible ? <HrLeaves162 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canApprove={props.canApprove} /> : null}
+      {leavesVisible ? <HrLeaves161 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canApprove={props.canApprove} /> : null}
       {teamsVisible ? <HrTeamCostControl156 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} /> : null}
       {documentsVisible ? <>
         <HrDocumentUpload157 workspaceId={props.workspaceId} canWrite={props.canWrite} documentCount={props.data.documents.length} />
