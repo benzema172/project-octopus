@@ -8,10 +8,11 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run test:hr-stress && next build",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run tests",
+    "test:hr-stress": "vitest run tests/hr-module-stress-10000.test.ts",
     "typecheck": "tsc --noEmit",
     "test:migrations": "node scripts/validate-migrations-local.mjs && node scripts/validate-all-migrations-local.mjs",
     "check:schema": "node scripts/check-schema.mjs",
