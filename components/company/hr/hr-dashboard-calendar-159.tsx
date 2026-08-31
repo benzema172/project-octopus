@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3, MapPin, UsersRound } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { HrTimesheetEntryEditor159 } from "./hr-timesheet-entry-editor-159";
 import styles from "./hr-dashboard-calendar-147.module.css";
 
@@ -64,10 +64,10 @@ export function HrDashboardCalendar159({ workspaceId, canWrite, data, onOpenEmpl
     return map;
   }, [data.leaves]);
 
-  const employeeEntries = (employeeId: string, date: string) => timesheetIndex.get(`${employeeId}|${date}`) ?? [];
-  const assignmentIds = (employeeId: string, date: string) => (assignmentIndex.get(employeeId) ?? []).filter((row) => inRange(date, row.date_from, row.date_to)).map((row) => String(row.project_id ?? "")).filter(Boolean);
+  const employeeEntries = useCallback((employeeId: string, date: string) => timesheetIndex.get(`${employeeId}|${date}`) ?? [], [timesheetIndex]);
+  const assignmentIds = useCallback((employeeId: string, date: string) => (assignmentIndex.get(employeeId) ?? []).filter((row) => inRange(date, row.date_from, row.date_to)).map((row) => String(row.project_id ?? "")).filter(Boolean), [assignmentIndex]);
 
-  const employeeDay = (employee: Row, date: string): EmployeeDay => {
+  const employeeDay = useCallback((employee: Row, date: string): EmployeeDay => {
     const employeeId = String(employee.id);
     if (!employedOn(employee, date)) return { employee, name: fullName(employee), status: "outside", statusLabel: "Poza zatrudnieniem", location: "—", hours: 0, overtime: 0 };
     const leaves = (approvedLeaveIndex.get(employeeId) ?? []).filter((row) => inRange(date, row.date_from, row.date_to));
@@ -82,11 +82,25 @@ export function HrDashboardCalendar159({ workspaceId, canWrite, data, onOpenEmpl
     if (leaves.length) { const label = leaveLabels[String(leaves[0].leave_type ?? "other")] ?? "Nieobecność"; return { employee, name: fullName(employee), status: "absence", statusLabel: label, location: label, hours: 0, overtime: 0 }; }
     if (hours > 0 || overtime > 0) return { employee, name: fullName(employee), status: "work", statusLabel: "Praca", location, hours, overtime };
     return { employee, name: fullName(employee), status: "missing", statusLabel: assignmentProjectIds.length ? "Brak wpisu czasu" : "Brak danych", location: assignmentProjectIds.length ? location : "Brak przypisania", hours: 0, overtime: 0 };
-  };
+  }, [approvedLeaveIndex, assignmentIds, employeeEntries, projectNames, teamProjects]);
 
-  const selectedRows = data.employees.map((employee) => employeeDay(employee, selectedDate));
-  const selectedSummary = { work: selectedRows.filter((row) => row.status === "work").length, absence: selectedRows.filter((row) => row.status === "absence").length, missing: selectedRows.filter((row) => row.status === "missing").length, conflict: selectedRows.filter((row) => row.status === "conflict").length };
   const days = useMemo(() => { const first = calendarStart(viewDate); return Array.from({ length: 42 }, (_, index) => { const date = new Date(first); date.setDate(first.getDate() + index); return date; }); }, [viewDate]);
+  const selectedRows = useMemo(() => data.employees.map((employee) => employeeDay(employee, selectedDate)), [data.employees, employeeDay, selectedDate]);
+  const selectedSummary = useMemo(() => ({
+    work: selectedRows.filter((row) => row.status === "work").length,
+    absence: selectedRows.filter((row) => row.status === "absence").length,
+    missing: selectedRows.filter((row) => row.status === "missing").length,
+    conflict: selectedRows.filter((row) => row.status === "conflict").length
+  }), [selectedRows]);
+  const daySummaries = useMemo(() => new Map(days.map((day) => {
+    const value = isoDate(day);
+    const rows = data.employees.map((employee) => employeeDay(employee, value));
+    const work = rows.filter((row) => row.status === "work").length;
+    const absence = rows.filter((row) => row.status === "absence").length;
+    const missing = rows.filter((row) => row.status === "missing").length;
+    const conflict = rows.filter((row) => row.status === "conflict").length;
+    return [value, { work, absence, missing, conflict, signalTotal: work + absence + missing + conflict }];
+  })), [data.employees, days, employeeDay]);
   const monthLabel = viewDate.toLocaleDateString("pl-PL", { month: "long", year: "numeric" });
   const selected = parseIso(selectedDate);
   const selectedLabel = selected.toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -102,8 +116,8 @@ export function HrDashboardCalendar159({ workspaceId, canWrite, data, onOpenEmpl
       {weekdays.map((weekday, index) => <div className={`${styles.weekday} ${index > 4 ? styles.weekendLabel : ""}`} role="columnheader" key={weekday}>{weekday}</div>)}
       {days.map((day) => {
         const value = isoDate(day); const currentMonth = day.getMonth() === viewDate.getMonth(); const isToday = value === data.referenceDate; const isSelected = value === selectedDate; const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-        const rows = data.employees.map((employee) => employeeDay(employee, value));
-        const work = rows.filter((row) => row.status === "work").length; const absence = rows.filter((row) => row.status === "absence").length; const missing = rows.filter((row) => row.status === "missing").length; const conflict = rows.filter((row) => row.status === "conflict").length; const signalTotal = work + absence + missing + conflict;
+        const summary = daySummaries.get(value) ?? { work: 0, absence: 0, missing: 0, conflict: 0, signalTotal: 0 };
+        const { work, absence, missing, conflict, signalTotal } = summary;
         return <button type="button" role="gridcell" aria-selected={isSelected} aria-label={day.toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} className={`${styles.day} ${!currentMonth ? styles.outside : ""} ${isWeekend ? styles.weekend : ""} ${isToday ? styles.today : ""} ${isSelected ? styles.selected : ""}`} key={value} onClick={() => setSelectedDate(value)}>
           <div className={styles.dayTop}><span className={styles.dayNumber}>{day.getDate()}</span>{isToday ? <span className={styles.todayChip}>Dziś</span> : null}</div>
           <div className={styles.dayCounters} aria-hidden="true">{work ? <span className={styles.counterWork}>{work}</span> : null}{absence ? <span className={styles.counterAbsence}>{absence}</span> : null}{missing ? <span className={styles.counterMissing}>{missing}</span> : null}{conflict ? <span className={styles.counterConflict}>{conflict}</span> : null}</div>

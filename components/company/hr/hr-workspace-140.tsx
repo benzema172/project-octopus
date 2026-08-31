@@ -77,9 +77,21 @@ function FormBlock({ title, children, open = false }: { title: string; children:
   return <details className={styles.details} open={open}><summary><Plus size={14} /> {title}</summary><div className={styles.detailsBody}>{children}</div></details>;
 }
 
-export function HrWorkspace140({ workspaceId, data, canWrite, canApprove, canViewPayroll, canManagePayroll }: { workspaceId: string; data: HrData; canWrite: boolean; canApprove: boolean; canViewPayroll: boolean; canManagePayroll: boolean }) {
+type HrWorkspace140Props = {
+  workspaceId: string;
+  data: HrData;
+  canWrite: boolean;
+  canApprove: boolean;
+  canViewPayroll: boolean;
+  canManagePayroll: boolean;
+  activeTab?: Tab;
+  onTabChange?: (tab: Tab) => void;
+};
+
+export function HrWorkspace140({ workspaceId, data, canWrite, canApprove, canViewPayroll, canManagePayroll, activeTab, onTabChange }: HrWorkspace140Props) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("dashboard");
+  const [internalTab, setInternalTab] = useState<Tab>("dashboard");
+  const tab = activeTab ?? internalTab;
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
   const [projectFilter, setProjectFilter] = useState("");
@@ -88,6 +100,11 @@ export function HrWorkspace140({ workspaceId, data, canWrite, canApprove, canVie
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const setTab = (nextTab: Tab) => {
+    if (activeTab === undefined) setInternalTab(nextTab);
+    onTabChange?.(nextTab);
+  };
 
   useEffect(() => {
     if (!employeeCreateOpen) return;

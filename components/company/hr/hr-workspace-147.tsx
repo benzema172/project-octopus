@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type MouseEvent } from "react";
+import { useEffect, useRef, useState, useTransition, type ComponentProps, type KeyboardEvent, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { HrWorkspace140 } from "./hr-workspace-140";
 import { HrDashboardCalendar159 } from "./hr-dashboard-calendar-159";
@@ -18,28 +18,19 @@ import registryStyles from "./hr-employee-registry-152.module.css";
 type Props = ComponentProps<typeof HrWorkspace140>;
 type HrRow = Record<string, unknown>;
 
-const TAB_LABELS = {
-  dashboard: "Pulpit",
-  employees: "Pracownicy",
-  time: "Czas pracy",
-  leaves: "Urlopy i absencje",
-  compliance: "Uprawnienia i BHP",
-  teams: "Zespoły i inwestycje",
-  documents: "Dokumenty"
-} as const;
-
 const DASHBOARD_COST_LABELS = new Map([
   ["Koszt pracy — miesiąc", "Koszt godzinowy zatrudnienia w miesiącu"],
   ["Koszt stały zatrudnienia", "Koszt stały zatrudnienia w miesiącu"]
 ]);
 
-type TabKey = keyof typeof TAB_LABELS;
+type TabKey = "dashboard" | "employees" | "time" | "leaves" | "compliance" | "teams" | "documents";
 type TimeFocus = { employeeId: string; referenceDate: string };
 
 export function HrWorkspace147(props: Props) {
   const router = useRouter();
   const shellRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
+  const [, startTabTransition] = useTransition();
   const [employeeCreateOpen, setEmployeeCreateOpen] = useState(false);
   const [timeFocus, setTimeFocus] = useState<TimeFocus | null>(null);
   const dashboardActive = activeTab === "dashboard";
@@ -47,13 +38,6 @@ export function HrWorkspace147(props: Props) {
   const timeVisible = activeTab === "time";
   const teamsVisible = activeTab === "teams";
   const documentsVisible = activeTab === "documents";
-
-  const findTabButton = (label: string) => {
-    const root = shellRef.current;
-    if (!root) return null;
-    return Array.from(root.querySelectorAll<HTMLButtonElement>('nav[aria-label="Sekcje modułu Kadry"] button'))
-      .find((button) => (button.textContent ?? "").includes(label)) ?? null;
-  };
 
   const scrollToHeading = (headingText: string) => {
     const root = shellRef.current;
@@ -64,10 +48,15 @@ export function HrWorkspace147(props: Props) {
   };
 
   const activateTab = (tab: TabKey, after?: () => void) => {
-    const button = findTabButton(TAB_LABELS[tab]);
-    if (!button) return;
-    button.click();
+    handleTabChange(tab);
     window.setTimeout(() => after?.(), 60);
+  };
+
+  const handleTabChange = (tab: TabKey) => {
+    startTabTransition(() => {
+      setActiveTab(tab);
+      if (tab !== "employees") setEmployeeCreateOpen(false);
+    });
   };
 
   const openEmployeeWorkCalendar = (employeeId: string, referenceDate: string) => {
@@ -249,12 +238,6 @@ export function HrWorkspace147(props: Props) {
       handleAttention(Number(attention.dataset.hrActionIndex ?? -1));
       return;
     }
-    const button = target.closest<HTMLButtonElement>('nav[aria-label="Sekcje modułu Kadry"] button');
-    if (!button) return;
-    const label = button.textContent ?? "";
-    const nextTab = (Object.entries(TAB_LABELS).find(([, value]) => label.includes(value))?.[0] ?? "dashboard") as TabKey;
-    if (nextTab !== "employees") setEmployeeCreateOpen(false);
-    setActiveTab(nextTab);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -273,7 +256,7 @@ export function HrWorkspace147(props: Props) {
     onKeyDownCapture={handleKeyDown}
   >
     <div className={styles.workspaceSlot} data-hr-workspace-slot="employees-shell">
-      <HrWorkspace140 {...props} />
+      <HrWorkspace140 {...props} activeTab={activeTab} onTabChange={handleTabChange} />
       {registryVisible ? <HrEmployeeRegistry152 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canManagePayroll={props.canManagePayroll} /> : null}
       {timeVisible ? <>
         <HrTimeRecords159 key={timeFocus ? `${timeFocus.employeeId}-${timeFocus.referenceDate}` : "all"} workspaceId={props.workspaceId} referenceDate={timeFocus?.referenceDate ?? props.data.referenceDate} employees={props.data.employees} projects={props.data.projects} timesheets={props.data.timesheets} canWrite={props.canWrite} initialEmployeeId={timeFocus?.employeeId ?? null} onClearEmployeeFocus={() => setTimeFocus(null)} />
