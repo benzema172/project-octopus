@@ -4,19 +4,21 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("HR time tab advanced labor controls", () => {
-  it("attaches detailed labor controls to a concrete employee row instead of rendering a separate panel", () => {
+  it("attaches detailed labor controls to a concrete employee/day instead of rendering a separate panel", () => {
     const workspace = read("components/company/hr/hr-workspace-147.tsx");
     const records = read("components/company/hr/hr-time-records-159.tsx");
 
     expect(workspace).toContain("<HrTimeRecords159");
     expect(workspace).not.toContain("advancedTimeDetails");
     expect(workspace).not.toContain("<HrWorkCost160");
-    expect(records).toContain("expandedEmployeeId");
+    expect(records).toContain("detailFocus");
     expect(records).toContain("Szczegóły robocizny");
     expect(records).toContain('data-hr-employee-detail-row="1"');
     expect(records).toContain("<HrWorkCost160");
     expect(records).toContain("fixedEmployeeId={employeeId}");
     expect(records).toContain("fixedWorkDate={referenceDate}");
+    expect(records).toContain('onOpenDetails={() => setDetailFocus({ employeeId, workDate: date })}');
+    expect(records).toContain('data-hr-month-detail-editor="1"');
     expect(records).toContain("embedded");
   });
 
@@ -34,5 +36,6 @@ describe("HR time tab advanced labor controls", () => {
     expect(workCost).toContain("Podział dnia · {rows.length} wpisy");
     expect(detailCss).toContain(".detailRow>td{");
     expect(detailCss).toContain(".detailShell{");
+    expect(detailCss).toContain(".monthModal{");
   });
 });
