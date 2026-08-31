@@ -40,7 +40,7 @@ describe("Kadry 1.5.9 editable daily timesheets", () => {
     expect(wrapper).toContain("timeFocus");
     expect(wrapper).toContain("openEmployeeWorkCalendar");
     expect(wrapper).toContain("initialEmployeeId={timeFocus?.employeeId ?? null}");
-    expect(calendar).toContain("onOpenEmployeeWorkCalendar?.(employeeId, selectedDate)");
+    expect(calendar).toContain("onOpenEmployeeCalendar?.(employeeId, selectedDate)");
     expect(records).toContain("Kalendarz pracy pracownika");
     expect(records).toContain("Kalendarz pracy —");
     expect(records).toContain("visibleEmployees");
