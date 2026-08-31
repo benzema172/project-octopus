@@ -40,7 +40,7 @@ describe("Kadry 1.5.9 editable daily timesheets", () => {
     expect(wrapper).toContain("timeFocus");
     expect(wrapper).toContain("openEmployeeWorkCalendar");
     expect(wrapper).toContain("initialEmployeeId={timeFocus?.employeeId ?? null}");
-    expect(calendar).toContain("onOpenEmployeeCalendar?.(employeeId, selectedDate)");
+    expect(calendar).toContain("onOpenEmployeeWorkCalendar?.(employeeId, selectedDate)");
     expect(records).toContain("Kalendarz pracy pracownika");
     expect(records).toContain("Kalendarz pracy —");
     expect(records).toContain("visibleEmployees");
@@ -55,7 +55,9 @@ describe("Kadry 1.5.9 editable daily timesheets", () => {
     expect(wrapper).toContain('hiddenTabs={["employees", "time", "documents"]}');
     expect(records).not.toContain("MutationObserver");
     expect(records).not.toContain("createPortal");
-    expect(records).toContain("prosty spis pracowników — wybierz inwestycję i wpisz godziny");
+    expect(records).toContain("prosty spis pracowników — wybierz inwestycję, wpisz godziny, a szczegóły rozwiń przy konkretnej osobie");
+    expect(records).toContain("Szczegóły robocizny");
+    expect(records).toContain('data-hr-employee-detail-row="1"');
     expect(records).toContain(">Dzień</button>");
     expect(records).toContain(">Miesiąc</button>");
   });
