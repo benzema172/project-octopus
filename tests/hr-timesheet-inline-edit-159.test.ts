@@ -54,10 +54,12 @@ describe("Kadry 1.5.9 editable daily timesheets", () => {
     expect(records).toContain("data-hr-editable-time-records");
     expect(wrapper).toContain('hiddenTabs={["employees", "time", "documents"]}');
     expect(records).not.toContain("MutationObserver");
-    expect(records).not.toContain("createPortal");
+    expect(records).toContain("createPortal");
     expect(records).toContain("prosty spis pracowników — wybierz inwestycję, wpisz godziny, a szczegóły rozwiń przy konkretnej osobie");
     expect(records).toContain("Szczegóły robocizny");
     expect(records).toContain('data-hr-employee-detail-row="1"');
+    expect(records).toContain('data-hr-month-detail-editor="1"');
+    expect(records).toContain("Pełna ewidencja dnia");
     expect(records).toContain(">Dzień</button>");
     expect(records).toContain(">Miesiąc</button>");
   });
