@@ -6,11 +6,12 @@ describe("Kadry HR document upload", () => {
   const workspace = readFileSync("components/company/hr/hr-workspace-147.tsx", "utf8");
   const css = readFileSync("components/company/hr/hr-document-upload-157.module.css", "utf8");
 
-  it("mounts a real dropzone inside the legacy HR document panel", () => {
+  it("mounts a real dropzone inside the current HR document panel", () => {
     expect(workspace).toContain("<HrDocumentUpload157");
     expect(workspace).toContain('documentsVisible = activeTab === "documents"');
-    expect(uploader).toContain('Wrzutnia dokumentów HR');
+    expect(uploader).toContain("Wrzuć tutaj dokumenty kadrowe");
     expect(uploader).toContain('data-hr-functional-upload="1"');
+    expect(uploader).toContain("Przeciągnij pliki tutaj lub kliknij, aby wybrać");
     expect(css).toContain(".dropzone");
   });
 
