@@ -37,6 +37,16 @@ describe("HR Core 3.0 issue center", () => {
     expect(result.issues.some((row) => row.kind === "timesheet")).toBe(true);
     expect(result.issues.filter((row) => row.kind === "leave").length).toBeGreaterThanOrEqual(2);
   });
+
+  it("treats an unfit medical result as critical even when its date is still current", () => {
+    const result = buildHrEmployeeIssues(data({
+      employments: [{ id: "em1", employee_id: "e1", valid_from: "2026-01-01", monthly_cost: 9000, hourly_cost: 60 }],
+      exams: [{ employee_id: "e1", valid_until: "2027-08-31", status: "unfit" }],
+      trainings: [{ employee_id: "e1", valid_until: "2027-08-31", status: "valid" }],
+      leaveBalances: [{ employee_id: "e1", entitlement_configured: true, remaining_days: 20 }]
+    }));
+    expect(result.issues.some((row) => row.kind === "medical" && row.severity === "critical" && row.title.includes("niezdolny"))).toBe(true);
+  });
 });
 
 describe("HR Core 3.0 architecture contracts", () => {
@@ -59,6 +69,8 @@ describe("HR Core 3.0 architecture contracts", () => {
     expect(shell).not.toContain("HrWorkspace148");
     expect(existsSync("components/company/hr/hr-workspace-140.tsx")).toBe(false);
     expect(existsSync("components/company/hr/hr-workspace-148.tsx")).toBe(false);
+    expect(existsSync("components/company/hr/hr-workspace-146.tsx")).toBe(false);
+    expect(existsSync("components/company/hr/hr-workspace-147.tsx")).toBe(false);
   });
 
   it("creates and edits employee bundles through atomic database functions", () => {
