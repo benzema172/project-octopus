@@ -4,18 +4,10 @@ import { useRef, type ComponentProps, type MouseEvent } from "react";
 import { HrWorkspaceCore300 } from "./hr-workspace-core-300";
 import styles from "./hr-workspace-149.module.css";
 
-type Props = ComponentProps<typeof HrWorkspaceCore300> & {
-  companyCity?: string | null;
-};
+type Props = ComponentProps<typeof HrWorkspaceCore300> & { companyCity?: string | null };
 
 function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;"
-  }[char] ?? char));
+  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char] ?? char));
 }
 
 function applyCityToPreview(root: HTMLElement | null, city: string) {
@@ -63,11 +55,13 @@ export function HrWorkspace149({ companyCity, ...props }: Props) {
 
   const handleClickCapture = (event: MouseEvent<HTMLDivElement>) => {
     if (!city) return;
-    const target = event.target as HTMLElement;
-    const button = target.closest<HTMLButtonElement>("button");
-    const label = (button?.textContent ?? "").trim();
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button");
+    if (!button) return;
+    const label = (button.textContent ?? "").trim();
+    const isDocumentAction = /(PDF|Drukuj|Podgląd|Generuj)/i.test(label);
+    if (!isDocumentAction) return;
 
-    if (button && (label.includes("PDF") || label.includes("Drukuj"))) {
+    if (/(PDF|Drukuj)/i.test(label)) {
       const restore = patchDocumentGenerators(city);
       window.setTimeout(restore, 0);
     }
