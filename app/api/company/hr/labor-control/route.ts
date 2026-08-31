@@ -52,9 +52,9 @@ export async function GET(request: Request) {
       .order("created_at", { ascending: false })
       .limit(5000),
     db.from("wbs_nodes")
-      .select("id,project_id,parent_id,code,name,level,path,is_active")
+      .select("id,project_id,parent_id,code,name,branch,installation,zone,sort_order,status")
       .eq("workspace_id", workspace.id)
-      .eq("is_active", true)
+      .eq("status", "active")
       .order("project_id")
       .order("sort_order")
       .limit(5000)
