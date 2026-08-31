@@ -18,6 +18,7 @@ type Props = {
   canWrite: boolean;
   variant: "inline" | "cell";
   suggestedProjectId?: string;
+  onOpenDetails?: () => void;
 };
 
 function num(value: unknown, digits = 1) {
@@ -34,7 +35,7 @@ function dayLabel(value: string) {
   return parsed.toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 }
 
-export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeName, workDate, projects, entries, canWrite, variant, suggestedProjectId = "" }: Props) {
+export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeName, workDate, projects, entries, canWrite, variant, suggestedProjectId = "", onOpenDetails }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(entries.length === 0);
@@ -129,13 +130,24 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
   }
 
   const summaryProject = projectNames.join(" / ") || "Brak wpisu";
+  const openCell = () => {
+    setMessage(null);
+    setError(null);
+    if (onOpenDetails) {
+      onOpenDetails();
+      return;
+    }
+    setOpen(true);
+    setAdding(entries.length === 0);
+  };
+
   return <>
     <button
       type="button"
       className={`${styles.cellButton} ${entries.length ? "" : styles.emptyCell}`}
-      onClick={() => { setOpen(true); setAdding(entries.length === 0); setMessage(null); setError(null); }}
-      title={entries.length ? `${summaryProject} · ${num(total)} h — kliknij, aby edytować` : "Kliknij, aby dodać inwestycję i godziny"}
-      aria-label={`${employeeName ?? "Pracownik"}, ${workDate}: ${entries.length ? `${num(total)} godzin` : "brak wpisu"}. Edytuj.`}
+      onClick={openCell}
+      title={entries.length ? `${summaryProject} · ${num(total)} h — kliknij, aby edytować pełne szczegóły dnia` : "Kliknij, aby dodać inwestycję, godziny i szczegóły pracy"}
+      aria-label={`${employeeName ?? "Pracownik"}, ${workDate}: ${entries.length ? `${num(total)} godzin` : "brak wpisu"}. Otwórz pełne szczegóły dnia.`}
     >
       <strong>{entries.length ? `${num(total)} h` : "+ wpis"}</strong>
       <span>{summaryProject}</span>
