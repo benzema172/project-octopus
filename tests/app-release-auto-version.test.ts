@@ -11,7 +11,7 @@ describe("automatic application release badge", () => {
     const badge = read("components/app-release-badge.tsx");
 
     expect(pkg.version).toBe("1.6.0");
-    expect(release).toContain('import packageJson from "@/package.json"');
+    expect(release).toContain('import packageJson from "../package.json"');
     expect(release).toContain("NEXT_PUBLIC_OCTOPUS_BUILD_TIMESTAMP");
     expect(release).toContain("NEXT_PUBLIC_OCTOPUS_BUILD_COMMIT");
     expect(release).toContain("displayVersion");
