@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { ArrowLeft, ChevronDown, Download } from "lucide-react";
+import { createPortal } from "react-dom";
+import { ArrowLeft, ChevronDown, Download, X } from "lucide-react";
 import { HrTimesheetEntryEditor159 } from "./hr-timesheet-entry-editor-159";
 import { HrWorkCost160 } from "./hr-work-cost-160";
 import styles from "./hr-workspace-140.module.css";
@@ -9,6 +10,7 @@ import detailStyles from "./hr-time-records-160.module.css";
 
 type Row = Record<string, unknown>;
 type Period = "day" | "month";
+type DetailFocus = { employeeId: string; workDate: string };
 
 function str(value: unknown, fallback = "—") { return value === null || value === undefined || value === "" ? fallback : String(value); }
 function num(value: unknown, digits = 1) { const n = Number(value ?? 0); return new Intl.NumberFormat("pl-PL", { maximumFractionDigits: digits }).format(Number.isFinite(n) ? n : 0); }
@@ -21,13 +23,17 @@ function periodLabel(period: Period, referenceDate: string) {
     ? parsed.toLocaleDateString("pl-PL", { month: "long", year: "numeric", timeZone: "UTC" })
     : parsed.toLocaleDateString("pl-PL", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
 }
+function fullDateLabel(value: string) {
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return parsed.toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+}
 function exportHref(workspaceId: string, referenceDate: string, period: Period, employeeId?: string | null) { const params = new URLSearchParams({ workspaceId, mode: "timesheet", period, referenceDate }); if (employeeId) params.set("employeeId", employeeId); return `/api/company/hr/export?${params.toString()}`; }
 
 export function HrTimeRecords159({ workspaceId, referenceDate, employees, projects, timesheets, canWrite, canViewPayroll, initialEmployeeId = null, onClearEmployeeFocus }: { workspaceId: string; referenceDate: string; employees: Row[]; projects: Row[]; timesheets: Row[]; canWrite: boolean; canViewPayroll: boolean; initialEmployeeId?: string | null; onClearEmployeeFocus?: () => void }) {
   const initialEmployee = initialEmployeeId ? employees.find((row) => String(row.id) === initialEmployeeId) ?? null : null;
   const [period, setPeriod] = useState<Period>(() => initialEmployee ? "month" : "day");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(() => initialEmployee ? String(initialEmployee.id) : null);
-  const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(null);
+  const [detailFocus, setDetailFocus] = useState<DetailFocus | null>(null);
   const dates = useMemo(() => period === "day" ? [referenceDate] : monthDates(referenceDate), [period, referenceDate]);
   const dateSet = useMemo(() => new Set(dates), [dates]);
   const activeEmployees = useMemo(() => employees.filter((row) => row.status === "active"), [employees]);
@@ -55,89 +61,136 @@ export function HrTimeRecords159({ workspaceId, referenceDate, employees, projec
 
   const focusedName = focusedEmployee ? employeeName(focusedEmployee) : "";
   const focusedId = focusedEmployee ? String(focusedEmployee.id) : null;
+  const detailEmployee = detailFocus ? employees.find((row) => String(row.id) === detailFocus.employeeId) ?? null : null;
+  const detailEntries = detailFocus ? entriesByEmployeeDate.get(`${detailFocus.employeeId}|${detailFocus.workDate}`) ?? [] : [];
+  const detailInitialProjectId = detailEntries.find((row) => row.project_id)?.project_id ? String(detailEntries.find((row) => row.project_id)?.project_id) : null;
+
   const clearFocus = () => {
     setSelectedEmployeeId(null);
     setPeriod("day");
-    setExpandedEmployeeId(null);
+    setDetailFocus(null);
     onClearEmployeeFocus?.();
   };
 
   const changePeriod = (next: Period) => {
     setPeriod(next);
-    if (next !== "day") setExpandedEmployeeId(null);
+    setDetailFocus(null);
   };
 
-  return <article className={styles.panel} data-hr-editable-time-records="1" data-hr-employee-calendar={focusedId ?? undefined}>
-    <div className={styles.panelHeader}>
-      <div>
-        <p className={styles.kicker}>{focusedEmployee ? "Kalendarz pracy pracownika" : period === "day" ? "Wybrany dzień" : "Miesiąc"}</p>
-        <h2>{focusedEmployee ? `Kalendarz pracy — ${focusedName}` : "Pracownicy i czas pracy"}</h2>
-        <div className={styles.subtle}>{periodLabel(period, referenceDate)} · {focusedEmployee ? "w komórkach widzisz godziny i inwestycję; kliknij dzień, aby edytować" : period === "day" ? "prosty spis pracowników — wybierz inwestycję, wpisz godziny, a szczegóły rozwiń przy konkretnej osobie" : "miesięczny podgląd godzin i inwestycji; kliknij dzień, aby edytować"}</div>
+  return <>
+    <article className={styles.panel} data-hr-editable-time-records="1" data-hr-employee-calendar={focusedId ?? undefined}>
+      <div className={styles.panelHeader}>
+        <div>
+          <p className={styles.kicker}>{focusedEmployee ? "Kalendarz pracy pracownika" : period === "day" ? "Wybrany dzień" : "Miesiąc"}</p>
+          <h2>{focusedEmployee ? `Kalendarz pracy — ${focusedName}` : "Pracownicy i czas pracy"}</h2>
+          <div className={styles.subtle}>{periodLabel(period, referenceDate)} · {focusedEmployee ? "kliknij dowolny dzień, aby edytować inwestycję, godziny, zakres i rodzaj pracy" : period === "day" ? "prosty spis pracowników — wybierz inwestycję, wpisz godziny, a szczegóły rozwiń przy konkretnej osobie" : "miesięczny podgląd — kliknij dowolny dzień, także historyczny, aby otworzyć pełną edycję wpisu"}</div>
+        </div>
+        <div className={styles.splitButtons}>
+          {focusedEmployee ? <button type="button" className={styles.buttonSecondary} onClick={clearFocus}><ArrowLeft size={15} /> Wszyscy pracownicy</button> : null}
+          <button type="button" className={period === "day" ? styles.button : styles.buttonSecondary} aria-pressed={period === "day"} onClick={() => changePeriod("day")}>Dzień</button>
+          <button type="button" className={period === "month" ? styles.button : styles.buttonSecondary} aria-pressed={period === "month"} onClick={() => changePeriod("month")}>Miesiąc</button>
+          <a className={styles.buttonSecondary} href={exportHref(workspaceId, referenceDate, period, focusedId)}><Download size={15} /> Pobierz ewidencję</a>
+          <span className={styles.chip}>{num(periodTotal)} h</span>
+        </div>
       </div>
-      <div className={styles.splitButtons}>
-        {focusedEmployee ? <button type="button" className={styles.buttonSecondary} onClick={clearFocus}><ArrowLeft size={15} /> Wszyscy pracownicy</button> : null}
-        <button type="button" className={period === "day" ? styles.button : styles.buttonSecondary} aria-pressed={period === "day"} onClick={() => changePeriod("day")}>Dzień</button>
-        <button type="button" className={period === "month" ? styles.button : styles.buttonSecondary} aria-pressed={period === "month"} onClick={() => changePeriod("month")}>Miesiąc</button>
-        <a className={styles.buttonSecondary} href={exportHref(workspaceId, referenceDate, period, focusedId)}><Download size={15} /> Pobierz ewidencję</a>
-        <span className={styles.chip}>{num(periodTotal)} h</span>
+      <div className={styles.tableWrap}>
+        <table className={styles.table}>
+          <thead><tr><th>Pracownik</th>{dates.map((date) => <th key={date}>{period === "day" ? "Inwestycja i godziny" : date.slice(8)}</th>)}<th>Razem</th></tr></thead>
+          <tbody>{visibleEmployees.map((employee) => {
+            const employeeId = String(employee.id);
+            const employeeEntries = entriesByEmployee.get(employeeId) ?? [];
+            const total = employeeEntries.reduce((sum, row) => sum + entryHours(row), 0);
+            const dayEntries = entriesByEmployeeDate.get(`${employeeId}|${referenceDate}`) ?? [];
+            const expanded = period === "day" && detailFocus?.employeeId === employeeId && detailFocus.workDate === referenceDate;
+            const initialProjectId = dayEntries.find((row) => row.project_id)?.project_id ? String(dayEntries.find((row) => row.project_id)?.project_id) : null;
+            return <Fragment key={employeeId}>
+              <tr>
+                <td>
+                  <div className={detailStyles.employeeCell}>
+                    <strong className={detailStyles.employeeName}>{employeeName(employee)}</strong>
+                    {period === "day" ? <button
+                      type="button"
+                      className={`${detailStyles.detailToggle} ${expanded ? detailStyles.detailToggleOpen : ""}`}
+                      aria-expanded={expanded}
+                      aria-controls={`hr-detail-${employeeId}`}
+                      onClick={() => setDetailFocus(expanded ? null : { employeeId, workDate: referenceDate })}
+                    >Szczegóły robocizny <ChevronDown size={13} /></button> : null}
+                  </div>
+                </td>
+                {dates.map((date) => {
+                  const entries = entriesByEmployeeDate.get(`${employeeId}|${date}`) ?? [];
+                  return <td key={date} style={{ minWidth: period === "month" ? 76 : 430, padding: 4 }}>
+                    {period === "day"
+                      ? <HrTimesheetEntryEditor159 workspaceId={workspaceId} employeeId={employeeId} employeeName={employeeName(employee)} workDate={date} projects={projects} entries={entries} canWrite={canWrite} variant="inline" />
+                      : <HrTimesheetEntryEditor159
+                          workspaceId={workspaceId}
+                          employeeId={employeeId}
+                          employeeName={employeeName(employee)}
+                          workDate={date}
+                          projects={projects}
+                          entries={entries}
+                          canWrite={canWrite}
+                          variant="cell"
+                          onOpenDetails={() => setDetailFocus({ employeeId, workDate: date })}
+                        />}
+                  </td>;
+                })}
+                <td><strong>{num(total)} h</strong></td>
+              </tr>
+              {expanded ? <tr className={detailStyles.detailRow} id={`hr-detail-${employeeId}`} data-hr-employee-detail-row="1">
+                <td colSpan={dates.length + 2}>
+                  <div className={detailStyles.detailShell}>
+                    <HrWorkCost160
+                      workspaceId={workspaceId}
+                      referenceDate={referenceDate}
+                      employees={employees}
+                      projects={projects}
+                      canWrite={canWrite}
+                      canViewPayroll={canViewPayroll}
+                      fixedEmployeeId={employeeId}
+                      fixedWorkDate={referenceDate}
+                      initialProjectId={initialProjectId}
+                      embedded
+                    />
+                  </div>
+                </td>
+              </tr> : null}
+            </Fragment>;
+          })}</tbody>
+        </table>
+        {!visibleEmployees.length ? <div className={styles.empty}>{focusedEmployee ? "Nie znaleziono pracownika." : "Brak aktywnych pracowników."}</div> : null}
       </div>
-    </div>
-    <div className={styles.tableWrap}>
-      <table className={styles.table}>
-        <thead><tr><th>Pracownik</th>{dates.map((date) => <th key={date}>{period === "day" ? "Inwestycja i godziny" : date.slice(8)}</th>)}<th>Razem</th></tr></thead>
-        <tbody>{visibleEmployees.map((employee) => {
-          const employeeId = String(employee.id);
-          const employeeEntries = entriesByEmployee.get(employeeId) ?? [];
-          const total = employeeEntries.reduce((sum, row) => sum + entryHours(row), 0);
-          const dayEntries = entriesByEmployeeDate.get(`${employeeId}|${referenceDate}`) ?? [];
-          const expanded = period === "day" && expandedEmployeeId === employeeId;
-          const initialProjectId = dayEntries.find((row) => row.project_id)?.project_id ? String(dayEntries.find((row) => row.project_id)?.project_id) : null;
-          return <Fragment key={employeeId}>
-            <tr>
-              <td>
-                <div className={detailStyles.employeeCell}>
-                  <strong className={detailStyles.employeeName}>{employeeName(employee)}</strong>
-                  {period === "day" ? <button
-                    type="button"
-                    className={`${detailStyles.detailToggle} ${expanded ? detailStyles.detailToggleOpen : ""}`}
-                    aria-expanded={expanded}
-                    aria-controls={`hr-detail-${employeeId}`}
-                    onClick={() => setExpandedEmployeeId(expanded ? null : employeeId)}
-                  >Szczegóły robocizny <ChevronDown size={13} /></button> : null}
-                </div>
-              </td>
-              {dates.map((date) => {
-                const entries = entriesByEmployeeDate.get(`${employeeId}|${date}`) ?? [];
-                return <td key={date} style={{ minWidth: period === "month" ? 76 : 430, padding: 4 }}>
-                  {period === "day"
-                    ? <HrTimesheetEntryEditor159 workspaceId={workspaceId} employeeId={employeeId} employeeName={employeeName(employee)} workDate={date} projects={projects} entries={entries} canWrite={canWrite} variant="inline" />
-                    : <HrTimesheetEntryEditor159 workspaceId={workspaceId} employeeId={employeeId} employeeName={employeeName(employee)} workDate={date} projects={projects} entries={entries} canWrite={canWrite} variant="cell" />}
-                </td>;
-              })}
-              <td><strong>{num(total)} h</strong></td>
-            </tr>
-            {expanded ? <tr className={detailStyles.detailRow} id={`hr-detail-${employeeId}`} data-hr-employee-detail-row="1">
-              <td colSpan={dates.length + 2}>
-                <div className={detailStyles.detailShell}>
-                  <HrWorkCost160
-                    workspaceId={workspaceId}
-                    referenceDate={referenceDate}
-                    employees={employees}
-                    projects={projects}
-                    canWrite={canWrite}
-                    canViewPayroll={canViewPayroll}
-                    fixedEmployeeId={employeeId}
-                    fixedWorkDate={referenceDate}
-                    initialProjectId={initialProjectId}
-                    embedded
-                  />
-                </div>
-              </td>
-            </tr> : null}
-          </Fragment>;
-        })}</tbody>
-      </table>
-      {!visibleEmployees.length ? <div className={styles.empty}>{focusedEmployee ? "Nie znaleziono pracownika." : "Brak aktywnych pracowników."}</div> : null}
-    </div>
-  </article>;
+    </article>
+
+    {period === "month" && detailFocus && detailEmployee && typeof document !== "undefined" ? createPortal(
+      <div className={detailStyles.monthLayer} data-hr-month-detail-editor="1">
+        <button type="button" className={detailStyles.monthBackdrop} onClick={() => setDetailFocus(null)} aria-label="Zamknij pełną edycję dnia" />
+        <section className={detailStyles.monthModal} role="dialog" aria-modal="true" aria-labelledby="hr-month-detail-title">
+          <header className={detailStyles.monthModalHeader}>
+            <div>
+              <span>Pełna ewidencja dnia</span>
+              <h3 id="hr-month-detail-title">{employeeName(detailEmployee)} · {fullDateLabel(detailFocus.workDate)}</h3>
+              <p>Możesz edytować także historyczny wpis: inwestycję, godziny, rodzaj pracy, WBS, zakres, kod kosztowy, ilość i uwagi.</p>
+            </div>
+            <button type="button" className={detailStyles.monthClose} onClick={() => setDetailFocus(null)} aria-label="Zamknij"><X size={18} /></button>
+          </header>
+          <div className={detailStyles.monthModalBody}>
+            <HrWorkCost160
+              workspaceId={workspaceId}
+              referenceDate={detailFocus.workDate}
+              employees={employees}
+              projects={projects}
+              canWrite={canWrite}
+              canViewPayroll={canViewPayroll}
+              fixedEmployeeId={detailFocus.employeeId}
+              fixedWorkDate={detailFocus.workDate}
+              initialProjectId={detailInitialProjectId}
+              embedded
+            />
+          </div>
+        </section>
+      </div>,
+      document.body
+    ) : null}
+  </>;
 }
