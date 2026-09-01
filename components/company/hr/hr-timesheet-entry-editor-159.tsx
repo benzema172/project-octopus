@@ -39,7 +39,8 @@ function dayLabel(value: string) {
 export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeName, workDate, projects, entries, canWrite, variant, suggestedProjectId = "", onOpenDetails, onChanged }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [adding, setAdding] = useState(entries.length === 0);
+  const [draftKeys, setDraftKeys] = useState<number[]>(() => entries.length === 0 ? [1] : []);
+  const [nextDraftKey, setNextDraftKey] = useState(2);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +50,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
   const projectNames = Array.from(new Set(entries.map((row) => row.project_id ? projectById.get(String(row.project_id)) ?? "Inwestycja" : "Koszt ogólny")));
 
   const request = async (action: "create" | "update" | "delete", payload: Record<string, unknown>, busyKey: string) => {
-    if (!canWrite || !workspaceId) return;
+    if (!canWrite || !workspaceId) return false;
     setBusyId(busyKey);
     setMessage(null);
     setError(null);
@@ -62,22 +63,23 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
       const result = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Nie udało się zapisać czasu pracy.");
       setMessage(action === "delete" ? "Wpis usunięto." : action === "create" ? "Wpis dodano." : "Zmiany zapisano.");
-      if (action === "create") setAdding(false);
       router.refresh();
       onChanged?.();
+      return true;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Nie udało się zapisać czasu pracy.");
+      return false;
     } finally {
       setBusyId(null);
     }
   };
 
-  const submitEntry = (entry?: Row) => async (event: FormEvent<HTMLFormElement>) => {
+  const submitEntry = (entry?: Row, draftKey?: number) => async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const values = Object.fromEntries(new FormData(form).entries());
-    const id = entry?.id ? String(entry.id) : "new";
-    await request(entry?.id ? "update" : "create", entry?.id ? {
+    const id = entry?.id ? String(entry.id) : `new-${draftKey ?? "row"}`;
+    const ok = await request(entry?.id ? "update" : "create", entry?.id ? {
       timesheetId: entry.id,
       projectId: values.projectId,
       hours: values.hours,
@@ -89,6 +91,9 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
       hours: values.hours,
       overtimeHours: values.overtimeHours
     }, id);
+    if (ok && !entry?.id && draftKey !== undefined) {
+      setDraftKeys((current) => current.filter((value) => value !== draftKey));
+    }
   };
 
   const removeEntry = async (entry: Row) => {
@@ -97,7 +102,20 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
     await request("delete", { timesheetId: entry.id }, String(entry.id));
   };
 
-  const formFor = (entry?: Row, key = "new", showInlineAdd = false) => <form className={styles.entryRow} onSubmit={submitEntry(entry)} key={key}>
+  const addDraft = () => {
+    setDraftKeys((current) => [...current, nextDraftKey]);
+    setNextDraftKey((value) => value + 1);
+    setMessage(null);
+    setError(null);
+  };
+
+  const removeDraft = (draftKey: number) => {
+    setDraftKeys((current) => current.filter((value) => value !== draftKey));
+    setMessage(null);
+    setError(null);
+  };
+
+  const formFor = (entry?: Row, key = "new", draftKey?: number) => <form className={styles.entryRow} onSubmit={submitEntry(entry, draftKey)} key={key}>
     <label className={styles.field}>
       <span>Inwestycja</span>
       <select name="projectId" defaultValue={entry?.project_id ? String(entry.project_id) : suggestedProjectId} disabled={!canWrite || busyId !== null}>
@@ -113,15 +131,15 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
       <span>Nadg.</span>
       <input name="overtimeHours" inputMode="decimal" defaultValue={entry ? String(entry.overtime_hours ?? 0) : "0"} disabled={!canWrite || busyId !== null} />
     </label>
-    {canWrite ? <button className={styles.save} type="submit" disabled={busyId !== null} aria-label={variant === "inline" ? (entry ? "Zapisz wpis czasu" : "Dodaj wpis czasu") : undefined} title={variant === "inline" ? (entry ? "Zapisz" : "Dodaj wpis") : undefined}><Save size={14} /> {variant === "inline" ? null : entry ? "Zapisz" : "Dodaj"}</button> : null}
+    {canWrite ? <button className={styles.save} type="submit" disabled={busyId !== null} aria-label={entry ? "Zapisz wpis czasu" : "Dodaj wpis czasu"} title={entry ? "Zapisz" : "Dodaj wpis"}><Save size={14} /> {variant === "inline" ? null : entry ? "Zapisz" : "Dodaj"}</button> : null}
     {entry && canWrite ? <button className={styles.delete} type="button" aria-label="Usuń wpis" title="Usuń wpis" disabled={busyId !== null} onClick={() => void removeEntry(entry)}><Trash2 size={14} /></button> : null}
-    {showInlineAdd ? <button type="button" className={`${styles.add} ${styles.addInline}`} aria-label="Dodaj drugi wpis / inną inwestycję" title="Dodaj drugi wpis / inną inwestycję" disabled={busyId !== null} onClick={() => { setAdding(true); setMessage(null); setError(null); }}><Plus size={14} /></button> : null}
+    {!entry && canWrite && draftKey !== undefined ? <button className={styles.delete} type="button" aria-label="Usuń nowy wiersz" title="Usuń nowy wiersz" disabled={busyId !== null} onClick={() => removeDraft(draftKey)}><X size={14} /></button> : null}
   </form>;
 
   const editor = <div className={`${styles.inlineWrap} ${variant === "inline" ? styles.inlineCompact : ""}`}>
-    {entries.map((entry, index) => formFor(entry, String(entry.id ?? `${employeeId}-${workDate}-${index}`), variant === "inline" && index === 0 && canWrite && !adding))}
-    {adding ? formFor(undefined, "new") : null}
-    {variant !== "inline" && canWrite && entries.length > 0 && !adding ? <button type="button" className={styles.add} onClick={() => { setAdding(true); setMessage(null); setError(null); }}><Plus size={13} /> Dodaj drugi wpis / inną inwestycję</button> : null}
+    {entries.map((entry, index) => formFor(entry, String(entry.id ?? `${employeeId}-${workDate}-${index}`)))}
+    {draftKeys.map((draftKey) => formFor(undefined, `draft-${draftKey}`, draftKey))}
+    {canWrite ? <button type="button" className={styles.addEntry} disabled={busyId !== null} onClick={addDraft}><Plus size={13} /> Dodaj kolejny wpis</button> : null}
     {!canWrite ? <div className={styles.readOnly}>Widok tylko do odczytu — zapis czasu pracy wymaga uprawnienia do edycji Kadr.</div> : null}
     {message ? <div className={styles.message}>{message}</div> : null}
     {error ? <div className={styles.error} role="alert">{error}</div> : null}
@@ -140,7 +158,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
       return;
     }
     setOpen(true);
-    setAdding(entries.length === 0);
+    if (!entries.length && !draftKeys.length) setDraftKeys([nextDraftKey]);
   };
 
   return <>
@@ -166,7 +184,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
             <button type="button" className={styles.close} onClick={() => setOpen(false)} aria-label="Zamknij"><X size={17} /></button>
           </header>
           <div className={styles.modalBody}>
-            <div className={styles.inlineStatus}><b>{entries.length ? `${entries.length} wpis${entries.length === 1 ? "" : "y"}` : "Brak wpisu"}</b><span>Możesz zmienić inwestycję, godziny i nadgodziny bez tworzenia duplikatu.</span></div>
+            <div className={styles.inlineStatus}><b>{entries.length ? `${entries.length} wpis${entries.length === 1 ? "" : "y"}` : "Brak zapisanego wpisu"}</b><span>Każdy wpis możesz niezależnie zapisać, usunąć albo dodać kolejną inwestycję tego samego dnia.</span></div>
             {editor}
           </div>
         </section>
