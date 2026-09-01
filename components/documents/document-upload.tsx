@@ -2,136 +2,34 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Download,
-  Eye,
-  FilePlus2,
-  FileSearch,
-  FileText,
-  FolderOpen,
-  RotateCcw,
-  Search,
-  Sparkles,
-  Trash2,
-  UploadCloud
-} from "lucide-react";
+import { Download, Eye, FilePlus2, FileSearch, FileText, FolderOpen, RotateCcw, Search, Sparkles, Trash2, UploadCloud } from "lucide-react";
 import type { DocumentSummary, ProjectSummary } from "@/lib/types";
 import { DOCUMENT_DESTINATIONS, documentCategoryLabel } from "@/lib/documents/classification";
 import { MAX_SUPPORTED_UPLOAD_BYTES, SUPPORTED_UPLOAD_ACCEPT, validateUploadFile } from "@/lib/r2/sanitize";
 
-type DocumentUploadProps = {
-  workspaceId?: string;
-  projectId?: string;
-  projects?: ProjectSummary[];
-  documents: DocumentSummary[];
-  trashedDocuments: DocumentSummary[];
-  storageReady: boolean;
-  defaultCategory?: string;
-};
-
+type DocumentUploadProps = { workspaceId?: string; projectId?: string; projects?: ProjectSummary[]; documents: DocumentSummary[]; trashedDocuments: DocumentSummary[]; storageReady: boolean; defaultCategory?: string };
 type UploadResponse = { uploadUrl: string; token: string; headers: Record<string, string> };
 type DownloadResponse = { downloadUrl: string };
 type CompleteResponse = { documentId: string; versionId: string; versionNumber: number };
-type AnalysisResponse = { analysis?: { package?: { accepted?: number; rejected?: number; queuedVersionIds?: string[] } } };
+type AnalysisResponse = { alreadyAnalyzed?: boolean; message?: string; analysis?: { package?: { accepted?: number; rejected?: number; queuedVersionIds?: string[] } } };
+type UploadCandidate = { file: File; relativePath: string };
+type BrowserFileEntry = { isFile: boolean; isDirectory: boolean; name: string; fullPath?: string; file?: (success: (file: File) => void, failure?: (error: DOMException) => void) => void; createReader?: () => { readEntries: (success: (entries: BrowserFileEntry[]) => void, failure?: (error: DOMException) => void) => void } };
 
 const MAX_BROWSER_HASH_BYTES = 32 * 1024 * 1024;
 const MAX_FOLDER_FILES = 1000;
 const IGNORED_FOLDER_ARTIFACTS = new Set([".DS_Store", "Thumbs.db", "desktop.ini"]);
 
-type UploadCandidate = {
-  file: File;
-  relativePath: string;
-};
-
-type BrowserFileEntry = {
-  isFile: boolean;
-  isDirectory: boolean;
-  name: string;
-  fullPath?: string;
-  file?: (success: (file: File) => void, failure?: (error: DOMException) => void) => void;
-  createReader?: () => {
-    readEntries: (success: (entries: BrowserFileEntry[]) => void, failure?: (error: DOMException) => void) => void;
-  };
-};
-
-function normalizeRelativePath(value: string) {
-  return value.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/{2,}/g, "/");
-}
-
-function candidateFromFile(file: File): UploadCandidate {
-  const browserFile = file as File & { webkitRelativePath?: string };
-  return {
-    file,
-    relativePath: normalizeRelativePath(browserFile.webkitRelativePath?.trim() || file.name)
-  };
-}
-
-function folderPathForCandidate(candidate: UploadCandidate) {
-  const parts = normalizeRelativePath(candidate.relativePath).split("/").filter(Boolean);
-  return parts.length > 1 ? parts.slice(0, -1).join("/") : undefined;
-}
-
-function shouldIgnoreFolderArtifact(candidate: UploadCandidate) {
-  const path = normalizeRelativePath(candidate.relativePath);
-  const parts = path.split("/").filter(Boolean);
-  return IGNORED_FOLDER_ARTIFACTS.has(candidate.file.name) || parts.includes("__MACOSX");
-}
-
-function fileFromEntry(entry: BrowserFileEntry) {
-  return new Promise<File>((resolve, reject) => {
-    if (!entry.file) return reject(new Error(`Nie można odczytać pliku ${entry.name}.`));
-    entry.file(resolve, reject);
-  });
-}
-
-async function readDirectoryEntries(entry: BrowserFileEntry) {
-  if (!entry.createReader) return [] as BrowserFileEntry[];
-  const reader = entry.createReader();
-  const collected: BrowserFileEntry[] = [];
-  while (true) {
-    const batch = await new Promise<BrowserFileEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
-    if (!batch.length) break;
-    collected.push(...batch);
-  }
-  return collected;
-}
-
-async function candidatesFromEntry(entry: BrowserFileEntry, parentPath = ""): Promise<UploadCandidate[]> {
-  const entryPath = normalizeRelativePath(entry.fullPath || [parentPath, entry.name].filter(Boolean).join("/"));
-  if (entry.isFile) {
-    const file = await fileFromEntry(entry);
-    return [{ file, relativePath: entryPath || file.name }];
-  }
-  if (!entry.isDirectory) return [];
-  const children = await readDirectoryEntries(entry);
-  const nested = await Promise.all(children.map((child) => candidatesFromEntry(child, entryPath)));
-  return nested.flat();
-}
-
-async function candidatesFromDataTransfer(dataTransfer: DataTransfer) {
-  const items = Array.from(dataTransfer.items ?? []);
-  const roots: BrowserFileEntry[] = [];
-  for (const item of items) {
-    const entryGetter = (item as unknown as { webkitGetAsEntry?: () => BrowserFileEntry | null }).webkitGetAsEntry;
-    const entry = entryGetter?.call(item);
-    if (entry) roots.push(entry);
-  }
-  if (!roots.length) return Array.from(dataTransfer.files ?? []).map(candidateFromFile);
-  const nested = await Promise.all(roots.map((entry) => candidatesFromEntry(entry)));
-  return nested.flat();
-}
-
-function formatFileSize(bytes: number) {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-async function sha256ForSmallFile(file: File) {
-  if (file.size > MAX_BROWSER_HASH_BYTES) return null;
-  const buffer = await file.arrayBuffer();
-  const hash = await crypto.subtle.digest("SHA-256", buffer);
-  return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
+function normalizeRelativePath(value: string) { return value.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/{2,}/g, "/"); }
+function candidateFromFile(file: File): UploadCandidate { const browserFile = file as File & { webkitRelativePath?: string }; return { file, relativePath: normalizeRelativePath(browserFile.webkitRelativePath?.trim() || file.name) }; }
+function folderPathForCandidate(candidate: UploadCandidate) { const parts = normalizeRelativePath(candidate.relativePath).split("/").filter(Boolean); return parts.length > 1 ? parts.slice(0, -1).join("/") : undefined; }
+function shouldIgnoreFolderArtifact(candidate: UploadCandidate) { const parts = normalizeRelativePath(candidate.relativePath).split("/").filter(Boolean); return IGNORED_FOLDER_ARTIFACTS.has(candidate.file.name) || parts.includes("__MACOSX"); }
+function fileFromEntry(entry: BrowserFileEntry) { return new Promise<File>((resolve, reject) => { if (!entry.file) return reject(new Error(`Nie można odczytać pliku ${entry.name}.`)); entry.file(resolve, reject); }); }
+async function readDirectoryEntries(entry: BrowserFileEntry) { if (!entry.createReader) return [] as BrowserFileEntry[]; const reader = entry.createReader(); const collected: BrowserFileEntry[] = []; while (true) { const batch = await new Promise<BrowserFileEntry[]>((resolve, reject) => reader.readEntries(resolve, reject)); if (!batch.length) break; collected.push(...batch); } return collected; }
+async function candidatesFromEntry(entry: BrowserFileEntry, parentPath = ""): Promise<UploadCandidate[]> { const entryPath = normalizeRelativePath(entry.fullPath || [parentPath, entry.name].filter(Boolean).join("/")); if (entry.isFile) { const file = await fileFromEntry(entry); return [{ file, relativePath: entryPath || file.name }]; } if (!entry.isDirectory) return []; const children = await readDirectoryEntries(entry); return (await Promise.all(children.map((child) => candidatesFromEntry(child, entryPath)))).flat(); }
+async function candidatesFromDataTransfer(dataTransfer: DataTransfer) { const roots: BrowserFileEntry[] = []; for (const item of Array.from(dataTransfer.items ?? [])) { const getter = (item as unknown as { webkitGetAsEntry?: () => BrowserFileEntry | null }).webkitGetAsEntry; const entry = getter?.call(item); if (entry) roots.push(entry); } if (!roots.length) return Array.from(dataTransfer.files ?? []).map(candidateFromFile); return (await Promise.all(roots.map((entry) => candidatesFromEntry(entry)))).flat(); }
+function formatFileSize(bytes: number) { return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`; }
+async function sha256ForSmallFile(file: File) { if (file.size > MAX_BROWSER_HASH_BYTES) return null; const hash = await crypto.subtle.digest("SHA-256", await file.arrayBuffer()); return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, "0")).join(""); }
+function aiStateLabel(status: string | null | undefined) { if (status === "ready") return "AI: przeanalizowano"; if (status === "review") return "AI: wymaga weryfikacji"; if (["processing", "running"].includes(status ?? "")) return "AI: analiza w toku"; if (["error", "failed"].includes(status ?? "")) return "AI: błąd analizy"; return "AI: w kolejce do analizy"; }
 
 export function DocumentUpload({ workspaceId, projectId, projects = [], documents, trashedDocuments, storageReady, defaultCategory = "" }: DocumentUploadProps) {
   const router = useRouter();
@@ -148,17 +46,8 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
   const [isDragging, setIsDragging] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  const categories = useMemo(
-    () => Array.from(new Set(documents.map((document) => document.category).filter(Boolean))).sort() as string[],
-    [documents]
-  );
-  const filteredDocuments = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase("pl");
-    return documents.filter((document) => {
-      const matchesText = !normalized || document.name.toLocaleLowerCase("pl").includes(normalized) || (document.category ?? "").includes(normalized);
-      return matchesText && (category === "all" || document.category === category);
-    });
-  }, [category, documents, query]);
+  const categories = useMemo(() => Array.from(new Set(documents.map((document) => document.category).filter(Boolean))).sort() as string[], [documents]);
+  const filteredDocuments = useMemo(() => { const normalized = query.trim().toLocaleLowerCase("pl"); return documents.filter((document) => { const matchesText = !normalized || document.name.toLocaleLowerCase("pl").includes(normalized) || (document.category ?? "").includes(normalized); return matchesText && (category === "all" || document.category === category); }); }, [category, documents, query]);
 
   async function uploadFile(candidate: UploadCandidate, documentId: string | null, contextProjectId: string | null) {
     const { file } = candidate;
@@ -168,351 +57,76 @@ export function DocumentUpload({ workspaceId, projectId, projects = [], document
     setStatus(file.size <= MAX_BROWSER_HASH_BYTES ? "Obliczanie sumy kontrolnej" : `Przygotowywanie pliku (limit ${MAX_SUPPORTED_UPLOAD_BYTES / 1024 / 1024} MB)`);
     const digest = await sha256ForSmallFile(file);
     const mimeType = file.type || "application/octet-stream";
-    const prepareResponse = await fetch("/api/storage/upload-url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        workspaceId,
-        projectId: contextProjectId,
-        documentId,
-        fileName: file.name,
-        mimeType,
-        fileSize: file.size,
-        category: uploadCategory || undefined,
-        categoryLocked: Boolean(uploadCategory),
-        packageLabel: folderPathForCandidate(candidate)
-      })
-    });
-    if (!prepareResponse.ok) {
-      const payload = await prepareResponse.json().catch(() => null);
-      throw new Error(payload?.error ?? "Nie udało się wygenerować adresu uploadu.");
-    }
-    const upload = (await prepareResponse.json()) as UploadResponse;
+    const prepareResponse = await fetch("/api/storage/upload-url", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, projectId: contextProjectId, documentId, fileName: file.name, mimeType, fileSize: file.size, category: uploadCategory || undefined, categoryLocked: Boolean(uploadCategory), packageLabel: folderPathForCandidate(candidate) }) });
+    if (!prepareResponse.ok) { const payload = await prepareResponse.json().catch(() => null); throw new Error(payload?.error ?? "Nie udało się wygenerować adresu uploadu."); }
+    const upload = await prepareResponse.json() as UploadResponse;
     setStatus("Wysyłanie pliku do prywatnego R2");
     const putResponse = await fetch(upload.uploadUrl, { method: "PUT", headers: upload.headers, body: file });
     if (!putResponse.ok) throw new Error(`R2 odrzucił upload: HTTP ${putResponse.status}`);
-
     setStatus("Zapisywanie dokumentu i uruchamianie analizy AI");
-    const completeResponse = await fetch("/api/storage/complete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: upload.token, sha256: digest })
-    });
-    if (!completeResponse.ok) {
-      const payload = await completeResponse.json().catch(() => null);
-      throw new Error(payload?.error ?? "Nie udało się zapisać dokumentu.");
-    }
+    const completeResponse = await fetch("/api/storage/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: upload.token, sha256: digest }) });
+    if (!completeResponse.ok) { const payload = await completeResponse.json().catch(() => null); throw new Error(payload?.error ?? "Nie udało się zapisać dokumentu."); }
     const completed = await completeResponse.json() as CompleteResponse;
     if (file.size <= 32 * 1024 * 1024) {
       setStatus("Dokument zapisany — Octopus Brain analizuje kontekst");
-      const analysisResponse = await fetch("/api/brain/process", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, versionId: completed.versionId })
-      });
+      const analysisResponse = await fetch("/api/brain/process", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, versionId: completed.versionId }) });
       const analysisPayload = await analysisResponse.json().catch(() => ({})) as AnalysisResponse;
       const packageInfo = analysisPayload.analysis?.package;
       if (analysisResponse.ok && packageInfo) {
         const immediate = (packageInfo.queuedVersionIds ?? []).slice(0, 3);
         setStatus(`Paczka rozpakowana: ${packageInfo.accepted ?? 0} plików przyjętych, ${packageInfo.rejected ?? 0} odrzuconych. Uruchamiam pierwsze analizy.`);
-        await Promise.allSettled(immediate.map((versionId) => fetch("/api/brain/process", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ workspaceId, versionId })
-        })));
+        await Promise.allSettled(immediate.map((versionId) => fetch("/api/brain/process", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, versionId }) })));
         setStatus(`Paczka gotowa — ${packageInfo.accepted ?? 0} dokumentów ma osobne zadania AI i manifest bezpieczeństwa.`);
-      } else {
-        setStatus(analysisResponse.ok ? "Analiza AI gotowa do weryfikacji" : "Dokument zapisany — analiza pozostaje w kolejce");
-      }
-    } else {
-      setStatus("Dokument zapisany — duży plik oczekuje w kolejce workera");
-    }
+      } else setStatus(analysisResponse.ok ? (analysisPayload.message ?? "Analiza AI zakończona") : "Dokument zapisany — analiza pozostaje w kolejce");
+    } else setStatus("Dokument zapisany — duży plik oczekuje w kolejce workera");
     startTransition(() => router.refresh());
   }
 
   async function handleCandidates(candidates: UploadCandidate[]) {
     if (!storageReady) return;
     const selectedFiles = candidates.filter((candidate) => !shouldIgnoreFolderArtifact(candidate));
-    if (!selectedFiles.length) {
-      setError("Folder nie zawiera obsługiwanych plików do przesłania.");
-      return;
-    }
-    if (selectedFiles.length > MAX_FOLDER_FILES) {
-      setError(`Jednorazowo możesz przekazać maksymalnie ${MAX_FOLDER_FILES} plików. Podziel dokumentację na mniejsze foldery.`);
-      return;
-    }
-    if (targetDocumentIdRef.current && selectedFiles.length > 1) {
-      setError("Nowa wersja dokumentu może zawierać jeden plik. Dla folderu użyj głównej Wrzutni.");
-      if (inputRef.current) inputRef.current.value = "";
-      return;
-    }
-    setIsUploading(true);
-    setError(null);
-    const failures: string[] = [];
-    let completed = 0;
-    const hasFolderStructure = selectedFiles.some((candidate) => candidate.relativePath.includes("/"));
-    for (const [index, candidate] of selectedFiles.entries()) {
-      try {
-        setStatus(`Plik ${index + 1} z ${selectedFiles.length}: ${candidate.relativePath}`);
-        await uploadFile(candidate, targetDocumentIdRef.current, targetProjectIdRef.current);
-        completed += 1;
-      } catch (uploadError) {
-        failures.push(`${candidate.relativePath}: ${uploadError instanceof Error ? uploadError.message : "upload nie powiódł się"}`);
-      }
-    }
-    if (completed) {
-      setStatus(`Zapisano ${completed} z ${selectedFiles.length} plików${hasFolderStructure ? " z zachowaniem informacji o folderach" : ""}. Analiza działa w tle.`);
-    }
-    if (failures.length) setError(failures.join(" · "));
-    if (!completed) setStatus(null);
-    try {
-      startTransition(() => router.refresh());
-    } finally {
-      setIsUploading(false);
-      targetDocumentIdRef.current = null;
-      targetProjectIdRef.current = projectId ?? (selectedProjectId || null);
-      if (inputRef.current) inputRef.current.value = "";
-    }
+    if (!selectedFiles.length) { setError("Folder nie zawiera obsługiwanych plików do przesłania."); return; }
+    if (selectedFiles.length > MAX_FOLDER_FILES) { setError(`Jednorazowo możesz przekazać maksymalnie ${MAX_FOLDER_FILES} plików. Podziel dokumentację na mniejsze foldery.`); return; }
+    if (targetDocumentIdRef.current && selectedFiles.length > 1) { setError("Nowa wersja dokumentu może zawierać jeden plik. Dla folderu użyj głównej Wrzutni."); if (inputRef.current) inputRef.current.value = ""; return; }
+    setIsUploading(true); setError(null);
+    const failures: string[] = []; let completed = 0; const hasFolderStructure = selectedFiles.some((candidate) => candidate.relativePath.includes("/"));
+    for (const [index, candidate] of selectedFiles.entries()) { try { setStatus(`Plik ${index + 1} z ${selectedFiles.length}: ${candidate.relativePath}`); await uploadFile(candidate, targetDocumentIdRef.current, targetProjectIdRef.current); completed += 1; } catch (uploadError) { failures.push(`${candidate.relativePath}: ${uploadError instanceof Error ? uploadError.message : "upload nie powiódł się"}`); } }
+    if (completed) setStatus(`Zapisano ${completed} z ${selectedFiles.length} plików${hasFolderStructure ? " z zachowaniem informacji o folderach" : ""}. Analiza działa w tle.`);
+    if (failures.length) setError(failures.join(" · ")); if (!completed) setStatus(null);
+    try { startTransition(() => router.refresh()); } finally { setIsUploading(false); targetDocumentIdRef.current = null; targetProjectIdRef.current = projectId ?? (selectedProjectId || null); if (inputRef.current) inputRef.current.value = ""; }
   }
 
-  async function handleFiles(files: FileList | null) {
-    await handleCandidates(Array.from(files ?? []).map(candidateFromFile));
-  }
+  async function handleFiles(files: FileList | null) { await handleCandidates(Array.from(files ?? []).map(candidateFromFile)); }
+  async function handleDrop(dataTransfer: DataTransfer) { if (!storageReady) return; try { setStatus("Odczytywanie struktury folderów"); await handleCandidates(await candidatesFromDataTransfer(dataTransfer)); } catch (dropError) { setStatus(null); setError(dropError instanceof Error ? dropError.message : "Nie udało się odczytać przeciągniętego folderu."); } }
+  function openFilePicker(documentId: string | null = null, contextProjectId: string | null = selectedProjectId || null) { targetDocumentIdRef.current = documentId; targetProjectIdRef.current = projectId ?? contextProjectId; if (inputRef.current) { inputRef.current.removeAttribute("webkitdirectory"); inputRef.current.removeAttribute("directory"); inputRef.current.click(); } }
+  function openFolderPicker() { targetDocumentIdRef.current = null; targetProjectIdRef.current = projectId ?? (selectedProjectId || null); if (inputRef.current) { inputRef.current.setAttribute("webkitdirectory", ""); inputRef.current.setAttribute("directory", ""); inputRef.current.click(); } }
 
-  async function handleDrop(dataTransfer: DataTransfer) {
-    if (!storageReady) return;
-    try {
-      setStatus("Odczytywanie struktury folderów");
-      const candidates = await candidatesFromDataTransfer(dataTransfer);
-      await handleCandidates(candidates);
-    } catch (dropError) {
-      setStatus(null);
-      setError(dropError instanceof Error ? dropError.message : "Nie udało się odczytać przeciągniętego folderu.");
-    }
+  async function getDocumentUrl(versionId: string, contextProjectId: string | null, disposition: "attachment" | "inline") {
+    const response = await fetch("/api/storage/download-url", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, projectId: contextProjectId, versionId, disposition }) });
+    if (!response.ok) { const payload = await response.json().catch(() => null); throw new Error(payload?.error ?? (disposition === "inline" ? "Nie udało się przygotować podglądu." : "Nie udało się przygotować pobierania.")); }
+    return (await response.json() as DownloadResponse).downloadUrl;
   }
+  async function downloadVersion(versionId: string, contextProjectId: string | null) { setError(null); setStatus("Przygotowywanie pobierania"); try { const url = await getDocumentUrl(versionId, contextProjectId, "attachment"); setStatus(null); window.location.assign(url); } catch (downloadError) { setStatus(null); setError(downloadError instanceof Error ? downloadError.message : "Pobieranie nie powiodło się."); } }
+  async function previewVersion(versionId: string, contextProjectId: string | null) { setError(null); setStatus("Przygotowywanie podglądu"); const previewWindow = window.open("about:blank", "_blank"); if (previewWindow) previewWindow.opener = null; try { const url = await getDocumentUrl(versionId, contextProjectId, "inline"); setStatus(null); if (previewWindow) previewWindow.location.replace(url); else window.open(url, "_blank", "noopener,noreferrer"); } catch (previewError) { previewWindow?.close(); setStatus(null); setError(previewError instanceof Error ? previewError.message : "Podgląd nie powiódł się."); } }
+  async function analyzeVersion(versionId: string) { setError(null); setStatus("Octopus Brain sprawdza analizę dokumentu"); try { const response = await fetch("/api/brain/process", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, versionId }) }); const payload = await response.json().catch(() => ({})) as AnalysisResponse & { error?: string }; if (!response.ok) throw new Error(payload.error ?? "Nie udało się uruchomić analizy."); setStatus(payload.alreadyAnalyzed ? (payload.message ?? "Dokument został już przeanalizowany.") : "Analiza AI zakończona — wynik jest gotowy do użycia."); startTransition(() => router.refresh()); } catch (analysisError) { setStatus(null); setError(analysisError instanceof Error ? analysisError.message : "Analiza nie powiodła się."); } }
+  async function changeDocumentState(documentId: string, state: "active" | "trashed", contextProjectId: string | null) { setError(null); setStatus(state === "trashed" ? "Przenoszenie dokumentu do kosza" : "Przywracanie dokumentu"); try { const response = await fetch("/api/storage/document-state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, projectId: contextProjectId, documentId, state }) }); if (!response.ok) { const payload = await response.json().catch(() => null); throw new Error(payload?.error ?? "Nie udało się zmienić stanu dokumentu."); } setStatus(state === "trashed" ? "Dokument przeniesiony do kosza" : "Dokument przywrócony"); startTransition(() => router.refresh()); } catch (stateError) { setStatus(null); setError(stateError instanceof Error ? stateError.message : "Zmiana stanu dokumentu nie powiodła się."); } }
 
-  function openFilePicker(documentId: string | null = null, contextProjectId: string | null = selectedProjectId || null) {
-    targetDocumentIdRef.current = documentId;
-    targetProjectIdRef.current = projectId ?? contextProjectId;
-    if (inputRef.current) {
-      inputRef.current.removeAttribute("webkitdirectory");
-      inputRef.current.removeAttribute("directory");
-      inputRef.current.click();
-    }
-  }
-
-  function openFolderPicker() {
-    targetDocumentIdRef.current = null;
-    targetProjectIdRef.current = projectId ?? (selectedProjectId || null);
-    if (inputRef.current) {
-      inputRef.current.setAttribute("webkitdirectory", "");
-      inputRef.current.setAttribute("directory", "");
-      inputRef.current.click();
-    }
-  }
-
-  async function downloadVersion(versionId: string, contextProjectId: string | null) {
-    setError(null);
-    setStatus("Przygotowywanie pobierania");
-    try {
-      const response = await fetch("/api/storage/download-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, projectId: contextProjectId, versionId })
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        throw new Error(payload?.error ?? "Nie udało się przygotować pobierania.");
-      }
-      const payload = (await response.json()) as DownloadResponse;
-      setStatus(null);
-      window.location.assign(payload.downloadUrl);
-    } catch (downloadError) {
-      setStatus(null);
-      setError(downloadError instanceof Error ? downloadError.message : "Pobieranie nie powiodło się.");
-    }
-  }
-
-  async function previewVersion(versionId: string, contextProjectId: string | null) {
-    setError(null);
-    setStatus("Przygotowywanie podglądu");
-    const previewWindow = window.open("about:blank", "_blank");
-    if (previewWindow) previewWindow.opener = null;
-    try {
-      const response = await fetch("/api/storage/download-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, projectId: contextProjectId, versionId })
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        throw new Error(payload?.error ?? "Nie udało się przygotować podglądu.");
-      }
-      const payload = (await response.json()) as DownloadResponse;
-      setStatus(null);
-      if (previewWindow) previewWindow.location.replace(payload.downloadUrl);
-      else window.open(payload.downloadUrl, "_blank", "noopener,noreferrer");
-    } catch (previewError) {
-      previewWindow?.close();
-      setStatus(null);
-      setError(previewError instanceof Error ? previewError.message : "Podgląd nie powiódł się.");
-    }
-  }
-
-  async function analyzeVersion(versionId: string) {
-    setError(null);
-    setStatus("Octopus Brain analizuje dokument");
-    try {
-      const response = await fetch("/api/brain/process", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, versionId })
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        throw new Error(payload?.error ?? "Nie udało się uruchomić analizy.");
-      }
-      setStatus("Analiza AI gotowa do weryfikacji");
-      startTransition(() => router.refresh());
-    } catch (analysisError) {
-      setStatus("Dokument pozostaje w kolejce");
-      setError(analysisError instanceof Error ? analysisError.message : "Analiza nie powiodła się.");
-    }
-  }
-
-  async function changeDocumentState(documentId: string, state: "active" | "trashed", contextProjectId: string | null) {
-    setError(null);
-    setStatus(state === "trashed" ? "Przenoszenie dokumentu do kosza" : "Przywracanie dokumentu");
-    try {
-      const response = await fetch("/api/storage/document-state", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, projectId: contextProjectId, documentId, state })
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        throw new Error(payload?.error ?? "Nie udało się zmienić stanu dokumentu.");
-      }
-      setStatus(state === "trashed" ? "Dokument przeniesiony do kosza" : "Dokument przywrócony");
-      startTransition(() => router.refresh());
-    } catch (stateError) {
-      setStatus(null);
-      setError(stateError instanceof Error ? stateError.message : "Zmiana stanu dokumentu nie powiodła się.");
-    }
-  }
-
-  return (
-    <div className="documents-workspace">
-      <div className="document-toolbar">
-        <label className="document-search">
-          <Search size={17} aria-hidden="true" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Szukaj po nazwie, kategorii lub haśle" />
-        </label>
-        <select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Kategoria dokumentu">
-          <option value="all">Wszystkie kategorie</option>
-          {categories.map((item) => <option key={item} value={item}>{documentCategoryLabel(item)}</option>)}
-        </select>
-        <span className="document-toolbar__count">{filteredDocuments.length} / {documents.length}</span>
+  return <div className="documents-workspace">
+    <div className="document-toolbar"><label className="document-search"><Search size={17} aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Szukaj po nazwie, kategorii lub haśle" /></label><select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Kategoria dokumentu"><option value="all">Wszystkie kategorie</option>{categories.map((item) => <option key={item} value={item}>{documentCategoryLabel(item)}</option>)}</select><span className="document-toolbar__count">{filteredDocuments.length} / {documents.length}</span></div>
+    <div className="documents-layout">
+      <div className="upload-panel">
+        <input ref={inputRef} type="file" accept={SUPPORTED_UPLOAD_ACCEPT} multiple onChange={(event) => void handleFiles(event.target.files)} disabled={!storageReady} />
+        {!projectId && projects.length > 0 ? <label className="upload-context"><span>Kontekst nowego dokumentu</span><select value={selectedProjectId} onChange={(event) => { setSelectedProjectId(event.target.value); targetProjectIdRef.current = event.target.value || null; }}><option value="">Dokument firmowy / AI dopasuje</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label> : null}
+        <label className="upload-context"><span>Rodzaj nowego źródła</span><select value={uploadCategory} onChange={(event) => setUploadCategory(event.target.value)}><option value="">AI rozpozna automatycznie</option>{DOCUMENT_DESTINATIONS.map((destination) => <option key={destination.value} value={destination.value}>{destination.label}</option>)}</select></label>
+        <p className="form-hint">Te ustawienia dotyczą kolejnych przesyłanych plików. Nie zmieniają kategorii dokumentów już znajdujących się na liście.</p>
+        <button type="button" className={`upload-dropzone ${isDragging ? "upload-dropzone--active" : ""}`} onClick={() => openFilePicker()} onDragEnter={(event) => { event.preventDefault(); setIsDragging(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setIsDragging(false)} onDrop={(event) => { event.preventDefault(); setIsDragging(false); void handleDrop(event.dataTransfer); }} disabled={isPending || isUploading || !storageReady}><UploadCloud size={30} aria-hidden="true" /><strong>{isUploading ? "Przetwarzanie dokumentacji" : "Przeciągnij pliki albo cały folder"}</strong><span>Foldery są odczytywane razem z podfolderami · PDF, Office, CSV, obrazy, XML, tekst i bezpieczne ZIP · do {MAX_SUPPORTED_UPLOAD_BYTES / 1024 / 1024} MB na plik</span></button>
+        <button type="button" className="secondary-button" onClick={openFolderPicker} disabled={isPending || isUploading || !storageReady}><FolderOpen size={16} aria-hidden="true" />Wybierz folder z dysku</button>
+        <p className="form-hint">Octopus zachowa ścieżkę folderu jako metadane paczki, pominie pliki systemowe i przeanalizuje każdy obsługiwany plik osobno.</p>
+        <div className="upload-pipeline"><span>R2</span><span>Ekstrakcja</span><span>Gemini</span><span>Klasyfikacja</span><span>Moduły</span></div>
+        {!storageReady ? <p className="form-message">Uruchom wszystkie migracje do 20260814_domain_access_hardening, aby odblokować Wrzutnię.</p> : null}{status ? <p className="upload-status">{status}</p> : null}{error ? <p className="form-message form-message--error">{error}</p> : null}
       </div>
-
-      <div className="documents-layout">
-        <div className="upload-panel">
-          <input ref={inputRef} type="file" accept={SUPPORTED_UPLOAD_ACCEPT} multiple onChange={(event) => handleFiles(event.target.files)} disabled={!storageReady} />
-          {!projectId && projects.length > 0 ? (
-            <label className="upload-context">
-              <span>Kontekst dokumentu</span>
-              <select value={selectedProjectId} onChange={(event) => {
-                setSelectedProjectId(event.target.value);
-                targetProjectIdRef.current = event.target.value || null;
-              }}>
-                <option value="">Dokument firmowy / AI dopasuje</option>
-                {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
-              </select>
-            </label>
-          ) : null}
-          <label className="upload-context">
-            <span>Rodzaj źródła</span>
-            <select value={uploadCategory} onChange={(event) => setUploadCategory(event.target.value)}>
-              <option value="">AI rozpozna automatycznie</option>
-              {DOCUMENT_DESTINATIONS.map((destination) => (
-                <option key={destination.value} value={destination.value}>{destination.label}</option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className={`upload-dropzone ${isDragging ? "upload-dropzone--active" : ""}`}
-            onClick={() => openFilePicker()}
-            onDragEnter={(event) => { event.preventDefault(); setIsDragging(true); }}
-            onDragOver={(event) => event.preventDefault()}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={(event) => { event.preventDefault(); setIsDragging(false); void handleDrop(event.dataTransfer); }}
-            disabled={isPending || isUploading || !storageReady}
-          >
-            <UploadCloud size={30} aria-hidden="true" />
-            <strong>{isUploading ? "Przetwarzanie dokumentacji" : "Przeciągnij pliki albo cały folder"}</strong>
-            <span>Foldery są odczytywane razem z podfolderami · PDF, Office, CSV, obrazy, XML, tekst i bezpieczne ZIP · do {MAX_SUPPORTED_UPLOAD_BYTES / 1024 / 1024} MB na plik</span>
-          </button>
-          <button type="button" className="secondary-button" onClick={openFolderPicker} disabled={isPending || isUploading || !storageReady}>
-            <FolderOpen size={16} aria-hidden="true" />Wybierz folder z dysku
-          </button>
-          <p className="form-hint">Octopus zachowa ścieżkę folderu jako metadane paczki, pominie pliki systemowe i przeanalizuje każdy obsługiwany plik osobno.</p>
-          <div className="upload-pipeline">
-            <span>R2</span><span>Ekstrakcja</span><span>Gemini</span><span>Klasyfikacja</span><span>Moduły</span>
-          </div>
-          {!storageReady ? <p className="form-message">Uruchom wszystkie migracje do 20260814_domain_access_hardening, aby odblokować Wrzutnię.</p> : null}
-          {status ? <p className="upload-status">{status}</p> : null}
-          {error ? <p className="form-message form-message--error">{error}</p> : null}
-        </div>
-
-        <div className="document-list">
-          {filteredDocuments.length > 0 ? filteredDocuments.map((document) => {
-            const version = document.document_versions?.[0];
-            const projectName = projects.find((item) => item.id === document.project_id)?.name;
-            const quarantined = version?.malware_scan_status === "infected";
-            return (
-              <article key={document.id} id={`document-${document.id}`} className="document-row">
-                <FileText size={19} aria-hidden="true" />
-                <div>
-                  <div className="document-row__title">
-                    <h3>{document.name}</h3>
-                    <span className="document-category">{documentCategoryLabel(document.category)}</span>
-                  </div>
-                  <p>{projectName ?? (document.project_id ? "Inwestycja" : "Dokument firmowy")} · {version?.mime_type ?? "plik"} · {version ? formatFileSize(version.file_size_bytes) : "bez wersji"} · {version ? `wersja ${version.version_number}` : "oczekuje"}</p>
-                  <span className="document-ai-state"><Sparkles size={13} aria-hidden="true" />{["ready", "review"].includes(document.ai_status ?? "") ? "AI: analiza do weryfikacji" : "AI: w kolejce do analizy"}</span>
-                  {quarantined ? <span className="document-security-state">Kwarantanna · pobieranie zablokowane</span> : version?.malware_scan_status === "clean" ? <span className="document-security-state document-security-state--clean">Skan bezpieczeństwa: czysty</span> : null}
-                </div>
-                {version ? (
-                  <div className="document-row__actions">
-                    <button type="button" className="secondary-button" onClick={() => analyzeVersion(version.id)} disabled={isUploading}><Sparkles size={16} aria-hidden="true" />Analizuj</button>
-                    <button type="button" className="secondary-button" onClick={() => previewVersion(version.id, document.project_id)} disabled={isUploading || quarantined}><Eye size={16} aria-hidden="true" />Podgląd</button>
-                    <button type="button" className="secondary-button" onClick={() => downloadVersion(version.id, document.project_id)} disabled={isUploading || quarantined}><Download size={16} aria-hidden="true" />Pobierz</button>
-                    <button type="button" className="secondary-button" onClick={() => openFilePicker(document.id, document.project_id)} disabled={isUploading || !storageReady}><FilePlus2 size={16} aria-hidden="true" />Nowa wersja</button>
-                    <button type="button" className="secondary-button secondary-button--danger" onClick={() => changeDocumentState(document.id, "trashed", document.project_id)} disabled={isUploading || isPending}><Trash2 size={16} aria-hidden="true" />Do kosza</button>
-                  </div>
-                ) : null}
-              </article>
-            );
-          }) : (
-            <div className="empty-state empty-state--compact"><FileSearch size={24} aria-hidden="true" /><h3>Brak pasujących dokumentów</h3><p>Wrzutnia przyjmie plik, zapisze jedną wersję źródłową i rozpocznie klasyfikację.</p></div>
-          )}
-        </div>
-      </div>
-
-      {trashedDocuments.length > 0 ? (
-        <section className="trash-panel">
-          <div><p className="eyebrow">Kosz</p><p>{trashedDocuments.length} dokumentów — pliki w R2 nie zostały usunięte.</p></div>
-          <div className="document-list">
-            {trashedDocuments.map((document) => (
-              <article key={document.id} className="document-row document-row--trashed">
-                <Trash2 size={18} aria-hidden="true" />
-                <div><h3>{document.name}</h3><p>Przeniesiono do kosza</p></div>
-                <div className="document-row__actions"><button type="button" className="secondary-button" onClick={() => changeDocumentState(document.id, "active", document.project_id)} disabled={isPending}><RotateCcw size={16} aria-hidden="true" />Przywróć</button></div>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      <div className="document-list">{filteredDocuments.length > 0 ? filteredDocuments.map((document) => { const version = document.document_versions?.[0]; const projectName = projects.find((item) => item.id === document.project_id)?.name; const quarantined = version?.malware_scan_status === "infected"; return <article key={document.id} id={`document-${document.id}`} className="document-row"><FileText size={19} aria-hidden="true" /><div><div className="document-row__title"><h3>{document.name}</h3><span className="document-category">{documentCategoryLabel(document.category)}</span></div><p>{projectName ?? (document.project_id ? "Inwestycja" : "Dokument firmowy")} · {version?.mime_type ?? "plik"} · {version ? formatFileSize(version.file_size_bytes) : "bez wersji"} · {version ? `wersja ${version.version_number}` : "oczekuje"}</p><span className="document-ai-state"><Sparkles size={13} aria-hidden="true" />{aiStateLabel(document.ai_status)}</span>{quarantined ? <span className="document-security-state">Kwarantanna · pobieranie zablokowane</span> : version?.malware_scan_status === "clean" ? <span className="document-security-state document-security-state--clean">Skan bezpieczeństwa: czysty</span> : null}</div>{version ? <div className="document-row__actions"><button type="button" className="secondary-button" onClick={() => void analyzeVersion(version.id)} disabled={isUploading}><Sparkles size={16} aria-hidden="true" />Analizuj</button><button type="button" className="secondary-button" onClick={() => void previewVersion(version.id, document.project_id)} disabled={isUploading || quarantined}><Eye size={16} aria-hidden="true" />Podgląd</button><button type="button" className="secondary-button" onClick={() => void downloadVersion(version.id, document.project_id)} disabled={isUploading || quarantined}><Download size={16} aria-hidden="true" />Pobierz</button><button type="button" className="secondary-button" onClick={() => openFilePicker(document.id, document.project_id)} disabled={isUploading || !storageReady}><FilePlus2 size={16} aria-hidden="true" />Nowa wersja</button><button type="button" className="secondary-button secondary-button--danger" onClick={() => void changeDocumentState(document.id, "trashed", document.project_id)} disabled={isUploading || isPending}><Trash2 size={16} aria-hidden="true" />Do kosza</button></div> : null}</article>; }) : <div className="empty-state empty-state--compact"><FileSearch size={24} aria-hidden="true" /><h3>Brak pasujących dokumentów</h3><p>Wrzutnia przyjmie plik, zapisze jedną wersję źródłową i rozpocznie klasyfikację.</p></div>}</div>
     </div>
-  );
+    {trashedDocuments.length > 0 ? <section className="trash-panel"><div><p className="eyebrow">Kosz</p><p>{trashedDocuments.length} dokumentów — pliki w R2 nie zostały usunięte.</p></div><div className="document-list">{trashedDocuments.map((document) => <article key={document.id} className="document-row document-row--trashed"><Trash2 size={18} aria-hidden="true" /><div><h3>{document.name}</h3><p>Przeniesiono do kosza</p></div><div className="document-row__actions"><button type="button" className="secondary-button" onClick={() => void changeDocumentState(document.id, "active", document.project_id)} disabled={isPending}><RotateCcw size={16} aria-hidden="true" />Przywróć</button></div></article>)}</div></section> : null}
+  </div>;
 }
