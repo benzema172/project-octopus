@@ -28,13 +28,11 @@
 .compact :global([data-hr-time-400="1"] div:has(>div>[data-hr-inline-timesheet-editor="1"])>div:nth-child(3)>small){display:none}
 .compact :global([data-hr-time-400="1"] div:has(>div>[data-hr-inline-timesheet-editor="1"])>div:last-child strong){font-size:.72rem;white-space:nowrap}
 
-/* Inline editor: kolejne inwestycje nie tworzą dodatkowej belki na wysokość. */
-.compact :global([data-hr-inline-timesheet-editor="1"]>div){position:relative;display:grid;gap:3px;padding-right:27px}
-.compact :global([data-hr-inline-timesheet-editor="1"]>div>form){grid-template-columns:minmax(135px,1fr) 52px 48px 27px 27px!important;gap:3px!important}
+/* Inline editor: wszystkie akcje, także +, pozostają w tym samym wierszu po prawej. */
+.compact :global([data-hr-inline-timesheet-editor="1"]>div){position:relative;display:grid;gap:3px}
+.compact :global([data-hr-inline-timesheet-editor="1"]>div>form){grid-template-columns:minmax(135px,1fr) 52px 48px 27px 27px 27px!important;gap:3px!important}
 .compact :global([data-hr-inline-timesheet-editor="1"]>div>form select),.compact :global([data-hr-inline-timesheet-editor="1"]>div>form input){height:27px!important;min-height:27px!important;border-radius:7px!important;padding-left:6px!important;padding-right:6px!important;font-size:.69rem!important}
 .compact :global([data-hr-inline-timesheet-editor="1"]>div>form button){width:27px!important;height:27px!important;min-height:27px!important;border-radius:7px!important;padding:0!important}
-.compact :global([data-hr-inline-timesheet-editor="1"]>div>button){position:absolute;right:0;top:0;width:24px!important;height:24px!important;min-height:24px!important;padding:0!important;font-size:0!important;border-radius:7px!important}
-.compact :global([data-hr-inline-timesheet-editor="1"]>div>button svg){width:12px;height:12px}
 .compact :global([data-hr-inline-timesheet-editor="1"]>div>div){font-size:.6rem!important}
 
 @media(max-width:1180px){
