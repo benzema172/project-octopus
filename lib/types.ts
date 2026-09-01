@@ -87,6 +87,23 @@ export type ProjectProfile = {
   notes: string;
 };
 
+export type DocumentFlowStage = "uploaded" | "processing" | "classified" | "review" | "ready" | "error";
+
+export type DocumentFlowSummary = {
+  stage: DocumentFlowStage;
+  category: string | null;
+  confidence: number | null;
+  classificationStatus: string | null;
+  rationale: string | null;
+  destination: string;
+  outcome: string;
+  resultHref: string | null;
+  artifactType: string | null;
+  artifactId: string | null;
+  proposalCount: number;
+  publishedCount: number;
+};
+
 export type DocumentSummary = {
   id: string;
   project_id: string | null;
@@ -100,6 +117,7 @@ export type DocumentSummary = {
   created_at: string;
   updated_at: string;
   document_versions?: DocumentVersionSummary[];
+  flow?: DocumentFlowSummary | null;
 };
 
 export type DocumentVersionSummary = {
