@@ -84,7 +84,8 @@ describe("unified operational UX", () => {
     expect(documents).toContain("co-upload-disclosure");
     expect(documents).not.toContain("document-principles");
     expect(documents).not.toContain("co-category-strip");
-    expect(ai).toContain("co-ai-tabs");
+    expect(ai).toContain('aria-label="Tryb pracy OctopusAI"');
+    expect(ai).toContain("styles.tabs");
     expect(ai).toContain("Do decyzji");
     expect(ai).toContain("Wiedza");
     expect(ai).toContain("Wzory");
