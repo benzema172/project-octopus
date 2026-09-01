@@ -24,43 +24,23 @@ const SUPPORTED_MIME_TYPES: Record<string, Set<string>> = {
 export function validateUploadFile(fileName: string, mimeType: string, fileSize?: number): string | null {
   const trimmedName = fileName.trim();
   const extension = trimmedName.includes(".") ? trimmedName.toLowerCase().split(".").at(-1) ?? "" : "";
-
   const allowedMimeTypes = SUPPORTED_MIME_TYPES[extension];
-  if (!allowedMimeTypes) {
-    return "Nieobsługiwany format. Dozwolone są PDF, DOC/DOCX, XLS/XLSX, CSV, obrazy, XML, pliki tekstowe i kontrolowane paczki ZIP.";
-  }
-
-  if (typeof fileSize === "number" && fileSize > MAX_SUPPORTED_UPLOAD_BYTES) {
-    return "Plik przekracza limit 50 MB pojedynczego dokumentu analizowanego przez AI.";
-  }
-
+  if (!allowedMimeTypes) return "Nieobsługiwany format. Dozwolone są PDF, DOC/DOCX, XLS/XLSX, CSV, obrazy, XML, pliki tekstowe i kontrolowane paczki ZIP.";
+  if (typeof fileSize === "number" && fileSize > MAX_SUPPORTED_UPLOAD_BYTES) return "Plik przekracza limit 50 MB pojedynczego dokumentu analizowanego przez AI.";
   const normalizedMime = mimeType.trim().toLowerCase().split(";", 1)[0] || "application/octet-stream";
-  if (normalizedMime !== "application/octet-stream" && !allowedMimeTypes.has(normalizedMime)) {
-    return `Typ pliku ${normalizedMime} nie pasuje do rozszerzenia .${extension}.`;
-  }
-
+  if (normalizedMime !== "application/octet-stream" && !allowedMimeTypes.has(normalizedMime)) return `Typ pliku ${normalizedMime} nie pasuje do rozszerzenia .${extension}.`;
   return null;
 }
 
 export function sanitizeFileName(fileName: string): string {
   const trimmed = fileName.trim();
-  const normalized = trimmed
-    .replaceAll("ł", "l")
-    .replaceAll("Ł", "L")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "");
-  const safe = normalized
-    .replace(/[^a-zA-Z0-9._-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^[.-]+|[.-]+$/g, "")
-    .slice(0, 140);
-
+  const normalized = trimmed.replaceAll("ł", "l").replaceAll("Ł", "L").normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+  const safe = normalized.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").replace(/^[.-]+|[.-]+$/g, "").slice(0, 140);
   return safe || "document";
 }
 
 export function inferDocumentCategory(mimeType: string, fileName: string): DocumentCategory {
   const lowerName = fileName.toLocaleLowerCase("pl").replaceAll("ł", "l").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
   if (/kosztorys|przedmiar|boq|kalkulacj/.test(lowerName)) return "estimate";
   if (/stwi?or|specyfikacj.*technic/.test(lowerName)) return "specification";
   if (/projekt|dokumentacja|opis.*technic|rzut|schemat|pzt|pw[-_ ]|pb[-_ ]/.test(lowerName)) return "technical";
@@ -76,26 +56,22 @@ export function inferDocumentCategory(mimeType: string, fileName: string): Docum
   if (/korespondencj|uzgodnieni|notatka|rfi|zapytani/.test(lowerName)) return "correspondence";
   if (/raport|zestawieni|podsumowani/.test(lowerName)) return "report";
   if (lowerName.endsWith(".zip") || mimeType.includes("zip")) return "other";
-
-  if (mimeType.includes("pdf") || lowerName.endsWith(".pdf")) {
-    return "technical";
-  }
-
-  if (mimeType.includes("spreadsheet") || lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") || lowerName.endsWith(".csv")) {
-    return "other";
-  }
-
-  if (mimeType.includes("word") || lowerName.endsWith(".doc") || lowerName.endsWith(".docx")) {
-    return "technical";
-  }
-
+  if (mimeType.includes("pdf") || lowerName.endsWith(".pdf")) return "technical";
+  if (mimeType.includes("spreadsheet") || lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") || lowerName.endsWith(".csv")) return "other";
+  if (mimeType.includes("word") || lowerName.endsWith(".doc") || lowerName.endsWith(".docx")) return "technical";
   return "other";
 }
 
-export function attachmentContentDisposition(fileName: string): string {
+function contentDisposition(fileName: string, mode: "attachment" | "inline") {
   const asciiName = sanitizeFileName(fileName).replace(/["\\]/g, "-");
-  const encodedName = encodeURIComponent(fileName)
-    .replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+  const encodedName = encodeURIComponent(fileName).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `${mode}; filename="${asciiName}"; filename*=UTF-8''${encodedName}`;
+}
 
-  return `attachment; filename="${asciiName}"; filename*=UTF-8''${encodedName}`;
+export function attachmentContentDisposition(fileName: string): string {
+  return contentDisposition(fileName, "attachment");
+}
+
+export function inlineContentDisposition(fileName: string): string {
+  return contentDisposition(fileName, "inline");
 }
