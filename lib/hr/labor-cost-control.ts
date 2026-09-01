@@ -21,6 +21,9 @@ export type LaborProjectCost = {
   projectId: string;
   employeeCosts: LaborEmployeeCost[];
   people: number;
+  formalAssignmentPeople: number;
+  withoutFormalAssignmentPeople: number;
+  assignedWithoutTimePeople: number;
   plannedHours: number;
   plannedCost: number;
   approvedHours: number;
@@ -28,7 +31,10 @@ export type LaborProjectCost = {
   actualCost: number;
   pendingHours: number;
   pendingCost: number;
+  projectedHours: number;
+  projectedCost: number;
   overPlan: boolean;
+  projectedOverPlan: boolean;
   warnings: string[];
 };
 
@@ -38,12 +44,21 @@ export type LaborControlResult = {
   actualCost: number;
   approvedHours: number;
   overtimeHours: number;
+  pendingHours: number;
   pendingCost: number;
+  projectedHours: number;
+  projectedCost: number;
+  plannedHours: number;
+  plannedCost: number;
+  formalAssignmentPeople: number;
+  withoutFormalAssignmentPeople: number;
+  assignedWithoutTimePeople: number;
   unassignedApprovedHours: number;
   unassignedActualCost: number;
   unassignedPendingHours: number;
   unassignedPendingCost: number;
   overPlanProjects: number;
+  projectedOverPlanProjects: number;
 };
 
 function dateOnly(value: unknown) {
@@ -207,7 +222,7 @@ export function calculateLaborControl({
           actualCost += snapshotCost(entry, total * rate);
         } else if (pendingStatuses.has(status)) {
           pendingHours += total;
-          pendingCost += total * rate;
+          pendingCost += snapshotCost(entry, total * rate);
         }
       }
 
@@ -235,19 +250,30 @@ export function calculateLaborControl({
     const actualCost = employeeCosts.reduce((sum, row) => sum + row.actualCost, 0);
     const pendingHours = employeeCosts.reduce((sum, row) => sum + row.pendingHours, 0);
     const pendingCost = employeeCosts.reduce((sum, row) => sum + row.pendingCost, 0);
+    const projectedHours = approvedHours + overtimeHours + pendingHours;
+    const projectedCost = actualCost + pendingCost;
+    const formalAssignmentPeople = employeeCosts.filter((row) => row.hasAssignment).length;
+    const withoutFormalAssignmentPeople = employeeCosts.filter((row) => !row.hasAssignment && row.approvedHours + row.overtimeHours + row.pendingHours > 0).length;
+    const assignedWithoutTimePeople = employeeCosts.filter((row) => row.hasAssignment && row.approvedHours + row.overtimeHours + row.pendingHours <= 0).length;
     const warnings: string[] = [];
     if (employeeCosts.some((row) => row.hourlyCost <= 0)) warnings.push("Brak kosztu 1 r-g u części zespołu");
-    if (employeeCosts.some((row) => !row.hasAssignment && row.approvedHours + row.overtimeHours > 0)) warnings.push("Czas pracy bez formalnego przypisania");
+    if (withoutFormalAssignmentPeople > 0) warnings.push(`${withoutFormalAssignmentPeople} ${withoutFormalAssignmentPeople === 1 ? "osoba ma" : "osoby mają"} czas na inwestycji bez formalnego przypisania`);
+    if (assignedWithoutTimePeople > 0) warnings.push(`${assignedWithoutTimePeople} ${assignedWithoutTimePeople === 1 ? "osoba przypisana bez" : "osoby przypisane bez"} ewidencji czasu w tym miesiącu`);
     if (employeeCosts.some((row) => row.plannedHours > 0 && row.approvedHours + row.overtimeHours > row.plannedHours + 0.1)) warnings.push("Przekroczono plan godzin pracownika");
     if (employeeCosts.some((row) => row.complianceRisk === "expired")) warnings.push("Wygasłe BHP / badania / uprawnienia");
     else if (employeeCosts.some((row) => row.complianceRisk === "expiring")) warnings.push("BHP / badania / uprawnienia wygasają ≤30 dni");
     const overPlan = plannedCost > 0 && actualCost > plannedCost + 0.01;
+    const projectedOverPlan = plannedCost > 0 && projectedCost > plannedCost + 0.01;
     if (overPlan) warnings.push("Przekroczony plan kosztu robocizny");
+    else if (projectedOverPlan) warnings.push("Po zatwierdzeniu oczekujących wpisów plan kosztu zostanie przekroczony");
 
     return {
       projectId,
       employeeCosts,
       people: employeeCosts.length,
+      formalAssignmentPeople,
+      withoutFormalAssignmentPeople,
+      assignedWithoutTimePeople,
       plannedHours: round(plannedHours),
       plannedCost: round(plannedCost),
       approvedHours: round(approvedHours),
@@ -255,7 +281,10 @@ export function calculateLaborControl({
       actualCost: round(actualCost),
       pendingHours: round(pendingHours),
       pendingCost: round(pendingCost),
+      projectedHours: round(projectedHours),
+      projectedCost: round(projectedCost),
       overPlan,
+      projectedOverPlan,
       warnings
     } satisfies LaborProjectCost;
   }).filter((row) => row.people > 0 || row.actualCost > 0 || row.pendingCost > 0);
@@ -277,21 +306,38 @@ export function calculateLaborControl({
       unassignedActualCost += snapshotCost(entry, total * rate);
     } else if (pendingStatuses.has(status)) {
       unassignedPendingHours += total;
-      unassignedPendingCost += total * rate;
+      unassignedPendingCost += snapshotCost(entry, total * rate);
     }
   }
 
+  const actualCost = projectCosts.reduce((sum, row) => sum + row.actualCost, 0);
+  const approvedHours = projectCosts.reduce((sum, row) => sum + row.approvedHours + row.overtimeHours, 0);
+  const overtimeHours = projectCosts.reduce((sum, row) => sum + row.overtimeHours, 0);
+  const pendingHours = projectCosts.reduce((sum, row) => sum + row.pendingHours, 0);
+  const pendingCost = projectCosts.reduce((sum, row) => sum + row.pendingCost, 0);
+  const plannedHours = projectCosts.reduce((sum, row) => sum + row.plannedHours, 0);
+  const plannedCost = projectCosts.reduce((sum, row) => sum + row.plannedCost, 0);
+
   return {
     month,
-    projects: projectCosts.sort((a, b) => b.actualCost - a.actualCost || b.plannedCost - a.plannedCost),
-    actualCost: round(projectCosts.reduce((sum, row) => sum + row.actualCost, 0)),
-    approvedHours: round(projectCosts.reduce((sum, row) => sum + row.approvedHours + row.overtimeHours, 0)),
-    overtimeHours: round(projectCosts.reduce((sum, row) => sum + row.overtimeHours, 0)),
-    pendingCost: round(projectCosts.reduce((sum, row) => sum + row.pendingCost, 0)),
+    projects: projectCosts.sort((a, b) => b.projectedCost - a.projectedCost || b.plannedCost - a.plannedCost),
+    actualCost: round(actualCost),
+    approvedHours: round(approvedHours),
+    overtimeHours: round(overtimeHours),
+    pendingHours: round(pendingHours),
+    pendingCost: round(pendingCost),
+    projectedHours: round(approvedHours + pendingHours),
+    projectedCost: round(actualCost + pendingCost),
+    plannedHours: round(plannedHours),
+    plannedCost: round(plannedCost),
+    formalAssignmentPeople: projectCosts.reduce((sum, row) => sum + row.formalAssignmentPeople, 0),
+    withoutFormalAssignmentPeople: projectCosts.reduce((sum, row) => sum + row.withoutFormalAssignmentPeople, 0),
+    assignedWithoutTimePeople: projectCosts.reduce((sum, row) => sum + row.assignedWithoutTimePeople, 0),
     unassignedApprovedHours: round(unassignedApprovedHours),
     unassignedActualCost: round(unassignedActualCost),
     unassignedPendingHours: round(unassignedPendingHours),
     unassignedPendingCost: round(unassignedPendingCost),
-    overPlanProjects: projectCosts.filter((row) => row.overPlan).length
+    overPlanProjects: projectCosts.filter((row) => row.overPlan).length,
+    projectedOverPlanProjects: projectCosts.filter((row) => row.projectedOverPlan).length
   };
 }
