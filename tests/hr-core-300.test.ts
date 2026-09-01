@@ -131,9 +131,9 @@ describe("HR Core 3.0 architecture contracts", () => {
   it("loads history by date range and exposes safe bulk editing", () => {
     expect(time400).toContain("/api/company/hr/timesheet-range");
     expect(time400).toContain("/api/company/hr/timesheet-bulk");
+    expect(time400).toContain('params.set("offset"');
     expect(timeRange).toContain('.gte("work_date", from)');
     expect(timeRange).toContain('.lte("work_date", to)');
-    expect(timeRange).toContain('params.set("offset"');
     expect(timeBulk).toContain("isPolishWorkingDay");
     expect(timeBulk).toContain('mode === "replace_single"');
     expect(timeBulk).toContain("skippedLeave");
