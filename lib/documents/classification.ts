@@ -1,19 +1,19 @@
 export const DOCUMENT_DESTINATIONS = [
-  { value: "technical", label: "Dokumentacja techniczna", module: "Dokumentacja" },
-  { value: "specification", label: "STWiOR / specyfikacja", module: "Dokumentacja" },
-  { value: "estimate", label: "Kosztorys / przedmiar", module: "Kosztorys" },
-  { value: "schedule", label: "Harmonogram", module: "Harmonogram" },
-  { value: "protocol", label: "Protokół / odbiór", module: "Protokoły" },
-  { value: "application", label: "Wniosek materiałowy", module: "Wnioski" },
-  { value: "contract", label: "Umowa / kontrakt / aneks", module: "Dokumentacja" },
-  { value: "correspondence", label: "Korespondencja / uzgodnienia", module: "Dokumentacja" },
-  { value: "invoice", label: "Faktura / korekta", module: "Finanse" },
-  { value: "warehouse", label: "WZ / PZ / dostawa", module: "Magazyn" },
-  { value: "hr", label: "Dokument kadrowy", module: "Kadry" },
-  { value: "fleet", label: "Dokument floty", module: "Flota" },
-  { value: "template", label: "Wzór dokumentu", module: "Wzory" },
-  { value: "report", label: "Raport / zestawienie", module: "Raporty" },
-  { value: "other", label: "Inny / do weryfikacji", module: "Skrzynka AI" }
+  { value: "technical", label: "Dokumentacja techniczna", module: "Dokumentacja", destination: "Inwestycja → Dokumentacja" },
+  { value: "specification", label: "STWiOR / specyfikacja", module: "Dokumentacja", destination: "Inwestycja → Dokumentacja" },
+  { value: "estimate", label: "Kosztorys / przedmiar", module: "Kosztorys", destination: "Inwestycja → Kosztorys" },
+  { value: "schedule", label: "Harmonogram", module: "Harmonogram", destination: "Inwestycja → Harmonogram" },
+  { value: "protocol", label: "Protokół / odbiór", module: "Protokoły", destination: "Inwestycja → Protokoły" },
+  { value: "application", label: "Wniosek materiałowy", module: "Wnioski", destination: "Inwestycja → Wnioski" },
+  { value: "contract", label: "Umowa / kontrakt / aneks", module: "Dokumentacja", destination: "Inwestycja → Dokumentacja" },
+  { value: "correspondence", label: "Korespondencja / uzgodnienia", module: "Dokumentacja", destination: "Inwestycja → Dokumentacja" },
+  { value: "invoice", label: "Faktura / korekta", module: "Finanse", destination: "Finanse → Faktury" },
+  { value: "warehouse", label: "WZ / PZ / dostawa", module: "Magazyn", destination: "Magazyn → WZ i ruchy" },
+  { value: "hr", label: "Dokument kadrowy", module: "Kadry", destination: "Kadry → Akta / urlopy / BHP" },
+  { value: "fleet", label: "Dokument floty", module: "Flota", destination: "Flota / sprzęt" },
+  { value: "template", label: "Wzór dokumentu", module: "Wzory", destination: "Octopus Brain → Wzory" },
+  { value: "report", label: "Raport / zestawienie", module: "Raporty", destination: "Raporty" },
+  { value: "other", label: "Inny / do weryfikacji", module: "Skrzynka AI", destination: "Dokumenty → Do decyzji" }
 ] as const;
 
 export type DocumentCategory = (typeof DOCUMENT_DESTINATIONS)[number]["value"];
