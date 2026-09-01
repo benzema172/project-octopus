@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
   const supabase = createServiceSupabaseClient();
   const { data: version, error } = await supabase.from("document_versions")
-    .select("id,file_name,mime_type,r2_bucket,r2_object_key,malware_scan_status,documents!inner(workspace_id,project_id,category)")
+    .select("id,file_name,mime_type,r2_bucket,r2_object_key,malware_scan_status,documents!document_versions_document_id_fkey!inner(workspace_id,project_id,category)")
     .eq("id", body.versionId).eq("documents.workspace_id", workspace.id).maybeSingle<VersionRow>();
   if (error) return jsonError(`Nie udało się pobrać danych pliku: ${error.message}`, 500);
   if (!version) return jsonError("Nie znaleziono wersji dokumentu w tym workspace.", 404);
