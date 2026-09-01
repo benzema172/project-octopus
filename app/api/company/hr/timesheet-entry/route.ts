@@ -17,7 +17,7 @@ const WORK_TYPES = new Set(["regular", "travel", "downtime", "training", "office
 function text(value: unknown, label: string, required = false, maxLength = 500) {
   const result = typeof value === "string" ? value.trim() : "";
   if (required && !result) throw new Error(`Uzupełnij pole: ${label}.`);
-  if (result.length > maxLength) throw new Error(`Pole ${label} jest zbyt długie.`);
+  if (result.length > maxLength) throw new Error(`Pole ${label} jest zbyt długi.`);
   return result || null;
 }
 
@@ -175,6 +175,7 @@ export async function POST(request: Request) {
     };
     const detailedSource = wbsNodeId || detail.cost_code || detail.work_scope || startedAt || endedAt || quantity !== null || workType !== "regular";
     const source = detailedSource ? "construction_time" : "inline_editor";
+    const finalizedAt = new Date().toISOString();
 
     if (body.action === "create") {
       const employeeId = await owned("employees", payload.employeeId, "Pracownik");
@@ -187,14 +188,16 @@ export async function POST(request: Request) {
         work_date: workDate,
         hours,
         overtime_hours: overtime,
-        status: "submitted",
+        status: "approved",
+        approved_by: user.id,
+        approved_at: finalizedAt,
         source,
         ...detail
       };
       const { data, error } = await db.from("timesheets").insert(row).select("id,hourly_cost_snapshot,labor_cost_snapshot").single<{ id: string; hourly_cost_snapshot: number | null; labor_cost_snapshot: number | null }>();
       if (error || !data) throw error ?? new Error("Nie zapisano czasu pracy.");
-      await audit(data.id, "timesheet_created_inline", row);
-      return NextResponse.json({ ok: true, id: data.id, calculatedHours: clockHours, hourlyCostSnapshot: data.hourly_cost_snapshot, laborCostSnapshot: data.labor_cost_snapshot });
+      await audit(data.id, "timesheet_created_auto_final", { ...row, autoFinalized: true });
+      return NextResponse.json({ ok: true, id: data.id, autoFinalized: true, calculatedHours: clockHours, hourlyCostSnapshot: data.hourly_cost_snapshot, laborCostSnapshot: data.labor_cost_snapshot });
     }
 
     const timesheetId = await owned("timesheets", payload.timesheetId, "Wpis czasu");
@@ -211,17 +214,17 @@ export async function POST(request: Request) {
       project_id: projectId,
       hours,
       overtime_hours: overtime,
-      status: "submitted",
-      approved_by: null,
-      approved_at: null,
+      status: "approved",
+      approved_by: user.id,
+      approved_at: finalizedAt,
       team_id: null,
       source,
       ...detail
     };
     const { data, error } = await db.from("timesheets").update(patch).eq("workspace_id", workspace.id).eq("id", timesheetId).select("hourly_cost_snapshot,labor_cost_snapshot").single<{ hourly_cost_snapshot: number | null; labor_cost_snapshot: number | null }>();
     if (error) throw error;
-    await audit(timesheetId!, "timesheet_updated_inline", patch);
-    return NextResponse.json({ ok: true, id: timesheetId, calculatedHours: clockHours, hourlyCostSnapshot: data?.hourly_cost_snapshot ?? null, laborCostSnapshot: data?.labor_cost_snapshot ?? null });
+    await audit(timesheetId!, "timesheet_updated_auto_final", { ...patch, autoFinalized: true });
+    return NextResponse.json({ ok: true, id: timesheetId, autoFinalized: true, calculatedHours: clockHours, hourlyCostSnapshot: data?.hourly_cost_snapshot ?? null, laborCostSnapshot: data?.labor_cost_snapshot ?? null });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Nie udało się zapisać czasu pracy.";
     return NextResponse.json({ error: message }, { status: 400 });
