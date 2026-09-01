@@ -78,65 +78,33 @@ describe("HR Core 3.0 architecture contracts", () => {
   const packageJson = readFileSync("package.json", "utf8");
 
   it("has one direct shell and no legacy workspace monoliths", () => {
-    expect(shell).toContain("HrDashboardCore300");
-    expect(shell).toContain("HrEmployeeRegistry300");
-    expect(shell).toContain("HrComplianceCore300");
-    expect(wrapper).toContain("HrWorkspaceCore300");
-    expect(shell).not.toContain("HrWorkspace140");
-    expect(shell).not.toContain("HrWorkspace148");
-    expect(existsSync("components/company/hr/hr-workspace-140.tsx")).toBe(false);
-    expect(existsSync("components/company/hr/hr-workspace-148.tsx")).toBe(false);
-    expect(existsSync("components/company/hr/hr-workspace-146.tsx")).toBe(false);
-    expect(existsSync("components/company/hr/hr-workspace-147.tsx")).toBe(false);
+    expect(shell).toContain("HrDashboardCore300"); expect(shell).toContain("HrEmployeeRegistry300"); expect(shell).toContain("HrComplianceCore300"); expect(wrapper).toContain("HrWorkspaceCore300"); expect(shell).not.toContain("HrWorkspace140"); expect(shell).not.toContain("HrWorkspace148");
+    expect(existsSync("components/company/hr/hr-workspace-140.tsx")).toBe(false); expect(existsSync("components/company/hr/hr-workspace-148.tsx")).toBe(false); expect(existsSync("components/company/hr/hr-workspace-146.tsx")).toBe(false); expect(existsSync("components/company/hr/hr-workspace-147.tsx")).toBe(false);
   });
 
   it("lazy-loads heavy HR sections and keeps the annual lifecycle test in the build gate", () => {
-    expect(shell).toContain('import dynamic from "next/dynamic"');
-    expect(shell).toContain("dynamic(() => import(\"./hr-employee-registry-300\")");
-    expect(shell).toContain("dynamic(() => import(\"./hr-time-records-400\")");
-    expect(shell).toContain("dynamic(() => import(\"./hr-documents-compact-161\")");
-    expect(packageJson).toContain("tests/hr-year-lifecycle-10-workers.test.ts");
+    expect(shell).toContain('import dynamic from "next/dynamic"'); expect(shell).toContain("dynamic(() => import(\"./hr-employee-registry-300\")"); expect(shell).toContain("dynamic(() => import(\"./hr-time-records-400\")"); expect(shell).toContain("dynamic(() => import(\"./hr-documents-compact-161\")"); expect(packageJson).toContain("tests/hr-year-lifecycle-10-workers.test.ts");
   });
 
   it("creates and edits employee bundles through atomic database functions", () => {
-    expect(create).toContain("/api/company/hr/employee-bundle");
-    expect(registry).toContain("/api/company/hr/employee-bundle/update");
-    expect(createRoute).toContain("create_hr_employee_bundle_atomic");
-    expect(updateRoute).toContain("update_hr_employee_bundle_atomic");
-    expect(createMigration).toContain("create_hr_employee_bundle_atomic");
-    expect(updateMigration).toContain("update_hr_employee_bundle_atomic");
-    expect(create).not.toContain("partialCreated");
+    expect(create).toContain("/api/company/hr/employee-bundle"); expect(registry).toContain("/api/company/hr/employee-bundle/update"); expect(createRoute).toContain("create_hr_employee_bundle_atomic"); expect(updateRoute).toContain("update_hr_employee_bundle_atomic"); expect(createMigration).toContain("create_hr_employee_bundle_atomic"); expect(updateMigration).toContain("update_hr_employee_bundle_atomic"); expect(create).not.toContain("partialCreated");
   });
 
-  it("feeds high-confidence OCR documents into formal HR registers", () => {
-    expect(intelligence).toContain("createComplianceFromDocument");
-    expect(intelligence).toContain("medical_exams");
-    expect(intelligence).toContain("safety_trainings");
-    expect(intelligence).toContain("qualifications");
-    expect(intelligence).toContain("employeeScore >= 0.93");
-    expect(intelligence).toContain("dates.confidence >= 0.9");
-    expect(intelligence).toContain("document_id");
+  it("feeds only high-confidence OCR documents into formal HR registers", () => {
+    expect(intelligence).toContain("createComplianceFromDocument"); expect(intelligence).toContain("medical_exams"); expect(intelligence).toContain("safety_trainings"); expect(intelligence).toContain("qualifications");
+    expect(intelligence).toMatch(/employeeScore\s*>=\s*0\.93/); expect(intelligence).toMatch(/dates\.confidence\s*>=\s*0\.9/); expect(intelligence).toContain("document_id");
+  });
+
+  it("keeps templates out of HR employee routing and rejects short employee numbers as strong identifiers", () => {
+    expect(intelligence).toMatch(/document\.category\s*===\s*["']template["']/);
+    expect(intelligence).toMatch(/employeeNumber\.length\s*>=\s*3/);
   });
 
   it("keeps HR Time 4.0 day, week, month and history workflows", () => {
-    expect(time400).toContain('type ViewMode = "day" | "week" | "month" | "history"');
-    expect(time400).toContain("−7 dni");
-    expect(time400).toContain("−30 dni");
-    expect(time400).toContain("Główny ekran korekt");
-    expect(time400).toContain("Kalendarz całej ekipy");
-    expect(time400).toContain("Wyszukaj i popraw dowolny wpis");
-    expect(time400).toContain("Plan ≠ wykonanie");
+    expect(time400).toContain('type ViewMode = "day" | "week" | "month" | "history"'); expect(time400).toContain("−7 dni"); expect(time400).toContain("−30 dni"); expect(time400).toContain("Główny ekran korekt"); expect(time400).toContain("Kalendarz całej ekipy"); expect(time400).toContain("Wyszukaj i popraw dowolny wpis"); expect(time400).toContain("Plan ≠ wykonanie");
   });
 
   it("loads history by date range and exposes safe bulk editing", () => {
-    expect(time400).toContain("/api/company/hr/timesheet-range");
-    expect(time400).toContain("/api/company/hr/timesheet-bulk");
-    expect(time400).toContain('params.set("offset"');
-    expect(timeRange).toContain('.gte("work_date", from)');
-    expect(timeRange).toContain('.lte("work_date", to)');
-    expect(timeBulk).toContain("isPolishWorkingDay");
-    expect(timeBulk).toContain('mode === "replace_single"');
-    expect(timeBulk).toContain("skippedLeave");
-    expect(timeBulk).toContain("skippedConflict");
+    expect(time400).toContain("/api/company/hr/timesheet-range"); expect(time400).toContain("/api/company/hr/timesheet-bulk"); expect(time400).toContain('params.set("offset"'); expect(timeRange).toContain('.gte("work_date", from)'); expect(timeRange).toContain('.lte("work_date", to)'); expect(timeBulk).toContain("isPolishWorkingDay"); expect(timeBulk).toContain('mode === "replace_single"'); expect(timeBulk).toContain("skippedLeave"); expect(timeBulk).toContain("skippedConflict");
   });
 });
