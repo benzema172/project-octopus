@@ -28,18 +28,79 @@ type FlowRow = {
 };
 
 const DESTINATION_LABELS: Record<string, string> = {
-  invoice: "Finanse → Faktury",
-  delivery_note: "Magazyn → WZ i ruchy",
+  technical: "Inwestycja → Dokumentacja",
+  specification: "Inwestycja → Dokumentacja / STWiOR",
   estimate: "Inwestycja → Kosztorys",
+  schedule: "Inwestycja → Harmonogram",
   protocol: "Inwestycja → Protokoły",
+  application: "Inwestycja → Wnioski materiałowe",
+  contract: "Inwestycja → Dokumentacja kontraktowa",
+  correspondence: "Inwestycja → Korespondencja i uzgodnienia",
+  invoice: "Finanse → Faktury",
+  warehouse: "Magazyn → WZ i ruchy",
+  delivery_note: "Magazyn → WZ i ruchy",
   timesheet: "Kadry → Czas pracy",
   hr: "Kadry → Akta / urlopy / BHP",
-  equipment: "Flota / sprzęt",
+  fleet: "Flota → Dokumenty pojazdu / sprzętu",
+  equipment: "Flota → Dokumenty pojazdu / sprzętu",
   template: "Octopus Brain → Wzory",
   reference: "Octopus Brain → Wiedza",
-  technical: "Inwestycja → Dokumentacja",
+  report: "Raporty",
   other: "Dokumenty → Do decyzji"
 };
+
+function searchableText(value: string) {
+  return value
+    .toLocaleLowerCase("pl")
+    .replaceAll("ł", "l")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function templateUsage(name: string, rationale: string | null) {
+  const source = searchableText(`${name} ${rationale ?? ""}`);
+  if (/(wniosek.*urlop|urlop|wypoczynk|okolicznosciow|rehabilitacyjn|opiekuncz|szkoleniow)/.test(source)) {
+    return "Kadry → Urlopy i absencje · generowanie wniosków urlopowych";
+  }
+  if (/(bhp|badani|lekarsk|orzeczeni|uprawnieni|szkolenie bhp)/.test(source)) {
+    return "Kadry → Uprawnienia i BHP · formularze pracownicze";
+  }
+  if (/(protokol|odbior|szczeln|cisnieni|zanik|plukan|dezynfek)/.test(source)) {
+    return "Inwestycja → Protokoły · generowanie protokołów i odbiorów";
+  }
+  if (/(wniosek.*material|material.*wniosek|zatwierdzenie.*material)/.test(source)) {
+    return "Inwestycja → Wnioski materiałowe · generowanie wniosków";
+  }
+  if (/(harmonogram|schedule|terminarz)/.test(source)) {
+    return "Inwestycja → Harmonogram · tworzenie planów i terminów";
+  }
+  if (/(kosztorys|przedmiar|boq|wycena)/.test(source)) {
+    return "Inwestycja → Kosztorys · formularze i zestawienia kosztowe";
+  }
+  if (/(raport|zestawienie|podsumowanie)/.test(source)) {
+    return "Raporty · generowanie raportów i zestawień";
+  }
+  if (/(umowa|kontrakt|aneks|zlecenie)/.test(source)) {
+    return "Dokumenty / Inwestycje · generowanie dokumentów kontraktowych";
+  }
+  return "Generator dokumentów Octopus AI · wzór referencyjny do ponownego użycia";
+}
+
+function hrUsage(name: string, rationale: string | null) {
+  const source = searchableText(`${name} ${rationale ?? ""}`);
+  if (/(urlop|wypoczynk|okolicznosciow|rehabilitacyjn|opiekuncz)/.test(source)) return "Kadry → Urlopy i absencje";
+  if (/(bhp|badani|lekarsk|orzeczeni|uprawnieni)/.test(source)) return "Kadry → Uprawnienia i BHP";
+  if (/(umowa|aneks|akta osob|pracownik)/.test(source)) return "Kadry → Dokumenty pracownika";
+  return DESTINATION_LABELS.hr;
+}
+
+function destinationForDocument(category: string | null, document: DocumentSummary, rationale: string | null) {
+  if (category === "template") {
+    return `${DESTINATION_LABELS.template} · użycie: ${templateUsage(document.name, rationale)}`;
+  }
+  if (category === "hr") return hrUsage(document.name, rationale);
+  return DESTINATION_LABELS[category ?? "other"] ?? DESTINATION_LABELS.other;
+}
 
 function stringValue(row: FlexibleRow, ...keys: string[]) {
   for (const key of keys) {
@@ -96,13 +157,15 @@ function resultHref(category: string | null, workspaceId: string, projectId: str
   if (category === "template") return `${base}/ai-center?tab=templates`;
   if (category === "reference") return `${base}/ai-center?tab=knowledge`;
   if (category === "invoice") return `${base}/finances`;
-  if (category === "delivery_note") return `${base}/warehouse`;
+  if (category === "warehouse" || category === "delivery_note") return `${base}/warehouse`;
   if (category === "hr" || category === "timesheet") return `${base}/hr`;
-  if (category === "equipment") return `${base}/fleet`;
+  if (category === "fleet" || category === "equipment") return `${base}/fleet`;
   if (!projectId) return `${base}/documents`;
   if (category === "estimate") return `/workspace/projects/${projectId}/cost-estimate`;
+  if (category === "schedule") return `/workspace/projects/${projectId}/schedule`;
   if (category === "protocol") return `/workspace/projects/${projectId}/protocols`;
-  if (category === "technical") return `/workspace/projects/${projectId}/documentation`;
+  if (category === "application") return `/workspace/projects/${projectId}/material-requests`;
+  if (category === "technical" || category === "specification" || category === "contract" || category === "correspondence") return `/workspace/projects/${projectId}/documentation`;
   return `/workspace/projects/${projectId}/documentation`;
 }
 
@@ -158,7 +221,7 @@ async function attachDocumentFlows(documents: DocumentSummary[]) {
         confidence,
         classificationStatus: row.classification_status,
         rationale: row.rationale,
-        destination: DESTINATION_LABELS[category ?? "other"] ?? DESTINATION_LABELS.other,
+        destination: destinationForDocument(category, document, row.rationale),
         outcome: outcomeForFlow(stage, row),
         resultHref: resultHref(category, document.workspace_id, document.project_id),
         artifactType: artifactType ?? null,
