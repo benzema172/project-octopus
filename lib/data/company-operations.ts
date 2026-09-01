@@ -199,29 +199,45 @@ export async function getWarehouseWorkspaceData(workspaceId: string, options: Co
   const db = createServiceSupabaseClient();
   const page = pageOptions(options, 40);
   let itemQuery = db.from("stock_items")
-    .select("id,sku,name,item_type,unit,minimum_stock,serial_tracking,active", { count: "exact" })
+    .select("id,sku,name,item_type,unit,category,subcategory,manufacturer,model,barcode,minimum_stock,optimal_stock,warranty_months,serial_tracking,active,created_at,updated_at", { count: "exact" })
     .eq("workspace_id", workspaceId)
     .order("name")
     .range(page.from, page.to);
-  if (page.query) itemQuery = itemQuery.or(`name.ilike.%${page.query}%,sku.ilike.%${page.query}%,item_type.ilike.%${page.query}%`);
+  if (page.query) itemQuery = itemQuery.or(`name.ilike.%${page.query}%,sku.ilike.%${page.query}%,item_type.ilike.%${page.query}%,category.ilike.%${page.query}%,manufacturer.ilike.%${page.query}%,model.ilike.%${page.query}%,barcode.ilike.%${page.query}%`);
 
-  const [itemsResult, warehousesResult, movementsResult, projectsResult, aiImports, summary] = await Promise.all([
+  const [itemsResult, warehousesResult, movementsResult, projectsResult, employeesResult, vehiclesResult, counterpartiesResult, countsResult, aiImports, summary] = await Promise.all([
     itemQuery,
     db.from("warehouses").select("id,name,location,warehouse_type,active").eq("workspace_id", workspaceId).order("name").limit(200),
-    db.from("stock_movements").select("id,project_id,warehouse_id,target_warehouse_id,movement_type,document_number,movement_date,status,created_at").eq("workspace_id", workspaceId).order("movement_date", { ascending: false }).limit(80),
+    db.from("stock_movements").select("id,project_id,warehouse_id,target_warehouse_id,movement_type,document_number,movement_date,status,source_document_id,destination_mode,approved_at,created_at").eq("workspace_id", workspaceId).order("movement_date", { ascending: false }).limit(200),
     db.from("projects").select("id,name").eq("workspace_id", workspaceId).order("name").limit(300),
+    db.from("employees").select("id,employee_number,first_name,last_name,status").eq("workspace_id", workspaceId).eq("status", "active").order("last_name").limit(500),
+    db.from("vehicles").select("id,registration_number,make,model,status").eq("workspace_id", workspaceId).eq("status", "active").order("registration_number").limit(300),
+    db.from("counterparties").select("id,name,tax_id,role,active").eq("workspace_id", workspaceId).eq("active", true).order("name").limit(500),
+    db.from("inventory_counts").select("id,warehouse_id,count_date,status,notes,approved_at,created_at").eq("workspace_id", workspaceId).order("count_date", { ascending: false }).limit(50),
     getOperationalDocumentImports(workspaceId, "warehouse"),
     getSummary(workspaceId, "warehouse", page.referenceDate)
   ]);
   const items = rows(itemsResult, "kartotek");
   const movements = rows(movementsResult, "ruchów magazynowych");
+  const inventoryCounts = rows(countsResult, "inwentaryzacji");
   const itemIds = ids(items);
   const movementIds = ids(movements);
-  const [linesResult, reservationsResult, balances] = await Promise.all([
-    movementIds.length ? db.from("stock_movement_lines").select("id,movement_id,stock_item_id,quantity,unit_cost,lot_number").eq("workspace_id", workspaceId).in("movement_id", movementIds).order("id", { ascending: false }).limit(1000) : Promise.resolve({ data: [], error: null }),
+  const countIds = ids(inventoryCounts);
+  const [linesResult, reservationsResult, balances, pricesResult, aliasesResult, instancesResult, countLinesResult, serviceResult] = await Promise.all([
+    movementIds.length ? db.from("stock_movement_lines").select("id,movement_id,stock_item_id,boq_item_id,quantity,unit_cost,lot_number,serial_numbers,source_invoice_line_id,purchase_order_line_id").eq("workspace_id", workspaceId).in("movement_id", movementIds).order("id", { ascending: false }).limit(2500) : Promise.resolve({ data: [], error: null }),
     itemIds.length ? db.from("reservations").select("id,project_id,warehouse_id,stock_item_id,quantity,required_at,status").eq("workspace_id", workspaceId).in("stock_item_id", itemIds).order("required_at").limit(page.pageSize * 8) : Promise.resolve({ data: [], error: null }),
-    getStockBalancesForItems(workspaceId, itemIds)
+    getStockBalancesForItems(workspaceId, itemIds),
+    itemIds.length ? db.from("price_observations").select("id,project_id,stock_item_id,counterparty_id,source_type,source_id,observed_at,quantity,unit,unit_price_net,currency,price_stage,canonical_purchase,created_at").eq("workspace_id", workspaceId).in("stock_item_id", itemIds).order("observed_at", { ascending: false }).limit(1500) : Promise.resolve({ data: [], error: null }),
+    itemIds.length ? db.from("material_aliases").select("id,stock_item_id,counterparty_id,supplier_sku,supplier_name,normalized_key,confidence,status,created_at").eq("workspace_id", workspaceId).in("stock_item_id", itemIds).order("created_at", { ascending: false }).limit(1000) : Promise.resolve({ data: [], error: null }),
+    itemIds.length ? db.from("stock_item_instances").select("id,stock_item_id,serial_number,asset_tag,purchase_date,purchase_price,warranty_until,status,condition,current_warehouse_id,employee_id,project_id,vehicle_id,last_service_date,next_service_date,notes,created_at,updated_at").eq("workspace_id", workspaceId).in("stock_item_id", itemIds).order("updated_at", { ascending: false }).limit(1000) : Promise.resolve({ data: [], error: null }),
+    countIds.length ? db.from("inventory_count_lines").select("id,inventory_count_id,stock_item_id,system_quantity,counted_quantity,difference,unit_cost,note,updated_at").eq("workspace_id", workspaceId).in("inventory_count_id", countIds).order("stock_item_id").limit(5000) : Promise.resolve({ data: [], error: null }),
+    itemIds.length ? db.from("tool_service_events").select("id,stock_item_id,event_type,event_date,next_due_date,cost,created_at").eq("workspace_id", workspaceId).in("stock_item_id", itemIds).order("event_date", { ascending: false }).limit(1000) : Promise.resolve({ data: [], error: null })
   ]);
+  const stockInstances = rows(instancesResult, "egzemplarzy sprzętu");
+  const instanceIds = ids(stockInstances);
+  const instanceEventsResult = instanceIds.length
+    ? await db.from("stock_instance_events").select("id,instance_id,event_type,employee_id,project_id,vehicle_id,warehouse_id,event_date,condition,cost,notes,created_at").eq("workspace_id", workspaceId).in("instance_id", instanceIds).order("event_date", { ascending: false }).limit(2500)
+    : { data: [], error: null };
 
   return {
     warehouses: rows(warehousesResult, "magazynów"),
@@ -230,6 +246,16 @@ export async function getWarehouseWorkspaceData(workspaceId: string, options: Co
     lines: rows(linesResult, "pozycji ruchów"),
     reservations: rows(reservationsResult, "rezerwacji"),
     projects: rows(projectsResult, "inwestycji"),
+    employees: rows(employeesResult, "pracowników"),
+    vehicles: rows(vehiclesResult, "pojazdów"),
+    counterparties: rows(counterpartiesResult, "kontrahentów"),
+    priceObservations: rows(pricesResult, "historii cen"),
+    aliases: rows(aliasesResult, "aliasów materiałowych"),
+    stockInstances,
+    stockInstanceEvents: rows(instanceEventsResult, "historii egzemplarzy"),
+    toolServices: rows(serviceResult, "serwisów sprzętu"),
+    inventoryCounts,
+    inventoryCountLines: rows(countLinesResult, "pozycji inwentaryzacji"),
     aiImports,
     balances,
     summary,

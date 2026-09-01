@@ -44,6 +44,7 @@ type Props = {
   primaryMetricCount?: number;
   detailTitle?: (row: Row) => ReactNode;
   detailContent?: (row: Row) => ReactNode;
+  beforeTable?: ReactNode;
   children?: ReactNode;
 };
 
@@ -98,7 +99,7 @@ function RecordForm({ form, pending, open, onToggle, onSubmit }: { form: FormSpe
   );
 }
 
-export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, query, metrics, forms, rows, columns, emptyLabel, tableTitle, layoutVariant = "default", primaryMetricCount = 3, detailTitle, detailContent, children }: Props) {
+export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, query, metrics, forms, rows, columns, emptyLabel, tableTitle, layoutVariant = "default", primaryMetricCount = 3, detailTitle, detailContent, beforeTable, children }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -229,6 +230,8 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
           <section className="ops-metrics" aria-label="Dodatkowe wskaźniki">{renderMetrics(secondaryMetrics)}</section>
         </details>
       ) : null}
+
+      {beforeTable}
 
       <section className="ops-panel ops-panel--wide" data-open="true" aria-labelledby="ops-records-heading">
         <div className="ops-panel__heading">

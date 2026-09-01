@@ -30,6 +30,7 @@ const ENTITY_DOMAINS: Record<string, Domain> = {
   employee_status: "hr",
   warehouse: "warehouse",
   stock_item: "warehouse",
+  stock_item_update: "warehouse",
   stock_movement: "warehouse",
   ai_warehouse_import: "warehouse",
   stock_movement_approve: "warehouse",
@@ -359,8 +360,56 @@ export async function POST(request: Request) {
       const { data, error } = await supabase.from("warehouses").insert({ workspace_id: workspace.id, name: text(p.name, "nazwa magazynu", true), location: text(p.location, "lokalizacja"), warehouse_type: text(p.warehouseType, "typ") ?? "central" }).select("id").single<{ id: string }>();
       if (error) throw error; id = data.id;
     } else if (body.entity === "stock_item") {
-      const { data, error } = await supabase.from("stock_items").insert({ workspace_id: workspace.id, sku: text(p.sku, "SKU"), name: text(p.name, "nazwa kartoteki", true), item_type: text(p.itemType, "typ") ?? "material", unit: text(p.unit, "jednostka", true), minimum_stock: amount(p.minimumStock, "stan minimalny") }).select("id").single<{ id: string }>();
+      const minimumStock = amount(p.minimumStock, "stan minimalny");
+      const optimalStock = amount(p.optimalStock, "stan optymalny");
+      const warrantyMonths = amount(p.warrantyMonths, "okres gwarancji");
+      if (minimumStock < 0 || optimalStock < 0) throw new Error("Stan minimalny i optymalny nie mogą być ujemne.");
+      if (optimalStock > 0 && optimalStock < minimumStock) throw new Error("Stan optymalny nie może być niższy niż stan minimalny.");
+      if (warrantyMonths < 0 || !Number.isInteger(warrantyMonths)) throw new Error("Okres gwarancji musi być nieujemną liczbą pełnych miesięcy.");
+      const { data, error } = await supabase.from("stock_items").insert({
+        workspace_id: workspace.id,
+        sku: text(p.sku, "SKU"),
+        name: text(p.name, "nazwa kartoteki", true),
+        item_type: text(p.itemType, "typ") ?? "material",
+        unit: text(p.unit, "jednostka", true),
+        category: text(p.category, "kategoria"),
+        subcategory: text(p.subcategory, "podkategoria"),
+        manufacturer: text(p.manufacturer, "producent"),
+        model: text(p.model, "model"),
+        barcode: text(p.barcode, "kod kreskowy"),
+        minimum_stock: minimumStock,
+        optimal_stock: optimalStock,
+        warranty_months: warrantyMonths || null,
+        serial_tracking: String(p.serialTracking ?? "false") === "true"
+      }).select("id").single<{ id: string }>();
       if (error) throw error; id = data.id;
+    } else if (body.entity === "stock_item_update") {
+      const stockItemId = await requireOwnedId("stock_items", p.stockItemId, workspace.id, "Kartoteka");
+      const { data: current, error: currentError } = await supabase.from("stock_items").select("minimum_stock,optimal_stock,warranty_months").eq("id", stockItemId).eq("workspace_id", workspace.id).single<{ minimum_stock: number; optimal_stock: number; warranty_months: number | null }>();
+      if (currentError || !current) throw new Error("Nie udało się odczytać kartoteki do aktualizacji.");
+      const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      const setText = (input: unknown, column: string, label: string) => { if (input !== undefined && input !== "") update[column] = text(input, label); };
+      setText(p.name, "name", "nazwa kartoteki");
+      setText(p.sku, "sku", "SKU");
+      setText(p.itemType, "item_type", "typ");
+      setText(p.unit, "unit", "jednostka");
+      setText(p.category, "category", "kategoria");
+      setText(p.subcategory, "subcategory", "podkategoria");
+      setText(p.manufacturer, "manufacturer", "producent");
+      setText(p.model, "model", "model");
+      setText(p.barcode, "barcode", "kod kreskowy");
+      if (p.minimumStock !== undefined && p.minimumStock !== "") update.minimum_stock = amount(p.minimumStock, "stan minimalny");
+      if (p.optimalStock !== undefined && p.optimalStock !== "") update.optimal_stock = amount(p.optimalStock, "stan optymalny");
+      if (p.warrantyMonths !== undefined && p.warrantyMonths !== "") update.warranty_months = amount(p.warrantyMonths, "okres gwarancji") || null;
+      const nextMinimum = Number(update.minimum_stock ?? current.minimum_stock ?? 0);
+      const nextOptimal = Number(update.optimal_stock ?? current.optimal_stock ?? 0);
+      const nextWarranty = Number(update.warranty_months ?? current.warranty_months ?? 0);
+      if (nextMinimum < 0 || nextOptimal < 0) throw new Error("Stan minimalny i optymalny nie mogą być ujemne.");
+      if (nextOptimal > 0 && nextOptimal < nextMinimum) throw new Error("Stan optymalny nie może być niższy niż stan minimalny.");
+      if (nextWarranty < 0 || !Number.isInteger(nextWarranty)) throw new Error("Okres gwarancji musi być nieujemną liczbą pełnych miesięcy.");
+      if (p.serialTracking !== undefined && p.serialTracking !== "") update.serial_tracking = String(p.serialTracking) === "true";
+      const { error } = await supabase.from("stock_items").update(update).eq("id", stockItemId).eq("workspace_id", workspace.id);
+      if (error) throw error; id = stockItemId;
     } else if (body.entity === "stock_movement") {
       const warehouseId = await requireOwnedId("warehouses", p.warehouseId, workspace.id, "Magazyn");
       const stockItemId = await requireOwnedId("stock_items", p.stockItemId, workspace.id, "Kartoteka");

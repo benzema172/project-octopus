@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, ChevronDown, LoaderCircle, PackageCheck, Route } from "lucide-react";
 
 type Row = Record<string, unknown>;
-type Props = { workspaceId: string; movements: Row[]; projects: Row[]; canWrite: boolean };
+type Props = { workspaceId: string; movements: Row[]; projects: Row[]; canWrite: boolean; canApprove: boolean };
 
-export function WarehouseFlowIntegrityPanel({ workspaceId, movements, projects, canWrite }: Props) {
+export function WarehouseFlowIntegrityPanel({ workspaceId, movements, projects, canWrite, canApprove }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -54,14 +54,14 @@ export function WarehouseFlowIntegrityPanel({ workspaceId, movements, projects, 
         <p className="empty-copy"><PackageCheck size={15} aria-hidden="true" /> Brak oczekujących szkiców PZ.</p>
       ) : (
         <div className="live-record-list">
-          {drafts.map((row) => <DraftRow key={String(row.id)} row={row} projects={projects} canWrite={canWrite} pending={pending} onAct={act} />)}
+          {drafts.map((row) => <DraftRow key={String(row.id)} row={row} projects={projects} canWrite={canWrite} canApprove={canApprove} pending={pending} onAct={act} />)}
         </div>
       )}
     </section>
   );
 }
 
-function DraftRow({ row, projects, canWrite, pending, onAct }: { row: Row; projects: Row[]; canWrite: boolean; pending: boolean; onAct: (entity: string, payload: Record<string, unknown>) => void }) {
+function DraftRow({ row, projects, canWrite, canApprove, pending, onAct }: { row: Row; projects: Row[]; canWrite: boolean; canApprove: boolean; pending: boolean; onAct: (entity: string, payload: Record<string, unknown>) => void }) {
   const [mode, setMode] = useState(String(row.project_id ?? "") ? "direct_project" : "central_stock");
   const [projectId, setProjectId] = useState(String(row.project_id ?? ""));
 
@@ -88,9 +88,9 @@ function DraftRow({ row, projects, canWrite, pending, onAct }: { row: Row; proje
             <button type="button" disabled={pending || (mode === "direct_project" && !projectId)} onClick={() => onAct("stock_movement_destination", { movementId: row.id, destinationMode: mode, projectId: mode === "direct_project" ? projectId : null })}>
               {pending ? <LoaderCircle className="spin" size={14} aria-hidden="true" /> : null}Zapisz miejsce dostawy
             </button>
-            <button type="button" disabled={pending || (mode === "direct_project" && !projectId)} onClick={() => onAct("stock_movement_approve", { movementId: row.id, projectId: mode === "direct_project" ? projectId : null })}>
+            {canApprove ? <button type="button" disabled={pending || (mode === "direct_project" && !projectId)} onClick={() => onAct("stock_movement_approve", { movementId: row.id, projectId: mode === "direct_project" ? projectId : null })}>
               <CheckCircle2 size={14} aria-hidden="true" />Zatwierdź PZ
-            </button>
+            </button> : null}
           </div>
         ) : null}
       </div>
