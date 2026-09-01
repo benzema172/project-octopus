@@ -19,6 +19,7 @@ type Props = {
   variant: "inline" | "cell";
   suggestedProjectId?: string;
   onOpenDetails?: () => void;
+  onChanged?: () => void;
 };
 
 function num(value: unknown, digits = 1) {
@@ -35,7 +36,7 @@ function dayLabel(value: string) {
   return parsed.toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 }
 
-export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeName, workDate, projects, entries, canWrite, variant, suggestedProjectId = "", onOpenDetails }: Props) {
+export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeName, workDate, projects, entries, canWrite, variant, suggestedProjectId = "", onOpenDetails, onChanged }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(entries.length === 0);
@@ -63,6 +64,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
       setMessage(action === "delete" ? "Wpis usunięto." : action === "create" ? "Wpis dodano." : "Zmiany zapisano.");
       if (action === "create") setAdding(false);
       router.refresh();
+      onChanged?.();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Nie udało się zapisać czasu pracy.");
     } finally {
