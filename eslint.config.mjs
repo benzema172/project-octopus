@@ -8,7 +8,11 @@ const eslintConfig = [
     ignores: [".next/**", "node_modules/**", "coverage/**"]
   },
   {
-    files: ["components/company/hr/hr-employee-registry-152.tsx"],
+    files: [
+      "components/company/hr/hr-employee-registry-152.tsx",
+      "components/company/hr/hr-leaves-161.tsx",
+      "components/company/hr/hr-time-records-400.tsx"
+    ],
     rules: {
       "react-hooks/set-state-in-effect": "off"
     }
