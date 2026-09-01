@@ -6,6 +6,7 @@ import { useState, type ReactNode } from "react";
 import { BriefcaseBusiness, CalendarDays, Clock3, Download, FileText, HardHat, Plus, ShieldCheck, UsersRound } from "lucide-react";
 import type { HrWorkspaceData, HrWorkspaceTab } from "@/lib/hr/types";
 import { HrDashboardCore300 } from "./hr-dashboard-core-300";
+import { HrApprovalProvider } from "./hr-approval-context-420";
 import styles from "./hr-core-300.module.css";
 import timeCompactStyles from "./hr-time-compact-401.module.css";
 
@@ -48,7 +49,7 @@ export function HrWorkspaceCore300(props: Props) {
     setTab("time");
   };
 
-  return <div className={styles.shell} data-hr-core="300">
+  return <HrApprovalProvider canApprove={props.canApprove}><div className={styles.shell} data-hr-core="300">
     <div className={styles.toolbar}>
       <nav className={styles.tabs} aria-label="Sekcje modułu Kadry">{tabs.map((item) => <button type="button" key={item.id} className={`${styles.tab} ${tab === item.id ? styles.tabActive : ""}`} onClick={() => navigate(item.id)}>{item.icon}{item.label}</button>)}</nav>
       <div className={styles.actions}>
@@ -65,5 +66,5 @@ export function HrWorkspaceCore300(props: Props) {
     {tab === "teams" ? <HrTeamCostControl156 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} /> : null}
     {tab === "documents" ? <HrDocumentsCompact161 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} canWrite={props.canWrite} documentCount={props.data.documents.length} data={props.data} /> : null}
     {employeeCreateOpen ? <HrEmployeeCreate300 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} canManagePayroll={props.canManagePayroll} onClose={() => setEmployeeCreateOpen(false)} /> : null}
-  </div>;
+  </div></HrApprovalProvider>;
 }
