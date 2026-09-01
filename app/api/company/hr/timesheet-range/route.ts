@@ -45,7 +45,7 @@ export async function GET(request: Request) {
 
   const db = createServiceSupabaseClient();
   let query = db.from("timesheets")
-    .select("id,employee_id,project_id,team_id,work_date,hours,overtime_hours,status,approved_by,approved_at,source,work_type,wbs_node_id,cost_code,work_scope,started_at,ended_at,break_minutes,quantity,unit,note,hourly_cost_snapshot,labor_cost_snapshot,cost_snapshot_at,created_at,updated_at", { count: "exact" })
+    .select("id,employee_id,project_id,team_id,work_date,hours,overtime_hours,status,approved_by,approved_at,source,work_type,wbs_node_id,cost_code,work_scope,started_at,ended_at,break_minutes,quantity,unit,note,hourly_cost_snapshot,labor_cost_snapshot,cost_snapshot_at,created_at", { count: "exact" })
     .eq("workspace_id", workspace.id)
     .gte("work_date", from)
     .lte("work_date", to)
