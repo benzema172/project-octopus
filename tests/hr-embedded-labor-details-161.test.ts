@@ -21,8 +21,9 @@ describe("HR employee-linked detailed labor view", () => {
   });
 
   it("uses a clear additional-scope action and a compact split-day list only when needed", () => {
-    expect(source).toContain("+ Dodaj kolejny zakres");
-    expect(source).toContain("Podział dnia · {rows.length} wpisy");
+    expect(source).toContain("Dodaj kolejny zakres");
+    expect(source).toContain("startNewRange");
+    expect(source).toContain("Podział dnia · {rows.length}");
     expect(css).toContain(".splitBlock{");
     expect(css).toContain(".splitRow{");
     expect(css).toContain(".embedded .field textarea");
