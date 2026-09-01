@@ -17,7 +17,7 @@ const HrEmployeeRegistry300 = dynamic(() => import("./hr-employee-registry-300")
 const HrTimeRecords400 = dynamic(() => import("./hr-time-records-400").then((module) => module.HrTimeRecords400), { loading: SectionLoading });
 const HrLeavesStable165 = dynamic(() => import("./hr-leaves-stable-165").then((module) => module.HrLeavesStable165), { loading: SectionLoading });
 const HrComplianceCore300 = dynamic(() => import("./hr-compliance-core-300").then((module) => module.HrComplianceCore300), { loading: SectionLoading });
-const HrTeamCostControl156 = dynamic(() => import("./hr-team-cost-control-156").then((module) => module.HrTeamCostControl156), { loading: SectionLoading });
+const HrTeamCostControl430 = dynamic(() => import("./hr-team-cost-control-430").then((module) => module.HrTeamCostControl430), { loading: SectionLoading });
 const HrDocumentsCompact161 = dynamic(() => import("./hr-documents-compact-161").then((module) => module.HrDocumentsCompact161), { loading: SectionLoading });
 const HrEmployeeCreate300 = dynamic(() => import("./hr-employee-create-300").then((module) => module.HrEmployeeCreate300), { loading: SectionLoading });
 
@@ -63,7 +63,7 @@ export function HrWorkspaceCore300(props: Props) {
     {tab === "time" ? <div className={timeCompactStyles.compact}><HrTimeRecords400 key={timeFocus ? `${timeFocus.employeeId}-${timeFocus.referenceDate}` : "all"} workspaceId={props.workspaceId} referenceDate={timeFocus?.referenceDate ?? props.data.referenceDate} employees={props.data.employees} projects={props.data.projects} timesheets={props.data.timesheets} assignments={props.data.assignments} leaves={props.data.leaves} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} initialEmployeeId={timeFocus?.employeeId ?? null} onClearEmployeeFocus={() => setTimeFocus(null)} /></div> : null}
     {tab === "leaves" ? <HrLeavesStable165 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canApprove={props.canApprove} /> : null}
     {tab === "compliance" ? <HrComplianceCore300 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} /> : null}
-    {tab === "teams" ? <HrTeamCostControl156 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} /> : null}
+    {tab === "teams" ? <HrTeamCostControl430 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} /> : null}
     {tab === "documents" ? <HrDocumentsCompact161 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} canWrite={props.canWrite} documentCount={props.data.documents.length} data={props.data} /> : null}
     {employeeCreateOpen ? <HrEmployeeCreate300 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} canManagePayroll={props.canManagePayroll} onClose={() => setEmployeeCreateOpen(false)} /> : null}
   </div></HrApprovalProvider>;
