@@ -130,13 +130,16 @@ describe("HR labor control automatic cost 4.3", () => {
     expect(result.overPlanProjects).toBe(1);
   });
 
-  it("keeps the UI contract explicit about actual cost versus planning", async () => {
+  it("keeps planning optional and hidden until a plan exists", async () => {
     const { readFile } = await import("node:fs/promises");
     const source = await readFile("components/company/hr/hr-team-cost-control-430.tsx", "utf8");
     expect(source).toContain("Koszt rzeczywisty");
     expect(source).toContain("Roboczogodziny");
-    expect(source).toContain("Plan robocizny");
-    expect(source).toContain("Plan zespołu / długoterminowe przypisanie");
+    expect(source).toContain("Planowanie zespołu");
+    expect(source).toContain("const hasAnyPlan");
+    expect(source).toContain("const projectHasPlan");
+    expect(source).toContain('data-plan-visible={hasAnyPlan ? "1" : "0"}');
+    expect(source).toContain('data-project-has-plan={projectHasPlan ? "1" : "0"}');
     expect(source).not.toContain("Do zatwierdzenia");
   });
 });
