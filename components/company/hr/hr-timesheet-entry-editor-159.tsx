@@ -115,7 +115,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
     setError(null);
   };
 
-  const formFor = (entry?: Row, key = "new", draftKey?: number) => <form className={styles.entryRow} onSubmit={submitEntry(entry, draftKey)} key={key}>
+  const formFor = (entry?: Row, key = "new", draftKey?: number, showAdd = false) => <form className={styles.entryRow} onSubmit={submitEntry(entry, draftKey)} key={key}>
     <label className={styles.field}>
       <span>Inwestycja</span>
       <select name="projectId" defaultValue={entry?.project_id ? String(entry.project_id) : suggestedProjectId} disabled={!canWrite || busyId !== null}>
@@ -134,12 +134,14 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
     {canWrite ? <button className={styles.save} type="submit" disabled={busyId !== null} aria-label={entry ? "Zapisz wpis czasu" : "Dodaj wpis czasu"} title={entry ? "Zapisz" : "Dodaj wpis"}><Save size={14} /> {variant === "inline" ? null : entry ? "Zapisz" : "Dodaj"}</button> : null}
     {entry && canWrite ? <button className={styles.delete} type="button" aria-label="Usuń wpis" title="Usuń wpis" disabled={busyId !== null} onClick={() => void removeEntry(entry)}><Trash2 size={14} /></button> : null}
     {!entry && canWrite && draftKey !== undefined ? <button className={styles.delete} type="button" aria-label="Usuń nowy wiersz" title="Usuń nowy wiersz" disabled={busyId !== null} onClick={() => removeDraft(draftKey)}><X size={14} /></button> : null}
+    {showAdd && canWrite ? <button type="button" className={styles.addEntry} disabled={busyId !== null} onClick={addDraft} aria-label="Dodaj kolejny wpis" title="Dodaj kolejny wpis"><Plus size={14} /></button> : null}
   </form>;
 
+  const lastEntryIndex = draftKeys.length === 0 ? entries.length - 1 : -1;
+  const lastDraftIndex = draftKeys.length - 1;
   const editor = <div className={`${styles.inlineWrap} ${variant === "inline" ? styles.inlineCompact : ""}`}>
-    {entries.map((entry, index) => formFor(entry, String(entry.id ?? `${employeeId}-${workDate}-${index}`)))}
-    {draftKeys.map((draftKey) => formFor(undefined, `draft-${draftKey}`, draftKey))}
-    {canWrite ? <button type="button" className={styles.addEntry} disabled={busyId !== null} onClick={addDraft}><Plus size={13} /> Dodaj kolejny wpis</button> : null}
+    {entries.map((entry, index) => formFor(entry, String(entry.id ?? `${employeeId}-${workDate}-${index}`), undefined, index === lastEntryIndex))}
+    {draftKeys.map((draftKey, index) => formFor(undefined, `draft-${draftKey}`, draftKey, index === lastDraftIndex))}
     {!canWrite ? <div className={styles.readOnly}>Widok tylko do odczytu — zapis czasu pracy wymaga uprawnienia do edycji Kadr.</div> : null}
     {message ? <div className={styles.message}>{message}</div> : null}
     {error ? <div className={styles.error} role="alert">{error}</div> : null}
