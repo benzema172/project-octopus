@@ -148,6 +148,9 @@ begin
 end;
 $$;
 
+revoke all on function public.bulk_apply_hr_timesheets_400(uuid,uuid,uuid[],date[],uuid,numeric,numeric,text) from public, anon, authenticated;
+grant execute on function public.bulk_apply_hr_timesheets_400(uuid,uuid,uuid[],date[],uuid,numeric,numeric,text) to service_role;
+
 update public.timesheets
 set status = 'approved',
     approved_at = coalesce(approved_at, now())
