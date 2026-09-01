@@ -14,11 +14,34 @@ function money(value: unknown) {
   return new Intl.NumberFormat("pl-PL", { style: "currency", currency: "PLN", maximumFractionDigits: 0 }).format(Number.isFinite(parsed) ? parsed : 0);
 }
 function str(value: unknown, fallback = "—") { return value === null || value === undefined || value === "" ? fallback : String(value); }
+function issueLabel(kind: string) {
+  if (kind === "medical") return "Badanie lekarskie";
+  if (kind === "safety") return "BHP";
+  if (kind === "contract") return "Umowa";
+  if (kind === "timesheet") return "Czas pracy";
+  if (kind === "leave") return "Urlopy";
+  if (kind === "qualification") return "Uprawnienia";
+  if (kind === "allocation") return "Obłożenie";
+  if (kind === "employment") return "Zatrudnienie";
+  if (kind === "cost") return "Koszt pracy";
+  if (kind === "document") return "Dokument AI";
+  return "Sprawa";
+}
+function issueCountLabel(count: number) {
+  if (count === 1) return "1 sprawa wymaga uwagi";
+  if (count >= 2 && count <= 4) return `${count} sprawy wymagają uwagi`;
+  return `${count} spraw wymaga uwagi`;
+}
 
 export function HrDashboardCore300({ data, canViewPayroll, onNavigate }: { data: HrWorkspaceData; canViewPayroll: boolean; onNavigate: (tab: HrWorkspaceTab, employeeId?: string) => void }) {
   const issueSummary = buildHrEmployeeIssues(data, { canViewPayroll });
-  const topIssues = issueSummary.issues.slice(0, 30);
-  const severityIcon = (severity: string) => severity === "critical" ? <CircleAlert size={16} /> : severity === "warning" ? <AlertTriangle size={16} /> : <Info size={16} />;
+  const groupedIssues = Array.from(issueSummary.byEmployee.entries()).map(([employeeId, issues]) => ({
+    employeeId,
+    employeeName: issues[0]?.employeeName ?? "Pracownik",
+    issues,
+    severity: issues.some((issue) => issue.severity === "critical") ? "critical" : issues.some((issue) => issue.severity === "warning") ? "warning" : "info"
+  })).slice(0, 12);
+  const severityIcon = (severity: string) => severity === "critical" ? <CircleAlert size={17} /> : severity === "warning" ? <AlertTriangle size={17} /> : <Info size={17} />;
 
   return <div className={styles.dashboard} data-hr-core-dashboard="300">
     <section className={styles.kpis}>
@@ -33,13 +56,19 @@ export function HrDashboardCore300({ data, canViewPayroll, onNavigate }: { data:
     <section className={styles.grid}>
       <article className={styles.panel}>
         <header className={styles.panelHeader}><div><p className={styles.kicker}>Centrum problemów pracownika</p><h2>Co wymaga działania</h2></div><span className={styles.badge}>{issueSummary.issues.length} spraw</span></header>
-        <div className={styles.issueList}>
-          {topIssues.map((issue) => <button type="button" key={issue.id} className={`${styles.issue} ${styles[issue.severity]}`} onClick={() => onNavigate(issue.targetTab, issue.employeeId)}>
-            {severityIcon(issue.severity)}
-            <span><strong>{issue.title}</strong><small>{issue.detail}</small></span>
-            <span className={styles.employee}>{issue.employeeName} <ArrowRight size={12} /></span>
-          </button>)}
-          {!topIssues.length ? <div className={styles.empty}><CircleCheck size={18} /> Brak aktywnych problemów kadrowych.</div> : null}
+        <div className={styles.employeeIssueGroups}>
+          {groupedIssues.map((group) => <article key={group.employeeId} className={`${styles.employeeIssueGroup} ${styles[`employeeIssueGroup${group.severity[0].toUpperCase()}${group.severity.slice(1)}`]}`}>
+            <div className={styles.groupLead}>
+              <span className={styles.groupIcon}>{severityIcon(group.severity)}</span>
+              <span><strong>{group.employeeName}</strong><small>{issueCountLabel(group.issues.length)}</small></span>
+            </div>
+            <div className={styles.groupChips}>
+              {group.issues.slice(0, 6).map((issue) => <button type="button" key={issue.id} className={`${styles.issueChip} ${styles[`issueChip${issue.severity[0].toUpperCase()}${issue.severity.slice(1)}`]}`} title={`${issue.title} — ${issue.detail}`} onClick={() => onNavigate(issue.targetTab, issue.employeeId)}>{issueLabel(issue.kind)}</button>)}
+              {group.issues.length > 6 ? <span className={styles.moreIssues}>+{group.issues.length - 6}</span> : null}
+            </div>
+            <button type="button" className={styles.groupAction} onClick={() => onNavigate(group.issues[0]?.targetTab ?? "employees", group.employeeId)}>Szczegóły <ArrowRight size={13} /></button>
+          </article>)}
+          {!groupedIssues.length ? <div className={styles.empty}><CircleCheck size={18} /> Brak aktywnych problemów kadrowych.</div> : null}
         </div>
       </article>
 
