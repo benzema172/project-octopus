@@ -14,7 +14,13 @@ type SearchResult = {
   score: number;
 };
 
-export function KnowledgeSearch({ projectId, workspaceId }: { projectId?: string; workspaceId?: string }) {
+type KnowledgeSearchProps = {
+  projectId?: string;
+  workspaceId?: string;
+  suggestions?: string[];
+};
+
+export function KnowledgeSearch({ projectId, workspaceId, suggestions = [] }: KnowledgeSearchProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,6 +50,13 @@ export function KnowledgeSearch({ projectId, workspaceId }: { projectId?: string
 
   return (
     <section className="knowledge-search">
+      {suggestions.length ? (
+        <div className="knowledge-search__suggestions" aria-label="Szybkie pytania">
+          {suggestions.slice(0, 6).map((suggestion) => (
+            <button key={suggestion} type="button" onClick={() => setQuery(suggestion)}>{suggestion}</button>
+          ))}
+        </div>
+      ) : null}
       <form onSubmit={submit} className="knowledge-search__form">
         <Search size={20} aria-hidden="true" />
         <input
