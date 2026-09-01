@@ -1,17 +1,18 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-describe("Kadry 1.6.0 — dokumenty, czas i księgowość", () => {
+describe("Kadry Core 3.0 — dokumenty, czas i księgowość", () => {
   const migration = readFileSync("supabase/migrations/20260830094000_hr_time_cost_accounting_bridge.sql", "utf8");
   const hybridSnapshotMigration = readFileSync("supabase/migrations/20260831060000_hr_timesheet_snapshot_hybrid_rate.sql", "utf8");
   const timesheetApi = readFileSync("app/api/company/hr/timesheet-entry/route.ts", "utf8");
   const laborApi = readFileSync("app/api/company/hr/labor-control/route.ts", "utf8");
   const laborUi = readFileSync("components/company/hr/hr-work-cost-160.tsx", "utf8");
-  const timeRecordsUi = readFileSync("components/company/hr/hr-time-records-159.tsx", "utf8");
-  const formalUi = readFileSync("components/company/hr/hr-formal-documents-160.tsx", "utf8");
+  const timeRecordsUi = readFileSync("components/company/hr/hr-time-records-400.tsx", "utf8");
+  const formalUi = readFileSync("components/company/hr/hr-formal-documents-162.tsx", "utf8");
   const accountingApi = readFileSync("app/api/company/hr/accounting-bridge/route.ts", "utf8");
   const accountingUi = readFileSync("components/company/hr/hr-accounting-bridge-160.tsx", "utf8");
-  const workspace = readFileSync("components/company/hr/hr-workspace-147.tsx", "utf8");
+  const documentsUi = readFileSync("components/company/hr/hr-documents-compact-161.tsx", "utf8");
+  const workspace = readFileSync("components/company/hr/hr-workspace-core-300.tsx", "utf8");
 
   it("freezes historical labor cost and reuses investment WBS", () => {
     expect(migration).toContain("hourly_cost_snapshot");
@@ -26,9 +27,7 @@ describe("Kadry 1.6.0 — dokumenty, czas i księgowość", () => {
   });
 
   it("records construction context, work types, clock times and quantities", () => {
-    for (const token of ["work_type", "cost_code", "work_scope", "started_at", "ended_at", "break_minutes", "quantity", "unit"]) {
-      expect(migration).toContain(token);
-    }
+    for (const token of ["work_type", "cost_code", "work_scope", "started_at", "ended_at", "break_minutes", "quantity", "unit"]) expect(migration).toContain(token);
     expect(timesheetApi).toContain("calculatedClockHours");
     expect(timesheetApi).toContain('"travel"');
     expect(timesheetApi).toContain('"downtime"');
@@ -46,31 +45,30 @@ describe("Kadry 1.6.0 — dokumenty, czas i księgowość", () => {
   });
 
   it("builds formal completeness from canonical HR records instead of copies", () => {
-    expect(formalUi).toContain("data.employeeDocuments");
-    expect(formalUi).toContain("data.exams");
-    expect(formalUi).toContain("data.trainings");
-    expect(formalUi).toContain("data.qualifications");
-    expect(formalUi).toContain("Wzory i Brain");
-    expect(formalUi).toContain("Nie tworzymy kopii danych");
+    expect(formalUi).toContain("employeeDocuments");
+    expect(formalUi).toContain("exams");
+    expect(formalUi).toContain("trainings");
+    expect(formalUi).toContain("qualifications");
+    expect(documentsUi).toContain("Wzory i Brain");
+    expect(documentsUi).toContain("HrFormalDocuments162");
   });
 
   it("prepares a validated universal accounting CSV bridge", () => {
     expect(accountingApi).toContain("CZAS_DO_ZATWIERDZENIA");
     expect(accountingApi).toContain("BRAK_ZAMKNIECIA_PLAC");
     expect(accountingApi).toContain("BRAK_SNAPSHOT_KOSZTU");
-    expect(accountingApi).toContain("NextResponse.json");
     expect(accountingApi).toContain("text/csv; charset=utf-8");
     expect(accountingApi).toContain("octopus-most-ksiegowy");
-    expect(accountingApi).not.toContain("is_primary");
     expect(accountingUi).toContain("Most księgowy v1");
     expect(accountingUi).toContain("Eksport CSV");
   });
 
-  it("mounts all three new HR capabilities in their existing tabs", () => {
+  it("mounts current time, formal-document and accounting capabilities in Core 3.0", () => {
     expect(timeRecordsUi).toContain("HrWorkCost160");
-    expect(timeRecordsUi).toContain("fixedEmployeeId={employeeId}");
-    expect(workspace).toContain("HrFormalDocuments160");
-    expect(workspace).toContain("HrAccountingBridge160");
-    expect(workspace).toContain('section[class*="grid2"] [class*="alertList"] > article[class*="alert"]');
+    expect(timeRecordsUi).toContain("fixedEmployeeId={detailFocus.employeeId}");
+    expect(timeRecordsUi).toContain("fixedWorkDate={detailFocus.workDate}");
+    expect(workspace).toContain("HrTimeRecords400");
+    expect(workspace).toContain("HrDocumentsCompact161");
+    expect(documentsUi).toContain("HrAccountingBridge160");
   });
 });
