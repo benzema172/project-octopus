@@ -25,7 +25,8 @@ describe("Document Flow 2.0", () => {
   it("shows where templates are stored and where they will actually be used", () => {
     const loader = source("lib/data/documents.ts");
     expect(loader).toContain("destinationForDocument");
-    expect(loader).toContain("Octopus Brain → Wzory · użycie:");
+    expect(loader).toContain('template: "Octopus Brain → Wzory"');
+    expect(loader).toContain("· użycie:");
     expect(loader).toContain("Kadry → Urlopy i absencje · generowanie wniosków urlopowych");
     expect(loader).toContain("Inwestycja → Protokoły · generowanie protokołów i odbiorów");
   });
