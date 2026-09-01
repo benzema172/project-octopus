@@ -13,6 +13,62 @@ export const maxDuration = 300;
 type VersionRow = { document_id: string; project_id: string | null };
 type DocumentRow = { category: string | null };
 type ApprovedClassification = { category: string; confidence: number | null; rationale: string | null; status: string };
+type TemplateMaterialization = { template_id: string; template_version_id: string; template_status: string };
+
+async function reconcileApprovedDocument(input: {
+  workspaceId: string;
+  versionId: string;
+  documentId: string;
+  projectId: string | null;
+  category: string;
+  actorId: string;
+}) {
+  const db = createServiceSupabaseClient();
+
+  if (input.category === "template") {
+    const { data, error } = await db.rpc("materialize_document_template_v2", {
+      p_workspace_id: input.workspaceId,
+      p_document_version_id: input.versionId,
+      p_actor_id: input.actorId
+    }).maybeSingle<TemplateMaterialization>();
+    if (error) throw new Error(`Nie udało się utworzyć wzoru: ${error.message}`);
+    return {
+      destination: "Octopus Brain → Wzory",
+      status: data?.template_status ?? "draft",
+      entityType: "template_version",
+      entityId: data?.template_version_id ?? null,
+      parentEntityId: data?.template_id ?? null
+    };
+  }
+
+  const autopilot = await applyDocumentAutopilot({
+    workspaceId: input.workspaceId,
+    documentId: input.documentId,
+    versionId: input.versionId,
+    category: input.category,
+    projectId: input.projectId,
+    actorId: input.actorId
+  });
+
+  let hrIntake: HrDocumentIntakeResult | null = null;
+  if (input.category === "hr") {
+    try {
+      hrIntake = await processHrDocumentIntake({ workspaceId: input.workspaceId, documentId: input.documentId, actorId: input.actorId });
+    } catch (error) {
+      console.error("[brain/process] HR reconciliation failed", error);
+      hrIntake = { attempted: true, matched: false, reason: error instanceof Error ? error.message : "Nie udało się automatycznie przypisać dokumentu HR." };
+    }
+  }
+
+  return {
+    destination: null,
+    status: autopilot.status,
+    entityType: null,
+    entityId: null,
+    autopilot,
+    hrIntake
+  };
+}
 
 export async function POST(request: Request) {
   const user = await getRequestUser(request);
@@ -41,12 +97,27 @@ export async function POST(request: Request) {
     .eq("document_version_id", body.versionId).eq("status", "approved").order("created_at", { ascending: false }).limit(1).maybeSingle<ApprovedClassification>();
   if (approvedError) console.error("[brain/process] approved classification lookup failed", approvedError);
   if (approved) {
-    return NextResponse.json({
-      ok: true,
-      alreadyAnalyzed: true,
-      analysis: { effectiveCategory: approved.category, confidence: approved.confidence, summary: approved.rationale },
-      message: "Dokument został już przeanalizowany i ma zatwierdzoną klasyfikację."
-    }, { headers: { "Cache-Control": "no-store" } });
+    try {
+      const materialization = await reconcileApprovedDocument({
+        workspaceId: workspace.id,
+        versionId: body.versionId,
+        documentId: version.document_id,
+        projectId: version.project_id,
+        category: approved.category,
+        actorId: user.id
+      });
+      return NextResponse.json({
+        ok: true,
+        alreadyAnalyzed: true,
+        analysis: { effectiveCategory: approved.category, confidence: approved.confidence, summary: approved.rationale },
+        materialization,
+        message: approved.category === "template"
+          ? "Dokument był już przeanalizowany. Document Flow potwierdził zapis w Octopus Brain → Wzory."
+          : "Dokument był już przeanalizowany. Document Flow ponownie sprawdził routing i wynik w module docelowym."
+      }, { headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Nie udało się dokończyć routingu dokumentu." }, { status: 422 });
+    }
   }
 
   try {
