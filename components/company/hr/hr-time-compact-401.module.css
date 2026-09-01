@@ -1,0 +1,50 @@
+.compact :global([data-hr-time-400="1"]){gap:7px}
+.compact :global([data-hr-time-400="1"]>section:first-child){display:grid;grid-template-columns:auto auto minmax(170px,220px) minmax(12px,1fr) auto;grid-template-rows:auto auto;align-items:center;column-gap:7px;row-gap:6px;padding:9px 11px;border-radius:11px}
+.compact :global([data-hr-time-400="1"]>section:first-child>div:first-child){grid-column:1/-1;grid-row:1;align-items:center;gap:10px}
+.compact :global([data-hr-time-400="1"]>section:first-child>div:first-child>div:first-child>p:last-child){display:none}
+.compact :global([data-hr-time-400="1"]>section:first-child>div:first-child h2){font-size:1rem;line-height:1.1}
+.compact :global([data-hr-time-400="1"]>section:first-child>div:first-child>div:last-child span){padding:4px 7px;font-size:.62rem}
+.compact :global([data-hr-time-400="1"]>section:first-child>div:nth-child(2)),.compact :global([data-hr-time-400="1"]>section:first-child>div:nth-child(3)){display:contents}
+.compact :global([data-hr-time-400="1"]>section:first-child>div:nth-child(2)>div:first-child){grid-column:1;grid-row:2;gap:3px;flex-wrap:nowrap}
+.compact :global([data-hr-time-400="1"]>section:first-child>div:nth-child(2)>div:nth-child(2)){grid-column:2;grid-row:2;gap:3px;flex-wrap:nowrap;margin:0;padding:0;border:0;background:transparent}
+.compact :global([data-hr-time-400="1"]>section:first-child>div:nth-child(2)>div:last-child){grid-column:5;grid-row:2;justify-self:end;gap:4px;flex-wrap:nowrap}
+.compact :global([data-hr-time-400="1"]>section:first-child>div:nth-child(3)>label){grid-column:3;grid-row:2;display:block;margin:0}
+.compact :global([data-hr-time-400="1"]>section:first-child>div:nth-child(3)>label>span){position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.compact :global([data-hr-time-400="1"]>section:first-child>div:nth-child(3)>label>select){width:100%;min-width:0;height:30px;padding:0 8px;border-radius:8px;font-size:.7rem}
+.compact :global([data-hr-time-400="1"]>section:first-child>div:nth-child(3)>div){display:none}
+.compact :global([data-hr-time-400="1"]>section:first-child button),.compact :global([data-hr-time-400="1"]>section:first-child input[type="date"]){height:30px;min-height:30px;border-radius:8px;font-size:.68rem}
+.compact :global([data-hr-time-400="1"]>section:first-child button){padding-top:0;padding-bottom:0}
+.compact :global([data-hr-time-400="1"]>section:first-child input[type="date"]){padding-top:0;padding-bottom:0}
+
+/* Dzienne wpisy: jeden pracownik ma być jednym zwartym wierszem. */
+.compact :global([data-hr-time-400="1"] div:has(>div>[data-hr-inline-timesheet-editor="1"])){min-height:42px;grid-template-columns:minmax(155px,.72fr) minmax(125px,.6fr) minmax(430px,2.7fr) 58px}
+.compact :global([data-hr-time-400="1"] div:has(>div>[data-hr-inline-timesheet-editor="1"])>div){padding:4px 7px}
+.compact :global([data-hr-time-400="1"] div:has(>div>[data-hr-inline-timesheet-editor="1"])>div:first-child){display:flex!important;align-items:center!important;gap:7px!important;white-space:nowrap}
+.compact :global([data-hr-time-400="1"] div:has(>div>[data-hr-inline-timesheet-editor="1"])>div:first-child strong){font-size:.72rem}
+.compact :global([data-hr-time-400="1"] div:has(>div>[data-hr-inline-timesheet-editor="1"])>div:first-child button){font-size:.56rem;white-space:nowrap}
+.compact :global([data-hr-time-400="1"] div:has(>div>[data-hr-inline-timesheet-editor="1"])>div:nth-child(2)){gap:1px!important;align-content:center!important}
+.compact :global([data-hr-time-400="1"] div:has(>div>[data-hr-inline-timesheet-editor="1"])>div:nth-child(2) small){display:none}
+.compact :global([data-hr-time-400="1"] div:has(>div>[data-hr-inline-timesheet-editor="1"])>div:nth-child(2) strong),.compact :global([data-hr-time-400="1"] div:has(>div>[data-hr-inline-timesheet-editor="1"])>div:nth-child(2) span){font-size:.6rem}
+.compact :global([data-hr-time-400="1"] div:has(>div>[data-hr-inline-timesheet-editor="1"])>div:nth-child(3)>small){display:none}
+.compact :global([data-hr-time-400="1"] div:has(>div>[data-hr-inline-timesheet-editor="1"])>div:last-child strong){font-size:.72rem;white-space:nowrap}
+
+/* Inline editor: kolejne inwestycje nie tworzą dodatkowej belki na wysokość. */
+.compact :global([data-hr-inline-timesheet-editor="1"]>div){position:relative;display:grid;gap:3px;padding-right:27px}
+.compact :global([data-hr-inline-timesheet-editor="1"]>div>form){grid-template-columns:minmax(135px,1fr) 52px 48px 27px 27px!important;gap:3px!important}
+.compact :global([data-hr-inline-timesheet-editor="1"]>div>form select),.compact :global([data-hr-inline-timesheet-editor="1"]>div>form input){height:27px!important;min-height:27px!important;border-radius:7px!important;padding-left:6px!important;padding-right:6px!important;font-size:.69rem!important}
+.compact :global([data-hr-inline-timesheet-editor="1"]>div>form button){width:27px!important;height:27px!important;min-height:27px!important;border-radius:7px!important;padding:0!important}
+.compact :global([data-hr-inline-timesheet-editor="1"]>div>button){position:absolute;right:0;top:0;width:24px!important;height:24px!important;min-height:24px!important;padding:0!important;font-size:0!important;border-radius:7px!important}
+.compact :global([data-hr-inline-timesheet-editor="1"]>div>button svg){width:12px;height:12px}
+.compact :global([data-hr-inline-timesheet-editor="1"]>div>div){font-size:.6rem!important}
+
+@media(max-width:1180px){
+  .compact :global([data-hr-time-400="1"]>section:first-child){grid-template-columns:auto auto minmax(150px,190px) 1fr auto}
+  .compact :global([data-hr-time-400="1"] div:has(>div>[data-hr-inline-timesheet-editor="1"])){grid-template-columns:minmax(145px,.65fr) minmax(110px,.55fr) minmax(390px,2.5fr) 54px}
+}
+@media(max-width:900px){
+  .compact :global([data-hr-time-400="1"]>section:first-child){display:block}
+  .compact :global([data-hr-time-400="1"]>section:first-child>div:nth-child(2)){display:flex;margin-top:7px;padding-top:7px}
+  .compact :global([data-hr-time-400="1"]>section:first-child>div:nth-child(3)){display:flex;margin-top:6px}
+  .compact :global([data-hr-time-400="1"]>section:first-child>div:nth-child(3)>label){display:block;flex:1}
+  .compact :global([data-hr-time-400="1"]>section:first-child>div:nth-child(3)>div){display:none}
+}
