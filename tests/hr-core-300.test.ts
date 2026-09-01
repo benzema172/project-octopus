@@ -72,6 +72,9 @@ describe("HR Core 3.0 architecture contracts", () => {
   const createMigration = readFileSync("supabase/migrations/20260831203000_hr_core_300_atomic_employee.sql", "utf8");
   const updateMigration = readFileSync("supabase/migrations/20260831204500_hr_core_300_atomic_employee_update.sql", "utf8");
   const intelligence = readFileSync("lib/hr/document-intelligence.ts", "utf8");
+  const time400 = readFileSync("components/company/hr/hr-time-records-400.tsx", "utf8");
+  const timeRange = readFileSync("app/api/company/hr/timesheet-range/route.ts", "utf8");
+  const timeBulk = readFileSync("app/api/company/hr/timesheet-bulk/route.ts", "utf8");
   const packageJson = readFileSync("package.json", "utf8");
 
   it("has one direct shell and no legacy workspace monoliths", () => {
@@ -90,7 +93,7 @@ describe("HR Core 3.0 architecture contracts", () => {
   it("lazy-loads heavy HR sections and keeps the annual lifecycle test in the build gate", () => {
     expect(shell).toContain('import dynamic from "next/dynamic"');
     expect(shell).toContain("dynamic(() => import(\"./hr-employee-registry-300\")");
-    expect(shell).toContain("dynamic(() => import(\"./hr-time-records-159\")");
+    expect(shell).toContain("dynamic(() => import(\"./hr-time-records-400\")");
     expect(shell).toContain("dynamic(() => import(\"./hr-documents-compact-161\")");
     expect(packageJson).toContain("tests/hr-year-lifecycle-10-workers.test.ts");
   });
@@ -113,5 +116,27 @@ describe("HR Core 3.0 architecture contracts", () => {
     expect(intelligence).toContain("employeeScore >= 0.93");
     expect(intelligence).toContain("dates.confidence >= 0.9");
     expect(intelligence).toContain("document_id");
+  });
+
+  it("keeps HR Time 4.0 day, week, month and history workflows", () => {
+    expect(time400).toContain('type ViewMode = "day" | "week" | "month" | "history"');
+    expect(time400).toContain("−7 dni");
+    expect(time400).toContain("−30 dni");
+    expect(time400).toContain("Główny ekran korekt");
+    expect(time400).toContain("Kalendarz całej ekipy");
+    expect(time400).toContain("Wyszukaj i popraw dowolny wpis");
+    expect(time400).toContain("Plan ≠ wykonanie");
+  });
+
+  it("loads history by date range and exposes safe bulk editing", () => {
+    expect(time400).toContain("/api/company/hr/timesheet-range");
+    expect(time400).toContain("/api/company/hr/timesheet-bulk");
+    expect(timeRange).toContain('.gte("work_date", from)');
+    expect(timeRange).toContain('.lte("work_date", to)');
+    expect(timeRange).toContain('params.set("offset"');
+    expect(timeBulk).toContain("isPolishWorkingDay");
+    expect(timeBulk).toContain('mode === "replace_single"');
+    expect(timeBulk).toContain("skippedLeave");
+    expect(timeBulk).toContain("skippedConflict");
   });
 });
