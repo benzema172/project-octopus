@@ -18,8 +18,8 @@ describe("Project Octopus HR employee force delete", () => {
   it("requires a conscious two-step confirmation in the current employee card", () => {
     expect(registry).toContain("Trwale usunąć");
     expect(registry).toContain('window.prompt("Wpisz dokładnie: USUŃ")');
-    expect(registry).toContain('action: "force_delete"');
-    expect(registry).toContain('confirmation: "USUŃ"');
+    expect(registry).toContain('action: "archive" | "restore" | "delete" | "force_delete"');
+    expect(registry).toContain('action === "force_delete" ? { employeeId, confirmation: "USUŃ"');
     expect(registry).toContain('canApprove ? "force_delete" : "delete"');
     expect(registry).toContain("wraz z historią HR");
   });
