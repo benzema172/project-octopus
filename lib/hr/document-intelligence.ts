@@ -8,221 +8,25 @@ type EmployeeRow = { id: string; employee_number: string | null; first_name: str
 type ExtractionRow = { payload: Record<string, unknown> | null; confidence: number | null };
 type DocumentKind = "leave" | "contract" | "medical" | "safety" | "qualification" | "other";
 
-export type HrComplianceIntakeRecord = {
-  kind: "medical_exam" | "safety_training" | "qualification";
-  detected: boolean;
-  created: boolean;
-  id?: string;
-  issuedAt?: string | null;
-  validUntil?: string | null;
-  reason?: string;
-};
+export type HrComplianceIntakeRecord = { kind: "medical_exam" | "safety_training" | "qualification"; detected: boolean; created: boolean; id?: string; issuedAt?: string | null; validUntil?: string | null; reason?: string };
+export type HrDocumentIntakeResult = { attempted: true; matched: boolean; employeeId?: string; employeeName?: string; confidence?: number; documentType?: string; employeeDocumentId?: string; reason?: string; complianceRecords?: HrComplianceIntakeRecord[]; leaveRequest?: { detected: boolean; created: boolean; id?: string; leaveType?: string; dateFrom?: string; dateTo?: string; days?: number; reason?: string } };
 
-export type HrDocumentIntakeResult = {
-  attempted: true;
-  matched: boolean;
-  employeeId?: string;
-  employeeName?: string;
-  confidence?: number;
-  documentType?: string;
-  employeeDocumentId?: string;
-  reason?: string;
-  complianceRecords?: HrComplianceIntakeRecord[];
-  leaveRequest?: { detected: boolean; created: boolean; id?: string; leaveType?: string; dateFrom?: string; dateTo?: string; days?: number; reason?: string };
-};
-
-function normalize(value: unknown) {
-  return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[łŁ]/g, "l").toLowerCase().replace(/[^a-z0-9@.+-]+/g, " ").replace(/\s+/g, " ").trim();
-}
+function normalize(value: unknown) { return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[łŁ]/g, "l").toLowerCase().replace(/[^a-z0-9@.+-]+/g, " ").replace(/\s+/g, " ").trim(); }
 function compactDigits(value: unknown) { return String(value ?? "").replace(/\D+/g, ""); }
 function employeeName(employee: EmployeeRow) { return `${employee.first_name} ${employee.last_name}`.trim(); }
-function factRows(payload: Record<string, unknown>) {
-  return Array.isArray(payload.facts) ? payload.facts.filter((item): item is Row => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : [];
-}
-function parseDate(value: unknown): string | null {
-  const raw = String(value ?? "").trim();
-  const iso = raw.match(/\b(20\d{2})[-/.](0?[1-9]|1[0-2])[-/.](0?[1-9]|[12]\d|3[01])\b/);
-  if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
-  const pl = raw.match(/\b(0?[1-9]|[12]\d|3[01])[.\-/](0?[1-9]|1[0-2])[.\-/](20\d{2})\b/);
-  if (pl) return `${pl[3]}-${pl[2].padStart(2, "0")}-${pl[1].padStart(2, "0")}`;
-  return null;
-}
-function allDates(rawContent: string) {
-  return [...new Set(Array.from(rawContent.matchAll(/\b(?:20\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])|(?:0?[1-9]|[12]\d|3[01])[.\-/](?:0?[1-9]|1[0-2])[.\-/]20\d{2})\b/g)).map((match) => parseDate(match[0])).filter((value): value is string => Boolean(value)))].sort();
-}
-function findFactDate(payload: Record<string, unknown>, labels: string[]) {
-  const normalizedLabels = labels.map(normalize);
-  for (const fact of factRows(payload)) {
-    const descriptor = normalize(`${fact.type ?? ""} ${fact.label ?? ""} ${fact.name ?? ""}`);
-    if (!normalizedLabels.some((key) => descriptor.includes(key))) continue;
-    const parsed = parseDate(fact.value ?? fact.date ?? fact.content);
-    if (parsed) return parsed;
-  }
-  return null;
-}
-function findFactText(payload: Record<string, unknown>, labels: string[]) {
-  const normalizedLabels = labels.map(normalize);
-  for (const fact of factRows(payload)) {
-    const descriptor = normalize(`${fact.type ?? ""} ${fact.label ?? ""} ${fact.name ?? ""}`);
-    if (!normalizedLabels.some((key) => descriptor.includes(key))) continue;
-    const value = String(fact.value ?? fact.content ?? "").trim();
-    if (value) return value;
-  }
-  return null;
-}
+function factRows(payload: Record<string, unknown>) { return Array.isArray(payload.facts) ? payload.facts.filter((item): item is Row => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : []; }
+function parseDate(value: unknown): string | null { const raw = String(value ?? "").trim(); const iso = raw.match(/\b(20\d{2})[-/.](0?[1-9]|1[0-2])[-/.](0?[1-9]|[12]\d|3[01])\b/); if (iso) return `${iso[1]}-${iso[2].padStart(2,"0")}-${iso[3].padStart(2,"0")}`; const pl = raw.match(/\b(0?[1-9]|[12]\d|3[01])[.\-/](0?[1-9]|1[0-2])[.\-/](20\d{2})\b/); return pl ? `${pl[3]}-${pl[2].padStart(2,"0")}-${pl[1].padStart(2,"0")}` : null; }
+function allDates(rawContent: string) { return [...new Set(Array.from(rawContent.matchAll(/\b(?:20\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])|(?:0?[1-9]|[12]\d|3[01])[.\-/](?:0?[1-9]|1[0-2])[.\-/]20\d{2})\b/g)).map((m)=>parseDate(m[0])).filter((v):v is string=>Boolean(v)))].sort(); }
+function findFactDate(payload: Record<string, unknown>, labels: string[]) { const normalizedLabels=labels.map(normalize); for(const fact of factRows(payload)){const descriptor=normalize(`${fact.type??""} ${fact.label??""} ${fact.name??""}`); if(!normalizedLabels.some((key)=>descriptor.includes(key))) continue; const parsed=parseDate(fact.value??fact.date??fact.content); if(parsed)return parsed;} return null; }
+function findFactText(payload: Record<string, unknown>, labels: string[]) { const normalizedLabels=labels.map(normalize); for(const fact of factRows(payload)){const descriptor=normalize(`${fact.type??""} ${fact.label??""} ${fact.name??""}`); if(!normalizedLabels.some((key)=>descriptor.includes(key))) continue; const value=String(fact.value??fact.content??"").trim(); if(value)return value;} return null; }
+function extractLeaveDates(payload: Record<string, unknown>, rawContent: string) { const dateFrom=findFactDate(payload,["leave_from","date_from","data od","urlop od","okres od","od dnia"]); const dateTo=findFactDate(payload,["leave_to","date_to","data do","urlop do","okres do","do dnia"]); if(dateFrom&&dateTo)return{dateFrom,dateTo,confidence:.98}; const pair=rawContent.match(/(?:od|from)\s*(\d{1,2}[.\-/]\d{1,2}[.\-/]20\d{2}|20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})[^\d]{0,24}(?:do|to|[-–—])\s*(\d{1,2}[.\-/]\d{1,2}[.\-/]20\d{2}|20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})/i); if(pair){const from=parseDate(pair[1]),to=parseDate(pair[2]); if(from&&to)return{dateFrom:from,dateTo:to,confidence:.94};} const dates=allDates(rawContent); if(dates.length===2)return{dateFrom:dates[0],dateTo:dates[1],confidence:.72}; return{dateFrom:null,dateTo:null,confidence:0}; }
+function extractComplianceDates(payload: Record<string, unknown>, rawContent: string) { const issuedAt=findFactDate(payload,["issued_at","examined_at","completed_at","data wydania","data badania","data szkolenia","ukończono","wystawiono","wydano"]); const validUntil=findFactDate(payload,["valid_until","expiry","expiration","ważne do","wazne do","termin ważności","termin waznosci","data ważności","data waznosci"]); if(validUntil)return{issuedAt,validUntil,confidence:issuedAt?.98:.95}; const textPair=rawContent.match(/(?:ważn\w*\s*do|wazn\w*\s*do|valid\s*until|expiry|termin\w*\s*ważn\w*)[^\d]{0,24}(\d{1,2}[.\-/]\d{1,2}[.\-/]20\d{2}|20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})/i); const parsedValid=textPair?parseDate(textPair[1]):null; if(parsedValid)return{issuedAt,validUntil:parsedValid,confidence:.93}; const dates=allDates(rawContent); if(dates.length>=2)return{issuedAt:issuedAt??dates[0],validUntil:dates[dates.length-1],confidence:.7}; return{issuedAt:issuedAt??dates[0]??null,validUntil:null,confidence:.45}; }
+function classifyLeaveType(content:string){if(content.includes("na zadanie")||content.includes("na żądanie"))return"on_demand";if(content.includes("okolicznosci"))return"circumstantial";if(content.includes("rehabilit"))return"rehabilitation";if(content.includes("opiekun")||content.includes("opieku"))return"care";if(content.includes("szkoleni"))return"training";if(content.includes("bezplat"))return"unpaid";return"annual";}
+function classifyDocument(payload:Record<string,unknown>,content:string):{type:string;kind:DocumentKind}{const subcategory=normalize(payload.subcategory);if(subcategory.includes("leave")||subcategory.includes("urlop")||content.includes("wniosek o urlop")||content.includes("wniosek urlopowy"))return{type:"Wniosek urlopowy",kind:"leave"};if(content.includes("aneks")&&(content.includes("umow")||content.includes("zatrudn")))return{type:"Aneks do umowy",kind:"contract"};if(content.includes("umow")||content.includes("employment contract")||content.includes("zatrudnien"))return{type:"Umowa o pracę / zatrudnienie",kind:"contract"};if(content.includes("badani")||content.includes("lekarsk")||content.includes("medycz")||content.includes("orzeczenie lekarskie"))return{type:"Badanie medyczne",kind:"medical"};if(content.includes("bhp")||content.includes("bezpieczenstwo i higiena pracy")||content.includes("instruktaz stanowiskowy"))return{type:"BHP",kind:"safety"};if(content.includes("sep"))return{type:"SEP",kind:"qualification"};if(content.includes("f gaz")||content.includes("fgaz")||content.includes("f-gaz"))return{type:"F-Gazy",kind:"qualification"};if(content.includes("udt"))return{type:"UDT",kind:"qualification"};if(content.includes("uprawnieni")||content.includes("kwalifikac")||content.includes("certyfikat")||content.includes("swiadectw"))return{type:"Uprawnienie / certyfikat",kind:"qualification"};if(content.includes("szkoleni"))return{type:"Szkolenie pracownika",kind:"safety"};return{type:"Inny dokument HR",kind:"other"};}
+function containsToken(content:string,token:string){return token.length>=3&&new RegExp(`(?:^|\\s)${token.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}(?:$|\\s)`).test(content);}
+function scoreEmployee(employee:EmployeeRow,normalizedContent:string,rawDigits:string){const fullName=normalize(employeeName(employee)),reverseName=normalize(`${employee.last_name} ${employee.first_name}`),firstName=normalize(employee.first_name),lastName=normalize(employee.last_name),employeeNumber=normalize(employee.employee_number),email=normalize(employee.email),phone=compactDigits(employee.phone);let score=0,reason="";if(employeeNumber.length>=3&&containsToken(normalizedContent,employeeNumber)){score=1;reason="numer pracownika";}if(fullName&&normalizedContent.includes(fullName)&&score<.99){score=.99;reason="pełne imię i nazwisko";}if(reverseName&&normalizedContent.includes(reverseName)&&score<.97){score=.97;reason="nazwisko i imię";}if(email&&normalizedContent.includes(email)&&score<.98){score=.98;reason="adres e-mail";}if(phone.length>=7&&rawDigits.includes(phone)&&score<.96){score=.96;reason="numer telefonu";}if(firstName.length>=3&&lastName.length>=3&&normalizedContent.includes(firstName)&&normalizedContent.includes(lastName)&&score<.93){score=.93;reason="imię i nazwisko rozdzielone w treści";}if(lastName.length>=3&&normalizedContent.includes(lastName)&&score<.78){score=.78;reason="unikalne nazwisko";}return{employee,score,reason};}
+async function audit(input:{workspaceId:string;actorId?:string|null;eventType:string;entityType:string;entityId:string;value:unknown}){const db=createServiceSupabaseClient();const{error}=await db.from("audit_events").insert({workspace_id:input.workspaceId,actor_id:input.actorId??null,actor_type:input.actorId?"user":"system",event_type:input.eventType,entity_type:input.entityType,entity_id:input.entityId,after_value:input.value});if(error)console.error("[hr-document-intelligence] audit failed",error.message);}
 
-function extractLeaveDates(payload: Record<string, unknown>, rawContent: string) {
-  const dateFrom = findFactDate(payload, ["leave_from", "date_from", "data od", "urlop od", "okres od", "od dnia"]);
-  const dateTo = findFactDate(payload, ["leave_to", "date_to", "data do", "urlop do", "okres do", "do dnia"]);
-  if (dateFrom && dateTo) return { dateFrom, dateTo, confidence: 0.98 };
-  const pair = rawContent.match(/(?:od|from)\s*(\d{1,2}[.\-/]\d{1,2}[.\-/]20\d{2}|20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})[^\d]{0,24}(?:do|to|[-–—])\s*(\d{1,2}[.\-/]\d{1,2}[.\-/]20\d{2}|20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})/i);
-  if (pair) {
-    const from = parseDate(pair[1]); const to = parseDate(pair[2]);
-    if (from && to) return { dateFrom: from, dateTo: to, confidence: 0.94 };
-  }
-  const dates = allDates(rawContent);
-  if (dates.length === 2) return { dateFrom: dates[0], dateTo: dates[1], confidence: 0.72 };
-  return { dateFrom: null, dateTo: null, confidence: 0 };
-}
+async function createComplianceFromDocument(input:{workspaceId:string;actorId?:string|null;documentId:string;employeeId:string;classified:{type:string;kind:DocumentKind};payload:Record<string,unknown>;rawContent:string;employeeScore:number;extractionConfidence:number}):Promise<HrComplianceIntakeRecord[]>{if(!["medical","safety","qualification"].includes(input.classified.kind))return[];const kind=input.classified.kind==="medical"?"medical_exam":input.classified.kind==="safety"?"safety_training":"qualification";const dates=extractComplianceDates(input.payload,input.rawContent);const cautiousEnough=input.employeeScore>=.93&&input.extractionConfidence>=.75&&dates.confidence>=.9;if(!cautiousEnough)return[{kind,detected:true,created:false,issuedAt:dates.issuedAt,validUntil:dates.validUntil,reason:"Dokument rozpoznano, ale osoba lub terminy wymagają potwierdzenia przed utworzeniem rekordu formalnego."}];if(!dates.validUntil)return[{kind,detected:true,created:false,issuedAt:dates.issuedAt,validUntil:null,reason:"Nie odczytano jednoznacznego terminu ważności — dokument przypisano do akt bez automatycznego wpisu terminu."}];const db=createServiceSupabaseClient(),table=kind==="medical_exam"?"medical_exams":kind==="safety_training"?"safety_trainings":"qualifications";const{data:existing}=await db.from(table).select("id").eq("workspace_id",input.workspaceId).eq("employee_id",input.employeeId).eq("document_id",input.documentId).limit(1).maybeSingle<{id:string}>();if(existing)return[{kind,detected:true,created:false,id:existing.id,issuedAt:dates.issuedAt,validUntil:dates.validUntil,reason:"Rekord formalny dla tego dokumentu już istnieje."}];let row:Record<string,unknown>;if(kind==="medical_exam"){const result=normalize(input.rawContent).includes("niezdoln")?"unfit":normalize(input.rawContent).includes("ograniczen")?"fit_with_restrictions":"valid";const examType=normalize(input.rawContent).includes("wstepn")?"Wstępne":normalize(input.rawContent).includes("kontroln")?"Kontrolne":"Okresowe";row={workspace_id:input.workspaceId,employee_id:input.employeeId,exam_type:examType,examined_at:dates.issuedAt,valid_until:dates.validUntil,status:result,document_id:input.documentId};}else if(kind==="safety_training"){if(!dates.issuedAt)return[{kind,detected:true,created:false,validUntil:dates.validUntil,reason:"Odczytano ważność BHP, ale nie datę szkolenia — wymagana jest decyzja człowieka."}];const content=normalize(input.rawContent),trainingType=content.includes("instruktaz stanowisk")?"Instruktaż stanowiskowy":content.includes("wstepn")?"Wstępne":"Okresowe";row={workspace_id:input.workspaceId,employee_id:input.employeeId,training_type:trainingType,provider:findFactText(input.payload,["organizator","provider","prowadzący","prowadzacy"]),completed_at:dates.issuedAt,valid_until:dates.validUntil,status:"valid",document_id:input.documentId,notes:"Utworzono automatycznie z OCR/Octopus Brain."};}else{row={workspace_id:input.workspaceId,employee_id:input.employeeId,qualification_type:input.classified.type,number:findFactText(input.payload,["numer","certificate number","nr uprawnienia","nr certyfikatu"]),issued_at:dates.issuedAt,valid_until:dates.validUntil,status:"valid",document_id:input.documentId};}const{data:created,error}=await db.from(table).insert(row).select("id").single<{id:string}>();if(error||!created)throw error??new Error("Nie udało się utworzyć rekordu formalnego z OCR.");await audit({workspaceId:input.workspaceId,actorId:input.actorId,eventType:`hr.${kind}_created_from_document`,entityType:kind,entityId:created.id,value:{employeeId:input.employeeId,documentId:input.documentId,issuedAt:dates.issuedAt,validUntil:dates.validUntil,documentType:input.classified.type}});return[{kind,detected:true,created:true,id:created.id,issuedAt:dates.issuedAt,validUntil:dates.validUntil}];}
 
-function extractComplianceDates(payload: Record<string, unknown>, rawContent: string) {
-  const issuedAt = findFactDate(payload, ["issued_at", "examined_at", "completed_at", "data wydania", "data badania", "data szkolenia", "ukończono", "wystawiono", "wydano"]);
-  const validUntil = findFactDate(payload, ["valid_until", "expiry", "expiration", "ważne do", "wazne do", "termin ważności", "termin waznosci", "data ważności", "data waznosci"]);
-  if (validUntil) return { issuedAt, validUntil, confidence: issuedAt ? 0.98 : 0.95 };
-  const textPair = rawContent.match(/(?:ważn\w*\s*do|wazn\w*\s*do|valid\s*until|expiry|termin\w*\s*ważn\w*)[^\d]{0,24}(\d{1,2}[.\-/]\d{1,2}[.\-/]20\d{2}|20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})/i);
-  const parsedValid = textPair ? parseDate(textPair[1]) : null;
-  if (parsedValid) return { issuedAt, validUntil: parsedValid, confidence: 0.93 };
-  const dates = allDates(rawContent);
-  if (dates.length >= 2) return { issuedAt: issuedAt ?? dates[0], validUntil: dates[dates.length - 1], confidence: 0.7 };
-  return { issuedAt: issuedAt ?? dates[0] ?? null, validUntil: null, confidence: 0.45 };
-}
-
-function classifyLeaveType(content: string) {
-  if (content.includes("na zadanie") || content.includes("na żądanie")) return "on_demand";
-  if (content.includes("okolicznosci")) return "circumstantial";
-  if (content.includes("rehabilit")) return "rehabilitation";
-  if (content.includes("opiekun") || content.includes("opieku")) return "care";
-  if (content.includes("szkoleni")) return "training";
-  if (content.includes("bezplat")) return "unpaid";
-  return "annual";
-}
-function classifyDocument(payload: Record<string, unknown>, content: string): { type: string; kind: DocumentKind } {
-  const subcategory = normalize(payload.subcategory);
-  if (subcategory.includes("leave") || subcategory.includes("urlop") || content.includes("wniosek o urlop") || content.includes("wniosek urlopowy")) return { type: "Wniosek urlopowy", kind: "leave" };
-  if (content.includes("aneks") && (content.includes("umow") || content.includes("zatrudn"))) return { type: "Aneks do umowy", kind: "contract" };
-  if (content.includes("umow") || content.includes("employment contract") || content.includes("zatrudnien")) return { type: "Umowa o pracę / zatrudnienie", kind: "contract" };
-  if (content.includes("badani") || content.includes("lekarsk") || content.includes("medycz") || content.includes("orzeczenie lekarskie")) return { type: "Badanie medyczne", kind: "medical" };
-  if (content.includes("bhp") || content.includes("bezpieczenstwo i higiena pracy") || content.includes("instruktaz stanowiskowy")) return { type: "BHP", kind: "safety" };
-  if (content.includes("sep")) return { type: "SEP", kind: "qualification" };
-  if (content.includes("f gaz") || content.includes("fgaz") || content.includes("f-gaz")) return { type: "F-Gazy", kind: "qualification" };
-  if (content.includes("udt")) return { type: "UDT", kind: "qualification" };
-  if (content.includes("uprawnieni") || content.includes("kwalifikac") || content.includes("certyfikat") || content.includes("swiadectw")) return { type: "Uprawnienie / certyfikat", kind: "qualification" };
-  if (content.includes("szkoleni")) return { type: "Szkolenie pracownika", kind: "safety" };
-  return { type: "Inny dokument HR", kind: "other" };
-}
-function scoreEmployee(employee: EmployeeRow, normalizedContent: string, rawDigits: string) {
-  const fullName = normalize(employeeName(employee)); const reverseName = normalize(`${employee.last_name} ${employee.first_name}`);
-  const firstName = normalize(employee.first_name); const lastName = normalize(employee.last_name); const employeeNumber = normalize(employee.employee_number); const email = normalize(employee.email); const phone = compactDigits(employee.phone);
-  let score = 0; let reason = "";
-  if (employeeNumber && normalizedContent.includes(employeeNumber)) { score = 1; reason = "numer pracownika"; }
-  if (fullName && normalizedContent.includes(fullName) && score < 0.99) { score = 0.99; reason = "pełne imię i nazwisko"; }
-  if (reverseName && normalizedContent.includes(reverseName) && score < 0.97) { score = 0.97; reason = "nazwisko i imię"; }
-  if (email && normalizedContent.includes(email) && score < 0.98) { score = 0.98; reason = "adres e-mail"; }
-  if (phone.length >= 7 && rawDigits.includes(phone) && score < 0.96) { score = 0.96; reason = "numer telefonu"; }
-  if (firstName.length >= 3 && lastName.length >= 3 && normalizedContent.includes(firstName) && normalizedContent.includes(lastName) && score < 0.93) { score = 0.93; reason = "imię i nazwisko rozdzielone w treści"; }
-  if (lastName.length >= 3 && normalizedContent.includes(lastName) && score < 0.78) { score = 0.78; reason = "unikalne nazwisko"; }
-  return { employee, score, reason };
-}
-async function audit(input: { workspaceId: string; actorId?: string | null; eventType: string; entityType: string; entityId: string; value: unknown }) {
-  const db = createServiceSupabaseClient();
-  const { error } = await db.from("audit_events").insert({ workspace_id: input.workspaceId, actor_id: input.actorId ?? null, actor_type: input.actorId ? "user" : "system", event_type: input.eventType, entity_type: input.entityType, entity_id: input.entityId, after_value: input.value });
-  if (error) console.error("[hr-document-intelligence] audit failed", error.message);
-}
-
-async function createComplianceFromDocument(input: {
-  workspaceId: string; actorId?: string | null; documentId: string; employeeId: string; classified: { type: string; kind: DocumentKind };
-  payload: Record<string, unknown>; rawContent: string; employeeScore: number; extractionConfidence: number;
-}): Promise<HrComplianceIntakeRecord[]> {
-  if (!["medical", "safety", "qualification"].includes(input.classified.kind)) return [];
-  const kind = input.classified.kind === "medical" ? "medical_exam" : input.classified.kind === "safety" ? "safety_training" : "qualification";
-  const dates = extractComplianceDates(input.payload, input.rawContent);
-  const cautiousEnough = input.employeeScore >= 0.93 && input.extractionConfidence >= 0.75 && dates.confidence >= 0.9;
-  if (!cautiousEnough) return [{ kind, detected: true, created: false, issuedAt: dates.issuedAt, validUntil: dates.validUntil, reason: "Dokument rozpoznano, ale osoba lub terminy wymagają potwierdzenia przed utworzeniem rekordu formalnego." }];
-  if (!dates.validUntil) return [{ kind, detected: true, created: false, issuedAt: dates.issuedAt, validUntil: null, reason: "Nie odczytano jednoznacznego terminu ważności — dokument przypisano do akt bez automatycznego wpisu terminu." }];
-
-  const db = createServiceSupabaseClient();
-  const table = kind === "medical_exam" ? "medical_exams" : kind === "safety_training" ? "safety_trainings" : "qualifications";
-  const { data: existing } = await db.from(table).select("id").eq("workspace_id", input.workspaceId).eq("employee_id", input.employeeId).eq("document_id", input.documentId).limit(1).maybeSingle<{ id: string }>();
-  if (existing) return [{ kind, detected: true, created: false, id: existing.id, issuedAt: dates.issuedAt, validUntil: dates.validUntil, reason: "Rekord formalny dla tego dokumentu już istnieje." }];
-
-  let row: Record<string, unknown>;
-  if (kind === "medical_exam") {
-    const result = normalize(input.rawContent).includes("niezdoln") ? "unfit" : normalize(input.rawContent).includes("ograniczen") ? "fit_with_restrictions" : "valid";
-    const examType = normalize(input.rawContent).includes("wstepn") ? "Wstępne" : normalize(input.rawContent).includes("kontroln") ? "Kontrolne" : "Okresowe";
-    row = { workspace_id: input.workspaceId, employee_id: input.employeeId, exam_type: examType, examined_at: dates.issuedAt, valid_until: dates.validUntil, status: result, document_id: input.documentId };
-  } else if (kind === "safety_training") {
-    if (!dates.issuedAt) return [{ kind, detected: true, created: false, validUntil: dates.validUntil, reason: "Odczytano ważność BHP, ale nie datę szkolenia — wymagana jest decyzja człowieka." }];
-    const content = normalize(input.rawContent);
-    const trainingType = content.includes("instruktaz stanowisk") ? "Instruktaż stanowiskowy" : content.includes("wstepn") ? "Wstępne" : "Okresowe";
-    row = { workspace_id: input.workspaceId, employee_id: input.employeeId, training_type: trainingType, provider: findFactText(input.payload, ["organizator", "provider", "prowadzący", "prowadzacy"]), completed_at: dates.issuedAt, valid_until: dates.validUntil, status: "valid", document_id: input.documentId, notes: "Utworzono automatycznie z OCR/Octopus Brain." };
-  } else {
-    row = { workspace_id: input.workspaceId, employee_id: input.employeeId, qualification_type: input.classified.type, number: findFactText(input.payload, ["numer", "certificate number", "nr uprawnienia", "nr certyfikatu"]), issued_at: dates.issuedAt, valid_until: dates.validUntil, status: "valid", document_id: input.documentId };
-  }
-  const { data: created, error } = await db.from(table).insert(row).select("id").single<{ id: string }>();
-  if (error || !created) throw error ?? new Error("Nie udało się utworzyć rekordu formalnego z OCR.");
-  await audit({ workspaceId: input.workspaceId, actorId: input.actorId, eventType: `hr.${kind}_created_from_document`, entityType: kind, entityId: created.id, value: { employeeId: input.employeeId, documentId: input.documentId, issuedAt: dates.issuedAt, validUntil: dates.validUntil, documentType: input.classified.type } });
-  return [{ kind, detected: true, created: true, id: created.id, issuedAt: dates.issuedAt, validUntil: dates.validUntil }];
-}
-
-export async function processHrDocumentIntake(input: { workspaceId: string; documentId: string; actorId?: string | null }): Promise<HrDocumentIntakeResult> {
-  const db = createServiceSupabaseClient();
-  const [{ data: document, error: documentError }, { data: extraction, error: extractionError }, { data: employees, error: employeesError }] = await Promise.all([
-    db.from("documents").select("id,name,category").eq("workspace_id", input.workspaceId).eq("id", input.documentId).maybeSingle<{ id: string; name: string; category: string | null }>(),
-    db.from("document_extractions").select("payload,confidence").eq("workspace_id", input.workspaceId).eq("document_id", input.documentId).eq("extraction_type", "document_context").order("created_at", { ascending: false }).limit(1).maybeSingle<ExtractionRow>(),
-    db.from("employees").select("id,employee_number,first_name,last_name,email,phone").eq("workspace_id", input.workspaceId).eq("status", "active").returns<EmployeeRow[]>()
-  ]);
-  if (documentError || !document) return { attempted: true, matched: false, reason: "Nie znaleziono dokumentu w aktywnej firmie." };
-  if (extractionError || !extraction?.payload) return { attempted: true, matched: false, reason: "OCR/Brain nie przygotował jeszcze danych dokumentu." };
-  if (employeesError || !employees?.length) return { attempted: true, matched: false, reason: "Brak aktywnych pracowników do dopasowania." };
-
-  const payload = extraction.payload;
-  const rawContent = `${document.name} ${JSON.stringify(payload)}`;
-  const normalizedContent = normalize(rawContent);
-  const ranked = employees.map((employee) => scoreEmployee(employee, normalizedContent, compactDigits(rawContent))).sort((a, b) => b.score - a.score);
-  const top = ranked[0]; const second = ranked[1];
-  if (!top || top.score < 0.78) return { attempted: true, matched: false, reason: "Nie znaleziono danych pozwalających przypisać dokument do pracownika." };
-  if (second && second.score >= top.score - 0.04) return { attempted: true, matched: false, reason: "Dokument pasuje do więcej niż jednego pracownika — wymaga wskazania osoby." };
-
-  const classified = classifyDocument(payload, normalizedContent);
-  const extractionConfidence = Number.isFinite(Number(extraction.confidence)) ? Number(extraction.confidence) : 0.75;
-  const confidence = Math.min(1, Math.max(top.score, extractionConfidence));
-  const explanation = `Automatycznie dopasowano dokument do ${employeeName(top.employee)} na podstawie: ${top.reason}. Rozpoznany typ: ${classified.type}.`;
-  const { data: existingLink } = await db.from("employee_documents").select("id").eq("workspace_id", input.workspaceId).eq("employee_id", top.employee.id).eq("document_id", input.documentId).maybeSingle<{ id: string }>();
-  let employeeDocumentId = existingLink?.id;
-  if (!employeeDocumentId) {
-    const dates = ["medical", "safety", "qualification"].includes(classified.kind) ? extractComplianceDates(payload, rawContent) : null;
-    const { data: link, error: linkError } = await db.from("employee_documents").insert({ workspace_id: input.workspaceId, employee_id: top.employee.id, document_id: input.documentId, document_type: classified.type, issued_at: dates?.issuedAt ?? null, valid_until: dates?.validUntil ?? null, source: "ai_suggestion", ai_confidence: confidence, ai_explanation: explanation, created_by: input.actorId ?? null }).select("id").single<{ id: string }>();
-    if (linkError || !link) throw linkError ?? new Error("Nie udało się automatycznie powiązać dokumentu z pracownikiem.");
-    employeeDocumentId = link.id;
-    await audit({ workspaceId: input.workspaceId, actorId: input.actorId, eventType: "hr.employee_document_auto_assigned", entityType: "employee_document", entityId: link.id, value: { employeeId: top.employee.id, documentId: input.documentId, documentType: classified.type, confidence, reason: top.reason } });
-  }
-
-  const result: HrDocumentIntakeResult = { attempted: true, matched: true, employeeId: top.employee.id, employeeName: employeeName(top.employee), confidence, documentType: classified.type, employeeDocumentId };
-  result.complianceRecords = await createComplianceFromDocument({ workspaceId: input.workspaceId, actorId: input.actorId, documentId: input.documentId, employeeId: top.employee.id, classified, payload, rawContent, employeeScore: top.score, extractionConfidence });
-  if (classified.kind !== "leave") return result;
-
-  const dates = extractLeaveDates(payload, rawContent);
-  const leaveType = classifyLeaveType(normalizedContent);
-  if (!dates.dateFrom || !dates.dateTo) { result.leaveRequest = { detected: true, created: false, leaveType, reason: "Rozpoznano wniosek urlopowy, ale nie udało się jednoznacznie odczytać obu dat." }; return result; }
-  if (dates.dateTo < dates.dateFrom) { result.leaveRequest = { detected: true, created: false, leaveType, dateFrom: dates.dateFrom, dateTo: dates.dateTo, reason: "Daty urlopu wymagają weryfikacji." }; return result; }
-  if (top.score < 0.9 || dates.confidence < 0.9) { result.leaveRequest = { detected: true, created: false, leaveType, dateFrom: dates.dateFrom, dateTo: dates.dateTo, reason: "Wniosek przypisano do pracownika, ale daty lub osoba wymagają potwierdzenia przed utworzeniem wpisu urlopowego." }; return result; }
-  const days = countPolishWorkingDays(dates.dateFrom, dates.dateTo);
-  if (days <= 0) { result.leaveRequest = { detected: true, created: false, leaveType, dateFrom: dates.dateFrom, dateTo: dates.dateTo, reason: "W rozpoznanym zakresie nie ma dni roboczych." }; return result; }
-  const { data: existingLeave } = await db.from("leave_requests").select("id").eq("workspace_id", input.workspaceId).eq("employee_id", top.employee.id).eq("leave_type", leaveType).eq("date_from", dates.dateFrom).eq("date_to", dates.dateTo).limit(1).maybeSingle<{ id: string }>();
-  if (existingLeave) { result.leaveRequest = { detected: true, created: false, id: existingLeave.id, leaveType, dateFrom: dates.dateFrom, dateTo: dates.dateTo, days, reason: "Taki wniosek urlopowy już istnieje." }; return result; }
-  const { data: leave, error: leaveError } = await db.from("leave_requests").insert({ workspace_id: input.workspaceId, employee_id: top.employee.id, leave_type: leaveType, date_from: dates.dateFrom, date_to: dates.dateTo, days, status: "pending" }).select("id").single<{ id: string }>();
-  if (leaveError || !leave) throw leaveError ?? new Error("Nie udało się utworzyć wniosku urlopowego z OCR.");
-  result.leaveRequest = { detected: true, created: true, id: leave.id, leaveType, dateFrom: dates.dateFrom, dateTo: dates.dateTo, days };
-  await audit({ workspaceId: input.workspaceId, actorId: input.actorId, eventType: "hr.leave_created_from_document", entityType: "leave_request", entityId: leave.id, value: { employeeId: top.employee.id, documentId: input.documentId, leaveType, dateFrom: dates.dateFrom, dateTo: dates.dateTo, days, confidence } });
-  return result;
-}
+export async function processHrDocumentIntake(input:{workspaceId:string;documentId:string;actorId?:string|null}):Promise<HrDocumentIntakeResult>{const db=createServiceSupabaseClient();const[{data:document,error:documentError},{data:extraction,error:extractionError},{data:employees,error:employeesError}]=await Promise.all([db.from("documents").select("id,name,category").eq("workspace_id",input.workspaceId).eq("id",input.documentId).maybeSingle<{id:string;name:string;category:string|null}>(),db.from("document_extractions").select("payload,confidence").eq("workspace_id",input.workspaceId).eq("document_id",input.documentId).eq("extraction_type","document_context").order("created_at",{ascending:false}).limit(1).maybeSingle<ExtractionRow>(),db.from("employees").select("id,employee_number,first_name,last_name,email,phone").eq("workspace_id",input.workspaceId).eq("status","active").returns<EmployeeRow[]>()]);if(documentError||!document)return{attempted:true,matched:false,reason:"Nie znaleziono dokumentu w aktywnej firmie."};if(document.category==="template")return{attempted:true,matched:false,reason:"Wzór dokumentu pozostaje źródłem wiedzy i nie jest przypisywany do kartoteki pracownika."};if(extractionError||!extraction?.payload)return{attempted:true,matched:false,reason:"OCR/Brain nie przygotował jeszcze danych dokumentu."};if(employeesError||!employees?.length)return{attempted:true,matched:false,reason:"Brak aktywnych pracowników do dopasowania."};const payload=extraction.payload,rawContent=`${document.name} ${JSON.stringify(payload)}`,normalizedContent=normalize(rawContent),ranked=employees.map((employee)=>scoreEmployee(employee,normalizedContent,compactDigits(rawContent))).sort((a,b)=>b.score-a.score),top=ranked[0],second=ranked[1];if(!top||top.score<.78)return{attempted:true,matched:false,reason:"Nie znaleziono danych pozwalających przypisać dokument do pracownika."};if(second&&second.score>=top.score-.04)return{attempted:true,matched:false,reason:"Dokument pasuje do więcej niż jednego pracownika — wymaga wskazania osoby."};const classified=classifyDocument(payload,normalizedContent),extractionConfidence=Number.isFinite(Number(extraction.confidence))?Number(extraction.confidence):.75,confidence=Math.min(1,Math.max(top.score,extractionConfidence)),explanation=`Automatycznie dopasowano dokument do ${employeeName(top.employee)} na podstawie: ${top.reason}. Rozpoznany typ: ${classified.type}.`;const{data:existingLink}=await db.from("employee_documents").select("id").eq("workspace_id",input.workspaceId).eq("employee_id",top.employee.id).eq("document_id",input.documentId).maybeSingle<{id:string}>();let employeeDocumentId=existingLink?.id;if(!employeeDocumentId){const dates=["medical","safety","qualification"].includes(classified.kind)?extractComplianceDates(payload,rawContent):null;const{data:link,error:linkError}=await db.from("employee_documents").insert({workspace_id:input.workspaceId,employee_id:top.employee.id,document_id:input.documentId,document_type:classified.type,issued_at:dates?.issuedAt??null,valid_until:dates?.validUntil??null,source:"ai_suggestion",ai_confidence:confidence,ai_explanation:explanation,created_by:input.actorId??null}).select("id").single<{id:string}>();if(linkError||!link)throw linkError??new Error("Nie udało się automatycznie powiązać dokumentu z pracownikiem.");employeeDocumentId=link.id;await audit({workspaceId:input.workspaceId,actorId:input.actorId,eventType:"hr.employee_document_auto_assigned",entityType:"employee_document",entityId:link.id,value:{employeeId:top.employee.id,documentId:input.documentId,documentType:classified.type,confidence,reason:top.reason}});}const result:HrDocumentIntakeResult={attempted:true,matched:true,employeeId:top.employee.id,employeeName:employeeName(top.employee),confidence,documentType:classified.type,employeeDocumentId};result.complianceRecords=await createComplianceFromDocument({workspaceId:input.workspaceId,actorId:input.actorId,documentId:input.documentId,employeeId:top.employee.id,classified,payload,rawContent,employeeScore:top.score,extractionConfidence});if(classified.kind!=="leave")return result;const dates=extractLeaveDates(payload,rawContent),leaveType=classifyLeaveType(normalizedContent);if(!dates.dateFrom||!dates.dateTo){result.leaveRequest={detected:true,created:false,leaveType,reason:"Rozpoznano wniosek urlopowy, ale nie udało się jednoznacznie odczytać obu dat."};return result;}if(dates.dateTo<dates.dateFrom){result.leaveRequest={detected:true,created:false,leaveType,dateFrom:dates.dateFrom,dateTo:dates.dateTo,reason:"Daty urlopu wymagają weryfikacji."};return result;}if(top.score<.9||dates.confidence<.9){result.leaveRequest={detected:true,created:false,leaveType,dateFrom:dates.dateFrom,dateTo:dates.dateTo,reason:"Wniosek przypisano do pracownika, ale daty lub osoba wymagają potwierdzenia przed utworzeniem wpisu urlopowego."};return result;}const days=countPolishWorkingDays(dates.dateFrom,dates.dateTo);if(days<=0){result.leaveRequest={detected:true,created:false,leaveType,dateFrom:dates.dateFrom,dateTo:dates.dateTo,reason:"W rozpoznanym zakresie nie ma dni roboczych."};return result;}const{data:existingLeave}=await db.from("leave_requests").select("id").eq("workspace_id",input.workspaceId).eq("employee_id",top.employee.id).eq("leave_type",leaveType).eq("date_from",dates.dateFrom).eq("date_to",dates.dateTo).limit(1).maybeSingle<{id:string}>();if(existingLeave){result.leaveRequest={detected:true,created:false,id:existingLeave.id,leaveType,dateFrom:dates.dateFrom,dateTo:dates.dateTo,days,reason:"Taki wniosek urlopowy już istnieje."};return result;}const{data:leave,error:leaveError}=await db.from("leave_requests").insert({workspace_id:input.workspaceId,employee_id:top.employee.id,leave_type:leaveType,date_from:dates.dateFrom,date_to:dates.dateTo,days,status:"pending"}).select("id").single<{id:string}>();if(leaveError||!leave)throw leaveError??new Error("Nie udało się utworzyć wniosku urlopowego z OCR.");result.leaveRequest={detected:true,created:true,id:leave.id,leaveType,dateFrom:dates.dateFrom,dateTo:dates.dateTo,days};await audit({workspaceId:input.workspaceId,actorId:input.actorId,eventType:"hr.leave_created_from_document",entityType:"leave_request",entityId:leave.id,value:{employeeId:top.employee.id,documentId:input.documentId,leaveType,dateFrom:dates.dateFrom,dateTo:dates.dateTo,days,confidence}});return result;}
