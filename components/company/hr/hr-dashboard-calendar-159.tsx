@@ -31,6 +31,16 @@ function fullName(row: Row) { return `${String(row.first_name ?? "")} ${String(r
 function inRange(date: string, from: unknown, to: unknown) { return (from ? String(from).slice(0, 10) : "0000-01-01") <= date && date <= (to ? String(to).slice(0, 10) : "9999-12-31"); }
 function employedOn(employee: Row, date: string) { const hiredAt = employee.hired_at ? String(employee.hired_at).slice(0, 10) : "0000-01-01"; const terminatedAt = employee.terminated_at ? String(employee.terminated_at).slice(0, 10) : "9999-12-31"; if (date < hiredAt || date > terminatedAt) return false; if (!employee.hired_at && !employee.terminated_at && employee.status && employee.status !== "active") return false; return true; }
 function formatHours(value: number) { return new Intl.NumberFormat("pl-PL", { maximumFractionDigits: 1 }).format(value); }
+function workApprovalLabel(sheets: Row[]) {
+  if (!sheets.length) return "Do zatwierdzenia";
+  const statuses = sheets.map((row) => String(row.status ?? "submitted"));
+  const approved = statuses.filter((status) => status === "approved").length;
+  const rejected = statuses.filter((status) => status === "rejected").length;
+  if (approved === statuses.length) return "Zatwierdzony";
+  if (rejected === statuses.length) return "Odrzucony";
+  if (approved > 0) return "Częściowo zatwierdzone";
+  return "Do zatwierdzenia";
+}
 
 export function HrDashboardCalendar159({ workspaceId, canWrite, data, onOpenEmployeeCalendar }: { workspaceId: string; canWrite: boolean; data: CalendarData; onOpenEmployeeCalendar?: (employeeId: string, referenceDate: string) => void }) {
   const reference = useMemo(() => parseIso(data.referenceDate), [data.referenceDate]);
@@ -80,7 +90,7 @@ export function HrDashboardCalendar159({ workspaceId, canWrite, data, onOpenEmpl
     const location = projectIds.map((id) => projectNames.get(id) ?? "Inwestycja").join(" / ") || "Brak przypisania";
     if (leaves.length && (hours > 0 || overtime > 0)) return { employee, name: fullName(employee), status: "conflict", statusLabel: "Urlop + wpis czasu", location, hours, overtime };
     if (leaves.length) { const label = leaveLabels[String(leaves[0].leave_type ?? "other")] ?? "Nieobecność"; return { employee, name: fullName(employee), status: "absence", statusLabel: label, location: label, hours: 0, overtime: 0 }; }
-    if (hours > 0 || overtime > 0) return { employee, name: fullName(employee), status: "work", statusLabel: "Praca", location, hours, overtime };
+    if (hours > 0 || overtime > 0) return { employee, name: fullName(employee), status: "work", statusLabel: `Praca · ${workApprovalLabel(sheets)}`, location, hours, overtime };
     return { employee, name: fullName(employee), status: "missing", statusLabel: assignmentProjectIds.length ? "Brak wpisu czasu" : "Brak danych", location: assignmentProjectIds.length ? location : "Brak przypisania", hours: 0, overtime: 0 };
   }, [approvedLeaveIndex, assignmentIds, employeeEntries, projectNames, teamProjects]);
 
