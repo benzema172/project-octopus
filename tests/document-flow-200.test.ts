@@ -22,6 +22,21 @@ describe("Document Flow 2.0", () => {
     expect(upload).toContain("Dokończ routing");
   });
 
+  it("shows where templates are stored and where they will actually be used", () => {
+    const loader = source("lib/data/documents.ts");
+    expect(loader).toContain("destinationForDocument");
+    expect(loader).toContain("Octopus Brain → Wzory · użycie:");
+    expect(loader).toContain("Kadry → Urlopy i absencje · generowanie wniosków urlopowych");
+    expect(loader).toContain("Inwestycja → Protokoły · generowanie protokołów i odbiorów");
+  });
+
+  it("visually distinguishes the upload entry from the document library", () => {
+    const css = source("components/documents/document-flow-200.module.css");
+    expect(css).toContain("#cbbdff");
+    expect(css).toContain("linear-gradient(90deg,#f3edff");
+    expect(css).toContain("background:#e8ddff");
+  });
+
   it("loads a compact read model and can reconcile an approved template", () => {
     const loader = source("lib/data/documents.ts");
     const processRoute = source("app/api/brain/process/route.ts");
