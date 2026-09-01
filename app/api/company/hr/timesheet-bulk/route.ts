@@ -22,8 +22,14 @@ type Body = {
   mode?: "fill_missing" | "replace_single";
 };
 
-type Existing = { id: string; employee_id: string; work_date: string; status: string | null };
-type Leave = { employee_id: string; date_from: string; date_to: string; status: string };
+type BulkResult = {
+  inserted?: number;
+  updated?: number;
+  skippedExisting?: number;
+  skippedLeave?: number;
+  skippedConflict?: number;
+  affected?: number;
+};
 
 function dateRange(from: string, to: string) {
   const result: string[] = [];
@@ -40,10 +46,6 @@ function numberValue(value: unknown, label: string) {
   const parsed = parseLocalizedNumber((value ?? 0) as string | number);
   if (!Number.isFinite(parsed)) throw new Error(`Nieprawidłowa wartość: ${label}.`);
   return parsed;
-}
-
-function overlaps(date: string, leave: Leave) {
-  return leave.status === "approved" && leave.date_from.slice(0, 10) <= date && date <= leave.date_to.slice(0, 10);
 }
 
 export async function POST(request: Request) {
@@ -68,7 +70,8 @@ export async function POST(request: Request) {
   if (!workspaceId || !employeeIds.length || employeeIds.length > 50 || !isIsoDate(from) || !isIsoDate(to) || from > to) {
     return NextResponse.json({ error: "Podaj firmę, 1–50 pracowników i poprawny zakres dat." }, { status: 400 });
   }
-  const dates = dateRange(from, to).filter((date) => !weekdaysOnly || isPolishWorkingDay(date));
+  const dates = dateRange(from, to).filter((value) => !weekdaysOnly || isPolishWorkingDay(value));
+  if (!dates.length) return NextResponse.json({ error: "Wybrany zakres nie zawiera dni do zapisania." }, { status: 400 });
   if (dates.length > 62) return NextResponse.json({ error: "Jedna operacja masowa może objąć maksymalnie 62 dni robocze/kalendarzowe." }, { status: 400 });
 
   const hours = numberValue(body.hours, "godziny");
@@ -81,107 +84,26 @@ export async function POST(request: Request) {
   if (!canWrite) return NextResponse.json({ error: "Brak uprawnienia do zapisu czasu pracy." }, { status: 403 });
 
   const db = createServiceSupabaseClient();
-  const { data: ownedEmployees, error: employeesError } = await db.from("employees").select("id").eq("workspace_id", workspace.id).in("id", employeeIds);
-  if (employeesError) return NextResponse.json({ error: employeesError.message }, { status: 400 });
-  if ((ownedEmployees ?? []).length !== employeeIds.length) return NextResponse.json({ error: "Co najmniej jeden pracownik nie należy do aktywnej firmy." }, { status: 400 });
+  const { data, error } = await db.rpc("bulk_apply_hr_timesheets_400", {
+    p_workspace_id: workspace.id,
+    p_actor_id: user.id,
+    p_employee_ids: employeeIds,
+    p_dates: dates,
+    p_project_id: body.projectId || null,
+    p_hours: hours,
+    p_overtime_hours: overtimeHours,
+    p_mode: mode
+  });
+  if (error) return NextResponse.json({ error: `Nie udało się wykonać operacji masowej: ${error.message}` }, { status: 400 });
 
-  let projectId: string | null = null;
-  if (body.projectId) {
-    const { data: project, error } = await db.from("projects").select("id").eq("workspace_id", workspace.id).eq("id", body.projectId).maybeSingle<{ id: string }>();
-    if (error || !project) return NextResponse.json({ error: "Wybrana inwestycja nie należy do aktywnej firmy." }, { status: 400 });
-    projectId = String(project.id);
-  }
-
-  const [{ data: existingRows, error: existingError }, { data: leaveRows, error: leaveError }] = await Promise.all([
-    db.from("timesheets").select("id,employee_id,work_date,status").eq("workspace_id", workspace.id).in("employee_id", employeeIds).gte("work_date", from).lte("work_date", to).order("work_date"),
-    db.from("leave_requests").select("employee_id,date_from,date_to,status").eq("workspace_id", workspace.id).in("employee_id", employeeIds).eq("status", "approved").lte("date_from", to).gte("date_to", from)
-  ]);
-  if (existingError) return NextResponse.json({ error: existingError.message }, { status: 400 });
-  if (leaveError) return NextResponse.json({ error: leaveError.message }, { status: 400 });
-
-  const existingByDay = new Map<string, Existing[]>();
-  for (const row of (existingRows ?? []) as Existing[]) {
-    const key = `${row.employee_id}|${String(row.work_date).slice(0, 10)}`;
-    existingByDay.set(key, [...(existingByDay.get(key) ?? []), row]);
-  }
-  const leavesByEmployee = new Map<string, Leave[]>();
-  for (const row of (leaveRows ?? []) as Leave[]) leavesByEmployee.set(String(row.employee_id), [...(leavesByEmployee.get(String(row.employee_id)) ?? []), row]);
-
-  const inserts: Array<Record<string, unknown>> = [];
-  const updateIds: string[] = [];
-  let skippedExisting = 0;
-  let skippedLeave = 0;
-  let skippedConflict = 0;
-
-  for (const employeeId of employeeIds) {
-    for (const workDate of dates) {
-      if ((leavesByEmployee.get(employeeId) ?? []).some((leave) => overlaps(workDate, leave))) {
-        skippedLeave += 1;
-        continue;
-      }
-      const existing = existingByDay.get(`${employeeId}|${workDate}`) ?? [];
-      if (mode === "fill_missing" && existing.length) {
-        skippedExisting += 1;
-        continue;
-      }
-      if (mode === "replace_single" && existing.length > 1) {
-        skippedConflict += 1;
-        continue;
-      }
-      if (mode === "replace_single" && existing.length === 1) {
-        updateIds.push(existing[0].id);
-        continue;
-      }
-      inserts.push({
-        workspace_id: workspace.id,
-        employee_id: employeeId,
-        project_id: projectId,
-        team_id: null,
-        work_date: workDate,
-        hours,
-        overtime_hours: overtimeHours,
-        status: "submitted",
-        approved_by: null,
-        approved_at: null,
-        source: "bulk_time_400",
-        work_type: "regular"
-      });
-    }
-  }
-
-  try {
-    if (updateIds.length) {
-      const { error } = await db.from("timesheets").update({
-        project_id: projectId,
-        team_id: null,
-        hours,
-        overtime_hours: overtimeHours,
-        status: "submitted",
-        approved_by: null,
-        approved_at: null,
-        source: "bulk_time_400",
-        work_type: "regular",
-        wbs_node_id: null,
-        cost_code: null,
-        work_scope: null
-      }).eq("workspace_id", workspace.id).in("id", updateIds);
-      if (error) throw error;
-    }
-    if (inserts.length) {
-      const { error } = await db.from("timesheets").insert(inserts);
-      if (error) throw error;
-    }
-    await db.from("audit_events").insert({
-      workspace_id: workspace.id,
-      actor_id: user.id,
-      actor_type: "user",
-      event_type: "hr.timesheet_bulk_applied",
-      entity_type: "timesheet_bulk",
-      entity_id: `${from}:${to}`,
-      after_value: { employeeIds, from, to, projectId, hours, overtimeHours, weekdaysOnly, mode, inserted: inserts.length, updated: updateIds.length, skippedExisting, skippedLeave, skippedConflict }
-    });
-    return NextResponse.json({ ok: true, inserted: inserts.length, updated: updateIds.length, skippedExisting, skippedLeave, skippedConflict, affected: inserts.length + updateIds.length });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Nie udało się wykonać operacji masowej." }, { status: 400 });
-  }
+  const result = (data ?? {}) as BulkResult;
+  return NextResponse.json({
+    ok: true,
+    inserted: Number(result.inserted ?? 0),
+    updated: Number(result.updated ?? 0),
+    skippedExisting: Number(result.skippedExisting ?? 0),
+    skippedLeave: Number(result.skippedLeave ?? 0),
+    skippedConflict: Number(result.skippedConflict ?? 0),
+    affected: Number(result.affected ?? 0)
+  });
 }
