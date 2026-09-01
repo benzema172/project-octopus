@@ -92,7 +92,7 @@ describe("HR Core 3.0 architecture contracts", () => {
 
   it("feeds only high-confidence OCR documents into formal HR registers", () => {
     expect(intelligence).toContain("createComplianceFromDocument"); expect(intelligence).toContain("medical_exams"); expect(intelligence).toContain("safety_trainings"); expect(intelligence).toContain("qualifications");
-    expect(intelligence).toMatch(/employeeScore\s*>=\s*0\.93/); expect(intelligence).toMatch(/dates\.confidence\s*>=\s*0\.9/); expect(intelligence).toContain("document_id");
+    expect(intelligence).toMatch(/employeeScore\s*>=\s*(?:0?\.)93/); expect(intelligence).toMatch(/dates\.confidence\s*>=\s*(?:0?\.)9/); expect(intelligence).toContain("document_id");
   });
 
   it("keeps templates out of HR employee routing and rejects short employee numbers as strong identifiers", () => {
