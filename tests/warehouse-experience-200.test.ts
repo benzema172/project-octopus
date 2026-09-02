@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("Warehouse 2.0 product experience", () => {
-  it("opens with a real dashboard instead of hiding the module behind small tabs", () => {
+  it("exposes the full Warehouse dashboard and operational areas", () => {
     const component = read("components/company/warehouse-command-center.tsx");
     expect(component).toContain('data-warehouse-experience="2.0"');
     expect(component).toContain('"dashboard" | "stock" | "ai" | "movements"');
@@ -15,6 +15,13 @@ describe("Warehouse 2.0 product experience", () => {
     expect(component).toContain("Sprzęt i urządzenia");
     expect(component).toContain("Ceny i dostawcy");
     expect(component).toContain("Lokalizacje i aliasy");
+  });
+
+  it("keeps Warehouse area panels collapsed by default and lets the active tile collapse again", () => {
+    const component = read("components/company/warehouse-command-center.tsx");
+    expect(component).toContain("useState<Tab | null>(null)");
+    expect(component).toContain("current === item.id ? null : item.id");
+    expect(component).toContain("aria-expanded={tab === item.id}");
   });
 
   it("has a useful empty-state onboarding path for a new company", () => {
