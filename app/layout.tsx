@@ -5,6 +5,7 @@ import "./release-badge.css";
 import "./unified-ux-simplification.css";
 import "./unified-ux-finalization.css";
 import "./equal-height-audit.css";
+import "./warehouse-kpi-compact.css";
 
 export const metadata: Metadata = {
   title: "Project Octopus",
