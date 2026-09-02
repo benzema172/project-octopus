@@ -19,6 +19,13 @@ describe("Warehouse compact KPI density", () => {
     expect(css).toContain(":not(.ops-workspace--finance)");
   });
 
+  it("shows all Warehouse KPI cards immediately on desktop", () => {
+    const css = read("app/warehouse-kpi-compact.css");
+    expect(css).toContain("> summary {\n    display: none !important;");
+    expect(css).toContain("display: grid !important;");
+    expect(css).toContain("all five extra indicators are visible by default");
+  });
+
   it("Warehouse keeps six primary and five secondary metrics", () => {
     const warehouse = read("components/company/operations/warehouse-operations.tsx");
     expect(warehouse).toContain("primaryMetricCount={6}");
