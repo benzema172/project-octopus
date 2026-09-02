@@ -12,10 +12,11 @@ function escapeHtml(value: string) {
 
 function applyCityToPreview(root: HTMLElement | null, city: string) {
   if (!root || !city) return;
+  const locationDate = `${city}, ${new Date().toLocaleDateString("pl-PL")}`;
   for (const label of root.querySelectorAll<HTMLElement>("small")) {
     if ((label.textContent ?? "").trim() !== "(miejscowość i data)") continue;
     const line = label.previousElementSibling as HTMLElement | null;
-    if (line) line.textContent = `${city}, ${new Date().toLocaleDateString("pl-PL")}`;
+    if (line && line.textContent !== locationDate) line.textContent = locationDate;
   }
 }
 
