@@ -6,6 +6,7 @@ import "./unified-ux-simplification.css";
 import "./unified-ux-finalization.css";
 import "./equal-height-audit.css";
 import "./warehouse-kpi-compact.css";
+import "./warehouse-navigation-refinement.css";
 
 export const metadata: Metadata = {
   title: "Project Octopus",
