@@ -1,6 +1,6 @@
 /* Project Octopus — compact Warehouse KPI strip, 2026-09-02.
-   Warehouse exposes 6 primary + 5 secondary KPIs. On desktop the cards should occupy
-   exactly two visual rows (6 + 5), while narrower screens keep safe responsive wrapping. */
+   Warehouse exposes 6 primary + 5 secondary KPIs. On desktop all cards are visible
+   immediately in exactly two visual rows (6 + 5), while narrower screens keep safe wrapping. */
 
 /* First Warehouse KPI row: all six operational cards in one line. */
 .ops-workspace--paged:not(.ops-workspace--finance)
@@ -65,32 +65,39 @@
   line-height: 1.08;
 }
 
-/* Second Warehouse KPI row: all five extra indicators in one line. */
-.ops-workspace--paged:not(.ops-workspace--finance):has(
-    > .ops-metrics--primary > .ops-metric:nth-child(6):last-child
-  )
-  > .ops-secondary-metrics {
-  margin-top: -6px;
-}
+/* Second Warehouse KPI row: all five extra indicators are visible by default.
+   Remove the disclosure bar/chrome so the two KPI rows read as one compact dashboard. */
+@media (min-width: 1181px) {
+  .ops-workspace--paged:not(.ops-workspace--finance):has(
+      > .ops-metrics--primary > .ops-metric:nth-child(6):last-child
+    )
+    > .ops-secondary-metrics {
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+  }
 
-.ops-workspace--paged:not(.ops-workspace--finance):has(
-    > .ops-metrics--primary > .ops-metric:nth-child(6):last-child
-  )
-  > .ops-secondary-metrics
-  > summary {
-  min-height: 30px;
-  padding: 5px 10px;
-  font-size: 11px;
-}
+  .ops-workspace--paged:not(.ops-workspace--finance):has(
+      > .ops-metrics--primary > .ops-metric:nth-child(6):last-child
+    )
+    > .ops-secondary-metrics
+    > summary {
+    display: none !important;
+  }
 
-.ops-workspace--paged:not(.ops-workspace--finance):has(
-    > .ops-metrics--primary > .ops-metric:nth-child(6):last-child
-  )
-  > .ops-secondary-metrics
-  > .ops-metrics:has(> .ops-metric:nth-child(5):last-child) {
-  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
-  gap: 8px !important;
-  padding: 8px !important;
+  .ops-workspace--paged:not(.ops-workspace--finance):has(
+      > .ops-metrics--primary > .ops-metric:nth-child(6):last-child
+    )
+    > .ops-secondary-metrics
+    > .ops-metrics:has(> .ops-metric:nth-child(5):last-child) {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
 }
 
 /* Tablet: preserve readability over forcing the desktop two-row density. */
