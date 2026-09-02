@@ -39,6 +39,7 @@ describe("Warehouse 1.7.0 implementation contract", () => {
   const route = read("app/api/company/warehouse-atomic/route.ts");
   const recordsRoute = read("app/api/company/records/route.ts");
   const uxCss = read("app/unified-ux-simplification.css");
+  const densityCss = read("app/layout-density-audit.css");
   const migration = read("supabase/migrations/20260901210000_warehouse_170_complete.sql");
 
   it("renders AI imports and uses movement lines for item history", () => {
@@ -66,6 +67,10 @@ describe("Warehouse 1.7.0 implementation contract", () => {
     expect(uxCss).toContain("grid-template-columns: minmax(0, 1fr)");
     expect(uxCss).toContain("overflow-wrap: normal");
     expect(uxCss).toContain("white-space: nowrap");
+    expect(densityCss).toContain(".octopus-app-light .ops-metric");
+    expect(densityCss).toContain("grid-template-columns: minmax(0, 1fr) !important");
+    expect(densityCss).toContain(".ops-workspace:not(.ops-workspace--finance) .ops-metrics--primary");
+    expect(densityCss).toContain("grid-template-columns: repeat(3, minmax(0, 1fr)) !important");
   });
 
   it("requires approval for physical stock and inventory truth", () => {

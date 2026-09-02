@@ -174,6 +174,30 @@
   min-height: 88px !important;
 }
 
+/* The legacy article rule has two columns for an optional icon. Current KPI
+   cards have no icon, so keep every text row at full width in the late audit
+   layer that wins the authenticated workspace cascade. */
+.octopus-app-light .ops-metric {
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-auto-flow: row;
+  align-content: start;
+  gap: 3px;
+}
+
+.octopus-app-light .ops-metric > :is(small, strong, p) {
+  grid-column: 1;
+  min-width: 0;
+}
+
+.octopus-app-light .ops-metric strong {
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.octopus-app-light .ops-workspace:not(.ops-workspace--finance) .ops-metrics--primary {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
 .octopus-app-light :is(.co-metric-grid, .ops-metrics) {
   margin-bottom: 0 !important;
 }
@@ -374,6 +398,7 @@
 
 /* Responsive audit contracts. */
 @media (max-width: 1050px) {
+  .octopus-app-light .ops-workspace:not(.ops-workspace--finance) .ops-metrics--primary,
   .octopus-app-light .ops-metrics-grid,
   .octopus-app-light .ops-auto-form-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
@@ -400,6 +425,7 @@
     padding: 12px 10px 88px !important;
   }
 
+  .octopus-app-light .ops-workspace:not(.ops-workspace--finance) .ops-metrics--primary,
   .octopus-app-light .ops-metrics-grid,
   .octopus-app-light .ops-auto-form-grid {
     grid-template-columns: 1fr !important;
