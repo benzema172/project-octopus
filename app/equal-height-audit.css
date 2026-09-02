@@ -12,6 +12,23 @@
   min-height: 0;
 }
 
+/* HR dashboard: use exactly the same six-column geometry as the KPI row above.
+   The action panels occupy 4/6 + 2/6 columns so their shared edge lands on the
+   same vertical guide as the KPI cards (between KPI 4 and KPI 5). */
+[data-equal-height-row="hr-dashboard-actions"] {
+  display: grid !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+}
+
+[data-equal-height-row="hr-dashboard-actions"] > [data-equal-height-card]:first-child {
+  grid-column: span 4;
+}
+
+[data-equal-height-row="hr-dashboard-actions"] > [data-equal-height-card]:last-child {
+  grid-column: span 2;
+}
+
 /* Shared operational/company/project grids. */
 :where(
   .ops-metrics,
@@ -50,4 +67,14 @@
 .enterprise-flow-steps > li {
   align-self: stretch;
   min-height: 0;
+}
+
+@media (max-width: 1100px) {
+  [data-equal-height-row="hr-dashboard-actions"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  [data-equal-height-row="hr-dashboard-actions"] > [data-equal-height-card] {
+    grid-column: 1 / -1;
+  }
 }
