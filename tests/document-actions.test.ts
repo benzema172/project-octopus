@@ -6,6 +6,8 @@ function source(path: string) {
   return readFileSync(resolve(process.cwd(), path), "utf8");
 }
 
+const templateFixMigration = "supabase/migrations/20260902074112_fix_template_attention_and_review_state.sql";
+
 describe("company document actions", () => {
   it("opens a stored document through the authorized signed-url endpoint", () => {
     const page = source("app/workspace/companies/[workspaceId]/documents/page.tsx");
@@ -22,7 +24,7 @@ describe("company document actions", () => {
 
 describe("template attention queue", () => {
   it("creates attention only for a real draft template version and routes to the decision inbox", () => {
-    const migration = source("supabase/migrations/20260902074500_fix_template_attention_and_review_state.sql");
+    const migration = source(templateFixMigration);
 
     expect(migration).toContain("tv.status = 'draft'");
     expect(migration).toContain("'template_version'");
@@ -31,7 +33,7 @@ describe("template attention queue", () => {
   });
 
   it("reconciles and synchronizes finalized template review state", () => {
-    const migration = source("supabase/migrations/20260902074500_fix_template_attention_and_review_state.sql");
+    const migration = source(templateFixMigration);
 
     expect(migration).toContain("quarantine_status = 'approved'");
     expect(migration).toContain("template_versions_sync_review_state");
