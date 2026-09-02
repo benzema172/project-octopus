@@ -55,7 +55,7 @@ export function WarehouseCommandCenter({ workspaceId, data, canWrite, canApprove
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("dashboard");
+  const [tab, setTab] = useState<Tab | null>(null);
 
   const items = (data.items as Row[] | undefined) ?? EMPTY_ROWS;
   const warehouses = (data.warehouses as Row[] | undefined) ?? EMPTY_ROWS;
@@ -172,7 +172,7 @@ export function WarehouseCommandCenter({ workspaceId, data, canWrite, canApprove
     </header>
 
     <nav className={styles.moduleGrid} aria-label="Obszary Magazynu" data-equal-height-row="warehouse-modules">
-      {modules.map((item) => <button key={item.id} type="button" className={`${styles.moduleCard} ${tab === item.id ? styles.moduleCardActive : ""} ${item.tone === "warn" ? styles.moduleCardWarn : ""} ${item.tone === "danger" ? styles.moduleCardDanger : ""}`} aria-pressed={tab === item.id} onClick={() => setTab(item.id)} data-equal-height-card>
+      {modules.map((item) => <button key={item.id} type="button" className={`${styles.moduleCard} ${tab === item.id ? styles.moduleCardActive : ""} ${item.tone === "warn" ? styles.moduleCardWarn : ""} ${item.tone === "danger" ? styles.moduleCardDanger : ""}`} aria-pressed={tab === item.id} aria-expanded={tab === item.id} onClick={() => setTab((current) => current === item.id ? null : item.id)} data-equal-height-card>
         <span className={styles.moduleIcon}>{item.icon}</span>
         <span><strong>{item.label}</strong><small>{item.caption}</small></span>
         {item.count !== undefined ? <b>{item.count}</b> : <ArrowRight size={15} />}
