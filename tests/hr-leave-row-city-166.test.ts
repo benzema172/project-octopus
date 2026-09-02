@@ -7,32 +7,43 @@ function source(path: string) {
 }
 
 describe("HR leave employee row interaction", () => {
-  it("treats a click anywhere on a non-interactive employee row as the existing expand action", () => {
+  it("implements whole-row expansion inside the leave component without DOM interception", () => {
+    const leaves = source("components/company/hr/hr-leaves-stable-165.tsx");
+    const css = source("components/company/hr/hr-leaves-stable-165.module.css");
     const workspace = source("components/company/hr/hr-workspace-149.tsx");
-    const css = source("components/company/hr/hr-workspace-149.module.css");
 
-    expect(workspace).toContain('section[data-hr-leaves-165="1"] tbody tr');
-    expect(workspace).toContain('button[aria-expanded]');
-    expect(workspace).toContain("rowToggle.click()");
-    expect(workspace).toContain('target.closest("button,a,input,select,textarea,label")');
-    expect(css).toContain('section[data-hr-leaves-165="1"] tbody tr:has(button[aria-expanded])');
-    expect(css).toContain("cursor:pointer");
+    expect(leaves).toContain("const handleRowClick=(event:MouseEvent<HTMLTableRowElement>)");
+    expect(leaves).toContain("if(!isInteractiveTarget(event.target))toggle()");
+    expect(leaves).toContain("onClick={handleRowClick}");
+    expect(leaves).toContain("onKeyDown={handleRowKey}");
+    expect(leaves).toContain("tabIndex={0}");
+    expect(leaves).toContain('target.closest("button,a,input,select,textarea,label")');
+    expect(css).toContain(".employeeRow{cursor:pointer");
+    expect(css).toContain(".employeeRow:hover");
+    expect(workspace).not.toContain("querySelector");
+    expect(workspace).not.toContain("rowToggle.click()");
   });
 });
 
 describe("HR leave request company locality", () => {
-  it("takes the locality from the company general profile and keeps generated previews synchronized without DOM observers", () => {
+  it("passes workspace city into the leave component and renders it natively in preview, PDF and print", () => {
     const page = source("app/workspace/companies/[workspaceId]/hr/page.tsx");
     const workspace = source("components/company/hr/hr-workspace-149.tsx");
+    const core = source("components/company/hr/hr-workspace-core-300.tsx");
+    const leaves = source("components/company/hr/hr-leaves-stable-165.tsx");
 
     expect(page).toContain("companyCity={workspace.city}");
-    expect(workspace).toContain("const city = String(companyCity ?? \"\").trim()");
-    expect(workspace).toContain("scheduleCityPreviewSync(rootRef.current, city)");
-    expect(workspace).toContain("window.requestAnimationFrame(sync)");
-    expect(workspace).toContain("[50, 150, 350]");
+    expect(core).toContain("companyCity?: string | null");
+    expect(core).toContain("companyCity={props.companyCity}");
+    expect(leaves).toContain("companyCity?: string | null");
+    expect(leaves).toContain('const city=String(companyCity??"").trim()');
+    expect(leaves).toContain('function locationDate(city:string)');
+    expect(leaves).toContain("ctx.fillText(locationDate(city),965,160)");
+    expect(leaves).toContain("${escapeHtml(locationDate(city))}");
+    expect(leaves).toContain("requestHtml(previewLeave");
+    expect(leaves).toContain("data.year,city)");
     expect(workspace).not.toContain("MutationObserver");
-    expect(workspace).toContain('const locationDate = `${city}, ${new Date().toLocaleDateString("pl-PL")}`');
-    expect(workspace).toContain("line.textContent !== locationDate");
-    expect(workspace).toContain("patchDocumentGenerators(city)");
+    expect(workspace).not.toContain("requestAnimationFrame");
+    expect(workspace).not.toContain("patchDocumentGenerators");
   });
 });
