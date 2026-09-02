@@ -9,3 +9,6 @@
 .root :global(section[data-hr-leaves-163="1"] tbody tr[aria-expanded="true"] td:first-child){box-shadow:inset 3px 0 0 #625cf6}
 .root :global(section[data-hr-leaves-163="1"] tbody tr[aria-expanded="true"] td:last-child){border-bottom-right-radius:0}
 .root :global(section[data-hr-leaves-163="1"] tbody tr[aria-expanded="true"] td:first-child){border-bottom-left-radius:0}
+.root :global(section[data-hr-leaves-165="1"] tbody tr:has(button[aria-expanded])){cursor:pointer;transition:background-color .15s ease}
+.root :global(section[data-hr-leaves-165="1"] tbody tr:has(button[aria-expanded]):hover){background:#f8f8ff}
+.root :global(section[data-hr-leaves-165="1"] tbody tr:has(button[aria-expanded]):active){background:#f2f1ff}
