@@ -28,7 +28,8 @@ describe("HR leave request company locality", () => {
     expect(page).toContain("companyCity={workspace.city}");
     expect(workspace).toContain("const city = String(companyCity ?? \"\").trim()");
     expect(workspace).toContain("new MutationObserver(syncPreview)");
-    expect(workspace).toContain('line.textContent = `${city}, ${new Date().toLocaleDateString("pl-PL")}`');
+    expect(workspace).toContain('const locationDate = `${city}, ${new Date().toLocaleDateString("pl-PL")}`');
+    expect(workspace).toContain("line.textContent !== locationDate");
     expect(workspace).toContain("patchDocumentGenerators(city)");
   });
 });
