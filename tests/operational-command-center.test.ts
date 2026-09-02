@@ -18,7 +18,8 @@ describe("Operational hardening — P0/P1/P2 contracts",()=>{
     expect(migration).toContain("unallocatedNet"); expect(migration).toContain("approvedLaborCost"); expect(migration).toContain("stockValue"); expect(migration).toContain("costPerKm");
     expect(read("components/company/hr/hr-workspace-core-300.tsx")).toContain("HrTimeRecords400");
     expect(read("components/company/hr/hr-time-records-400.tsx")).toContain("Do decyzji");
-    expect(read("components/company/operations/warehouse-operations.tsx")).toContain("stock_movement_approve");
+    expect(read("components/company/warehouse-workspace-300.tsx")).toContain("Ruchy do akceptacji");
+    expect(read("app/api/company/warehouse-atomic/route.ts")).toContain("stock_movement_approve");
     expect(read("components/company/operations/fleet-operations.tsx")).toContain("service_close");
   });
   it("makes document retry atomic and instruments worker failures",()=>{
