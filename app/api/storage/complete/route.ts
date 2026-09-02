@@ -131,11 +131,11 @@ export async function POST(request: Request) {
         document_id: completed.document_id,
         proposed_project_id: intent.projectId,
         channel: `module:${sourceModule}`,
-        received_at: uploadedAt,
         status: "queued",
         requested_category: routingCategory,
         category_locked: intent.categoryLocked,
-        source_metadata: sourceMetadata
+        source_metadata: sourceMetadata,
+        created_by: user.id
       });
       if (insertIntakeError) return jsonError(`Dokument zapisano, ale nie udało się utworzyć kontekstu Wrzutni: ${insertIntakeError.message}`, 500);
     }
