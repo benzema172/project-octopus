@@ -87,9 +87,7 @@ declare
   v_description text := lower(coalesce(p_line->>'description',''));
 begin
   if v_type = 'material' then
-    if v_expense = 'equipment' or v_description ~ '(wiertnic|zgrzewark|młot|mlot|wkrętark|wkretark|miernik|kamera|pompa|sprężark|sprezark|agregat|narzędz|narzedz)' then
-      return 'device';
-    end if;
+    if v_expense = 'equipment' or v_description ~ '(wiertnic|zgrzewark|młot|mlot|wkrętark|wkretark|miernik|kamera|pompa|sprężark|sprezark|agregat|narzędz|narzedz)' then return 'device'; end if;
     if v_description ~ '(filtr|wkład|wklad|uszczelk|łożysk|lozysk|część|czesc zamien)' then return 'spare_part'; end if;
     if v_description ~ '(taśm|tasm|klej|smar|czyściw|czysciw|elektrod|gaz technicz|materiał eksploat|material eksploat)' then return 'consumable'; end if;
     return 'material';
@@ -158,7 +156,7 @@ $$;
 
 drop trigger if exists warehouse_ai_lines_recalc_review on public.warehouse_ai_lines;
 create trigger warehouse_ai_lines_recalc_review
-  after insert or update of decision, candidate_stock_item_id or delete on public.warehouse_ai_lines
+  after insert or update or delete on public.warehouse_ai_lines
   for each row execute function private.recalc_warehouse_document_review_trigger();
 
 create or replace function private.resolve_warehouse_document_extraction()
@@ -193,8 +191,9 @@ begin
   where di.document_id = new.document_id
   limit 1;
 
-  select dv.file_name
-  into v_document_name
+  if coalesce(v_source_module, '') <> 'warehouse' then return new; end if;
+
+  select dv.file_name into v_document_name
   from public.document_versions dv
   where dv.id = new.document_version_id;
 
@@ -222,8 +221,7 @@ begin
     updated_at = now()
   returning id into v_review_id;
 
-  delete from public.warehouse_ai_lines
-  where document_version_id = new.document_version_id;
+  delete from public.warehouse_ai_lines where document_version_id = new.document_version_id;
 
   for v_line, v_idx in
     select value, ordinality::integer
@@ -244,18 +242,20 @@ begin
       into v_candidate, v_match
       from public.material_aliases ma
       where ma.workspace_id = new.workspace_id
-        and ma.active = true
-        and ma.stock_item_id is not null
+        and ma.status = 'approved'
         and (
           (nullif(v_line->>'sku','') is not null and ma.supplier_sku = nullif(v_line->>'sku',''))
           or ma.normalized_key = v_normalized
-          or public.normalize_material_key(ma.alias_name) = v_normalized
         )
-        and (v_supplier_tax_id is null or ma.supplier_tax_id is null or ma.supplier_tax_id = v_supplier_tax_id)
+        and (
+          v_supplier_name is null
+          or ma.supplier_name is null
+          or public.normalize_material_key(ma.supplier_name) = public.normalize_material_key(v_supplier_name)
+        )
       order by
         case when nullif(v_line->>'sku','') is not null and ma.supplier_sku = nullif(v_line->>'sku','') then 0 else 1 end,
-        ma.confidence desc nulls last,
-        ma.last_used_at desc nulls last
+        ma.confidence desc,
+        ma.created_at desc
       limit 1;
 
       if v_candidate is null then
@@ -286,7 +286,7 @@ begin
 
       if v_candidate is not null and v_match >= 0.90 then
         v_decision := 'auto_matched';
-        v_reason := 'Pozycję automatycznie dopasowano do istniejącej kartoteki na podstawie indeksu, aliasu lub znormalizowanej nazwy.';
+        v_reason := 'Pozycję automatycznie dopasowano do istniejącej kartoteki na podstawie indeksu, wyuczonego aliasu lub znormalizowanej nazwy.';
       elsif v_candidate is not null then
         v_decision := 'needs_review';
         v_reason := 'Znaleziono podobną kartotekę, ale pewność wymaga szybkiego potwierdzenia.';
@@ -296,7 +296,7 @@ begin
       end if;
     elsif v_line_class in ('service','transport','labor','fee','informational') then
       v_decision := 'non_stock';
-      v_reason := 'Pozycja została rozpoznana jako koszt/usługa bez wpływu na stan magazynowy.';
+      v_reason := 'Pozycja została rozpoznana jako koszt lub usługa bez wpływu na stan magazynowy.';
     else
       v_decision := 'needs_review';
       v_reason := 'AI nie potrafi jednoznacznie rozstrzygnąć, czy pozycja jest zapasem.';
@@ -353,5 +353,5 @@ create trigger warehouse_document_extraction_resolver
   when (new.extraction_type = 'document_context')
   execute function private.resolve_warehouse_document_extraction();
 
-comment on table public.warehouse_document_reviews is 'Warehouse 3.0 document-level AI routing state; the waiting status is the human exception queue.';
+comment on table public.warehouse_document_reviews is 'Warehouse 3.0 document-level AI routing state; waiting is the human exception queue.';
 comment on table public.warehouse_ai_lines is 'Warehouse 3.0 line-level AI decisions. These rows never change real stock directly.';
