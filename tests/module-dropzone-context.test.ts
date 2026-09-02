@@ -29,17 +29,20 @@ describe("module-aware Wrzutnia", () => {
     expect(sourceModulePromptHint("hr")).toContain('category="hr"');
   });
 
-  it("uses Wrzutnia as the Warehouse primary action and keeps HR entry at the module header", () => {
+  it("uses the same primary Wrzutnia action pattern in Warehouse and HR", () => {
     const operationalPage = read("components/company/company-operational-page.tsx");
     const moduleShell = read("components/company/operations/module-shell.tsx");
     const hrPage = read("app/workspace/companies/[workspaceId]/hr/page.tsx");
+    const hrCore = read("components/company/hr/hr-workspace-core-300.tsx");
     const link = read("components/documents/module-dropzone-link.tsx");
     const styles = read("components/documents/module-dropzone-link.module.css");
 
     expect(operationalPage).not.toContain("ModuleDropzoneLink");
     expect(moduleShell).toContain('const isWarehouse = pathname.endsWith("/warehouse")');
     expect(moduleShell).toContain('<ModuleDropzoneLink workspaceId={workspaceId} sourceModule="warehouse" variant="primary" />');
-    expect(hrPage).toContain('sourceModule="hr"');
+    expect(hrPage).not.toContain("ModuleDropzoneLink");
+    expect(hrCore).toContain('<ModuleDropzoneLink workspaceId={props.workspaceId} sourceModule="hr" variant="primary" />');
+    expect(hrCore).not.toContain("Raport CSV");
     expect(link).toContain("?upload=1&sourceModule=${sourceModule}#wrzutnia");
     expect(link).toContain('variant === "primary" ? `primary-button ${styles.primary}`');
     expect(styles).toContain('[data-warehouse-experience="2.0"] a[href*="/documents"]');
