@@ -28,16 +28,26 @@
   outline-offset: 2px;
 }
 
+.primary {
+  text-decoration: none;
+}
+
 .context {
   color: #667085;
   font-size: 11px;
   font-weight: 650;
 }
 
+.contextPrimary {
+  color: rgb(255 255 255 / 82%);
+  font-size: 11px;
+  font-weight: 650;
+}
+
 /*
- * Moduł ma jeden punkt wejścia do Wrzutni: przy nagłówku strony.
- * Starsze lokalne skróty pozostają w komponentach do czasu porządków
- * architektury, ale nie są prezentowane użytkownikowi ani klikalne.
+ * Magazyn ma jeden punkt wejścia do Wrzutni: główny przycisk akcji
+ * w miejscu dawnego „Dodaj”. Starsze lokalne skróty pozostają w
+ * komponentach do czasu porządków architektury, ale nie są prezentowane.
  */
 :global([data-warehouse-experience="2.0"] a[href*="/documents"]) {
   display: none !important;

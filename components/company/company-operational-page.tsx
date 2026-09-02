@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import { CompanyOperationsLazy } from "@/components/company/company-operations-lazy";
 import { CompanyPowerToolsDeferred } from "@/components/company/company-power-tools-deferred";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
-import { ModuleDropzoneLink } from "@/components/documents/module-dropzone-link";
 import { requireCurrentUser } from "@/lib/auth";
 import { hasDomainAccess, type Domain } from "@/lib/authorization";
 import type { CompanyPageOptions } from "@/lib/data/company-operations";
@@ -37,5 +36,5 @@ export async function CompanyOperationalPage({workspaceId,page,query,domain,kind
     hasDomainAccess({workspaceId:workspace.id,userId:user.id,domain,level:"approve"})
   ]);
   const pathname=`/workspace/companies/${workspace.id}/${kind==="finance"?"finances":kind}`;
-  return <main className="co-page"><header className="co-page-heading"><div><p className="co-kicker">{kicker}</p><h1>{title}</h1><p>{description}</p></div>{kind==="warehouse"?<ModuleDropzoneLink workspaceId={workspace.id} sourceModule="warehouse"/>:null}</header><CompanyOperationsLazy workspaceId={workspace.id} kind={kind} data={data} canWrite={canWrite} canApprove={canApprove} pathname={pathname} query={query??""}/><CompanyPowerToolsDeferred workspaceId={workspace.id} kind={kind} canWrite={canWrite} referenceDate={referenceDate}/></main>;
+  return <main className="co-page"><header className="co-page-heading"><div><p className="co-kicker">{kicker}</p><h1>{title}</h1><p>{description}</p></div></header><CompanyOperationsLazy workspaceId={workspace.id} kind={kind} data={data} canWrite={canWrite} canApprove={canApprove} pathname={pathname} query={query??""}/><CompanyPowerToolsDeferred workspaceId={workspace.id} kind={kind} canWrite={canWrite} referenceDate={referenceDate}/></main>;
 }

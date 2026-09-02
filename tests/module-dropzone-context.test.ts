@@ -29,15 +29,19 @@ describe("module-aware Wrzutnia", () => {
     expect(sourceModulePromptHint("hr")).toContain('category="hr"');
   });
 
-  it("exposes the single top entry point in Warehouse and HR", () => {
+  it("uses Wrzutnia as the Warehouse primary action and keeps HR entry at the module header", () => {
     const operationalPage = read("components/company/company-operational-page.tsx");
+    const moduleShell = read("components/company/operations/module-shell.tsx");
     const hrPage = read("app/workspace/companies/[workspaceId]/hr/page.tsx");
     const link = read("components/documents/module-dropzone-link.tsx");
     const styles = read("components/documents/module-dropzone-link.module.css");
 
-    expect(operationalPage).toContain('sourceModule="warehouse"');
+    expect(operationalPage).not.toContain("ModuleDropzoneLink");
+    expect(moduleShell).toContain('const isWarehouse = pathname.endsWith("/warehouse")');
+    expect(moduleShell).toContain('<ModuleDropzoneLink workspaceId={workspaceId} sourceModule="warehouse" variant="primary" />');
     expect(hrPage).toContain('sourceModule="hr"');
     expect(link).toContain("?upload=1&sourceModule=${sourceModule}#wrzutnia");
+    expect(link).toContain('variant === "primary" ? `primary-button ${styles.primary}`');
     expect(styles).toContain('[data-warehouse-experience="2.0"] a[href*="/documents"]');
     expect(styles).toContain('[data-hr-core="300"] [data-hr-functional-upload="1"]');
   });
