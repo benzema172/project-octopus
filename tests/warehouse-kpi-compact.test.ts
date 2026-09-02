@@ -4,33 +4,31 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("Warehouse compact KPI density", () => {
-  it("loads the Warehouse KPI density layer after the shared layout layers", () => {
+  it("keeps the legacy KPI density layer loaded for older operational views", () => {
     const layout = read("app/layout.tsx");
     expect(layout).toContain('import "./warehouse-kpi-compact.css";');
     expect(layout.indexOf('import "./warehouse-kpi-compact.css";')).toBeGreaterThan(layout.indexOf('import "./equal-height-audit.css";'));
   });
 
-  it("fits Warehouse KPI cards into two desktop rows without changing Finance", () => {
+  it("keeps the legacy responsive Warehouse KPI rules isolated from Finance", () => {
     const css = read("app/warehouse-kpi-compact.css");
     expect(css).toContain("grid-template-columns: repeat(6, minmax(0, 1fr)) !important");
-    expect(css).toContain("grid-template-columns: repeat(5, minmax(0, 1fr)) !important");
-    expect(css).toContain("min-height: 58px !important");
-    expect(css).toContain("padding: 7px 10px !important");
     expect(css).toContain(":not(.ops-workspace--finance)");
   });
 
-  it("shows all Warehouse KPI cards immediately on desktop", () => {
-    const css = read("app/warehouse-kpi-compact.css");
-    expect(css).toContain("> summary {\n    display: none !important;");
-    expect(css).toContain("display: grid !important;");
-    expect(css).toContain("all five extra indicators are visible by default");
+  it("Warehouse 3.0 shows one compact six-card decision strip", () => {
+    const workspace = read("components/company/warehouse-workspace-300.tsx");
+    const styles = read("components/company/warehouse-workspace-300.module.css");
+    for (const label of ["Kartoteki", "Poczekalnia", "Poniżej minimum", "Ruchy do akceptacji", "Rezerwacje", "Sprzęt wydany"]) {
+      expect(workspace).toContain(label);
+    }
+    expect(styles).toContain("grid-template-columns:repeat(6,minmax(0,1fr))");
+    expect(styles).toContain("padding:8px 10px");
   });
 
-  it("Warehouse keeps six primary and five secondary metrics", () => {
-    const warehouse = read("components/company/operations/warehouse-operations.tsx");
-    expect(warehouse).toContain("primaryMetricCount={6}");
-    for (const label of ["Wartość zapasu", "Poniżej minimum", "Dostawy AI", "Ruchy do akceptacji", "Rezerwacje", "Sprzęt wydany", "Magazyny", "Kartoteki", "Ruchy 30 dni", "Inwentaryzacje", "Wolnorotujące"]) {
-      expect(warehouse).toContain(label);
-    }
+  it("does not restore the obsolete secondary metric disclosure", () => {
+    const workspace = read("components/company/warehouse-workspace-300.tsx");
+    expect(workspace).not.toContain("Więcej wskaźników");
+    expect(workspace).not.toContain("primaryMetricCount");
   });
 });
