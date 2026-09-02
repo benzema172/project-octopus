@@ -12,6 +12,11 @@ import { createUploadToken, type UploadIntent } from "@/lib/r2/upload-token";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
 import { normalizeDocumentCategory } from "@/lib/documents/classification";
+import {
+  normalizeDocumentSourceModule,
+  preferredCategoryForSourceModule,
+  sourceModuleMetadata
+} from "@/lib/documents/source-module";
 
 export const runtime = "nodejs";
 
@@ -26,6 +31,7 @@ type UploadUrlBody = {
   fileSize?: number;
   category?: string;
   categoryLocked?: boolean;
+  sourceModule?: string;
   releaseType?: "baseline" | "revision" | "addendum" | "as_built" | "closeout" | "other";
   packageLabel?: string;
   revisionLabel?: string;
@@ -35,6 +41,16 @@ type UploadUrlBody = {
 
 function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
+}
+
+function sourceModuleFromReferer(request: Request) {
+  const referer = request.headers.get("referer");
+  if (!referer) return null;
+  try {
+    return normalizeDocumentSourceModule(new URL(referer).searchParams.get("sourceModule"));
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(request: Request) {
@@ -58,6 +74,8 @@ export async function POST(request: Request) {
   const mimeType = body.mimeType?.trim() || "application/octet-stream";
   const fileSize = Number(body.fileSize);
   const requestedCategory = normalizeDocumentCategory(body.category);
+  const sourceModule = normalizeDocumentSourceModule(body.sourceModule) ?? sourceModuleFromReferer(request);
+  const sourcePreferredCategory = normalizeDocumentCategory(preferredCategoryForSourceModule(sourceModule));
   const releaseType = ["baseline", "revision", "addendum", "as_built", "closeout", "other"].includes(body.releaseType ?? "baseline")
     ? body.releaseType ?? "baseline" : null;
   if (body.category && !requestedCategory) return jsonError("Nieprawidłowa kategoria dokumentu.", 400);
@@ -112,6 +130,7 @@ export async function POST(request: Request) {
 
   const category = normalizeDocumentCategory(existingDocumentCategory)
     ?? requestedCategory
+    ?? sourcePreferredCategory
     ?? inferDocumentCategory(mimeType, fileName);
   const categoryLocked = Boolean(requestedDocumentId || (body.categoryLocked && requestedCategory));
   const uploadDomain = domainForDocumentCategory(category);
@@ -152,6 +171,8 @@ export async function POST(request: Request) {
     revisionLabel,
     effectiveAt: effectiveAt ? new Date(effectiveAt).toISOString() : undefined,
     replacesVersionId: body.replacesVersionId?.trim() || undefined,
+    sourceChannel: sourceModule ? `module:${sourceModule}` : undefined,
+    sourceMetadata: sourceModule ? sourceModuleMetadata(sourceModule) : undefined,
     expiresAt: Date.now() + PRESIGNED_URL_TTL_SECONDS * 1000
   };
 
@@ -161,6 +182,7 @@ export async function POST(request: Request) {
     objectKey,
     documentId,
     versionId,
+    sourceModule,
     headers: {
       "Content-Type": mimeType
     },
