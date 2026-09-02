@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { HrWorkspace149 } from "@/components/company/hr/hr-workspace-149";
-import { ModuleDropzoneLink } from "@/components/documents/module-dropzone-link";
 import { requireCurrentUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { getHrWorkspace141Data } from "@/lib/data/hr-workspace-141";
@@ -38,7 +37,6 @@ export default async function HrPage({ params }: { params: Promise<{ workspaceId
         <h1>Kadry i zasoby ludzkie</h1>
         <p>Pracownicy, czas pracy, urlopy, BHP i uprawnienia, dokumenty OCR/AI, zespoły, inwestycje oraz koszt pracy w jednym spójnym obiegu.</p>
       </div>
-      <ModuleDropzoneLink workspaceId={workspace.id} sourceModule="hr" />
     </header>
     <HrWorkspace149
       workspaceId={workspace.id}
