@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlertTriangle, ChevronDown, FileText, UploadCloud } from "lucide-react";
 import { notFound } from "next/navigation";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
+import { DocumentOpenLink } from "@/components/documents/document-open-link";
 import { DocumentUpload } from "@/components/documents/document-upload";
 import { requireCurrentUser } from "@/lib/auth";
 import {
@@ -95,14 +96,20 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
         <div className="co-section-heading"><div><p className="co-kicker">Biblioteka</p><h2>Ostatnio aktualizowane</h2></div><span>AI klasyfikuje i proponuje przypisanie automatycznie</span></div>
         {documents.length ? (
           <div className="co-document-table">
-            {documents.map((document) => (
-              <article key={document.id} id={`document-${document.id}`}>
-                <span className="co-document-icon"><FileText size={18} aria-hidden="true" /></span>
-                <div><strong>{document.name}</strong><small>{document.category || "Dokument"} · {document.project_id ? projectNames.get(document.project_id) ?? "Inwestycja" : "Dokument firmowy"}</small></div>
-                <time>{document.updated_at ? new Date(document.updated_at).toLocaleDateString("pl-PL") : ""}</time>
-                <Link href={document.project_id ? `/workspace/projects/${document.project_id}/documentation#document-${document.id}` : `#document-${document.id}`}>Otwórz →</Link>
-              </article>
-            ))}
+            {documents.map((document) => {
+              const fallbackHref = document.project_id
+                ? `/workspace/projects/${document.project_id}/documentation#document-${document.id}`
+                : `#document-${document.id}`;
+              const versionId = document.current_version_id ?? document.document_versions?.[0]?.id ?? null;
+              return (
+                <article key={document.id} id={`document-${document.id}`}>
+                  <span className="co-document-icon"><FileText size={18} aria-hidden="true" /></span>
+                  <div><strong>{document.name}</strong><small>{document.category || "Dokument"} · {document.project_id ? projectNames.get(document.project_id) ?? "Inwestycja" : "Dokument firmowy"}</small></div>
+                  <time>{document.updated_at ? new Date(document.updated_at).toLocaleDateString("pl-PL") : ""}</time>
+                  <DocumentOpenLink workspaceId={workspace.id} projectId={document.project_id} versionId={versionId} fallbackHref={fallbackHref} />
+                </article>
+              );
+            })}
           </div>
         ) : <div className="co-empty-state"><strong>Brak dokumentów w firmie.</strong><p>Otwórz Wrzutnię i dodaj pierwszy plik.</p></div>}
       </section>
