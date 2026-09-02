@@ -1,0 +1,97 @@
+/* Warehouse UI: replace the former module cards with a compact HR-like tab bar. */
+[data-warehouse-experience="2.0"] > header {
+  display: none !important;
+}
+
+[data-warehouse-experience="2.0"] nav[aria-label="Obszary Magazynu"] {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: flex !important;
+  grid-template-columns: none !important;
+  flex-wrap: wrap;
+  gap: 4px !important;
+  padding: 7px;
+  overflow: visible;
+  border: 1px solid #dde2ea;
+  border-radius: 12px;
+  background: rgb(255 255 255 / 96%);
+  backdrop-filter: blur(10px);
+}
+
+[data-warehouse-experience="2.0"] nav[aria-label="Obszary Magazynu"] > button {
+  display: inline-flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 6px !important;
+  width: auto;
+  min-height: 36px;
+  padding: 9px 12px !important;
+  border: 0 !important;
+  border-radius: 9px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #202531 !important;
+  font-weight: 750;
+  white-space: nowrap;
+  transform: none !important;
+}
+
+[data-warehouse-experience="2.0"] nav[aria-label="Obszary Magazynu"] > button:hover {
+  background: #f4f6fa !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+[data-warehouse-experience="2.0"] nav[aria-label="Obszary Magazynu"] > button[aria-pressed="true"] {
+  background: #edf9f4 !important;
+  box-shadow: inset 0 0 0 1px #bfe7d7 !important;
+  color: #125f49 !important;
+}
+
+[data-warehouse-experience="2.0"] nav[aria-label="Obszary Magazynu"] > button > span:first-child {
+  display: inline-flex !important;
+  width: auto !important;
+  height: auto !important;
+  flex: 0 0 auto;
+  place-items: unset !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: inherit !important;
+}
+
+[data-warehouse-experience="2.0"] nav[aria-label="Obszary Magazynu"] > button > span:nth-child(2) {
+  display: inline-flex !important;
+  gap: 0 !important;
+  min-width: 0;
+}
+
+[data-warehouse-experience="2.0"] nav[aria-label="Obszary Magazynu"] > button strong {
+  font-size: 13px !important;
+  line-height: 1;
+}
+
+[data-warehouse-experience="2.0"] nav[aria-label="Obszary Magazynu"] > button small,
+[data-warehouse-experience="2.0"] nav[aria-label="Obszary Magazynu"] > button > b,
+[data-warehouse-experience="2.0"] nav[aria-label="Obszary Magazynu"] > button > svg:last-child {
+  display: none !important;
+}
+
+[data-warehouse-experience="2.0"] nav[aria-label="Obszary Magazynu"] svg {
+  width: 15px !important;
+  height: 15px !important;
+}
+
+/* The detailed stock register is available inside the Kartoteki i stany tab. */
+.ops-workspace:has([data-warehouse-experience="2.0"]) > .ops-panel--wide {
+  display: none !important;
+}
+
+@media (max-width: 720px) {
+  [data-warehouse-experience="2.0"] nav[aria-label="Obszary Magazynu"] {
+    position: static;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+}
