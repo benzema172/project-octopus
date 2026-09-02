@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ChevronDown, MoreHorizontal, Plus, Save, Search, X } from "lucide-react";
 import { ServerPagination } from "@/components/system/server-pagination";
+import { ModuleDropzoneLink } from "@/components/documents/module-dropzone-link";
 
 export type Row = Record<string, unknown>;
 export type PageMeta = { page: number; pageSize: number; total: number };
@@ -111,6 +112,7 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
   const page = data.page ?? { page: 1, pageSize: Math.max(rows.length, 1), total: rows.length };
   const primaryMetrics = metrics.slice(0, primaryMetricCount);
   const secondaryMetrics = metrics.slice(primaryMetricCount);
+  const isWarehouse = pathname.endsWith("/warehouse");
 
   const submit = (entity: string, success: string) => (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -186,7 +188,9 @@ export function CompanyModuleShell({ workspaceId, data, canWrite, pathname, quer
             {query ? <Link className="ops-search__clear" href={pathname} aria-label="Wyczyść wyszukiwanie" title="Wyczyść"><X size={15} aria-hidden="true" /></Link> : null}
           </label>
         </form>
-        {canWrite && forms.length ? (
+        {canWrite && isWarehouse ? (
+          <ModuleDropzoneLink workspaceId={workspaceId} sourceModule="warehouse" variant="primary" />
+        ) : canWrite && forms.length ? (
           <details className="ops-add-menu ops-quick-actions">
             <summary className="primary-button"><Plus size={16} aria-hidden="true" /> Dodaj <ChevronDown size={14} aria-hidden="true" /></summary>
             <div className="ops-add-menu__panel">
