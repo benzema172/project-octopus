@@ -1,12 +1,12 @@
 import { CompanyOperationalPage } from "@/components/company/company-operational-page";
 import { getWarehouseAi300Data } from "@/lib/data/warehouse-ai-300";
-import { getWarehouseWorkspaceData } from "@/lib/data/company-operations";
+import { getWarehouseWorkspaceData, type CompanyPageOptions } from "@/lib/data/company-operations";
 
 export const dynamic = "force-dynamic";
 
-async function getWarehouse300Data(workspaceId: string, options: Parameters<typeof getWarehouseWorkspaceData>[1]) {
+async function getWarehouse300Data(workspaceId: string, _options: CompanyPageOptions) {
   const [base, ai] = await Promise.all([
-    getWarehouseWorkspaceData(workspaceId, options),
+    getWarehouseWorkspaceData(workspaceId),
     getWarehouseAi300Data(workspaceId)
   ]);
   return { ...base, ...ai };
