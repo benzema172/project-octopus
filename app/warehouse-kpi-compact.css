@@ -1,0 +1,49 @@
+/* Project Octopus — compact Warehouse KPI strip, 2026-09-02.
+   The Warehouse overview is the operational shell with exactly six primary KPI cards.
+   Keep this rule scoped to that six-card strip so Finance and other modules retain their density. */
+
+.ops-workspace--paged:not(.ops-workspace--finance)
+  > .ops-metrics--primary:has(> .ops-metric:nth-child(6):last-child) {
+  gap: 8px !important;
+}
+
+.ops-workspace--paged:not(.ops-workspace--finance)
+  > .ops-metrics--primary:has(> .ops-metric:nth-child(6):last-child)
+  > .ops-metric {
+  min-height: 66px !important;
+  padding: 9px 12px !important;
+  gap: 1px !important;
+  align-content: center;
+}
+
+.ops-workspace--paged:not(.ops-workspace--finance)
+  > .ops-metrics--primary:has(> .ops-metric:nth-child(6):last-child)
+  > .ops-metric small {
+  font-size: 11px;
+  line-height: 1.1;
+}
+
+.ops-workspace--paged:not(.ops-workspace--finance)
+  > .ops-metrics--primary:has(> .ops-metric:nth-child(6):last-child)
+  > .ops-metric strong {
+  margin-top: 2px;
+  font-size: clamp(17px, 1.45vw, 21px);
+  line-height: 1;
+}
+
+.ops-workspace--paged:not(.ops-workspace--finance)
+  > .ops-metrics--primary:has(> .ops-metric:nth-child(6):last-child)
+  > .ops-metric p {
+  margin: 3px 0 0;
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+@media (max-width: 720px) {
+  .ops-workspace--paged:not(.ops-workspace--finance)
+    > .ops-metrics--primary:has(> .ops-metric:nth-child(6):last-child)
+    > .ops-metric {
+    min-height: 60px !important;
+    padding: 8px 10px !important;
+  }
+}
