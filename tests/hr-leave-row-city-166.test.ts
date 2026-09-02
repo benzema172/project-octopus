@@ -21,13 +21,16 @@ describe("HR leave employee row interaction", () => {
 });
 
 describe("HR leave request company locality", () => {
-  it("takes the locality from the company general profile and keeps generated previews synchronized", () => {
+  it("takes the locality from the company general profile and keeps generated previews synchronized without DOM observers", () => {
     const page = source("app/workspace/companies/[workspaceId]/hr/page.tsx");
     const workspace = source("components/company/hr/hr-workspace-149.tsx");
 
     expect(page).toContain("companyCity={workspace.city}");
     expect(workspace).toContain("const city = String(companyCity ?? \"\").trim()");
-    expect(workspace).toContain("new MutationObserver(syncPreview)");
+    expect(workspace).toContain("scheduleCityPreviewSync(rootRef.current, city)");
+    expect(workspace).toContain("window.requestAnimationFrame(sync)");
+    expect(workspace).toContain("[50, 150, 350]");
+    expect(workspace).not.toContain("MutationObserver");
     expect(workspace).toContain('const locationDate = `${city}, ${new Date().toLocaleDateString("pl-PL")}`');
     expect(workspace).toContain("line.textContent !== locationDate");
     expect(workspace).toContain("patchDocumentGenerators(city)");
