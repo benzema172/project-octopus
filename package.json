@@ -13,7 +13,7 @@
     "lint": "eslint .",
     "test": "vitest run tests",
     "test:hr-stress": "vitest run tests/hr-module-stress-10000.test.ts tests/hr-core-300.test.ts tests/hr-year-lifecycle-10-workers.test.ts tests/hr-labor-control-410.test.ts tests/hr-timesheet-approval-420.test.ts tests/hr-leave-row-city-166.test.ts tests/equal-height-layout.test.ts",
-    "test:document-flow": "vitest run tests/document-flow-200.test.ts tests/document-actions.test.ts tests/warehouse-170-complete.test.ts tests/warehouse-experience-200.test.ts",
+    "test:document-flow": "vitest run tests/document-flow-200.test.ts tests/document-actions.test.ts tests/warehouse-170-complete.test.ts tests/warehouse-experience-200.test.ts tests/warehouse-kpi-compact.test.ts",
     "typecheck": "tsc --noEmit",
     "test:migrations": "node scripts/validate-migrations-local.mjs && node scripts/validate-all-migrations-local.mjs",
     "check:schema": "node scripts/check-schema.mjs",
