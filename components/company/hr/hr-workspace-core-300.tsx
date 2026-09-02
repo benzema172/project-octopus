@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useState, type ReactNode } from "react";
-import { BriefcaseBusiness, CalendarDays, Clock3, Download, FileText, HardHat, Plus, ShieldCheck, UsersRound } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, Clock3, FileText, HardHat, Plus, ShieldCheck, UsersRound } from "lucide-react";
+import { ModuleDropzoneLink } from "@/components/documents/module-dropzone-link";
 import type { HrWorkspaceData, HrWorkspaceTab } from "@/lib/hr/types";
 import { HrDashboardCore300 } from "./hr-dashboard-core-300";
 import { HrApprovalProvider } from "./hr-approval-context-420";
@@ -54,7 +54,7 @@ export function HrWorkspaceCore300(props: Props) {
       <nav className={styles.tabs} aria-label="Sekcje modułu Kadry">{tabs.map((item) => <button type="button" key={item.id} className={`${styles.tab} ${tab === item.id ? styles.tabActive : ""}`} onClick={() => navigate(item.id)}>{item.icon}{item.label}</button>)}</nav>
       <div className={styles.actions}>
         {props.canWrite && tab === "employees" ? <button type="button" className={styles.action} onClick={() => setEmployeeCreateOpen(true)}><Plus size={15} /> Dodaj pracownika</button> : null}
-        <Link className={styles.secondary} href={`/api/company/hr/export?workspaceId=${encodeURIComponent(props.workspaceId)}`}><Download size={15} /> Raport CSV</Link>
+        {props.canWrite ? <ModuleDropzoneLink workspaceId={props.workspaceId} sourceModule="hr" variant="primary" /> : null}
       </div>
     </div>
 
