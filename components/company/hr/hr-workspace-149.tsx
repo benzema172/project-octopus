@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ComponentProps, type MouseEvent } from "react";
+import { useRef, type ComponentProps, type MouseEvent } from "react";
 import { HrWorkspaceCore300 } from "./hr-workspace-core-300";
 import styles from "./hr-workspace-149.module.css";
 
@@ -18,6 +18,13 @@ function applyCityToPreview(root: HTMLElement | null, city: string) {
     const line = label.previousElementSibling as HTMLElement | null;
     if (line && line.textContent !== locationDate) line.textContent = locationDate;
   }
+}
+
+function scheduleCityPreviewSync(root: HTMLElement | null, city: string) {
+  if (!root || !city) return;
+  const sync = () => applyCityToPreview(root, city);
+  window.requestAnimationFrame(sync);
+  for (const delay of [50, 150, 350]) window.setTimeout(sync, delay);
 }
 
 function patchDocumentGenerators(city: string) {
@@ -61,18 +68,10 @@ export function HrWorkspace149({ companyCity, ...props }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const city = String(companyCity ?? "").trim();
 
-  useEffect(() => {
-    if (!city || !rootRef.current) return;
-    const root = rootRef.current;
-    const syncPreview = () => applyCityToPreview(root, city);
-    syncPreview();
-    const observer = new MutationObserver(syncPreview);
-    observer.observe(root, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, [city]);
-
   const handleClickCapture = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
+    if (city) scheduleCityPreviewSync(rootRef.current, city);
+
     const rowToggle = findLeaveRowToggle(target);
     if (rowToggle) {
       event.preventDefault();
@@ -91,7 +90,6 @@ export function HrWorkspace149({ companyCity, ...props }: Props) {
       const restore = patchDocumentGenerators(city);
       window.setTimeout(restore, 0);
     }
-    window.requestAnimationFrame(() => applyCityToPreview(rootRef.current, city));
   };
 
   return <div ref={rootRef} className={styles.root} onClickCapture={handleClickCapture}>
