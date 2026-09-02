@@ -34,6 +34,19 @@
   font-weight: 650;
 }
 
+/*
+ * Moduł ma jeden punkt wejścia do Wrzutni: przy nagłówku strony.
+ * Starsze lokalne skróty pozostają w komponentach do czasu porządków
+ * architektury, ale nie są prezentowane użytkownikowi ani klikalne.
+ */
+:global([data-warehouse-experience="2.0"] a[href*="/documents"]) {
+  display: none !important;
+}
+
+:global([data-hr-core="300"] [data-hr-functional-upload="1"]) {
+  display: none !important;
+}
+
 @media (max-width: 720px) {
   .link {
     width: 100%;
