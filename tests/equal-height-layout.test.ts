@@ -26,6 +26,18 @@ describe("equal-height card layout contract", () => {
     expect(dashboard.match(/data-equal-height-card/g)?.length ?? 0).toBeGreaterThanOrEqual(11);
   });
 
+  it("aligns the two HR action panels to the exact six-column KPI geometry", () => {
+    const equalHeight = read("app/equal-height-audit.css");
+
+    expect(equalHeight).toContain('[data-equal-height-row="hr-dashboard-actions"]');
+    expect(equalHeight).toContain("grid-template-columns: repeat(6, minmax(0, 1fr)) !important");
+    expect(equalHeight).toContain("gap: 6px !important");
+    expect(equalHeight).toContain("grid-column: span 4");
+    expect(equalHeight).toContain("grid-column: span 2");
+    expect(equalHeight).toContain("@media (max-width: 1100px)");
+    expect(equalHeight).toContain("grid-column: 1 / -1");
+  });
+
   it("keeps intrinsic-height exception layouts out of the global stretch list", () => {
     const equalHeight = read("app/equal-height-audit.css");
 
