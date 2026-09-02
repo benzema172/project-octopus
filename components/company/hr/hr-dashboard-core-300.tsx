@@ -44,17 +44,17 @@ export function HrDashboardCore300({ data, canViewPayroll, onNavigate }: { data:
   const severityIcon = (severity: string) => severity === "critical" ? <CircleAlert size={17} /> : severity === "warning" ? <AlertTriangle size={17} /> : <Info size={17} />;
 
   return <div className={styles.dashboard} data-hr-core-dashboard="300">
-    <section className={styles.kpis}>
-      <article className={styles.kpi}><small>Aktywni</small><strong>{num(data.summary.activeEmployees)}</strong><span>pracowników</span></article>
-      <article className={styles.kpi}><small>Na inwestycjach</small><strong>{num(data.summary.todayOnSites)}</strong><span>dzisiaj bez absencji</span></article>
-      <article className={styles.kpi}><small>Problemy krytyczne</small><strong>{issueSummary.critical}</strong><span>{issueSummary.affectedEmployees} osób z uwagami</span></article>
-      <article className={styles.kpi}><small>Terminy ≤30 dni</small><strong>{num(data.summary.expiring30)}</strong><span>{num(data.summary.expired)} po terminie</span></article>
-      <article className={styles.kpi}><small>Do decyzji</small><strong>{num(data.summary.pendingDecisions)}</strong><span>urlopy + czas pracy</span></article>
-      <article className={styles.kpi}><small>Bez inwestycji</small><strong>{num(data.summary.unassigned)}</strong><span>aktywnych osób</span></article>
+    <section className={styles.kpis} data-equal-height-row="hr-kpis">
+      <article className={styles.kpi} data-equal-height-card><small>Aktywni</small><strong>{num(data.summary.activeEmployees)}</strong><span>pracowników</span></article>
+      <article className={styles.kpi} data-equal-height-card><small>Na inwestycjach</small><strong>{num(data.summary.todayOnSites)}</strong><span>dzisiaj bez absencji</span></article>
+      <article className={styles.kpi} data-equal-height-card><small>Problemy krytyczne</small><strong>{issueSummary.critical}</strong><span>{issueSummary.affectedEmployees} osób z uwagami</span></article>
+      <article className={styles.kpi} data-equal-height-card><small>Terminy ≤30 dni</small><strong>{num(data.summary.expiring30)}</strong><span>{num(data.summary.expired)} po terminie</span></article>
+      <article className={styles.kpi} data-equal-height-card><small>Do decyzji</small><strong>{num(data.summary.pendingDecisions)}</strong><span>urlopy + czas pracy</span></article>
+      <article className={styles.kpi} data-equal-height-card><small>Bez inwestycji</small><strong>{num(data.summary.unassigned)}</strong><span>aktywnych osób</span></article>
     </section>
 
-    <section className={styles.grid}>
-      <article className={styles.panel}>
+    <section className={styles.grid} data-equal-height-row="hr-dashboard-actions">
+      <article className={styles.panel} data-equal-height-card>
         <header className={styles.panelHeader}><div><p className={styles.kicker}>Centrum problemów pracownika</p><h2>Co wymaga działania</h2></div><span className={styles.badge}>{issueSummary.issues.length} spraw</span></header>
         <div className={styles.employeeIssueGroups}>
           {groupedIssues.map((group) => <article key={group.employeeId} className={`${styles.employeeIssueGroup} ${styles[`employeeIssueGroup${group.severity[0].toUpperCase()}${group.severity.slice(1)}`]}`}>
@@ -72,7 +72,7 @@ export function HrDashboardCore300({ data, canViewPayroll, onNavigate }: { data:
         </div>
       </article>
 
-      <article className={styles.panel}>
+      <article className={styles.panel} data-equal-height-card>
         <header className={styles.panelHeader}><div><p className={styles.kicker}>Zasoby</p><h3>Zespół na inwestycjach</h3></div><UsersRound size={19} /></header>
         <div className={styles.projects}>{data.projectStaff.slice(0, 12).map((row) => <div className={styles.project} key={String(row.project_id)}><div><strong>{str(row.name)}</strong><span>{num(row.people)} osób</span></div><strong>{num(row.allocation)}%</strong></div>)}</div>
         {!data.projectStaff.length ? <div className={styles.empty}>Brak aktywnych przypisań.</div> : null}
@@ -81,10 +81,10 @@ export function HrDashboardCore300({ data, canViewPayroll, onNavigate }: { data:
 
     {canViewPayroll ? <section className={styles.panel} data-hr-core-payroll-summary="1">
       <header className={styles.panelHeader}><div><p className={styles.kicker}>Koszt zatrudnienia</p><h3>Bieżący miesiąc</h3></div><span className={styles.badge}>{num(data.summary.payrollConfirmed)}/{num(data.summary.activeEmployees)} potwierdzonych</span></header>
-      <div className={styles.moneyGrid}>
-        <div className={styles.moneyCard}><small>Do wypłaty netto</small><strong>{money(data.summary.monthlyNetPay)}</strong></div>
-        <div className={styles.moneyCard}><small>Pełny koszt pracodawcy</small><strong>{money(data.summary.monthlyEmploymentCost)}</strong></div>
-        <div className={styles.moneyCard}><small>Zatwierdzona robocizna</small><strong>{money(data.summary.approvedLaborCost)}</strong></div>
+      <div className={styles.moneyGrid} data-equal-height-row="hr-payroll-kpis">
+        <div className={styles.moneyCard} data-equal-height-card><small>Do wypłaty netto</small><strong>{money(data.summary.monthlyNetPay)}</strong></div>
+        <div className={styles.moneyCard} data-equal-height-card><small>Pełny koszt pracodawcy</small><strong>{money(data.summary.monthlyEmploymentCost)}</strong></div>
+        <div className={styles.moneyCard} data-equal-height-card><small>Zatwierdzona robocizna</small><strong>{money(data.summary.approvedLaborCost)}</strong></div>
       </div>
     </section> : null}
   </div>;

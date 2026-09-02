@@ -1,0 +1,53 @@
+/* Project Octopus — cross-application equal-height card contract, 2026-09-02.
+   Multi-column rows that present sibling cards must keep the same visual height.
+   Layouts that intentionally need intrinsic/start alignment (for example sticky document sidebars)
+   are deliberately not included here. */
+
+[data-equal-height-row] {
+  align-items: stretch !important;
+}
+
+[data-equal-height-row] > [data-equal-height-card] {
+  align-self: stretch !important;
+  min-height: 0;
+}
+
+/* Shared operational/company/project grids. */
+:where(
+  .ops-metrics,
+  .ops-form-grid,
+  .ops-auto-form-grid,
+  .ops-split-lists,
+  .report-snapshot-grid,
+  .ai-center-flow,
+  .co-metric-grid,
+  .co-metric-grid--decision,
+  .project-menu-grid,
+  .project-data-grid,
+  .output-type-grid,
+  .project-grid,
+  .pw-decision-grid,
+  .pw-dashboard-more__grid,
+  .ops-record-drawer__summary,
+  .enterprise-flow-steps
+) {
+  align-items: stretch;
+}
+
+.ops-metrics > :where(article, .ops-metric),
+.ops-form-grid > .ops-form-card,
+.ops-auto-form-grid > :where(article, section, details),
+.ops-split-lists > .ops-panel,
+.report-snapshot-grid > :where(article, section, div),
+.ai-center-flow > article,
+.co-metric-grid > .co-metric-card,
+.co-metric-grid--decision > .co-metric-card,
+.project-menu-grid > .project-menu-item,
+.output-type-grid > .output-type-row,
+.pw-decision-grid > :where(a, div),
+.pw-dashboard-more__grid > a,
+.ops-record-drawer__summary > div,
+.enterprise-flow-steps > li {
+  align-self: stretch;
+  min-height: 0;
+}
