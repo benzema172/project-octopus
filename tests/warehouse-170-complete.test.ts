@@ -38,6 +38,7 @@ describe("Warehouse 1.7.0 implementation contract", () => {
   const loader = read("lib/data/company-operations.ts");
   const route = read("app/api/company/warehouse-atomic/route.ts");
   const recordsRoute = read("app/api/company/records/route.ts");
+  const uxCss = read("app/unified-ux-simplification.css");
   const migration = read("supabase/migrations/20260901210000_warehouse_170_complete.sql");
 
   it("renders AI imports and uses movement lines for item history", () => {
@@ -59,6 +60,12 @@ describe("Warehouse 1.7.0 implementation contract", () => {
     expect(recordsRoute).toContain("nextOptimal > 0 && nextOptimal < nextMinimum");
     expect(recordsRoute).toContain("Number.isInteger(nextWarranty)");
     expect(recordsRoute).toContain("Stan minimalny i optymalny nie mogą być ujemne");
+  });
+
+  it("keeps KPI values visible without wrapping currency", () => {
+    expect(uxCss).toContain("grid-template-columns: minmax(0, 1fr)");
+    expect(uxCss).toContain("overflow-wrap: normal");
+    expect(uxCss).toContain("white-space: nowrap");
   });
 
   it("requires approval for physical stock and inventory truth", () => {

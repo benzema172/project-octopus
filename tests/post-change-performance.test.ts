@@ -51,9 +51,9 @@ describe("post-change reliability and performance hardening", () => {
     const lazy = read("components/company/company-operations-lazy.tsx");
     const deferred = read("components/company/company-power-tools-deferred.tsx");
     expect(lazy).toContain('dynamic(()=>import("@/components/company/operations/finance-operations")');
-    expect(lazy).toContain('dynamic(()=>import("@/components/company/operations/hr-operations")');
     expect(lazy).toContain('dynamic(()=>import("@/components/company/operations/warehouse-operations")');
     expect(lazy).toContain('dynamic(()=>import("@/components/company/operations/fleet-operations")');
+    expect(lazy).not.toContain("hr-operations");
     expect(deferred).toContain("/api/company/power-data");
     expect(deferred).toContain("Narzędzia zaawansowane");
   });
@@ -87,10 +87,16 @@ describe("post-change reliability and performance hardening", () => {
     const layout = read("app/workspace/layout.tsx");
     const selector = read("app/workspace/page.tsx");
     const investments = read("app/workspace/companies/[workspaceId]/investments/page.tsx");
+    const finances = read("app/workspace/companies/[workspaceId]/finances/page.tsx");
+    const projectLayout = read("app/workspace/projects/[projectId]/layout.tsx");
     expect(layout).not.toContain("company-selector-refinement.css");
     expect(layout).not.toContain("investments-refinement.css");
+    expect(layout).not.toContain("finance-compact.css");
+    expect(layout).not.toContain("layout-density-project-audit.css");
     expect(selector).toContain("company-selector-refinement.css");
     expect(investments).toContain("investments-refinement.css");
+    expect(finances).toContain("finance-compact.css");
+    expect(projectLayout).toContain("layout-density-project-audit.css");
   });
 
   it("removes broad legacy ALL policies from investment and document data", () => {

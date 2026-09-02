@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AlertTriangle, BarChart3, CalendarClock, CheckCircle2, Download, FileBarChart, PieChart, Sparkles } from "lucide-react";
 import { notFound } from "next/navigation";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
-import { CompanyOperationsWorkspace } from "@/components/company/company-operations-workspace";
+import ReportsOperations from "@/components/company/operations/reports-operations";
 import { requireCurrentUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { getReportsWorkspaceData } from "@/lib/data/company-operations";
@@ -112,13 +112,12 @@ export default async function CompanyReportsPage({ params }: Props) {
           <Link href={`/workspace/companies/${workspace.id}/ai-inbox`} className="co-text-link">Sprawdź wyjątki AI →</Link>
         </div>
         <p className="section-lead">Najpierw utwórz definicję raportu. Następnie rozwiń ją i uruchom raport dla wybranego okresu. Wynik zostaje zachowany jako snapshot, dzięki czemu raport z poprzedniego miesiąca nie zmieni się po późniejszej korekcie danych.</p>
-        <CompanyOperationsWorkspace
+        <ReportsOperations
           workspaceId={workspace.id}
-          kind="reports"
           data={data}
           canWrite={canWrite}
-          canApprove={false}
-          referenceDate={new Date().toISOString()}
+          pathname={`/workspace/companies/${workspace.id}/reports`}
+          query=""
         />
       </section>
     </main>

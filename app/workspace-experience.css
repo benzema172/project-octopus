@@ -72,7 +72,6 @@
 .octopus-app-light .ops-panel,
 .octopus-app-light .ops-quick-actions,
 .octopus-app-light .co-list-toolbar,
-.octopus-app-light .project-card,
 .octopus-app-light .section-band {
   border-color: var(--lux-border) !important;
   border-radius: 17px !important;
@@ -139,7 +138,7 @@
 
 .octopus-app-light :is(.co-section, .ops-panel, .document-principles) { content-visibility: auto; contain-intrinsic-size: auto 220px; }
 .octopus-app-light .co-main > :is(main, .workspace-page),
-.octopus-app-light .project-workspace > :is(section, article, .section-band, .project-card) { animation: octopus-content-in var(--motion-base) var(--motion-ease) both; }
+.octopus-app-light .project-workspace > :is(section, article, .section-band) { animation: octopus-content-in var(--motion-base) var(--motion-ease) both; }
 
 .route-loading { width: min(1440px,100%); min-height: 390px; margin: 0 auto; padding: 2px 0 20px; animation: octopus-content-in var(--motion-base) var(--motion-ease) both; }
 .route-loading :is(.route-loading__eyebrow,.route-loading__title,.route-loading__copy,.route-loading__metrics > span,.route-loading__panel > span) { display: block; border-radius: 999px; background: linear-gradient(90deg,#eceef2 0%,#f6f7f9 48%,#eceef2 100%); background-size: 220% 100%; animation: octopus-skeleton 1.55s ease-in-out infinite; }

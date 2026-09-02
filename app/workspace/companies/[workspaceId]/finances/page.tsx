@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { CompanyOperationalPage } from "@/components/company/company-operational-page";
 import { FinanceEnterpriseFlowSection } from "@/components/company/finance-enterprise-flow-section";
 import { getFinanceWorkspaceData } from "@/lib/data/company-operations";
+import "../../../../finance-compact.css";
 
 export const dynamic = "force-dynamic";
 

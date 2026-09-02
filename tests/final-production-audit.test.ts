@@ -9,11 +9,15 @@ describe("final production audit contract", () => {
   it("keeps workspace-only styles out of the anonymous root route", () => {
     const rootLayout = read("app/layout.tsx");
     const workspaceLayout = read("app/workspace/layout.tsx");
+    const companySearch = read("components/company/company-search.tsx");
+    const controlCss = read("app/control-360-compact.css");
 
     expect(rootLayout).not.toContain("octopus-app.css");
     expect(rootLayout).not.toContain("octopus-1-release.css");
     expect(workspaceLayout).toContain("../octopus-app.css");
-    expect(workspaceLayout).toContain("../octopus-1-release.css");
+    expect(workspaceLayout).not.toContain("octopus-1-release.css");
+    expect(companySearch).toContain("company-search.module.css");
+    expect(controlCss).toContain(".command-form");
   });
 
   it("does not expose the framework header", () => {
@@ -30,13 +34,15 @@ describe("final production audit contract", () => {
     expect(proxy).not.toContain("NextResponse.rewrite");
   });
 
-  it("replaces the legacy company monolith with a thin lazy compatibility adapter", () => {
-    const adapter = read("components/company/company-operations-workspace.tsx");
+  it("loads reports directly without the legacy all-module compatibility adapter", () => {
+    const reports = read("app/workspace/companies/[workspaceId]/reports/page.tsx");
+    const legacyRoute = read("app/workspace/companies/[workspaceId]/[section]/page.tsx");
 
-    expect(adapter).toContain("dynamic(() => import");
-    expect(adapter).toContain("reports-operations");
-    expect(adapter).not.toContain("function Finance(");
-    expect(adapter.length).toBeLessThan(4_000);
+    expect(reports).toContain('import ReportsOperations from "@/components/company/operations/reports-operations"');
+    expect(reports).not.toContain("CompanyOperationsWorkspace");
+    expect(legacyRoute).toContain("LEGACY_AI_SECTIONS");
+    expect(legacyRoute).not.toContain("OPERATIONAL_MODULES");
+    expect(legacyRoute.length).toBeLessThan(1_200);
   });
 
   it("keeps CI and E2E on Node 24 with dependency and black-box integration gates", () => {

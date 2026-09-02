@@ -26,13 +26,13 @@ describe("finance compact layout", () => {
 
   it("gives finance KPI values their own row so currency is not clipped", () => {
     const css = read("app/finance-compact.css");
-    const workspaceLayout = read("app/workspace/layout.tsx");
+    const financePage = read("app/workspace/companies/[workspaceId]/finances/page.tsx");
 
     expect(css).toContain("grid-template-columns: repeat(8, minmax(0, 1fr));");
     expect(css).toContain("grid-template-columns: minmax(0, 1fr) !important;");
     expect(css).toContain("overflow: visible;");
     expect(css).toContain("white-space: nowrap;");
-    expect(workspaceLayout).toContain('import "../finance-compact.css"');
+    expect(financePage).toContain('import "../../../../finance-compact.css"');
   });
 
   it("replaces the presentation hero with a compact four-step operational flow", () => {

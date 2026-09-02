@@ -6,7 +6,7 @@ const read = (path: string) => readFileSync(path, "utf8");
 describe("global authenticated section rhythm", () => {
   it("loads the rhythm layer after legacy density styles", () => {
     const layout = read("app/workspace/layout.tsx");
-    const density = layout.indexOf('import "../layout-density-project-audit.css"');
+    const density = layout.indexOf('import "../layout-density-audit.css"');
     const rhythm = layout.indexOf('import "../global-section-rhythm.css"');
     expect(density).toBeGreaterThan(-1);
     expect(rhythm).toBeGreaterThan(density);

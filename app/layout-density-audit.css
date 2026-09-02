@@ -19,7 +19,6 @@
   .co-section,
   .section-band,
   .project-workspace,
-  .project-card,
   .ops-workspace,
   .ops-panel,
   .ops-panel__summary,
@@ -46,7 +45,7 @@
 }
 
 /* Remove the old 220px placeholder reservation from interactive workspace panels. */
-.octopus-app-light :is(.co-section, .ops-panel, .ops-quick-actions, .section-band, .project-card) {
+.octopus-app-light :is(.co-section, .ops-panel, .ops-quick-actions, .section-band) {
   min-height: 0 !important;
   content-visibility: visible !important;
   contain-intrinsic-size: none !important;

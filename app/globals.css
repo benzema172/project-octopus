@@ -1386,7 +1386,6 @@ button:disabled {
 
 .page-heading p:not(.eyebrow),
 .section-heading p:not(.eyebrow),
-.project-card p,
 .brain-panel p,
 .empty-state p {
   color: var(--muted);
@@ -1418,7 +1417,6 @@ button:disabled {
   gap: 14px;
 }
 
-.project-card,
 .empty-state,
 .brain-panel,
 .upload-panel,
@@ -1428,38 +1426,18 @@ button:disabled {
   background: var(--panel);
 }
 
-.project-card {
-  display: grid;
-  gap: 18px;
-  padding: 18px;
-}
-
-.project-card h2,
 .document-row h3,
 .empty-state h2,
 .empty-state h3 {
   margin: 0;
 }
 
-.project-card dl {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin: 0;
-}
-
-.project-card dt,
 .project-overview span,
 .brain-status-grid span {
   color: var(--quiet);
   font-size: 0.76rem;
   font-weight: 800;
   text-transform: uppercase;
-}
-
-.project-card dd {
-  margin: 3px 0 0;
-  color: var(--text);
 }
 
 .empty-state {
@@ -1875,15 +1853,10 @@ button:disabled {
 .field input,
 .field textarea { color: var(--text); }
 .project-grid { gap: 12px; }
-.project-card,
 .empty-state,
 .brain-panel,
 .upload-panel,
 .document-row { border-color: var(--line); background: #fff; box-shadow: none; }
-.project-card { border-radius: 11px; }
-.project-card p { color: var(--muted); }
-.project-card dt { color: var(--quiet); }
-.project-card dd { color: var(--text); }
 .empty-state { display: grid; justify-items: start; gap: 9px; color: var(--muted); }
 .portfolio-footer-note { display: flex; align-items: start; gap: 10px; border: 1px solid #d7e0ef; border-radius: 10px; background: #f8faff; color: var(--muted); padding: 15px 17px; }
 .portfolio-footer-note p { margin: 0; line-height: 1.5; }

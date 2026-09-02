@@ -5,13 +5,13 @@ const read = (path: string) => readFileSync(path, "utf8");
 
 describe("HR monthly historical detail editing", () => {
   it("opens full detailed labor editing from every monthly day cell", () => {
-    const records = read("components/company/hr/hr-time-records-159.tsx");
+    const records = read("components/company/hr/hr-time-records-400.tsx");
     const editor = read("components/company/hr/hr-timesheet-entry-editor-159.tsx");
 
-    expect(records).toContain('onOpenDetails={() => setDetailFocus({ employeeId, workDate: date })}');
-    expect(records).toContain('data-hr-month-detail-editor="1"');
-    expect(records).toContain("Pełna ewidencja dnia");
-    expect(records).toContain("Możesz edytować także historyczny wpis");
+    expect(records).toContain('setDetailFocus({ employeeId, workDate: date })');
+    expect(records).toContain('onOpenDay(date, id)');
+    expect(records).toContain("Pełna korekta historyczna");
+    expect(records).toContain("historyczny dzień");
     expect(records).toContain("fixedWorkDate={detailFocus.workDate}");
     expect(records).toContain("referenceDate={detailFocus.workDate}");
     expect(editor).toContain("onOpenDetails?: () => void");

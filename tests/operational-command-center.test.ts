@@ -16,7 +16,8 @@ describe("Operational hardening — P0/P1/P2 contracts",()=>{
   it("exposes real operating KPIs in Finance HR Warehouse and Fleet",()=>{
     const migration=read("supabase/migrations/20260819085000_129_module_intelligence.sql");
     expect(migration).toContain("unallocatedNet"); expect(migration).toContain("approvedLaborCost"); expect(migration).toContain("stockValue"); expect(migration).toContain("costPerKm");
-    expect(read("components/company/operations/hr-operations.tsx")).toContain("timesheet_decision");
+    expect(read("components/company/hr/hr-workspace-core-300.tsx")).toContain("HrTimeRecords400");
+    expect(read("components/company/hr/hr-time-records-400.tsx")).toContain("Do decyzji");
     expect(read("components/company/operations/warehouse-operations.tsx")).toContain("stock_movement_approve");
     expect(read("components/company/operations/fleet-operations.tsx")).toContain("service_close");
   });

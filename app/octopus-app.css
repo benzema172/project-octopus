@@ -511,17 +511,14 @@
 .co-main .workspace-page { width: min(1440px,100%); min-height: auto; margin: 0 auto; padding: 0; color: var(--text); }
 .co-main .project-shell-heading,
 .co-main .section-band,
-.co-main .project-card,
 .co-main .create-project,
 .co-main .upload-panel,
 .co-main .document-row,
 .co-main .trash-panel,
 .co-main .empty-state { border-color: var(--line); background: rgba(255,255,255,.8); color: var(--text); box-shadow: 0 15px 38px rgba(50,39,66,.05); }
 .co-main .project-shell-heading p,
-.co-main .project-card p,
 .co-main .section-heading p,
 .co-main .document-row p { color: var(--muted); }
-.co-main .project-card h2,
 .co-main .section-heading h2,
 .co-main .project-shell-heading h1 { color: var(--text); }
 .co-main .primary-button { border: 0; background: linear-gradient(100deg,#8a2be2,#1e5bff 70%,#00aeb0); color: #fff; }

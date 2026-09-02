@@ -8,7 +8,7 @@ import type { CompanyPageOptions } from "@/lib/data/company-operations";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import type { Data } from "@/components/company/operations/module-shell";
 
-type Kind="finance"|"hr"|"warehouse"|"fleet";
+type Kind="finance"|"warehouse"|"fleet";
 type Loader=(workspaceId:string,options:CompanyPageOptions)=>Promise<Data>;
 
 type Props={

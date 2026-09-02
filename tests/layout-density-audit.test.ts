@@ -4,15 +4,16 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("workspace layout density audit", () => {
-  it("loads the audit layers after the legacy and finance layout systems", () => {
+  it("scopes finance and project audit layers to their owning routes", () => {
     const layout = read("app/workspace/layout.tsx");
-    const financeIndex = layout.indexOf('import "../finance-compact.css"');
-    const auditIndex = layout.indexOf('import "../layout-density-audit.css"');
-    const projectAuditIndex = layout.indexOf('import "../layout-density-project-audit.css"');
+    const financePage = read("app/workspace/companies/[workspaceId]/finances/page.tsx");
+    const projectLayout = read("app/workspace/projects/[projectId]/layout.tsx");
 
-    expect(financeIndex).toBeGreaterThan(-1);
-    expect(auditIndex).toBeGreaterThan(financeIndex);
-    expect(projectAuditIndex).toBeGreaterThan(auditIndex);
+    expect(layout).toContain('import "../layout-density-audit.css"');
+    expect(layout).not.toContain('import "../finance-compact.css"');
+    expect(layout).not.toContain('import "../layout-density-project-audit.css"');
+    expect(financePage).toContain('import "../../../../finance-compact.css"');
+    expect(projectLayout).toContain('import "../../../layout-density-project-audit.css"');
   });
 
   it("re-applies project audit after project-specific legacy styles", () => {

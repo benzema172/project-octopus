@@ -96,7 +96,18 @@
 .ops-metrics--primary { grid-template-columns: repeat(3, minmax(0,1fr)); gap: var(--ux-gap-2) !important; }
 .ops-workspace--finance .ops-metrics--primary { grid-template-columns: repeat(4, minmax(0,1fr)); }
 .ops-metrics--primary .ops-metric { min-height: 82px !important; padding: 13px 14px !important; }
-.ops-metric strong { overflow-wrap: anywhere; }
+.ops-metric {
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-flow: row;
+  gap: 3px;
+}
+.ops-metric > :is(small, strong, p) { min-width: 0; }
+.ops-metric strong {
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .ops-secondary-metrics {
   margin-top: -4px;
   border: 1px solid var(--ux-border);

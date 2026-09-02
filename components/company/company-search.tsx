@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { Bookmark, FileSearch, LoaderCircle, Search, Trash2 } from "lucide-react";
+import styles from "./company-search.module.css";
 
 type SearchResult = { entity_type: string; entity_id: string; domain: string; project_id: string | null; title: string; subtitle: string; score: number };
 type SavedSearch = { id: string; name: string; query: string };
@@ -86,7 +87,7 @@ export function CompanySearch({ workspaceId }: { workspaceId: string }) {
   }
 
   return <section className="co-section">
-    <form onSubmit={submit} className="company-search-form">
+    <form onSubmit={submit} className={styles.searchForm}>
       <Search size={19} aria-hidden="true" />
       <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nazwa, numer faktury, treść dokumentu, SKU, stanowisko, VIN, BOQ…" aria-label="Szukaj w firmie" />
       <button type="submit" disabled={pending || query.trim().length < 2}>{pending ? <LoaderCircle className="spin" size={16} /> : <Search size={16} />} Szukaj</button>
@@ -100,7 +101,7 @@ export function CompanySearch({ workspaceId }: { workspaceId: string }) {
     {query.trim().length >= 2 ? <details className="ops-panel ops-disclosure"><summary className="ops-panel__summary"><div><p className="eyebrow">Skrót pracy</p><h2>Zapisz to wyszukiwanie</h2></div><Bookmark size={17} /></summary><div className="ops-panel__content"><div className="ops-inline-actions"><input value={saveName} onChange={(event) => setSaveName(event.target.value)} placeholder="Np. faktury Wysoka, rury DN100" aria-label="Nazwa zapisanego wyszukiwania"/><button className="secondary-button" type="button" onClick={() => void saveCurrent()} disabled={!saveName.trim()}><Bookmark size={14}/> Zapisz</button></div></div></details> : null}
 
     {error ? <p className="form-error">{error}</p> : null}
-    <div className="company-search-results">
+    <div className={styles.searchResults}>
       {results.map((row) => <Link key={`${row.entity_type}:${row.entity_id}`} href={href(workspaceId, row)}>
         <FileSearch size={18} />
         <div><small>{labels[row.entity_type] ?? row.entity_type} · {row.domain}</small><strong>{row.title}</strong><span>{row.subtitle}</span></div>

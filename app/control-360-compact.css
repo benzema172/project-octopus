@@ -238,6 +238,19 @@
 .control360-detail-columns .command-row strong { font-size: 9px; }
 .control360-detail-columns .command-row span { font-size: 8px; color: #7a7282; }
 
+.reconciliation-graph { display: grid; gap: 16px; }
+.reconciliation-graph details { margin-top: 0; }
+.command-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 11px 0; border-bottom: 1px solid #eee8f2; }
+.command-row:last-child { border-bottom: 0; }
+.command-row > div { display: grid; gap: 2px; min-width: 0; }
+.command-row small,.command-row span { color: #766e7b; font-size: .78rem; }
+.command-row > span { display: flex; gap: 6px; flex-wrap: wrap; }
+.command-row button,.command-form button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #c9b7e2; border-radius: 9px; background: #f4eefb; color: #5d3690; padding: 8px 10px; cursor: pointer; }
+.command-row button:hover,.command-form button:hover { background: #ece1f7; }
+.command-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-bottom: 12px; }
+.command-form input,.command-form select { width: 100%; min-width: 0; border: 1px solid #ded7e3; border-radius: 10px; background: #fff; color: #29232d; padding: 10px 11px; }
+.command-message { padding: 10px 12px; border: 1px solid #bde5d9; border-radius: 10px; background: #effbf7; color: #15775f; }
+
 .control360-details .reconciliation-order-form { padding: 10px; }
 .control360-details .reconciliation-order-form label { font-size: 9px; }
 .control360-technical-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 7px; padding: 9px; }
@@ -297,7 +310,7 @@
   .control360-panel__heading { align-items: flex-start; }
   .control360-heading-actions { flex-wrap: wrap; justify-content: flex-end; }
   .control360-priority { align-items: flex-start; flex-direction: column; gap: 3px; }
-  .control360-stage-grid,.control360-decision-grid,.control360-detail-columns { grid-template-columns: 1fr; }
+  .control360-stage-grid,.control360-decision-grid,.control360-detail-columns,.command-form { grid-template-columns: 1fr; }
   .control360-alert-row,.control360-review-row { grid-template-columns: auto minmax(0,1fr); }
   .control360-row-actions { grid-column: 2; }
   .control360-details > summary { align-items: flex-start; flex-direction: column; gap: 2px; }

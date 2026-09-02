@@ -19,13 +19,12 @@ describe("unified UX finalization", () => {
   });
 
   it("makes HR exception-first and keeps employee context in the drawer", () => {
-    const hr = read("components/company/operations/hr-operations.tsx");
-    expect(ordered(hr, ["Pracownicy aktywni", "Terminy do 30 dni", "Do zatwierdzenia"])).toBe(true);
-    expect(hr).toContain("detailTitle=");
-    expect(hr).toContain("detailContent=");
-    expect(hr).toContain("Zatrudnienie");
-    expect(hr).toContain("Ostatnie urlopy");
-    expect(hr).toContain("Ostatni czas pracy");
+    const dashboard = read("components/company/hr/hr-dashboard-core-300.tsx");
+    const registry = read("components/company/hr/hr-employee-registry-300.tsx");
+    expect(ordered(dashboard, ["Aktywni", "Problemy krytyczne", "Terminy ≤30 dni", "Do decyzji"])).toBe(true);
+    expect(dashboard).toContain("Co wymaga działania");
+    expect(registry).toContain("onOpenTime");
+    expect(registry).toContain("issueSummary");
   });
 
   it("makes Warehouse exception-first and exposes stock movement context", () => {
