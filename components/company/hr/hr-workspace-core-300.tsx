@@ -21,7 +21,7 @@ const HrTeamCostControl430 = dynamic(() => import("./hr-team-cost-control-430").
 const HrDocumentsCompact161 = dynamic(() => import("./hr-documents-compact-161").then((module) => module.HrDocumentsCompact161), { loading: SectionLoading });
 const HrEmployeeCreate300 = dynamic(() => import("./hr-employee-create-300").then((module) => module.HrEmployeeCreate300), { loading: SectionLoading });
 
-type Props = { workspaceId: string; data: HrWorkspaceData; canWrite: boolean; canApprove: boolean; canViewPayroll: boolean; canManagePayroll: boolean };
+type Props = { workspaceId: string; data: HrWorkspaceData; canWrite: boolean; canApprove: boolean; canViewPayroll: boolean; canManagePayroll: boolean; companyCity?: string | null };
 type TimeFocus = { employeeId: string; referenceDate: string } | null;
 
 const tabs: Array<{ id: HrWorkspaceTab; label: string; icon: ReactNode }> = [
@@ -61,7 +61,7 @@ export function HrWorkspaceCore300(props: Props) {
     {tab === "dashboard" ? <><HrDashboardCore300 data={props.data} canViewPayroll={props.canViewPayroll} onNavigate={navigate} /><HrDashboardCalendar159 workspaceId={props.workspaceId} canWrite={props.canWrite} data={props.data} onOpenEmployeeCalendar={(employeeId, referenceDate) => { setTimeFocus({ employeeId, referenceDate }); setTab("time"); }} /></> : null}
     {tab === "employees" ? <HrEmployeeRegistry300 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canApprove={props.canApprove} canViewPayroll={props.canViewPayroll} canManagePayroll={props.canManagePayroll} onOpenTime={openEmployeeTime} /> : null}
     {tab === "time" ? <div className={timeCompactStyles.compact}><HrTimeRecords400 key={timeFocus ? `${timeFocus.employeeId}-${timeFocus.referenceDate}` : "all"} workspaceId={props.workspaceId} referenceDate={timeFocus?.referenceDate ?? props.data.referenceDate} employees={props.data.employees} projects={props.data.projects} timesheets={props.data.timesheets} assignments={props.data.assignments} leaves={props.data.leaves} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} initialEmployeeId={timeFocus?.employeeId ?? null} onClearEmployeeFocus={() => setTimeFocus(null)} /></div> : null}
-    {tab === "leaves" ? <HrLeavesStable165 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canApprove={props.canApprove} /> : null}
+    {tab === "leaves" ? <HrLeavesStable165 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canApprove={props.canApprove} companyCity={props.companyCity} /> : null}
     {tab === "compliance" ? <HrComplianceCore300 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} /> : null}
     {tab === "teams" ? <HrTeamCostControl430 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} /> : null}
     {tab === "documents" ? <HrDocumentsCompact161 workspaceId={props.workspaceId} referenceDate={props.data.referenceDate} canWrite={props.canWrite} documentCount={props.data.documents.length} data={props.data} /> : null}
