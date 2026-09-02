@@ -5,7 +5,7 @@ import {
   preferredCategoryForSourceModule,
   sourceModuleMetadata,
   sourceModulePromptHint
-} from "@/lib/documents/source-module";
+} from "../lib/documents/source-module";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
