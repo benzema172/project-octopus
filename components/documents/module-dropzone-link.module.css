@@ -1,0 +1,54 @@
+.link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 13px;
+  border: 1px solid #d8dee8;
+  border-radius: 10px;
+  background: #fff;
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1;
+  text-decoration: none;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.link:hover {
+  border-color: #0f9f79;
+  background: #f4fbf8;
+  transform: translateY(-1px);
+}
+
+.link:focus-visible {
+  outline: 2px solid #0f9f79;
+  outline-offset: 2px;
+}
+
+.context {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+/*
+ * Moduł ma jeden punkt wejścia do Wrzutni: przy nagłówku strony.
+ * Starsze lokalne skróty pozostają w komponentach do czasu porządków
+ * architektury, ale nie są prezentowane użytkownikowi ani klikalne.
+ */
+:global([data-warehouse-experience="2.0"] a[href*="/documents"]) {
+  display: none !important;
+}
+
+:global([data-hr-core="300"] [data-hr-functional-upload="1"]) {
+  display: none !important;
+}
+
+@media (max-width: 720px) {
+  .link {
+    width: 100%;
+  }
+}

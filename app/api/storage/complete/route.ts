@@ -9,6 +9,11 @@ import { validateFileSignature } from "@/lib/r2/file-signature";
 import { verifyUploadToken } from "@/lib/r2/upload-token";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
+import {
+  normalizeDocumentSourceModule,
+  preferredCategoryForSourceModule,
+  sourceModuleMetadata
+} from "@/lib/documents/source-module";
 
 export const runtime = "nodejs";
 
@@ -101,6 +106,41 @@ export async function POST(request: Request) {
     return jsonError(`Nie udało się atomowo zapisać dokumentu: ${completeError?.message ?? "brak danych"}`, 500);
   }
 
+  const sourceModule = normalizeDocumentSourceModule(intent.sourceMetadata?.sourceModule);
+  if (sourceModule) {
+    const preferredCategory = preferredCategoryForSourceModule(sourceModule);
+    const sourceMetadata = { ...sourceModuleMetadata(sourceModule), ...(intent.sourceMetadata ?? {}) };
+    const routingCategory = intent.categoryLocked ? category : preferredCategory;
+    const intakePatch = {
+      channel: `module:${sourceModule}`,
+      requested_category: routingCategory,
+      category_locked: intent.categoryLocked,
+      source_metadata: sourceMetadata
+    };
+    const { data: updatedIntake, error: updateIntakeError } = await supabase
+      .from("document_intakes")
+      .update(intakePatch)
+      .eq("document_id", completed.document_id)
+      .select("id")
+      .maybeSingle<{ id: string }>();
+    if (updateIntakeError) return jsonError(`Dokument zapisano, ale nie udało się zapisać kontekstu Wrzutni: ${updateIntakeError.message}`, 500);
+
+    if (!updatedIntake) {
+      const { error: insertIntakeError } = await supabase.from("document_intakes").insert({
+        workspace_id: intent.workspaceId,
+        document_id: completed.document_id,
+        proposed_project_id: intent.projectId,
+        channel: `module:${sourceModule}`,
+        status: "queued",
+        requested_category: routingCategory,
+        category_locked: intent.categoryLocked,
+        source_metadata: sourceMetadata,
+        created_by: user.id
+      });
+      if (insertIntakeError) return jsonError(`Dokument zapisano, ale nie udało się utworzyć kontekstu Wrzutni: ${insertIntakeError.message}`, 500);
+    }
+  }
+
   if (intent.replacesVersionId) {
     const { data: replacedVersion, error: replacedError } = await supabase.from("document_versions").select("id")
       .eq("id", intent.replacesVersionId).eq("document_id", completed.document_id).maybeSingle<{ id: string }>();
@@ -123,6 +163,7 @@ export async function POST(request: Request) {
     objectKey: intent.objectKey,
     signatureVerified: true,
     category,
-    categoryLocked: intent.categoryLocked
+    categoryLocked: intent.categoryLocked,
+    sourceModule
   }, { headers: { "Cache-Control": "no-store" } });
 }

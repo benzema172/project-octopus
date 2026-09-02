@@ -15,6 +15,7 @@ import { processDocumentPackage } from "@/lib/documents/package-pipeline";
 import { buildRevisionImpacts } from "@/lib/documents/revision-radar";
 import { scanDocumentBytes, type MalwareScanResult } from "@/lib/documents/malware-scan";
 import { extractSpreadsheetIntelligence } from "@/lib/documents/spreadsheet-intelligence";
+import { normalizeDocumentSourceModule, sourceModuleLabel, sourceModulePromptHint } from "@/lib/documents/source-module";
 
 const MAX_PIPELINE_BYTES = 50 * 1024 * 1024;
 const MAX_INLINE_BYTES = 18 * 1024 * 1024;
@@ -35,6 +36,7 @@ type VersionRow = {
 type IntakeRow = {
   requested_category: string | null;
   category_locked: boolean;
+  source_metadata: Record<string, unknown> | null;
 };
 
 type ProjectRow = {
@@ -108,7 +110,7 @@ export async function processDocumentVersion(input: {
       .maybeSingle<{ id: string; workspace_id: string; category: string | null }>(),
     supabase
       .from("document_intakes")
-      .select("requested_category,category_locked")
+      .select("requested_category,category_locked,source_metadata")
       .eq("document_id", version.document_id)
       .maybeSingle<IntakeRow>(),
     supabase
@@ -123,6 +125,10 @@ export async function processDocumentVersion(input: {
   if (intakeError) throw new Error(`Nie udało się odczytać intencji dokumentu: ${intakeError.message}`);
   if (approvedClassification) throw new Error("Zatwierdzona wersja jest niezmienna. Dodaj nową wersję dokumentu, aby uruchomić ponowną analizę.");
   if (version.file_size_bytes > MAX_PIPELINE_BYTES) throw new Error("Plik przekracza limit 50 MB pojedynczego zadania AI.");
+
+  const sourceModule = normalizeDocumentSourceModule(intake?.source_metadata?.sourceModule);
+  const sourceRoutingHint = sourceModulePromptHint(sourceModule);
+  const requestedRoutingCategory = normalizeDocumentCategory(intake?.requested_category);
 
   const jobKey = `document-pipeline:${version.id}`;
   const { data: currentJob } = await supabase
@@ -227,7 +233,10 @@ export async function processDocumentVersion(input: {
       contractNumber: typeof profiles.get(project.id)?.contractNumber === "string" ? String(profiles.get(project.id)?.contractNumber) : null,
       aliases: aliases.get(project.id) ?? []
     }));
-    const projectCatalog = projectCandidates.map(projectCatalogLine);
+    const projectCatalog = [
+      ...(sourceRoutingHint ? [`SYSTEMOWY KONTEKST WRZUTNI — TO NIE JEST INWESTYCJA I NIE MOŻE BYĆ ZWRÓCONE W projectHint: ${sourceRoutingHint}`] : []),
+      ...projectCandidates.map(projectCatalogLine)
+    ];
     await supabase.from("processing_jobs").update({ stage: "analyze" }).eq("job_key", jobKey);
     const { analysis, model } = useFilesApi
       ? await analyzeFileWithGemini({ fileName: version.file_name, mimeType: version.mime_type, bytes, projectCatalog })
@@ -265,7 +274,9 @@ export async function processDocumentVersion(input: {
       ai_category: analysis.category,
       effective_category: effectiveCategory,
       category_locked: categoryLocked,
-      requested_category: lockedCategory,
+      requested_category: lockedCategory ?? requestedRoutingCategory,
+      source_module: sourceModule,
+      source_module_hint_applied: Boolean(sourceRoutingHint),
       project_hint: analysis.projectHint,
       project_match: projectMatch
     };
@@ -279,7 +290,12 @@ export async function processDocumentVersion(input: {
       subcategory: analysis.subcategory || null,
       proposed_project_id: proposedProjectId,
       confidence: analysis.confidence,
-      rationale: [analysis.summary, categoryLocked ? "Kategoria została zablokowana przez użytkownika." : null, projectMatch?.reason].filter(Boolean).join(" "),
+      rationale: [
+        analysis.summary,
+        categoryLocked ? "Kategoria została zablokowana przez użytkownika." : null,
+        sourceModule ? `Kontekst Wrzutni: ${sourceModuleLabel(sourceModule)} — silna podpowiedź routingu bez blokady kategorii.` : null,
+        projectMatch?.reason
+      ].filter(Boolean).join(" "),
       schema_version: "document-analysis-v3",
       model_name: model,
       status: "proposed"
@@ -453,7 +469,7 @@ export async function processDocumentVersion(input: {
       status: "succeeded",
       stage: "complete",
       model_name: model,
-      prompt_version: "document-analysis-v3",
+      prompt_version: "document-analysis-v3+module-context",
       finished_at: new Date().toISOString(),
       error_code: null,
       error_message: null
@@ -470,6 +486,8 @@ export async function processDocumentVersion(input: {
         aiCategory: analysis.category,
         effectiveCategory,
         categoryLocked,
+        sourceModule,
+        sourceModuleHintApplied: Boolean(sourceRoutingHint),
         confidence: analysis.confidence,
         proposedProjectId,
         projectMatch,
