@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type ComponentProps, type MouseEvent } from "react";
+import { useEffect, useRef, type ComponentProps, type MouseEvent } from "react";
 import { HrWorkspaceCore300 } from "./hr-workspace-core-300";
 import styles from "./hr-workspace-149.module.css";
 
@@ -49,13 +49,38 @@ function patchDocumentGenerators(city: string) {
   };
 }
 
+function findLeaveRowToggle(target: HTMLElement) {
+  if (target.closest("button,a,input,select,textarea,label")) return null;
+  const row = target.closest<HTMLTableRowElement>('section[data-hr-leaves-165="1"] tbody tr');
+  if (!row || row.querySelector("td[colspan]")) return null;
+  return row.querySelector<HTMLButtonElement>('button[aria-expanded]');
+}
+
 export function HrWorkspace149({ companyCity, ...props }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const city = String(companyCity ?? "").trim();
 
+  useEffect(() => {
+    if (!city || !rootRef.current) return;
+    const root = rootRef.current;
+    const syncPreview = () => applyCityToPreview(root, city);
+    syncPreview();
+    const observer = new MutationObserver(syncPreview);
+    observer.observe(root, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [city]);
+
   const handleClickCapture = (event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    const rowToggle = findLeaveRowToggle(target);
+    if (rowToggle) {
+      event.preventDefault();
+      rowToggle.click();
+      return;
+    }
+
     if (!city) return;
-    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button");
+    const button = target.closest<HTMLButtonElement>("button");
     if (!button) return;
     const label = (button.textContent ?? "").trim();
     const isDocumentAction = /(PDF|Drukuj|Podgląd|Generuj)/i.test(label);
