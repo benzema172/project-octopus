@@ -76,11 +76,11 @@ describe("Project Octopus functional contract", () => {
     expect(deferred).toContain("CompanyPowerTools workspaceId={workspaceId} kind={kind}");
   });
 
-  it("retires the legacy power-tools surface from Warehouse only", () => {
-    expect(operationalPage).toContain('const showLegacyPowerTools = kind !== "warehouse";');
+  it("keeps the legacy power-tools surface only in Finance", () => {
+    expect(operationalPage).toContain('const showLegacyPowerTools = kind === "finance";');
     expect(operationalPage).toContain("{showLegacyPowerTools ? (");
     expect(operationalPage).toContain("<CompanyPowerToolsDeferred");
-    expect(operationalPage).not.toContain('kind !== "finance"');
+    expect(operationalPage).not.toContain('kind !== "warehouse"');
     expect(operationalPage).not.toContain('kind !== "fleet"');
   });
 
