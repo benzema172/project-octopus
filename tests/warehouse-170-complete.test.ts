@@ -84,7 +84,8 @@ describe("Warehouse durable implementation contract", () => {
     expect(migration).toContain("assign_stock_instance_atomic");
     expect(migration).toContain("return_stock_instance_atomic");
     expect(migration).toContain("record_stock_instance_service_atomic");
-    expect(workspace).toContain("Sprzęt i urządzenia");
-    expect(workspace).toContain("Egzemplarze seryjne, wydania i serwis");
+    expect(workspace).toContain("Urządzenia i odpowiedzialność");
+    expect(workspace).toContain("Numery seryjne, użytkownik/budowa/pojazd, gwarancja i historia serwisu.");
+    expect(workspace).toContain('act("stock_instance_service"');
   });
 });
