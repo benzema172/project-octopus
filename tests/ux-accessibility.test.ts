@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(path, "utf8");
@@ -53,14 +53,14 @@ describe("workspace UX and accessibility contracts", () => {
     expect(warehouse).not.toContain("Material Flow Integrity");
   });
 
-  it("adds instant investment filtering and keeps advanced tools lazy", () => {
+  it("adds instant investment filtering and keeps the retired heavy tool surface out of the client", () => {
     const investments = read("components/projects/company-investments-view.tsx");
-    const tools = read("components/company/company-power-tools-deferred.tsx");
+    const operationalPage = read("components/company/company-operational-page.tsx");
     expect(investments).toContain("filteredProjects");
     expect(investments).toContain("Szukaj inwestycji");
-    expect(tools).toContain("Więcej narzędzi");
-    expect(tools).toContain("/api/company/power-data");
-    expect(tools).toContain("dynamic(");
+    expect(operationalPage).not.toContain("Więcej narzędzi");
+    expect(operationalPage).not.toContain("power-data");
+    expect(existsSync("components/company/company-power-tools-deferred.tsx")).toBe(false);
   });
 
   it("turns operation tables into labelled cards on narrow screens", () => {
