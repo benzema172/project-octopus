@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { employeeAllocationLoad, fleetEconomy, invoiceAging, stockHealth } from "../lib/company/power-metrics";
 
@@ -59,39 +59,48 @@ describe("Project Octopus functional contract", () => {
   const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
   const layout = readFileSync("app/workspace/companies/[workspaceId]/[section]/layout.tsx", "utf8");
   const operationalPage = readFileSync("components/company/company-operational-page.tsx", "utf8");
-  const deferred = readFileSync("components/company/company-power-tools-deferred.tsx", "utf8");
+  const financeOperations = readFileSync("components/company/operations/finance-operations.tsx", "utf8");
+  const fleetOperations = readFileSync("components/company/operations/fleet-operations.tsx", "utf8");
+  const warehouseOperations = readFileSync("components/company/operations/warehouse-operations.tsx", "utf8");
   const route = readFileSync("app/api/company/power/route.ts", "utf8");
   const reliability = readFileSync("supabase/migrations/20260817210000_091_reliability_core.sql", "utf8");
   const exportRoute = readFileSync("app/api/company/export/route.ts", "utf8");
-  const component = readFileSync("components/company/company-power-tools.tsx", "utf8");
 
-  it("publishes the current release and keeps advanced tools available without eager layout loading", () => {
+  it("removes the legacy Power Tools surface and its heavy deferred data path from the app", () => {
     expect(packageJson.version).toBe("1.7.0");
     expect(layout).not.toContain("CompanyPowerTools");
     expect(layout).not.toContain("getCompanyPowerToolsData");
-    expect(deferred).toContain("CompanyPowerTools");
-    expect(deferred).toContain("/api/company/power-data");
-    expect(deferred).toContain('kind: Exclude<CompanyPowerKind, "reports">');
-    expect(deferred).toContain("kind=${encodeURIComponent(kind)}");
-    expect(deferred).toContain("CompanyPowerTools workspaceId={workspaceId} kind={kind}");
+    expect(operationalPage).not.toContain("CompanyPowerTools");
+    expect(operationalPage).not.toContain("showLegacyPowerTools");
+    expect(operationalPage).not.toContain("power-data");
+    expect(operationalPage).not.toContain("Więcej narzędzi");
+
+    for (const retiredPath of [
+      "components/company/company-power-tools-deferred.tsx",
+      "components/company/company-power-tools.tsx",
+      "components/company/company-power-tools.module.css",
+      "lib/data/company-power-tools.ts",
+      "app/api/company/power-data/route.ts"
+    ]) {
+      expect(existsSync(retiredPath), `${retiredPath} should stay retired`).toBe(false);
+    }
   });
 
-  it("keeps the legacy power-tools surface only in Finance", () => {
-    expect(operationalPage).toContain('const showLegacyPowerTools = kind === "finance";');
-    expect(operationalPage).toContain("{showLegacyPowerTools ? (");
-    expect(operationalPage).toContain("<CompanyPowerToolsDeferred");
-    expect(operationalPage).not.toContain('kind !== "warehouse"');
-    expect(operationalPage).not.toContain('kind !== "fleet"');
+  it("keeps Finance, Fleet and Warehouse free of the retired heavy panel", () => {
+    for (const source of [financeOperations, fleetOperations, warehouseOperations]) {
+      expect(source).not.toContain("CompanyPowerTools");
+      expect(source).not.toContain("power-data");
+      expect(source).not.toContain("Więcej narzędzi");
+    }
   });
 
-  it("contains write actions for finance, HR, warehouse, fleet and reports", () => {
+  it("keeps protected backend write actions available while retiring the old UI", () => {
     for (const action of [
       "invoice_reassign", "commitment_status", "employment_create", "assignment_create",
       "reservation_issue", "stock_transfer", "stock_item_status", "vehicle_allocation_create",
       "meter_reading_create", "damage_status", "report_definition_status"
     ]) {
       expect(route).toContain(`\"${action}\"`);
-      expect(component).toContain(action);
     }
   });
 
@@ -104,11 +113,9 @@ describe("Project Octopus functional contract", () => {
     expect(reliability).toContain("nie może być mniejszy od bieżącego");
   });
 
-  it("exports every operational tab as CSV or JSON behind read authorization", () => {
+  it("keeps CSV and JSON export authorization independent of the retired UI", () => {
     expect(exportRoute).toContain("hasDomainAccess");
     expect(exportRoute).toContain("text/csv");
     expect(exportRoute).toContain("application/json");
-    expect(component).toContain("format=csv");
-    expect(component).toContain("format=json");
   });
 });
