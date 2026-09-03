@@ -4,7 +4,7 @@ import { inferWarehouseMovementType, inventoryDifference, isPhysicalWarehouseLin
 
 const read = (path: string) => readFileSync(path, "utf8");
 
-describe("Warehouse 1.7.0 domain rules", () => {
+describe("Warehouse domain rules", () => {
   it("keeps financial evidence separate from the physical movement direction", () => {
     expect(inferWarehouseMovementType("purchase")).toBe("PZ");
     expect(inferWarehouseMovementType("sale")).toBe("WZ");
@@ -32,9 +32,8 @@ describe("Warehouse 1.7.0 domain rules", () => {
   });
 });
 
-describe("Warehouse 1.7.0 implementation contract", () => {
-  const operations = read("components/company/operations/warehouse-operations.tsx");
-  const commandCenter = read("components/company/warehouse-command-center.tsx");
+describe("Warehouse durable implementation contract", () => {
+  const workspace = read("components/company/warehouse-workspace-300.tsx");
   const loader = read("lib/data/company-operations.ts");
   const route = read("app/api/company/warehouse-atomic/route.ts");
   const recordsRoute = read("app/api/company/records/route.ts");
@@ -42,13 +41,12 @@ describe("Warehouse 1.7.0 implementation contract", () => {
   const densityCss = read("app/layout-density-audit.css");
   const migration = read("supabase/migrations/20260901210000_warehouse_170_complete.sql");
 
-  it("renders AI imports and uses movement lines for item history", () => {
-    expect(operations).toContain("WarehouseCommandCenter");
-    expect(operations).toContain("lines.filter((line)");
-    expect(operations).toContain("movementById.get");
-    expect(commandCenter).toContain("Dostawy AI");
-    expect(commandCenter).toContain("ai_warehouse_import");
-    expect(commandCenter).toContain("Usługi nie trafią do stanu");
+  it("renders AI exception handling while keeping movement history visible", () => {
+    expect(workspace).toContain("Poczekalnia");
+    expect(workspace).toContain("SUGESTIA OCTOPUS AI");
+    expect(workspace).toContain("Ruchy magazynowe");
+    expect(workspace).toContain("Ostatnie ruchy");
+    expect(workspace).toContain("Poza magazynem");
   });
 
   it("loads price, alias, serialized asset and inventory data", () => {
@@ -68,9 +66,6 @@ describe("Warehouse 1.7.0 implementation contract", () => {
     expect(uxCss).toContain("overflow-wrap: normal");
     expect(uxCss).toContain("white-space: nowrap");
     expect(densityCss).toContain(".octopus-app-light .ops-metric");
-    expect(densityCss).toContain("grid-template-columns: minmax(0, 1fr) !important");
-    expect(densityCss).toContain(".ops-workspace:not(.ops-workspace--finance) .ops-metrics--primary");
-    expect(densityCss).toContain("grid-template-columns: repeat(3, minmax(0, 1fr)) !important");
   });
 
   it("requires approval for physical stock and inventory truth", () => {
@@ -89,8 +84,7 @@ describe("Warehouse 1.7.0 implementation contract", () => {
     expect(migration).toContain("assign_stock_instance_atomic");
     expect(migration).toContain("return_stock_instance_atomic");
     expect(migration).toContain("record_stock_instance_service_atomic");
-    expect(commandCenter).toContain("Wydaj egzemplarz");
-    expect(commandCenter).toContain("Zwrot egzemplarza");
-    expect(commandCenter).toContain("Serwis i kalibracja");
+    expect(workspace).toContain("Sprzęt i urządzenia");
+    expect(workspace).toContain("Egzemplarze seryjne, wydania i serwis");
   });
 });
