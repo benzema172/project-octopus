@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { CompanyOperationsLazy } from "@/components/company/company-operations-lazy";
-import { CompanyPowerToolsDeferred } from "@/components/company/company-power-tools-deferred";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { requireCurrentUser } from "@/lib/auth";
 import { hasDomainAccess, type Domain } from "@/lib/authorization";
@@ -39,7 +38,6 @@ export async function CompanyOperationalPage({ workspaceId, page, query, domain,
   ]);
 
   const pathname = `/workspace/companies/${workspace.id}/${kind === "finance" ? "finances" : kind}`;
-  const showLegacyPowerTools = kind === "finance";
 
   return (
     <main className="co-page">
@@ -59,14 +57,6 @@ export async function CompanyOperationalPage({ workspaceId, page, query, domain,
         pathname={pathname}
         query={query ?? ""}
       />
-      {showLegacyPowerTools ? (
-        <CompanyPowerToolsDeferred
-          workspaceId={workspace.id}
-          kind={kind}
-          canWrite={canWrite}
-          referenceDate={referenceDate}
-        />
-      ) : null}
     </main>
   );
 }
