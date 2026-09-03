@@ -1,6 +1,7 @@
 begin;
 
--- Fleet 4.0 hardening i operacje terenowe: mobile check-out, dispatch, health integracji, PL compliance i Service Kit -> Magazyn.
+-- Fleet 4.0 hardening: mobile check-out, dispatch, health integracji,
+-- polska zgodność e-TOLL/tachograf/SENT i Service Kit -> Magazyn.
 
 create table if not exists public.fleet_vehicle_checkouts (
   id uuid primary key default gen_random_uuid(),
@@ -10,17 +11,12 @@ create table if not exists public.fleet_vehicle_checkouts (
   project_id uuid references public.projects(id) on delete set null,
   checked_out_at timestamptz not null default now(),
   checked_in_at timestamptz,
-  start_mileage numeric,
-  end_mileage numeric,
-  start_engine_hours numeric,
-  end_engine_hours numeric,
+  start_mileage numeric,end_mileage numeric,start_engine_hours numeric,end_engine_hours numeric,
   checkout_inspection_id uuid references public.fleet_walkaround_inspections(id) on delete set null,
   return_inspection_id uuid references public.fleet_walkaround_inspections(id) on delete set null,
   status text not null default 'open' check(status in ('open','returned','cancelled')),
-  notes text,
-  created_by uuid references auth.users(id) on delete set null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  notes text,created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),updated_at timestamptz not null default now()
 );
 create unique index if not exists fleet_vehicle_checkouts_open_vehicle_uidx on public.fleet_vehicle_checkouts(vehicle_id) where status='open';
 create index if not exists fleet_vehicle_checkouts_workspace_idx on public.fleet_vehicle_checkouts(workspace_id,status,checked_out_at desc);
@@ -31,23 +27,14 @@ create index if not exists fleet_vehicle_checkouts_return_inspection_idx on publ
 create index if not exists fleet_vehicle_checkouts_created_by_idx on public.fleet_vehicle_checkouts(created_by) where created_by is not null;
 
 create table if not exists public.fleet_route_plans (
-  id uuid primary key default gen_random_uuid(),
-  workspace_id uuid not null references public.workspaces(id) on delete cascade,
-  mission_id uuid references public.fleet_missions(id) on delete cascade,
-  vehicle_id uuid references public.vehicles(id) on delete set null,
-  employee_id uuid references public.employees(id) on delete set null,
-  route_date date not null default current_date,
+  id uuid primary key default gen_random_uuid(),workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  mission_id uuid references public.fleet_missions(id) on delete cascade,vehicle_id uuid references public.vehicles(id) on delete set null,
+  employee_id uuid references public.employees(id) on delete set null,route_date date not null default current_date,
   status text not null default 'draft' check(status in ('draft','planned','in_progress','completed','cancelled')),
-  estimated_distance_km numeric,
-  estimated_duration_minutes numeric,
-  actual_distance_km numeric,
-  actual_duration_minutes numeric,
+  estimated_distance_km numeric,estimated_duration_minutes numeric,actual_distance_km numeric,actual_duration_minutes numeric,
   optimization_mode text not null default 'manual' check(optimization_mode in ('manual','nearest','provider','ai')),
-  provider text,
-  metadata jsonb not null default '{}'::jsonb,
-  created_by uuid references auth.users(id) on delete set null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  provider text,metadata jsonb not null default '{}'::jsonb,created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),updated_at timestamptz not null default now()
 );
 create index if not exists fleet_route_plans_workspace_idx on public.fleet_route_plans(workspace_id,route_date,status);
 create index if not exists fleet_route_plans_mission_idx on public.fleet_route_plans(mission_id) where mission_id is not null;
@@ -56,47 +43,29 @@ create index if not exists fleet_route_plans_employee_idx on public.fleet_route_
 create index if not exists fleet_route_plans_created_by_idx on public.fleet_route_plans(created_by) where created_by is not null;
 
 create table if not exists public.fleet_route_stops (
-  id uuid primary key default gen_random_uuid(),
-  workspace_id uuid not null references public.workspaces(id) on delete cascade,
-  route_plan_id uuid not null references public.fleet_route_plans(id) on delete cascade,
-  sequence_no integer not null check(sequence_no>=0),
-  project_id uuid references public.projects(id) on delete set null,
-  geofence_id uuid references public.fleet_geofences(id) on delete set null,
-  label text not null,
-  address text,
-  latitude numeric,
-  longitude numeric,
-  planned_arrival timestamptz,
-  planned_departure timestamptz,
-  actual_arrival timestamptz,
-  actual_departure timestamptz,
-  stop_type text not null default 'job' check(stop_type in ('base','job','warehouse','service','fuel','charge','other')),
-  metadata jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now(),
-  unique(route_plan_id,sequence_no)
+  id uuid primary key default gen_random_uuid(),workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  route_plan_id uuid not null references public.fleet_route_plans(id) on delete cascade,sequence_no integer not null check(sequence_no>=0),
+  project_id uuid references public.projects(id) on delete set null,geofence_id uuid references public.fleet_geofences(id) on delete set null,
+  label text not null,address text,latitude numeric,longitude numeric,planned_arrival timestamptz,planned_departure timestamptz,
+  actual_arrival timestamptz,actual_departure timestamptz,stop_type text not null default 'job' check(stop_type in ('base','job','warehouse','service','fuel','charge','other')),
+  metadata jsonb not null default '{}'::jsonb,created_at timestamptz not null default now(),unique(route_plan_id,sequence_no)
 );
 create index if not exists fleet_route_stops_workspace_idx on public.fleet_route_stops(workspace_id,route_plan_id,sequence_no);
 create index if not exists fleet_route_stops_project_idx on public.fleet_route_stops(project_id) where project_id is not null;
 create index if not exists fleet_route_stops_geofence_idx on public.fleet_route_stops(geofence_id) where geofence_id is not null;
 
 create table if not exists public.fleet_provider_sync_runs (
-  id uuid primary key default gen_random_uuid(),
-  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  id uuid primary key default gen_random_uuid(),workspace_id uuid not null references public.workspaces(id) on delete cascade,
   connection_id uuid not null references public.fleet_telematics_connections(id) on delete cascade,
-  started_at timestamptz not null default now(),
-  finished_at timestamptz,
+  started_at timestamptz not null default now(),finished_at timestamptz,
   status text not null default 'running' check(status in ('running','success','partial','failed')),
-  received_events integer not null default 0,
-  accepted_events integer not null default 0,
-  rejected_events integer not null default 0,
-  error_message text,
-  metadata jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now()
+  received_events integer not null default 0,accepted_events integer not null default 0,rejected_events integer not null default 0,
+  error_message text,metadata jsonb not null default '{}'::jsonb,created_at timestamptz not null default now()
 );
 create index if not exists fleet_provider_sync_runs_workspace_idx on public.fleet_provider_sync_runs(workspace_id,started_at desc,status);
 create index if not exists fleet_provider_sync_runs_connection_idx on public.fleet_provider_sync_runs(connection_id,started_at desc);
 
--- RLS.
+-- Nie nakładamy FOR ALL na polityki per operacja.
 do $$
 declare t text;
 begin
@@ -115,10 +84,7 @@ begin
 end $$;
 
 create or replace function public.checkout_vehicle_400(p_workspace_id uuid,p_vehicle_id uuid,p_employee_id uuid,p_project_id uuid,p_actor_id uuid,p_notes text default null)
-returns uuid
-language plpgsql
-security definer
-set search_path=public,private,pg_temp
+returns uuid language plpgsql security definer set search_path=public,private,pg_temp
 as $$
 declare v public.vehicles%rowtype;v_id uuid;v_missing integer;v_open uuid;
 begin
@@ -130,7 +96,9 @@ begin
   perform 1 from public.employees where id=p_employee_id and workspace_id=p_workspace_id and status='active';
   if not found then raise exception 'Pracownik nie jest aktywny w tej firmie.'; end if;
   if p_project_id is not null then perform 1 from public.projects where id=p_project_id and workspace_id=p_workspace_id; if not found then raise exception 'Inwestycja nie należy do firmy.'; end if; end if;
-  select count(*) into v_missing from public.vehicle_required_qualifications rq where rq.workspace_id=p_workspace_id and rq.vehicle_id=p_vehicle_id and not exists(select 1 from public.qualifications q where q.workspace_id=p_workspace_id and q.employee_id=p_employee_id and lower(q.qualification_type)=lower(rq.qualification_type) and q.status not in('expired','revoked') and (q.valid_until is null or q.valid_until>=current_date));
+  select count(*) into v_missing from public.vehicle_required_qualifications rq where rq.workspace_id=p_workspace_id and rq.vehicle_id=p_vehicle_id and not exists(
+    select 1 from public.qualifications q where q.workspace_id=p_workspace_id and q.employee_id=p_employee_id and lower(q.qualification_type)=lower(rq.qualification_type) and q.status not in('expired','revoked') and (q.valid_until is null or q.valid_until>=current_date)
+  );
   if v_missing>0 then raise exception 'Pracownik nie ma wszystkich wymaganych uprawnień do tego pojazdu/maszyny.'; end if;
   select id into v_open from public.fleet_vehicle_checkouts where vehicle_id=p_vehicle_id and status='open' limit 1;
   if v_open is not null then raise exception 'Pojazd jest już wydany.'; end if;
@@ -143,10 +111,7 @@ begin
 end;$$;
 
 create or replace function public.return_vehicle_400(p_workspace_id uuid,p_checkout_id uuid,p_end_mileage numeric,p_end_engine_hours numeric,p_actor_id uuid,p_notes text default null)
-returns uuid
-language plpgsql
-security definer
-set search_path=public,private,pg_temp
+returns uuid language plpgsql security definer set search_path=public,private,pg_temp
 as $$
 declare c public.fleet_vehicle_checkouts%rowtype;
 begin
@@ -160,10 +125,7 @@ begin
 end;$$;
 
 create or replace function public.prepare_fleet_service_kit_replenishment_400(p_workspace_id uuid,p_kit_id uuid,p_counterparty_id uuid,p_project_id uuid,p_actor_id uuid)
-returns jsonb
-language plpgsql
-security definer
-set search_path=public,private,pg_temp
+returns jsonb language plpgsql security definer set search_path=public,private,pg_temp
 as $$
 declare r record;v_order uuid;v_orders jsonb:='[]'::jsonb;v_on_hand numeric;v_short numeric;
 begin
@@ -175,6 +137,7 @@ begin
     from public.stock_movement_lines l join public.stock_movements m on m.id=l.movement_id where m.workspace_id=p_workspace_id and m.status='approved' and l.stock_item_id=r.stock_item_id;
     v_short:=greatest(0,r.quantity-v_on_hand);
     if v_short>0 then
+      -- create_replenishment_order_atomic tworzy wyłącznie szkic zamówienia do zatwierdzenia.
       v_order:=public.create_replenishment_order_atomic(p_workspace_id,r.stock_item_id,v_short,p_counterparty_id,p_project_id,p_actor_id);
       v_orders:=v_orders||jsonb_build_array(jsonb_build_object('stockItemId',r.stock_item_id,'quantity',v_short,'purchaseOrderId',v_order));
     end if;
@@ -183,12 +146,9 @@ begin
 end;$$;
 
 create or replace function public.refresh_fleet_regulatory_recommendations_400(p_workspace_id uuid)
-returns integer
-language plpgsql
-security definer
-set search_path=public,private,pg_temp
+returns integer language plpgsql security definer set search_path=public,private,pg_temp
 as $$
-declare v_count integer:=0;
+declare v_count integer:=0;v_added integer:=0;
 begin
   insert into public.fleet_ai_recommendations(workspace_id,vehicle_id,recommendation_type,dedupe_key,title,description,severity,confidence,recommended_action,action_payload,generated_by,status,valid_until,updated_at)
   select p_workspace_id,r.vehicle_id,'regulatory','reg:etoll:'||r.vehicle_id,'Sprawdź e-TOLL',format('Pojazd ma włączony e-TOLL, ale status urządzenia to: %s.',coalesce(r.etoll_status,'brak statusu')),'critical',.95,'open_compliance',jsonb_build_object('vehicleId',r.vehicle_id,'kind','etoll'),'rules_v1','new',now()+interval '1 day',now()
@@ -196,23 +156,20 @@ begin
   on conflict(workspace_id,dedupe_key) do update set description=excluded.description,severity=excluded.severity,status='new',valid_until=excluded.valid_until,updated_at=now();
   get diagnostics v_count = row_count;
   insert into public.fleet_ai_recommendations(workspace_id,vehicle_id,recommendation_type,dedupe_key,title,description,severity,confidence,recommended_action,action_payload,generated_by,status,valid_until,updated_at)
-  select p_workspace_id,r.vehicle_id,'regulatory','reg:tacho:'||r.vehicle_id,'Zbliża się termin pobrania danych tachografu',format('Termin pobrania danych: %s.',r.next_tachograph_download_due),'warning',.98,'open_compliance',jsonb_build_object('vehicleId',r.vehicle_id,'kind','tachograph'),'rules_v1','new',r.next_tachograph_download_due::timestamptz,now()
+  select p_workspace_id,r.vehicle_id,'regulatory','reg:tacho:'||r.vehicle_id,'Zbliża się termin pobrania danych tachografu',format('Termin pobrania danych tachografu: %s.',r.next_tachograph_download_due),'warning',.98,'open_compliance',jsonb_build_object('vehicleId',r.vehicle_id,'kind','tachograph'),'rules_v1','new',r.next_tachograph_download_due::timestamptz,now()
   from public.fleet_regulatory_profiles r where r.workspace_id=p_workspace_id and r.tachograph_required=true and r.next_tachograph_download_due is not null and r.next_tachograph_download_due<=current_date+7
   on conflict(workspace_id,dedupe_key) do update set description=excluded.description,status='new',valid_until=excluded.valid_until,updated_at=now();
-  get diagnostics v_count = v_count + row_count;
+  get diagnostics v_added = row_count; v_count:=v_count+v_added;
   insert into public.fleet_ai_recommendations(workspace_id,vehicle_id,recommendation_type,dedupe_key,title,description,severity,confidence,recommended_action,action_payload,generated_by,status,valid_until,updated_at)
   select p_workspace_id,r.vehicle_id,'regulatory','reg:sent:'||r.vehicle_id,'Sprawdź SENT',format('Monitoring SENT jest włączony, ale status to: %s.',coalesce(r.sent_status,'brak statusu')),'critical',.95,'open_compliance',jsonb_build_object('vehicleId',r.vehicle_id,'kind','sent'),'rules_v1','new',now()+interval '1 day',now()
   from public.fleet_regulatory_profiles r where r.workspace_id=p_workspace_id and r.sent_enabled=true and lower(coalesce(r.sent_status,'')) not in('active','ok','aktywny')
   on conflict(workspace_id,dedupe_key) do update set description=excluded.description,status='new',valid_until=excluded.valid_until,updated_at=now();
-  get diagnostics v_count = v_count + row_count;
+  get diagnostics v_added = row_count; v_count:=v_count+v_added;
   return v_count;
 end;$$;
 
 create or replace function public.refresh_fleet_connection_health_400(p_workspace_id uuid)
-returns integer
-language plpgsql
-security definer
-set search_path=public,private,pg_temp
+returns integer language plpgsql security definer set search_path=public,private,pg_temp
 as $$
 declare v_count integer:=0;
 begin
@@ -227,13 +184,7 @@ begin
   return v_count;
 end;$$;
 
--- Read RPCs są używane przez autoryzowany server loader, nie bezpośrednio z przeglądarki.
-revoke all on function public.get_fleet_connected_summary_400(uuid,integer) from public,anon,authenticated;
-grant execute on function public.get_fleet_connected_summary_400(uuid,integer) to service_role;
-revoke all on function public.get_fleet_service_kit_shortages_400(uuid) from public,anon,authenticated;
-grant execute on function public.get_fleet_service_kit_shortages_400(uuid) to service_role;
-
--- Privileged operational RPCs only through server routes.
+-- Uprzywilejowane operacje server-side.
 do $$
 declare fn regprocedure;
 begin
@@ -250,5 +201,4 @@ begin
 end $$;
 
 insert into public.app_schema_versions(version) values('20260903_fleet_connected_400_hardening') on conflict(version) do update set applied_at=excluded.applied_at;
-
 commit;
