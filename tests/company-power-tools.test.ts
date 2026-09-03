@@ -58,6 +58,7 @@ describe("Project Octopus operational metrics", () => {
 describe("Project Octopus functional contract", () => {
   const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
   const layout = readFileSync("app/workspace/companies/[workspaceId]/[section]/layout.tsx", "utf8");
+  const operationalPage = readFileSync("components/company/company-operational-page.tsx", "utf8");
   const deferred = readFileSync("components/company/company-power-tools-deferred.tsx", "utf8");
   const route = readFileSync("app/api/company/power/route.ts", "utf8");
   const reliability = readFileSync("supabase/migrations/20260817210000_091_reliability_core.sql", "utf8");
@@ -73,6 +74,14 @@ describe("Project Octopus functional contract", () => {
     expect(deferred).toContain('kind: Exclude<CompanyPowerKind, "reports">');
     expect(deferred).toContain("kind=${encodeURIComponent(kind)}");
     expect(deferred).toContain("CompanyPowerTools workspaceId={workspaceId} kind={kind}");
+  });
+
+  it("retires the legacy power-tools surface from Warehouse only", () => {
+    expect(operationalPage).toContain('const showLegacyPowerTools = kind !== "warehouse";');
+    expect(operationalPage).toContain("{showLegacyPowerTools ? (");
+    expect(operationalPage).toContain("<CompanyPowerToolsDeferred");
+    expect(operationalPage).not.toContain('kind !== "finance"');
+    expect(operationalPage).not.toContain('kind !== "fleet"');
   });
 
   it("contains write actions for finance, HR, warehouse, fleet and reports", () => {
