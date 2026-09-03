@@ -30,6 +30,20 @@ describe("HR toolbar Wrzutnia", () => {
     expect(styles).toContain("border:1px solid #dde2ea");
   });
 
+  it("keeps all HR tabs on one row and compacts the employee action", () => {
+    const styles = read("components/company/hr/hr-workspace-149.module.css");
+
+    expect(styles).toContain("flex-wrap:nowrap!important");
+    expect(styles).toContain("overflow-x:auto");
+    expect(styles).toContain('[data-hr-tabs="panel"]>button');
+    expect(styles).toContain("padding:8px 10px!important");
+    expect(styles).toContain("font-size:14px");
+    expect(styles).toContain('[data-hr-toolbar-actions="1"]>button');
+    expect(styles).toContain("height:38px");
+    expect(styles).toContain("padding:0 10px!important");
+    expect(styles).toContain("font-size:13px");
+  });
+
   it("uses one exact shared 184x42 primary box in HR and Warehouse", () => {
     const hrStyles = read("components/company/hr/hr-workspace-149.module.css");
     const dropzoneStyles = read("components/documents/module-dropzone-link.module.css");

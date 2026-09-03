@@ -12,7 +12,10 @@
 
 /* HR toolbar mirrors Warehouse: navigation panel ends before the standalone Wrzutnia action. */
 .root :global([data-hr-toolbar="split"]){padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;backdrop-filter:none!important}
-.root :global([data-hr-tabs="panel"]){flex:1 1 auto;min-width:0;padding:7px;border:1px solid #dde2ea;border-radius:12px;background:rgba(255,255,255,.96);backdrop-filter:blur(10px)}
+.root :global([data-hr-tabs="panel"]){flex:1 1 auto;min-width:0;padding:7px;border:1px solid #dde2ea;border-radius:12px;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);flex-wrap:nowrap!important;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-inline:contain}
+.root :global([data-hr-tabs="panel"]::-webkit-scrollbar){display:none}
+.root :global([data-hr-tabs="panel"]>button){flex:0 0 auto;white-space:nowrap;padding:8px 10px!important;font-size:14px;line-height:1.1}
 .root :global([data-hr-toolbar-actions="1"]){flex:0 0 auto;align-self:center;justify-content:flex-end}
+.root :global([data-hr-toolbar-actions="1"]>button){box-sizing:border-box;height:38px;min-height:38px;padding:0 10px!important;border-radius:9px;font-size:13px;line-height:1;white-space:nowrap}
 .root :global([data-hr-toolbar-actions="1"]>[data-module-dropzone="hr"]){white-space:nowrap}
-@media(max-width:720px){.root :global([data-hr-toolbar="split"]){align-items:stretch}.root :global([data-hr-tabs="panel"]){width:100%}.root :global([data-hr-toolbar-actions="1"]){align-self:auto;justify-content:flex-end}}
+@media(max-width:720px){.root :global([data-hr-toolbar="split"]){align-items:stretch}.root :global([data-hr-tabs="panel"]){width:100%}.root :global([data-hr-toolbar-actions="1"]){align-self:auto;justify-content:flex-end}.root :global([data-hr-toolbar-actions="1"]>button){height:38px;min-height:38px}}
