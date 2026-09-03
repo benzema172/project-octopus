@@ -16,10 +16,10 @@ describe("Warehouse compact KPI density", () => {
     expect(css).toContain(":not(.ops-workspace--finance)");
   });
 
-  it("Warehouse 3.0 shows one compact six-card decision strip", () => {
+  it("Warehouse 3.1 shows one compact six-card decision strip", () => {
     const workspace = read("components/company/warehouse-workspace-300.tsx");
-    const styles = read("components/company/warehouse-workspace-300.module.css");
-    for (const label of ["Kartoteki", "Poczekalnia", "Poniżej minimum", "Ruchy do akceptacji", "Rezerwacje", "Sprzęt wydany"]) {
+    const styles = read("components/company/warehouse-workspace-310.module.css");
+    for (const label of ["Kartoteki", "Poczekalnia", "Automatyzacja AI", "Poniżej minimum", "Wartość FIFO", "Sprzęt wydany"]) {
       expect(workspace).toContain(label);
     }
     expect(styles).toContain("grid-template-columns:repeat(6,minmax(0,1fr))");

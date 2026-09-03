@@ -27,11 +27,12 @@ describe("unified UX finalization", () => {
     expect(registry).toContain("issueSummary");
   });
 
-  it("makes Warehouse exception-first and exposes stock, movement and reservation context", () => {
+  it("makes Warehouse exception-first and exposes stock, location, movement and reservation context", () => {
     const warehouse = read("components/company/warehouse-workspace-300.tsx");
     expect(ordered(warehouse, ["Poczekalnia", "Poniżej minimum", "Ruchy do akceptacji", "Rezerwacje"])).toBe(true);
     expect(warehouse).toContain("ItemDrawer");
-    expect(warehouse).toContain("Stany wg lokalizacji");
+    expect(warehouse).toContain("Stany wg magazynu");
+    expect(warehouse).toContain("Lokalizacje regałowe / QR");
     expect(warehouse).toContain("Ostatnie ruchy");
     expect(warehouse).toContain("Rezerwacje");
   });

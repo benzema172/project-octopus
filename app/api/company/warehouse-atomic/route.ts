@@ -10,12 +10,19 @@ import { inferWarehouseMovementType } from "@/lib/warehouse/domain";
 export const runtime = "nodejs";
 
 type Body = { workspaceId?: string; entity?: string; payload?: Record<string, unknown> };
+type StockItemRow = {
+  id: string; name: string; sku: string | null; item_type: string; unit: string;
+  minimum_stock: number; optimal_stock: number; serial_tracking: boolean; active: boolean;
+  category: string | null; subcategory: string | null; manufacturer: string | null; model: string | null;
+  barcode: string | null; warranty_months: number | null;
+};
 
 const ACTIONS = new Set([
   "ai_warehouse_import",
   "reservation",
   "stock_movement_destination",
   "stock_movement_approve",
+  "manual_stock_movement",
   "inventory_count_create",
   "inventory_count_line",
   "inventory_count_approve",
@@ -23,7 +30,12 @@ const ACTIONS = new Set([
   "stock_instance_assign",
   "stock_instance_return",
   "stock_instance_service",
-  "material_alias"
+  "material_alias",
+  "stock_item_update",
+  "stock_item_merge",
+  "warehouse_location_create",
+  "warehouse_location_assign",
+  "replenishment_order"
 ]);
 const APPROVAL_ACTIONS = new Set(["stock_movement_approve", "inventory_count_approve"]);
 
@@ -31,6 +43,7 @@ const clean = (value: unknown) => typeof value === "string" ? value.trim() : "";
 const nullable = (value: unknown) => clean(value) || null;
 const validDate = (value: unknown) => /^\d{4}-\d{2}-\d{2}$/.test(clean(value)) ? clean(value) : null;
 const optionalNumber = (value: unknown) => value === undefined || value === null || value === "" ? null : parseLocalizedNumber(value);
+const optionalBoolean = (value: unknown, fallback: boolean) => value === undefined || value === null ? fallback : Boolean(value);
 
 async function ownedId(table: string, id: unknown, workspaceId: string, label: string) {
   const value = clean(id);
@@ -47,13 +60,9 @@ async function optionalOwnedId(table: string, id: unknown, workspaceId: string, 
 async function loadBusinessDocument(workspaceId: string, documentIdValue: unknown) {
   const documentId = await ownedId("documents", documentIdValue, workspaceId, "Dokument źródłowy");
   const { data, error } = await createServiceSupabaseClient().from("document_extractions")
-    .select("payload,status")
-    .eq("workspace_id", workspaceId)
-    .eq("document_id", documentId)
-    .eq("extraction_type", "document_context")
-    .neq("status", "rejected")
-    .order("created_at", { ascending: false })
-    .limit(1)
+    .select("payload,status").eq("workspace_id", workspaceId).eq("document_id", documentId)
+    .eq("extraction_type", "document_context").neq("status", "rejected")
+    .order("created_at", { ascending: false }).limit(1)
     .maybeSingle<{ payload: Record<string, unknown>; status: string }>();
   if (error || !data) throw new Error("Dokument nie ma gotowego odczytu AI.");
   const business = data.payload?.businessDocument;
@@ -102,6 +111,21 @@ export async function POST(request: Request) {
       const { data, error } = await db.rpc("approve_stock_movement_atomic", { p_workspace_id: workspace.id, p_movement_id: movementId, p_actor_id: user.id });
       if (error) throw new Error(error.message);
       return NextResponse.json({ ok: true, id: String(data ?? movementId) });
+    }
+
+    if (body.entity === "manual_stock_movement") {
+      const warehouseId = await ownedId("warehouses", p.warehouseId, workspace.id, "Magazyn");
+      const targetWarehouseId = clean(p.movementType).toUpperCase() === "MM"
+        ? await ownedId("warehouses", p.targetWarehouseId, workspace.id, "Magazyn docelowy") : null;
+      const verifiedProject = projectId ? await ownedId("projects", projectId, workspace.id, "Inwestycja") : null;
+      const lines = Array.isArray(p.lines) ? p.lines : [];
+      const { data, error } = await db.rpc("create_manual_stock_movement_atomic", {
+        p_workspace_id: workspace.id, p_movement_type: clean(p.movementType), p_warehouse_id: warehouseId,
+        p_target_warehouse_id: targetWarehouseId, p_project_id: verifiedProject, p_document_number: nullable(p.documentNumber),
+        p_movement_date: validDate(p.movementDate), p_lines: lines, p_actor_id: user.id
+      });
+      if (error) throw new Error(error.message);
+      return NextResponse.json({ ok: true, id: String(data), status: "draft" });
     }
 
     if (body.entity === "reservation") {
@@ -190,24 +214,111 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, id: data.id });
     }
 
-    const source = await loadBusinessDocument(workspace.id, p.documentId);
-    const verifiedProject = projectId ? await ownedId("projects", projectId, workspace.id, "Inwestycja") : null;
-    const warehouseId = p.warehouseId ? await ownedId("warehouses", p.warehouseId, workspace.id, "Magazyn") : null;
-    const lines = Array.isArray(source.business.lines) ? source.business.lines.filter((line) => line && typeof line === "object") : [];
-    if (!lines.length) throw new Error("AI nie odczytało pozycji materiałowych. Sprawdź dokument lub dodaj ruch ręcznie.");
-    const direction = clean(source.business.direction).toLowerCase();
-    const movementType = inferWarehouseMovementType(direction, p.movementType);
-    const { data, error } = await db.rpc("import_ai_warehouse_document_atomic", {
-      p_workspace_id: workspace.id, p_project_id: verifiedProject, p_warehouse_id: warehouseId,
-      p_source_document_id: source.documentId, p_document_number: nullable(source.business.documentNumber),
-      p_movement_date: validDate(source.business.issueDate), p_movement_type: movementType, p_lines: lines, p_actor_id: user.id
-    });
-    if (error || !data) throw new Error(error?.message ?? "Nie udało się atomowo zaczytać dokumentu magazynowego.");
-    if (verifiedProject) {
-      const { error: assignmentError } = await db.rpc("assign_document_to_project_atomic", { p_workspace_id: workspace.id, p_document_id: source.documentId, p_project_id: verifiedProject, p_actor_id: user.id });
-      if (assignmentError) throw new Error(`Utworzono szkic ruchu, ale nie przypisano dokumentu do inwestycji: ${assignmentError.message}`);
+    if (body.entity === "stock_item_update") {
+      const stockItemId = await ownedId("stock_items", p.stockItemId, workspace.id, "Kartoteka");
+      const { data: current, error: currentError } = await db.from("stock_items")
+        .select("id,name,sku,item_type,unit,minimum_stock,optimal_stock,serial_tracking,active,category,subcategory,manufacturer,model,barcode,warranty_months")
+        .eq("workspace_id", workspace.id).eq("id", stockItemId).maybeSingle<StockItemRow>();
+      if (currentError || !current) throw new Error("Nie udało się pobrać kartoteki.");
+      const minimum = optionalNumber(p.minimumStock) ?? Number(current.minimum_stock ?? 0);
+      const optimal = optionalNumber(p.optimalStock) ?? Number(current.optimal_stock ?? 0);
+      const warranty = optionalNumber(p.warrantyMonths) ?? current.warranty_months;
+      if (minimum < 0 || optimal < 0) throw new Error("Stan minimalny i optymalny nie mogą być ujemne.");
+      if (optimal > 0 && optimal < minimum) throw new Error("Stan optymalny nie może być niższy od minimalnego.");
+      if (warranty !== null && (!Number.isInteger(warranty) || warranty < 0 || warranty > 240)) throw new Error("Gwarancja musi być liczbą pełnych miesięcy od 0 do 240.");
+      const name = clean(p.name) || current.name;
+      const unit = clean(p.unit) || current.unit;
+      if (!name || !unit) throw new Error("Nazwa i jednostka kartoteki są wymagane.");
+      const update = {
+        name, unit, sku: p.sku === undefined ? current.sku : nullable(p.sku),
+        item_type: clean(p.itemType) || current.item_type,
+        minimum_stock: minimum, optimal_stock: optimal,
+        serial_tracking: optionalBoolean(p.serialTracking, current.serial_tracking),
+        active: optionalBoolean(p.active, current.active),
+        category: p.category === undefined ? current.category : nullable(p.category),
+        subcategory: p.subcategory === undefined ? current.subcategory : nullable(p.subcategory),
+        manufacturer: p.manufacturer === undefined ? current.manufacturer : nullable(p.manufacturer),
+        model: p.model === undefined ? current.model : nullable(p.model),
+        barcode: p.barcode === undefined ? current.barcode : nullable(p.barcode),
+        warranty_months: warranty,
+        updated_at: new Date().toISOString()
+      };
+      const { error } = await db.from("stock_items").update(update).eq("workspace_id", workspace.id).eq("id", stockItemId);
+      if (error) throw new Error(error.code === "23505" ? "SKU lub EAN jest już używany przez inną kartotekę." : error.message);
+      return NextResponse.json({ ok: true, id: stockItemId });
     }
-    return NextResponse.json({ ok: true, id: String(data), movementType });
+
+    if (body.entity === "stock_item_merge") {
+      const sourceId = await ownedId("stock_items", p.sourceId, workspace.id, "Kartoteka źródłowa");
+      const targetId = await ownedId("stock_items", p.targetId, workspace.id, "Kartoteka docelowa");
+      const { data, error } = await db.rpc("merge_stock_items_atomic", { p_workspace_id: workspace.id, p_source_id: sourceId, p_target_id: targetId, p_actor_id: user.id });
+      if (error) throw new Error(error.message);
+      return NextResponse.json({ ok: true, id: String(data) });
+    }
+
+    if (body.entity === "warehouse_location_create") {
+      const warehouseId = await ownedId("warehouses", p.warehouseId, workspace.id, "Magazyn");
+      const parentId = await optionalOwnedId("warehouse_locations", p.parentId, workspace.id, "Lokalizacja nadrzędna");
+      const code = clean(p.code).toUpperCase();
+      const name = clean(p.name);
+      if (!code || !name) throw new Error("Kod i nazwa lokalizacji są wymagane.");
+      if (parentId) {
+        const { data: parent } = await db.from("warehouse_locations").select("warehouse_id").eq("id", parentId).eq("workspace_id", workspace.id).maybeSingle<{ warehouse_id: string }>();
+        if (!parent || parent.warehouse_id !== warehouseId) throw new Error("Lokalizacja nadrzędna musi należeć do tego samego magazynu.");
+      }
+      const { data, error } = await db.from("warehouse_locations").insert({ workspace_id: workspace.id, warehouse_id: warehouseId, parent_id: parentId, code, name, active: true }).select("id,qr_token").single<{ id: string; qr_token: string }>();
+      if (error || !data) throw new Error(error?.code === "23505" ? "Taki kod lokalizacji już istnieje." : error?.message ?? "Nie udało się utworzyć lokalizacji.");
+      return NextResponse.json({ ok: true, id: data.id, qrToken: data.qr_token });
+    }
+
+    if (body.entity === "warehouse_location_assign") {
+      const stockItemId = await ownedId("stock_items", p.stockItemId, workspace.id, "Kartoteka");
+      const locationId = await ownedId("warehouse_locations", p.locationId, workspace.id, "Lokalizacja");
+      const preferred = Boolean(p.preferred);
+      if (preferred) await db.from("stock_item_location_assignments").update({ preferred: false }).eq("workspace_id", workspace.id).eq("stock_item_id", stockItemId);
+      const { data: existing } = await db.from("stock_item_location_assignments").select("id").eq("workspace_id", workspace.id).eq("stock_item_id", stockItemId).eq("warehouse_location_id", locationId).maybeSingle<{ id: string }>();
+      if (existing) {
+        const { error } = await db.from("stock_item_location_assignments").update({ preferred }).eq("id", existing.id);
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ ok: true, id: existing.id });
+      }
+      const { data, error } = await db.from("stock_item_location_assignments").insert({ workspace_id: workspace.id, stock_item_id: stockItemId, warehouse_location_id: locationId, preferred }).select("id").single<{ id: string }>();
+      if (error || !data) throw new Error(error?.message ?? "Nie udało się przypisać lokalizacji.");
+      return NextResponse.json({ ok: true, id: data.id });
+    }
+
+    if (body.entity === "replenishment_order") {
+      const stockItemId = await ownedId("stock_items", p.stockItemId, workspace.id, "Kartoteka");
+      const counterpartyId = await optionalOwnedId("counterparties", p.counterpartyId, workspace.id, "Dostawca");
+      const verifiedProject = await optionalOwnedId("projects", p.projectId, workspace.id, "Inwestycja");
+      const quantity = parseLocalizedNumber(p.quantity);
+      const { data, error } = await db.rpc("create_replenishment_order_atomic", { p_workspace_id: workspace.id, p_stock_item_id: stockItemId, p_quantity: quantity, p_counterparty_id: counterpartyId, p_project_id: verifiedProject, p_actor_id: user.id });
+      if (error) throw new Error(error.message);
+      return NextResponse.json({ ok: true, id: String(data) });
+    }
+
+    if (body.entity === "ai_warehouse_import") {
+      const source = await loadBusinessDocument(workspace.id, p.documentId);
+      const verifiedProject = projectId ? await ownedId("projects", projectId, workspace.id, "Inwestycja") : null;
+      const warehouseId = p.warehouseId ? await ownedId("warehouses", p.warehouseId, workspace.id, "Magazyn") : null;
+      const lines = Array.isArray(source.business.lines) ? source.business.lines.filter((line) => line && typeof line === "object") : [];
+      if (!lines.length) throw new Error("AI nie odczytało pozycji materiałowych. Sprawdź dokument lub dodaj ruch ręcznie.");
+      const direction = clean(source.business.direction).toLowerCase();
+      const movementType = inferWarehouseMovementType(direction, p.movementType);
+      const { data, error } = await db.rpc("import_ai_warehouse_document_atomic", {
+        p_workspace_id: workspace.id, p_project_id: verifiedProject, p_warehouse_id: warehouseId,
+        p_source_document_id: source.documentId, p_document_number: nullable(source.business.documentNumber),
+        p_movement_date: validDate(source.business.issueDate), p_movement_type: movementType, p_lines: lines, p_actor_id: user.id
+      });
+      if (error || !data) throw new Error(error?.message ?? "Nie udało się atomowo zaczytać dokumentu magazynowego.");
+      if (verifiedProject) {
+        const { error: assignmentError } = await db.rpc("assign_document_to_project_atomic", { p_workspace_id: workspace.id, p_document_id: source.documentId, p_project_id: verifiedProject, p_actor_id: user.id });
+        if (assignmentError) throw new Error(`Utworzono szkic ruchu, ale nie przypisano dokumentu do inwestycji: ${assignmentError.message}`);
+      }
+      return NextResponse.json({ ok: true, id: String(data), movementType });
+    }
+
+    return NextResponse.json({ error: "Nieobsługiwana operacja Magazynu." }, { status: 400 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Nie udało się zapisać operacji magazynowej." }, { status: 422 });
   }
