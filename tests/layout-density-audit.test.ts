@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(path, "utf8");
@@ -113,13 +113,11 @@ describe("workspace layout density audit", () => {
     expect(css).toContain("grid-template-columns: 1fr");
   });
 
-  it("compacts hashed CSS-module company tools without relying on global selectors", () => {
-    const css = read("components/company/company-power-tools.module.css");
-
-    expect(css).toContain("margin: 12px auto 24px");
-    expect(css).toContain("min-height:76px");
-    expect(css).toContain("padding:10px 12px");
-    expect(css).toContain("@media (max-width: 720px)");
+  it("keeps the removed company Power Tools CSS out of the production bundle", () => {
+    const operationalPage = read("components/company/company-operational-page.tsx");
+    expect(existsSync("components/company/company-power-tools.module.css")).toBe(false);
+    expect(existsSync("components/company/company-power-tools.tsx")).toBe(false);
+    expect(operationalPage).not.toContain("CompanyPowerTools");
   });
 
   it("does not render the large upcoming-commitments panel when it has no records", () => {
