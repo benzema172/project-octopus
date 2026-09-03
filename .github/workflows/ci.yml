@@ -41,18 +41,7 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests
-        id: unit_tests
-        shell: bash
-        run: |
-          set -o pipefail
-          npm run test 2>&1 | tee /tmp/unit-tests.log
-      - name: Upload unit test diagnostics
-        if: failure() && steps.unit_tests.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: unit-test-diagnostics
-          path: /tmp/unit-tests.log
-          retention-days: 1
+        run: npm run test
       - name: Migration contract
         run: npm run test:migrations
       - name: Lint
