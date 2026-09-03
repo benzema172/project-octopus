@@ -42,10 +42,13 @@ describe("0.9.1–1.0 implementation contracts", () => {
     expect(companyRoute).toContain("record_meter_reading_atomic");
   });
 
-  it("uses the full SQL stock ledger while the primary warehouse page scopes the returned balances", () => {
-    expect(read("lib/data/company-operations.ts")).toContain("getStockBalancesForItems(workspaceId, itemIds)");
-    expect(read("lib/data/company-power-tools.ts")).toContain("getStockBalances(workspaceId)");
-    expect(read("lib/data/stock-balances.ts")).toContain('rpc("get_stock_balances_for_items"');
+  it("uses the full SQL stock ledger while the primary warehouse page scopes returned balances", () => {
+    const operations = read("lib/data/company-operations.ts");
+    const balances = read("lib/data/stock-balances.ts");
+    expect(operations).toContain("getStockBalancesForItems(workspaceId, itemIds)");
+    expect(balances).toContain("export async function getStockBalances(workspaceId");
+    expect(balances).toContain('rpc("get_stock_balances"');
+    expect(balances).toContain('rpc("get_stock_balances_for_items"');
     expect(read("supabase/migrations/20260817210000_091_reliability_core.sql")).toContain("get_stock_balances");
     expect(read("supabase/migrations/20260818140500_paged_stock_balances.sql")).toContain("get_stock_balances_for_items");
   });
