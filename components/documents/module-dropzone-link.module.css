@@ -28,7 +28,25 @@
   outline-offset: 2px;
 }
 
+/*
+ * Jeden wspólny box dla głównej Wrzutni w modułach.
+ * Magazyn i Kadry używają dokładnie tego samego komponentu i wymiaru,
+ * niezależnie od długości etykiety kontekstu.
+ */
 .primary {
+  box-sizing: border-box;
+  display: inline-flex;
+  width: 184px;
+  min-width: 184px;
+  max-width: 184px;
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 15px;
+  white-space: nowrap;
   text-decoration: none;
 }
 
@@ -60,5 +78,11 @@
 @media (max-width: 720px) {
   .link {
     width: 100%;
+  }
+
+  .primary {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
   }
 }
