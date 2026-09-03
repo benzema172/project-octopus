@@ -5,6 +5,7 @@
 .root :global(.hr-leave-inline-shell){position:relative}
 .root :global(.hr-leave-inline-details){margin:0!important;border-radius:0 0 14px 14px!important;border-top:0!important;box-shadow:0 2px 5px rgba(15,23,42,.05)!important;background:linear-gradient(180deg,#fbfbff 0%,#fff 100%)!important}
 .root :global(section[data-hr-leaves-163="1"] tbody tr[aria-expanded="true"]){background:#f5f4ff!important}
+.root :global(section[data-hr-leaves-163="1"] tbody tr[aria-expanded="true"]:hover){background:#f5f4ff!important}
 .root :global(section[data-hr-leaves-163="1"] tbody tr[aria-expanded="true"] td){border-bottom-color:transparent!important}
 .root :global(section[data-hr-leaves-163="1"] tbody tr[aria-expanded="true"] td:first-child){box-shadow:inset 3px 0 0 #625cf6}
 .root :global(section[data-hr-leaves-163="1"] tbody tr[aria-expanded="true"] td:last-child){border-bottom-right-radius:0}
@@ -13,6 +14,6 @@
 /* HR toolbar mirrors Warehouse: navigation panel ends before the standalone Wrzutnia action. */
 .root :global([data-hr-toolbar="split"]){padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;backdrop-filter:none!important}
 .root :global([data-hr-tabs="panel"]){flex:1 1 auto;min-width:0;padding:7px;border:1px solid #dde2ea;border-radius:12px;background:rgba(255,255,255,.96);backdrop-filter:blur(10px)}
-.root :global([data-hr-toolbar-actions="1"]){flex:0 0 auto;align-self:stretch;justify-content:flex-end}
-.root :global([data-hr-toolbar-actions="1"]>[data-module-dropzone="hr"]){min-height:100%;white-space:nowrap}
-@media(max-width:720px){.root :global([data-hr-toolbar="split"]){align-items:stretch}.root :global([data-hr-tabs="panel"]){width:100%}.root :global([data-hr-toolbar-actions="1"]){align-self:auto;justify-content:flex-end}.root :global([data-hr-toolbar-actions="1"]>[data-module-dropzone="hr"]){min-height:40px}}
+.root :global([data-hr-toolbar-actions="1"]){flex:0 0 auto;align-self:center;justify-content:flex-end}
+.root :global([data-hr-toolbar-actions="1"]>[data-module-dropzone="hr"]){min-height:42px;white-space:nowrap}
+@media(max-width:720px){.root :global([data-hr-toolbar="split"]){align-items:stretch}.root :global([data-hr-tabs="panel"]){width:100%}.root :global([data-hr-toolbar-actions="1"]){align-self:auto;justify-content:flex-end}.root :global([data-hr-toolbar-actions="1"]>[data-module-dropzone="hr"]){min-height:42px}}
