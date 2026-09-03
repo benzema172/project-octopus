@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(path, "utf8");
+const compact = (value: string) => value.replace(/\s+/g, "");
 
 describe("Warehouse 3.1 top navigation matches HR Core layout", () => {
   it("puts tabs with Wrzutnia first, KPIs second and search below", () => {
@@ -24,5 +25,23 @@ describe("Warehouse 3.1 top navigation matches HR Core layout", () => {
     expect(warehouseCss).toContain("box-shadow: inset 0 0 0 1px #d9d6ff !important;");
     expect(hrCss).toContain("background:#f1f0ff!important");
     expect(hrCss).toContain("box-shadow:inset 0 0 0 1px #d9d6ff");
+  });
+
+  it("uses exactly the same tab height geometry as the live HR panel", () => {
+    const warehouseCss = read("app/warehouse-navigation-refinement.css");
+    const hrLayoutCss = read("components/company/hr/hr-workspace-149.module.css");
+    const warehouse31 = warehouseCss.split("Warehouse 3.1")[1] ?? "";
+    const warehouseCompact = compact(warehouse31);
+    const hrCompact = compact(hrLayoutCss);
+
+    expect(hrCompact).toContain('padding:7px;border:1pxsolid#dde2ea;border-radius:12px');
+    expect(warehouseCompact).toContain('padding:7px;border:1pxsolid#dde2ea;border-radius:12px');
+
+    expect(hrCompact).toContain('padding:8px10px!important;font-size:14px;line-height:1.1');
+    expect(warehouseCompact).toContain('padding:8px10px!important;border:0;border-radius:9px');
+    expect(warehouseCompact).toContain('font-size:14px;line-height:1.1;font-weight:750');
+
+    expect(warehouse31).not.toContain("min-height: 42px;");
+    expect(warehouse31).not.toContain("min-height: 36px;");
   });
 });
