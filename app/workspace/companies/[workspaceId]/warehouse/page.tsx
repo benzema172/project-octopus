@@ -4,9 +4,9 @@ import { getWarehouseWorkspaceData, type CompanyPageOptions } from "@/lib/data/c
 
 export const dynamic = "force-dynamic";
 
-async function getWarehouse300Data(workspaceId: string, _options: CompanyPageOptions) {
+async function getWarehouse300Data(workspaceId: string, options: CompanyPageOptions) {
   const [base, ai] = await Promise.all([
-    getWarehouseWorkspaceData(workspaceId),
+    getWarehouseWorkspaceData(workspaceId, options),
     getWarehouseAi300Data(workspaceId)
   ]);
   return { ...base, ...ai };
