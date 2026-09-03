@@ -39,7 +39,7 @@ export async function CompanyOperationalPage({ workspaceId, page, query, domain,
   ]);
 
   const pathname = `/workspace/companies/${workspace.id}/${kind === "finance" ? "finances" : kind}`;
-  const showLegacyPowerTools = kind !== "warehouse";
+  const showLegacyPowerTools = kind === "finance";
 
   return (
     <main className="co-page">
