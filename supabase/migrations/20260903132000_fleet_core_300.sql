@@ -329,7 +329,6 @@ grant select,insert,update,delete on public.fleet_ai_decision_events to authenti
 grant select,insert,update,delete on public.fleet_anomalies to authenticated,service_role;
 grant select,insert,update,delete on public.fleet_cost_links to authenticated,service_role;
 
--- Pomocniczy odczyt ogólnych faktów Gemini dla pól, których nie ma w sztywnym schemacie businessDocument.
 create or replace function private.fleet_fact_value_300(p_payload jsonb,p_labels text[])
 returns text
 language sql
@@ -343,7 +342,6 @@ as $$
   limit 1
 $$;
 
--- Wrzutnia Floty -> bezpieczna Poczekalnia AI.
 create or replace function private.prepare_fleet_review_300()
 returns trigger
 language plpgsql
@@ -451,7 +449,6 @@ drop trigger if exists fleet_prepare_review_300 on public.document_extractions;
 create trigger fleet_prepare_review_300 before insert or update of payload on public.document_extractions
 for each row when(new.extraction_type='document_context') execute function private.prepare_fleet_review_300();
 
--- Odczyt licznika: spadek nigdy nie aktualizuje źródła prawdy; powstaje alert zamiast cichej korekty.
 create or replace function public.record_vehicle_meter_reading_300(
   p_workspace_id uuid,p_vehicle_id uuid,p_reading_date date,p_mileage numeric,p_engine_hours numeric,p_source text,
   p_source_document_id uuid,p_source_fuel_entry_id uuid,p_source_service_order_id uuid,p_actor_id uuid
@@ -525,7 +522,6 @@ begin
   return s.id;
 end;$$;
 
--- Bezpieczne zastosowanie decyzji Poczekalni AI. AI nie tworzy pojazdu i nie rozstrzyga winy szkody.
 create or replace function public.resolve_fleet_review_300(
   p_workspace_id uuid,p_review_id uuid,p_vehicle_id uuid,p_action text,p_actor_id uuid
 ) returns uuid
@@ -634,6 +630,8 @@ grant execute on function public.undo_fleet_ai_decision_300(uuid,uuid,uuid) to s
 revoke all on function public.get_fleet_core_summary_300(uuid,date) from public,anon;
 grant execute on function public.get_fleet_core_summary_300(uuid,date) to authenticated,service_role;
 
-insert into public.schema_versions(version) values('20260903_fleet_core_300') on conflict(version) do nothing;
+insert into public.app_schema_versions(version)
+values('20260903_fleet_core_300')
+on conflict(version) do update set applied_at=excluded.applied_at;
 
 commit;
