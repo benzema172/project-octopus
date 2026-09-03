@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
-describe("Warehouse 3.0 AI-first contract", () => {
+describe("Warehouse 3.0 -> 3.1 AI-first compatibility contract", () => {
   it("uses a real top tab workspace with Magazyn and Poczekalnia", () => {
     const operations = read("components/company/operations/warehouse-operations.tsx");
     const workspace = read("components/company/warehouse-workspace-300.tsx");
@@ -11,16 +11,17 @@ describe("Warehouse 3.0 AI-first contract", () => {
     expect(operations).not.toContain("WarehouseCommandCenter");
     expect(workspace).toContain('label: "Magazyn"');
     expect(workspace).toContain('label: "Poczekalnia"');
-    expect(workspace).toContain('useState<Tab>("dashboard")');
-    expect(workspace).toContain('data-warehouse-experience="3.0"');
+    expect(workspace).toContain('useState<Tab>(query || page.page > 1 ? "stock" : "dashboard")');
+    expect(workspace).toContain('data-warehouse-experience="3.1"');
   });
 
-  it("makes Magazyn an A-Z canonical registry with edit and price history", () => {
+  it("makes Magazyn an A-Z canonical registry with full edit, merge and price history", () => {
     const workspace = read("components/company/warehouse-workspace-300.tsx");
     expect(workspace).toContain('localeCompare(String(b.name ?? ""), "pl"');
     expect(workspace).toContain("Kartoteki A–Z");
     expect(workspace).toContain("Nazwa kanoniczna");
-    expect(workspace).toContain('act("rename_item"');
+    expect(workspace).toContain('act("stock_item_update"');
+    expect(workspace).toContain('act("stock_item_merge"');
     expect(workspace).toContain("Ostatnie zakupy i ceny");
     expect(workspace).toContain("Wyuczone nazwy dostawców");
   });
@@ -61,7 +62,7 @@ describe("Warehouse 3.0 AI-first contract", () => {
     expect(api).toContain('body.action === "create"');
     expect(api).toContain("material_aliases");
     expect(api).toContain('status: "approved"');
-    expect(api).toContain("price_observations");
+    expect(priceMigration).toContain("price_observations");
     expect(api).toContain("draft_movement_id");
     expect(api).toContain('movement?.status === "draft"');
     expect(api).toContain('movement.source_group_key === "warehouse-ai-31"');
