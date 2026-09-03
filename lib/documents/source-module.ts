@@ -46,6 +46,7 @@ export function sourceModulePromptHint(sourceModule: DocumentSourceModule | null
       "Traktuj ten kontekst jako silną podpowiedź routingu, a nie twardą blokadę kategorii.",
       "Jeśli treść dotyczy pojazdu, maszyny, VIN, numeru rejestracyjnego, polisy OC/AC, przeglądu, UDT, leasingu, serwisu, naprawy, opon, szkody, tankowania, paliwa, przebiegu, motogodzin albo kosztów eksploatacji, preferuj category=\"fleet\".",
       "Dla dokumentów Floty wydobądź możliwie dokładnie: registrationNumber, vin, documentType, documentNumber, validFrom, validUntil, issueDate, providerName, amount, currency, mileage, engineHours, fuelLiters, fuelType, serviceType, workshopName, claimNumber oraz wszystkie wartości potrzebne do powiązania z istniejącym pojazdem.",
+      "Jeżeli sztywny schemat odpowiedzi nie ma osobnego pola dla danych Floty, na przykład VIN, daty ważności, motogodzin, warsztatu albo numeru szkody, zapisz je także w facts z jednoznacznym label i type, aby Poczekalnia Floty mogła je bezpiecznie odczytać.",
       "Nie zakładaj nowego pojazdu na podstawie niepewnego dokumentu. Gdy identyfikacja pojazdu, przebiegu, kosztu lub typu dokumentu nie jest jednoznaczna, pozostaw informację do potwierdzenia przez użytkownika.",
       "Jeżeli treść jednoznacznie dotyczy innego obszaru, zignoruj podpowiedź Floty i sklasyfikuj dokument zgodnie z jego rzeczywistą treścią."
     ].join(" ");
