@@ -1,12 +1,22 @@
 import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { hasDomainAccess, type Domain } from "@/lib/authorization";
-import { getCompanyPowerToolsData, type CompanyPowerKind } from "@/lib/data/company-power-tools";
+import {
+  getFinanceWorkspaceData,
+  getFleetWorkspaceData,
+  getHrWorkspaceData,
+  getWarehouseWorkspaceData,
+  type CompanyPageOptions
+} from "@/lib/data/company-operations";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
+import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-const DOMAIN: Record<CompanyPowerKind, Domain> = {
+type ExportKind = "finance" | "hr" | "warehouse" | "fleet" | "reports";
+type ExportLoader = (workspaceId: string, options?: CompanyPageOptions) => Promise<Record<string, unknown>>;
+
+const DOMAIN: Record<ExportKind, Domain> = {
   finance: "finance",
   hr: "hr",
   warehouse: "warehouse",
@@ -14,7 +24,14 @@ const DOMAIN: Record<CompanyPowerKind, Domain> = {
   reports: "reports"
 };
 
-function isKind(value: string | null): value is CompanyPowerKind {
+const LOADERS: Partial<Record<ExportKind, ExportLoader>> = {
+  finance: getFinanceWorkspaceData,
+  hr: getHrWorkspaceData,
+  warehouse: getWarehouseWorkspaceData,
+  fleet: getFleetWorkspaceData
+};
+
+function isKind(value: string | null): value is ExportKind {
   return value !== null && ["finance", "hr", "warehouse", "fleet", "reports"].includes(value);
 }
 
@@ -41,6 +58,65 @@ function toCsv(data: Record<string, unknown>) {
   return [headers.map(csvCell).join(";"), ...exportRows.map((row) => headers.map((header) => csvCell(row[header])).join(";"))].join("\n");
 }
 
+function mergePage(target: Record<string, unknown>, page: Record<string, unknown>) {
+  for (const [key, value] of Object.entries(page)) {
+    if (key === "page") continue;
+    if (!Array.isArray(value)) {
+      if (!(key in target)) target[key] = value;
+      continue;
+    }
+    const current = Array.isArray(target[key]) ? target[key] as unknown[] : [];
+    target[key] = [...current, ...value];
+  }
+}
+
+function dedupeArrays(data: Record<string, unknown>) {
+  for (const [key, value] of Object.entries(data)) {
+    if (!Array.isArray(value)) continue;
+    const seen = new Set<string>();
+    data[key] = value.filter((row) => {
+      if (!row || typeof row !== "object") return true;
+      const record = row as Record<string, unknown>;
+      const identity = record.id ? `id:${String(record.id)}` : JSON.stringify(record);
+      if (seen.has(identity)) return false;
+      seen.add(identity);
+      return true;
+    });
+  }
+  return data;
+}
+
+async function loadPagedExport(workspaceId: string, loader: ExportLoader) {
+  const first = await loader(workspaceId, { page: 1, pageSize: 100 });
+  const merged: Record<string, unknown> = {};
+  mergePage(merged, first);
+  const pageMeta = first.page && typeof first.page === "object" ? first.page as Record<string, unknown> : {};
+  const total = Math.max(0, Number(pageMeta.total ?? 0) || 0);
+  const pages = Math.min(100, Math.max(1, Math.ceil(total / 100)));
+  for (let page = 2; page <= pages; page += 1) {
+    mergePage(merged, await loader(workspaceId, { page, pageSize: 100 }));
+  }
+  return dedupeArrays(merged);
+}
+
+async function loadReportsExport(workspaceId: string) {
+  const db = createServiceSupabaseClient();
+  const [projects, definitions, runs] = await Promise.all([
+    db.from("projects").select("id,name,status").eq("workspace_id", workspaceId).order("name").limit(1000),
+    db.from("report_definitions").select("id,project_id,name,report_type,schedule_rule,active,created_at").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(5000),
+    db.from("report_runs").select("id,report_definition_id,project_id,period_start,period_end,status,finished_at,created_at").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(5000)
+  ]);
+  for (const result of [projects, definitions, runs]) if (result.error) throw new Error(result.error.message);
+  return { projects: projects.data ?? [], definitions: definitions.data ?? [], runs: runs.data ?? [] };
+}
+
+async function loadExportData(workspaceId: string, kind: ExportKind) {
+  if (kind === "reports") return loadReportsExport(workspaceId);
+  const loader = LOADERS[kind];
+  if (!loader) throw new Error("Brak loadera eksportu dla wybranego modułu.");
+  return loadPagedExport(workspaceId, loader);
+}
+
 export async function GET(request: Request) {
   const user = await getRequestUser(request);
   if (!user) return NextResponse.json({ error: "Brak aktywnej sesji." }, { status: 401 });
@@ -57,7 +133,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const data = await getCompanyPowerToolsData(workspace.id, kind) as Record<string, unknown>;
+    const data = await loadExportData(workspace.id, kind) as Record<string, unknown>;
     const date = new Date().toISOString().slice(0, 10);
     const base = `octopus-${kind}-${date}`;
     if (format === "json") {
