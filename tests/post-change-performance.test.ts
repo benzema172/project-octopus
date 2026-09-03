@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(path, "utf8");
@@ -47,15 +47,18 @@ describe("post-change reliability and performance hardening", () => {
     expect(source).toContain('rpc("get_company_operations_summary"');
   });
 
-  it("splits company modules and defers Power Tools until the user asks for them", () => {
+  it("splits company modules and permanently retires the legacy Power Tools bundle", () => {
     const lazy = read("components/company/company-operations-lazy.tsx");
-    const deferred = read("components/company/company-power-tools-deferred.tsx");
+    const operationalPage = read("components/company/company-operational-page.tsx");
     expect(lazy).toContain('dynamic(()=>import("@/components/company/operations/finance-operations")');
     expect(lazy).toContain('dynamic(()=>import("@/components/company/operations/warehouse-operations")');
     expect(lazy).toContain('dynamic(()=>import("@/components/company/operations/fleet-operations")');
     expect(lazy).not.toContain("hr-operations");
-    expect(deferred).toContain("/api/company/power-data");
-    expect(deferred).toContain("Narzędzia zaawansowane");
+    expect(operationalPage).not.toContain("CompanyPowerTools");
+    expect(operationalPage).not.toContain("power-data");
+    expect(existsSync("components/company/company-power-tools-deferred.tsx")).toBe(false);
+    expect(existsSync("components/company/company-power-tools.tsx")).toBe(false);
+    expect(existsSync("components/company/company-power-tools.module.css")).toBe(false);
   });
 
   it("scopes Autopilot AI Inbox to one investment", () => {
