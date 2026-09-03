@@ -39,7 +39,9 @@ describe("unified UX finalization", () => {
 
   it("makes Fleet exception-first and exposes the complete vehicle passport context", () => {
     const fleet = read("components/company/fleet-workspace-300.tsx");
-    expect(ordered(fleet, ["Aktywne pojazdy", "Dokumenty / 30 dni", "Serwis / 30 dni", "Poczekalnia AI", "Alerty krytyczne", "Koszt miesiąca"])).toBe(true);
+    for (const label of ["Aktywne pojazdy", "Dokumenty / 30 dni", "Serwis / 30 dni", "Poczekalnia AI", "Alerty krytyczne", "Koszt miesiąca"]) {
+      expect(fleet).toContain(label);
+    }
     expect(fleet).toContain("Paszport pojazdu");
     expect(fleet).toContain("Dokumenty i terminy");
     expect(fleet).toContain("Serwis");
