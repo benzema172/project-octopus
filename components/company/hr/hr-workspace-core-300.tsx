@@ -50,9 +50,9 @@ export function HrWorkspaceCore300(props: Props) {
   };
 
   return <HrApprovalProvider canApprove={props.canApprove}><div className={styles.shell} data-hr-core="300">
-    <div className={styles.toolbar}>
-      <nav className={styles.tabs} aria-label="Sekcje modułu Kadry">{tabs.map((item) => <button type="button" key={item.id} className={`${styles.tab} ${tab === item.id ? styles.tabActive : ""}`} onClick={() => navigate(item.id)}>{item.icon}{item.label}</button>)}</nav>
-      <div className={styles.actions}>
+    <div className={styles.toolbar} data-hr-toolbar="split">
+      <nav className={styles.tabs} aria-label="Sekcje modułu Kadry" data-hr-tabs="panel">{tabs.map((item) => <button type="button" key={item.id} className={`${styles.tab} ${tab === item.id ? styles.tabActive : ""}`} onClick={() => navigate(item.id)}>{item.icon}{item.label}</button>)}</nav>
+      <div className={styles.actions} data-hr-toolbar-actions="1">
         {props.canWrite && tab === "employees" ? <button type="button" className={styles.action} onClick={() => setEmployeeCreateOpen(true)}><Plus size={15} /> Dodaj pracownika</button> : null}
         {props.canWrite ? <ModuleDropzoneLink workspaceId={props.workspaceId} sourceModule="hr" variant="primary" /> : null}
       </div>
