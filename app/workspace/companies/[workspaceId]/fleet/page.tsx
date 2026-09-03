@@ -1,11 +1,11 @@
 import { CompanyOperationalPage } from "@/components/company/company-operational-page";
-import { getFleetCore300Data } from "@/lib/data/fleet-core-300";
+import { getFleetConnected400Data } from "@/lib/data/fleet-connected-400";
 import type { CompanyPageOptions } from "@/lib/data/company-operations";
 
 export const dynamic = "force-dynamic";
 
-async function getFleet300Data(workspaceId: string, options: CompanyPageOptions) {
-  return getFleetCore300Data(workspaceId, options);
+async function getFleet400Data(workspaceId: string, options: CompanyPageOptions) {
+  return getFleetConnected400Data(workspaceId, options);
 }
 
 export default async function FleetPage({ params, searchParams }: {
@@ -20,8 +20,8 @@ export default async function FleetPage({ params, searchParams }: {
     domain="fleet"
     kind="fleet"
     kicker="Flota"
-    title="Flota, maszyny i transport"
-    description="Cyfrowy paszport pojazdu, AI z Wrzutni, przebiegi i motogodziny, serwis, dokumenty, opony, szkody, uprawnienia, koszty TCO i wykorzystanie na inwestycjach."
-    loader={getFleet300Data}
+    title="Fleet 4.0 — Connected Intelligence"
+    description="Uniwersalny system floty dla polskich firm: operacje, GPS i geofencing, OBD/CAN, Fleet Readiness, Mission Fit, predykcyjny serwis, AI, bezpieczeństwo, e-TOLL/tachograf/SENT, EV, TCO i integracje z Kadrami, Magazynem, Finansami oraz Inwestycjami."
+    loader={getFleet400Data}
   />;
 }
