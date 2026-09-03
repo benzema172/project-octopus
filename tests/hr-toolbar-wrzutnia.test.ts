@@ -27,4 +27,15 @@ describe("HR toolbar Wrzutnia", () => {
     expect(styles).toContain("border:0!important");
     expect(styles).toContain("border:1px solid #dde2ea");
   });
+
+  it("does not stretch the HR dropzone beyond the shared Warehouse primary-button height", () => {
+    const styles = read("components/company/hr/hr-workspace-149.module.css");
+    const globals = read("app/globals.css");
+
+    expect(styles).toContain('align-self:center');
+    expect(styles).toContain('min-height:42px');
+    expect(styles).not.toContain('min-height:100%');
+    expect(globals).toContain('.primary-button,');
+    expect(globals).toContain('min-height: 42px;');
+  });
 });
