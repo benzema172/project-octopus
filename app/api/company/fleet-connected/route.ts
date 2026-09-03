@@ -26,7 +26,9 @@ const jsonArray = (value: unknown) => Array.isArray(value) ? value : s(value) ? 
 
 function hashSecret(secret: string) { return createHash("sha256").update(secret).digest("hex"); }
 
-async function owned(table: string, value: unknown, workspaceId: string, label: string, optional = false) {
+function owned(table: string, value: unknown, workspaceId: string, label: string, optional?: false): Promise<string>;
+function owned(table: string, value: unknown, workspaceId: string, label: string, optional: true): Promise<string | null>;
+async function owned(table: string, value: unknown, workspaceId: string, label: string, optional = false): Promise<string | null> {
   const id = s(value);
   if (!id && optional) return null;
   if (!id) throw new Error(`Wybierz: ${label}.`);
