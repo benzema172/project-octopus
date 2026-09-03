@@ -1,21 +1,24 @@
-export const DOCUMENT_SOURCE_MODULES = ["warehouse", "hr"] as const;
+export const DOCUMENT_SOURCE_MODULES = ["warehouse", "hr", "fleet"] as const;
 
 export type DocumentSourceModule = (typeof DOCUMENT_SOURCE_MODULES)[number];
-export type SourcePreferredCategory = "warehouse" | "hr";
+export type SourcePreferredCategory = "warehouse" | "hr" | "fleet";
 
 export function normalizeDocumentSourceModule(value: unknown): DocumentSourceModule | null {
   const normalized = String(value ?? "").trim().toLowerCase();
-  return normalized === "warehouse" || normalized === "hr" ? normalized : null;
+  return normalized === "warehouse" || normalized === "hr" || normalized === "fleet" ? normalized : null;
 }
 
 export function preferredCategoryForSourceModule(sourceModule: DocumentSourceModule | null): SourcePreferredCategory | null {
   if (sourceModule === "warehouse") return "warehouse";
   if (sourceModule === "hr") return "hr";
+  if (sourceModule === "fleet") return "fleet";
   return null;
 }
 
 export function sourceModuleLabel(sourceModule: DocumentSourceModule): string {
-  return sourceModule === "warehouse" ? "Magazyn" : "Kadry";
+  if (sourceModule === "warehouse") return "Magazyn";
+  if (sourceModule === "hr") return "Kadry";
+  return "Flota";
 }
 
 export function sourceModulePromptHint(sourceModule: DocumentSourceModule | null): string | undefined {
@@ -34,6 +37,18 @@ export function sourceModulePromptHint(sourceModule: DocumentSourceModule | null
       "Traktuj ten kontekst jako silną podpowiedź routingu, a nie twardą blokadę kategorii.",
       "Jeśli treść dotyczy pracownika, umowy o pracę lub zlecenia, urlopu, czasu pracy, badań lekarskich, BHP, uprawnień, wynagrodzeń albo innych danych kadrowych, preferuj category=\"hr\".",
       "Jeżeli treść dokumentu jednoznacznie dotyczy innego obszaru (np. magazynu, floty lub dokumentacji inwestycji), zignoruj podpowiedź modułu i sklasyfikuj dokument zgodnie z jego rzeczywistą treścią."
+    ].join(" ");
+  }
+
+  if (sourceModule === "fleet") {
+    return [
+      "Dokument został wrzucony przez Wrzutnię uruchomioną z modułu Flota.",
+      "Traktuj ten kontekst jako silną podpowiedź routingu, a nie twardą blokadę kategorii.",
+      "Jeśli treść dotyczy pojazdu, maszyny, VIN, numeru rejestracyjnego, polisy OC/AC, przeglądu, UDT, leasingu, serwisu, naprawy, opon, szkody, tankowania, paliwa, przebiegu, motogodzin albo kosztów eksploatacji, preferuj category=\"fleet\".",
+      "Dla dokumentów Floty wydobądź możliwie dokładnie: registrationNumber, vin, documentType, documentNumber, validFrom, validUntil, issueDate, providerName, amount, currency, mileage, engineHours, fuelLiters, fuelType, serviceType, workshopName, claimNumber oraz wszystkie wartości potrzebne do powiązania z istniejącym pojazdem.",
+      "Jeżeli sztywny schemat odpowiedzi nie ma osobnego pola dla danych Floty, na przykład VIN, daty ważności, motogodzin, warsztatu albo numeru szkody, zapisz je także w facts z jednoznacznym label i type, aby Poczekalnia Floty mogła je bezpiecznie odczytać.",
+      "Nie zakładaj nowego pojazdu na podstawie niepewnego dokumentu. Gdy identyfikacja pojazdu, przebiegu, kosztu lub typu dokumentu nie jest jednoznaczna, pozostaw informację do potwierdzenia przez użytkownika.",
+      "Jeżeli treść jednoznacznie dotyczy innego obszaru, zignoruj podpowiedź Floty i sklasyfikuj dokument zgodnie z jego rzeczywistą treścią."
     ].join(" ");
   }
 
