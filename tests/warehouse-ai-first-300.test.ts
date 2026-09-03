@@ -54,7 +54,7 @@ describe("Warehouse 3.0 AI-first contract", () => {
     expect(migration).not.toContain("update public.stock_balances");
   });
 
-  it("learns supplier aliases and captures prices without changing inventory quantity", () => {
+  it("learns supplier aliases and captures prices while inventory mutation stays draft-gated", () => {
     const api = read("app/api/company/warehouse-ai/route.ts");
     const priceMigration = read("supabase/migrations/20260902202100_warehouse_ai_price_learning_300.sql");
     expect(api).toContain('body.action === "match"');
@@ -62,7 +62,10 @@ describe("Warehouse 3.0 AI-first contract", () => {
     expect(api).toContain("material_aliases");
     expect(api).toContain('status: "approved"');
     expect(api).toContain("price_observations");
-    expect(api).not.toContain("stock_movements");
+    expect(api).toContain("draft_movement_id");
+    expect(api).toContain('movement?.status === "draft"');
+    expect(api).toContain('movement.source_group_key === "warehouse-ai-31"');
+    expect(api).toContain("finalize_warehouse_review_atomic");
     expect(priceMigration).toContain("capture_warehouse_ai_price");
     expect(priceMigration).toContain("warehouse_ai_line");
     expect(priceMigration).toContain("canonical_purchase");
