@@ -199,7 +199,7 @@ function normalizeAnalysis(value: unknown): WarehouseDocumentAnalysis {
   const businessDocuments = Array.isArray(source.businessDocuments)
     ? source.businessDocuments.map(normalizeBusinessDocument).filter((doc): doc is WarehouseBusinessDocument => Boolean(doc))
     : [];
-  const aiCategory = normalizeDocumentCategory(source.category);
+  const aiCategory = normalizeDocumentCategory(typeof source.category === "string" ? source.category : null);
   const category = businessDocuments.length ? "warehouse" : (aiCategory ?? "other");
   const confidence = bounded(source.confidence);
   const summary = String(source.summary ?? "").trim() || (businessDocuments.length
