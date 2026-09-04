@@ -4,10 +4,12 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("Warehouse 3.0 -> 3.1 AI-first compatibility contract", () => {
-  it("uses a real top tab workspace with Magazyn and Poczekalnia", () => {
+  it("uses a real top tab workspace with Magazyn and Poczekalnia under Warehouse 4.0", () => {
     const operations = read("components/company/operations/warehouse-operations.tsx");
+    const market = read("components/company/warehouse-market-400.tsx");
     const workspace = read("components/company/warehouse-workspace-300.tsx");
-    expect(operations).toContain("WarehouseWorkspace300");
+    expect(operations).toContain("WarehouseMarket400");
+    expect(market).toContain("WarehouseWorkspace300");
     expect(operations).not.toContain("WarehouseCommandCenter");
     expect(workspace).toContain('label: "Magazyn"');
     expect(workspace).toContain('label: "Poczekalnia"');
@@ -73,14 +75,17 @@ describe("Warehouse 3.0 -> 3.1 AI-first compatibility contract", () => {
     expect(priceMigration).not.toContain("stock_movements");
   });
 
-  it("loads AI queue data together with the existing warehouse engine", () => {
+  it("loads AI queue data together with the existing warehouse engine through Warehouse 4.0", () => {
     const page = read("app/workspace/companies/[workspaceId]/warehouse/page.tsx");
-    const loader = read("lib/data/warehouse-ai-300.ts");
-    expect(page).toContain("getWarehouseWorkspaceData");
-    expect(page).toContain("getWarehouseAi300Data");
-    expect(page).toContain("return { ...base, ...ai }");
-    expect(loader).toContain("warehouse_document_reviews");
-    expect(loader).toContain("warehouse_ai_lines");
-    expect(loader).toContain("document_texts");
+    const marketLoader = read("lib/data/warehouse-market-400.ts");
+    const aiLoader = read("lib/data/warehouse-ai-300.ts");
+    expect(page).toContain("getWarehouseMarket400Data");
+    expect(marketLoader).toContain("getWarehouseWorkspaceData");
+    expect(marketLoader).toContain("getWarehouseAi300Data");
+    expect(marketLoader).toContain("...base");
+    expect(marketLoader).toContain("...ai");
+    expect(aiLoader).toContain("warehouse_document_reviews");
+    expect(aiLoader).toContain("warehouse_ai_lines");
+    expect(aiLoader).toContain("document_texts");
   });
 });
