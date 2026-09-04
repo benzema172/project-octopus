@@ -35,7 +35,23 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: Production dependency audit
-        run: npm audit --omit=dev --audit-level=high
+        shell: bash
+        run: |
+          set -o pipefail
+          for attempt in 1 2 3; do
+            rm -f /tmp/npm-audit.log
+            if timeout 90s npm audit --omit=dev --audit-level=high 2>&1 | tee /tmp/npm-audit.log; then
+              exit 0
+            fi
+            code=${PIPESTATUS[0]}
+            if [[ "$code" != "124" ]] && ! grep -Eqi "network timeout|audit endpoint returned an error|ECONN|ETIMEDOUT|EAI_AGAIN|ENETUNREACH" /tmp/npm-audit.log; then
+              exit "$code"
+            fi
+            echo "npm audit: przejściowy błąd sieci (próba $attempt/3)."
+            sleep $((attempt * 5))
+          done
+          echo "npm audit: registry niedostępne po 3 próbach."
+          exit 1
       - name: Stability contract
         run: npm run check:stability
       - name: Typecheck

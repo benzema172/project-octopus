@@ -10,6 +10,7 @@
   },
   "crons": [
     { "path": "/api/brain/worker", "schedule": "30 3 * * *" },
-    { "path": "/api/cron/operations", "schedule": "15 4 * * *" }
+    { "path": "/api/cron/operations", "schedule": "15 4 * * *" },
+    { "path": "/api/cron/fleet-intelligence", "schedule": "45 4 * * *" }
   ]
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { FleetWorkspace300 } from "@/components/company/fleet-workspace-300";
+import { FleetWorkspace400 } from "@/components/company/fleet-workspace-400";
 import type { Data } from "@/components/company/operations/module-shell";
 
 export default function FleetOperations({ workspaceId, data, canWrite, canApprove, query }: {
@@ -11,5 +11,5 @@ export default function FleetOperations({ workspaceId, data, canWrite, canApprov
   pathname: string;
   query: string;
 }) {
-  return <FleetWorkspace300 workspaceId={workspaceId} data={data} canWrite={canWrite} canApprove={canApprove} query={query} />;
+  return <FleetWorkspace400 workspaceId={workspaceId} data={data} canWrite={canWrite} canApprove={canApprove} query={query} />;
 }
