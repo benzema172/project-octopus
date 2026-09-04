@@ -8,10 +8,13 @@ const eslintConfig = [
     ignores: [".next/**", "node_modules/**", "coverage/**"]
   },
   {
+    // Te widoki synchronizują stan React z danymi zewnętrznymi po montażu
+    // (m.in. localStorage kolejki skanów offline), więc aktualizacja stanu w efekcie jest zamierzona.
     files: [
       "components/company/hr/hr-employee-registry-152.tsx",
       "components/company/hr/hr-leaves-161.tsx",
-      "components/company/hr/hr-time-records-400.tsx"
+      "components/company/hr/hr-time-records-400.tsx",
+      "components/company/warehouse-market-400.tsx"
     ],
     rules: {
       "react-hooks/set-state-in-effect": "off"
