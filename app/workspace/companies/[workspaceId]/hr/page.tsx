@@ -3,7 +3,7 @@ import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { HrWorkspace149 } from "@/components/company/hr/hr-workspace-149";
 import { requireCurrentUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
-import { getHrMarket400Data } from "@/lib/data/hr-market-400";
+import { getHrWorkspace141Data } from "@/lib/data/hr-workspace-141";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import styles from "./hr-employee-list-141.module.css";
 import regression from "./hr-employee-list-1410.module.css";
@@ -28,14 +28,14 @@ export default async function HrPage({ params }: { params: Promise<{ workspaceId
   ]);
   const canViewPayroll = canApprove || canFinanceRead;
   const canManagePayroll = canApprove || canFinanceWrite;
-  const data = await getHrMarket400Data(workspace.id, { referenceDate, includePayroll: canViewPayroll });
+  const data = await getHrWorkspace141Data(workspace.id, { referenceDate, includePayroll: canViewPayroll });
 
   return <main className={`co-page ${styles.hr141} ${regression.hr1410} ${compact.profile143} ${createModal.create151}`}>
     <header className="co-page-heading">
       <div>
-        <p className="co-kicker">Kadry 4.0</p>
+        <p className="co-kicker">Kadry Core 3.0</p>
         <h1>Kadry i zasoby ludzkie</h1>
-        <p>Core kadrowy, ATS, onboarding/offboarding, delegacje, kompetencje i szkolenia, oceny i cele, workforce planning, wynagrodzenia, portal pracownika, RCP oraz People Readiness i bezpieczny AI HR Controller.</p>
+        <p>Pracownicy, czas pracy, urlopy, BHP i uprawnienia, dokumenty OCR/AI, zespoły, inwestycje oraz koszt pracy w jednym spójnym obiegu.</p>
       </div>
     </header>
     <HrWorkspace149
