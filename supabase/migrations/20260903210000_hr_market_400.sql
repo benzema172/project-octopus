@@ -199,7 +199,7 @@ create index if not exists hr_survey_responses_employee_idx on public.hr_survey_
 
 create table if not exists public.hr_career_paths (
   id uuid primary key default gen_random_uuid(),workspace_id uuid not null references public.workspaces(id) on delete cascade,
-  name text not null,current_role text,target_role text,required_competencies jsonb not null default '[]'::jsonb,active boolean not null default true,
+  name text not null,"current_role" text,target_role text,required_competencies jsonb not null default '[]'::jsonb,active boolean not null default true,
   created_at timestamptz not null default now()
 );
 create index if not exists hr_career_paths_workspace_idx on public.hr_career_paths(workspace_id,active,name);
