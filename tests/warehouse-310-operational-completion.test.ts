@@ -29,6 +29,7 @@ describe("Warehouse 3.1 domain logic", () => {
 
 describe("Warehouse 3.1 implementation contract", () => {
   const page = read("app/workspace/companies/[workspaceId]/warehouse/page.tsx");
+  const marketLoader = read("lib/data/warehouse-market-400.ts");
   const workspace = read("components/company/warehouse-workspace-300.tsx");
   const aiRoute = read("app/api/company/warehouse-ai/route.ts");
   const atomicRoute = read("app/api/company/warehouse-atomic/route.ts");
@@ -36,8 +37,9 @@ describe("Warehouse 3.1 implementation contract", () => {
   const migration = read("supabase/migrations/20260903083000_warehouse_310_operational_completion.sql");
 
   it("passes server search and pagination into the actual Warehouse loader", () => {
-    expect(page).toContain("getWarehouseWorkspaceData(workspaceId, options)");
-    expect(page).not.toContain("getWarehouseWorkspaceData(workspaceId),");
+    expect(page).toContain("loader={getWarehouseMarket400Data}");
+    expect(marketLoader).toContain("getWarehouseWorkspaceData(workspaceId, options)");
+    expect(marketLoader).not.toContain("getWarehouseWorkspaceData(workspaceId),");
   });
 
   it("keeps AI as a draft creator rather than a physical stock approver", () => {
