@@ -1,0 +1,20 @@
+.shell {
+  min-width: 0;
+}
+
+.planningActive [data-warehouse-experience="3.1"] > :nth-child(n + 4) {
+  display: none !important;
+}
+
+.planningContent {
+  margin-top: 12px;
+}
+
+.empty {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px dashed rgba(15, 23, 42, 0.18);
+  border-radius: 12px;
+  color: #64748b;
+  font-size: 0.9rem;
+}
