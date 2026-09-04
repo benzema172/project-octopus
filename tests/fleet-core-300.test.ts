@@ -29,6 +29,8 @@ describe("Fleet Core 3.0", () => {
     expect(operations).not.toContain("CompanyModuleShell");
     expect(loader).toContain('{ count: "exact" }');
     expect(loader).toContain(".range(from, from + pageSize - 1)");
+    expect(loader).toContain('select("id,employee_number,first_name,last_name,status")');
+    expect(loader).not.toContain("job_title");
     expect(loader).toContain("availableVehicleAssets");
     expect(loader).toContain("vehicle_required_qualifications");
     expect(loader).toContain("vehicle_checks");
