@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { analyzeDocumentWithGemini, analyzeFileWithGemini } from "@/lib/ai/gemini-document";
+import { analyzeWarehouseDocumentWithGemini } from "@/lib/ai/gemini-warehouse-document";
 import { buildDocumentModuleProposals, proposalCounts } from "@/lib/ai/module-proposals";
 import { extractDocxText, extractLegacyDocText, extractLegacyXlsText, extractXlsxText } from "@/lib/ai/office-extractor";
 import { getR2Config } from "@/lib/env";
@@ -188,8 +189,14 @@ export async function processDocumentVersion(input: {
         parentSha256: actualSha256
       });
     }
-    const useFilesApi = (version.mime_type === "application/pdf" || version.mime_type.startsWith("image/")) && bytes.length > MAX_INLINE_BYTES;
-    const prepared = useFilesApi ? {} : await prepareInput(version.file_name, version.mime_type, bytes);
+
+    const warehouseBinary = sourceModule === "warehouse"
+      && (version.mime_type === "application/pdf" || version.mime_type.startsWith("image/"));
+    const useFilesApi = !warehouseBinary
+      && (version.mime_type === "application/pdf" || version.mime_type.startsWith("image/"))
+      && bytes.length > MAX_INLINE_BYTES;
+    const prepared = warehouseBinary || useFilesApi ? {} : await prepareInput(version.file_name, version.mime_type, bytes);
+
     const { data: projectRows, error: projectsError } = await supabase.from("projects")
       .select("id,name,code,status,description,investor_name,location")
       .eq("workspace_id", input.workspaceId)
@@ -238,9 +245,20 @@ export async function processDocumentVersion(input: {
       ...projectCandidates.map(projectCatalogLine)
     ];
     await supabase.from("processing_jobs").update({ stage: "analyze" }).eq("job_key", jobKey);
-    const { analysis, model } = useFilesApi
-      ? await analyzeFileWithGemini({ fileName: version.file_name, mimeType: version.mime_type, bytes, projectCatalog })
-      : await analyzeDocumentWithGemini({ fileName: version.file_name, mimeType: version.mime_type, ...prepared, projectCatalog });
+
+    const analysisResult = sourceModule === "warehouse"
+      ? await analyzeWarehouseDocumentWithGemini({
+          fileName: version.file_name,
+          mimeType: version.mime_type,
+          bytes: warehouseBinary ? bytes : undefined,
+          extractedText: "extractedText" in prepared && typeof prepared.extractedText === "string" ? prepared.extractedText : undefined,
+          projectCatalog
+        })
+      : useFilesApi
+        ? await analyzeFileWithGemini({ fileName: version.file_name, mimeType: version.mime_type, bytes, projectCatalog })
+        : await analyzeDocumentWithGemini({ fileName: version.file_name, mimeType: version.mime_type, ...prepared, projectCatalog });
+    const { analysis, model } = analysisResult;
+
     const lockedCategory = input.categoryOverride
       ?? (intake?.category_locked ? normalizeDocumentCategory(intake.requested_category) : null);
     if ((input.categoryOverride || intake?.category_locked) && !lockedCategory) {
@@ -296,7 +314,7 @@ export async function processDocumentVersion(input: {
         sourceModule ? `Kontekst Wrzutni: ${sourceModuleLabel(sourceModule)} — silna podpowiedź routingu bez blokady kategorii.` : null,
         projectMatch?.reason
       ].filter(Boolean).join(" "),
-      schema_version: "document-analysis-v3",
+      schema_version: sourceModule === "warehouse" ? "warehouse-analysis-v4-multi" : "document-analysis-v3",
       model_name: model,
       status: "proposed"
     });
@@ -354,7 +372,7 @@ export async function processDocumentVersion(input: {
     const searchableText = "extractedText" in prepared && typeof prepared.extractedText === "string"
       ? prepared.extractedText
       : [analysis.summary, ...analysis.searchPassages, ...analysis.workStages, ...analysis.installations, ...analysis.facts.map((fact) => `${fact.label}: ${fact.value} ${fact.unit}`)].join("\n");
-    const extractionMethod = useFilesApi ? "gemini_files" : "local_or_inline";
+    const extractionMethod = sourceModule === "warehouse" && warehouseBinary ? "gemini_files_warehouse" : useFilesApi ? "gemini_files" : "local_or_inline";
     const { error: textError } = await supabase.from("document_texts").upsert({
       workspace_id: input.workspaceId,
       project_id: proposedProjectId,
@@ -469,7 +487,7 @@ export async function processDocumentVersion(input: {
       status: "succeeded",
       stage: "complete",
       model_name: model,
-      prompt_version: "document-analysis-v3+module-context",
+      prompt_version: sourceModule === "warehouse" ? "warehouse-analysis-v4-multi" : "document-analysis-v3+module-context",
       finished_at: new Date().toISOString(),
       error_code: null,
       error_message: null

@@ -22,6 +22,13 @@ export type ModuleProposalDraft = {
   requiresFormalApproval: boolean;
 };
 
+type MultiBusinessAnalysis = DocumentAnalysis & {
+  businessDocuments?: Array<DocumentAnalysis["businessDocument"] & {
+    sourcePageStart?: number;
+    sourcePageEnd?: number;
+  }>;
+};
+
 function normalize(value: unknown) {
   return String(value ?? "")
     .trim()
@@ -76,6 +83,16 @@ function deduplicate(proposals: ModuleProposalDraft[]) {
     if (!existing || existing.confidence < proposal.confidence) rows.set(key, proposal);
   }
   return Array.from(rows.values());
+}
+
+function businessDocumentsForAnalysis(analysis: DocumentAnalysis) {
+  const multi = analysis as MultiBusinessAnalysis;
+  if (Array.isArray(multi.businessDocuments) && multi.businessDocuments.length > 0) return multi.businessDocuments;
+  const legacy = analysis.businessDocument;
+  const hasLegacy = Boolean(
+    legacy.documentNumber || legacy.supplierName || legacy.lines.length || legacy.netAmount || legacy.grossAmount
+  );
+  return hasLegacy ? [legacy] : [];
 }
 
 export function buildDocumentModuleProposals(analysis: DocumentAnalysis) {
@@ -243,21 +260,35 @@ export function buildDocumentModuleProposals(analysis: DocumentAnalysis) {
     requiresFormalApproval: false
   }));
 
-  analysis.businessDocument.lines.forEach((line, index) => {
-    if (!line.description) return;
-    const base = {
-      naturalKey: naturalKey("business", [analysis.businessDocument.documentNumber, index + 1, line.sku, line.description]),
-      title: line.description,
-      payload: { ...line, document: analysis.businessDocument.documentNumber, currency: analysis.businessDocument.currency },
-      confidence: bounded(line.confidence),
-      sourceLocator: { label: `Pozycja dokumentu handlowego ${index + 1}` },
-      sourceQuote: line.description,
-      requiresFormalApproval: true
-    };
-    proposals.push({ ...base, module: "finance", proposalType: "finance_line" });
-    if (line.lineType === "material" || ["WZ", "PZ", "delivery"].includes(analysis.businessDocument.documentType)) {
-      proposals.push({ ...base, module: "warehouse", proposalType: "warehouse_line" });
-    }
+  businessDocumentsForAnalysis(analysis).forEach((businessDocument, documentIndex) => {
+    businessDocument.lines.forEach((line, lineIndex) => {
+      if (!line.description) return;
+      const sourcePageStart = "sourcePageStart" in businessDocument ? Number(businessDocument.sourcePageStart) || undefined : undefined;
+      const sourcePageEnd = "sourcePageEnd" in businessDocument ? Number(businessDocument.sourcePageEnd) || undefined : undefined;
+      const sourceLabel = sourcePageStart
+        ? `Dokument ${documentIndex + 1}, str. ${sourcePageStart}${sourcePageEnd && sourcePageEnd !== sourcePageStart ? `–${sourcePageEnd}` : ""}, pozycja ${lineIndex + 1}`
+        : `Dokument ${documentIndex + 1}, pozycja ${lineIndex + 1}`;
+      const base = {
+        naturalKey: naturalKey("business", [documentIndex + 1, businessDocument.documentNumber, lineIndex + 1, line.sku, line.description]),
+        title: line.description,
+        payload: {
+          ...line,
+          document: businessDocument.documentNumber,
+          currency: businessDocument.currency,
+          sourceDocumentIndex: documentIndex + 1,
+          sourcePageStart,
+          sourcePageEnd
+        },
+        confidence: bounded(line.confidence),
+        sourceLocator: { label: sourceLabel, ...(sourcePageStart ? { page: sourcePageStart } : {}) },
+        sourceQuote: line.description,
+        requiresFormalApproval: true
+      };
+      proposals.push({ ...base, module: "finance", proposalType: "finance_line" });
+      if (line.lineType === "material" || ["WZ", "PZ", "delivery"].includes(businessDocument.documentType)) {
+        proposals.push({ ...base, module: "warehouse", proposalType: "warehouse_line" });
+      }
+    });
   });
 
   const closeoutMatcher = /powykonaw|dtr|instrukcj|dokumentacj.*odbior|certyfikat|deklaracj.*zgod/i;

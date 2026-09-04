@@ -184,13 +184,33 @@ export async function applyDocumentAutopilot(input: {
   }
 
   const projectId = reviewed.result_project_id;
+  let failed = 0;
+  let businessDocumentProcessed = false;
+  let businessDocumentCount = 0;
+
+  if (["warehouse", "invoice"].includes(reviewed.result_category)) {
+    const { data: businessResult, error: businessError } = await db.rpc("orchestrate_approved_business_documents_atomic", {
+      p_workspace_id: input.workspaceId,
+      p_document_id: input.documentId,
+      p_actor_id: input.actorId
+    });
+    if (businessError) {
+      failed += 1;
+      errors.push(`Dokument finansowo-magazynowy: ${businessError.message}`);
+    } else {
+      const result = businessResult as Record<string, unknown> | null;
+      businessDocumentCount = Number(result?.count ?? 0) || 0;
+      businessDocumentProcessed = result?.skipped !== true && businessDocumentCount > 0;
+    }
+  }
+
   if (!projectId) {
     await db.from("audit_events").insert({
       workspace_id: input.workspaceId,
       project_id: null,
       actor_id: input.actorId,
       actor_type: "ai",
-      event_type: "document.autopilot_applied",
+      event_type: failed > 0 ? "document.autopilot_partial" : "document.autopilot_applied",
       entity_type: "document",
       entity_id: input.documentId,
       after_value: {
@@ -198,18 +218,23 @@ export async function applyDocumentAutopilot(input: {
         category: reviewed.result_category,
         project_id: null,
         published: 0,
-        note: "Dokument sklasyfikowany automatycznie; brak inwestycji uniemożliwia publikację do modułów."
+        failed,
+        business_document_processed: businessDocumentProcessed,
+        business_document_count: businessDocumentCount,
+        note: businessDocumentProcessed
+          ? "Dokument firmowy przetworzony do Finansów/Magazynu bez przypisania inwestycji."
+          : "Dokument sklasyfikowany automatycznie; brak inwestycji uniemożliwia publikację pozostałych propozycji projektowych."
       }
     });
     return {
-      status: "applied",
+      status: failed > 0 ? "partial" : "applied",
       projectId: null,
       published: 0,
-      failed: 0,
+      failed,
       protocolDrafts: 0,
       boqImported: false,
-      businessDocumentProcessed: false,
-      errors: []
+      businessDocumentProcessed,
+      errors
     };
   }
 
@@ -230,14 +255,11 @@ export async function applyDocumentAutopilot(input: {
   if (proposalsError) throw new Error(`Autopilot nie mógł pobrać zmian modułowych: ${proposalsError.message}`);
 
   let published = 0;
-  let failed = 0;
   let protocolDrafts = 0;
   let hasBoq = false;
-  let hasBusiness = false;
 
   for (const proposal of proposals ?? []) {
     hasBoq ||= proposal.proposal_type === "boq_item";
-    hasBusiness ||= proposal.proposal_type === "finance_line" || proposal.proposal_type === "warehouse_line";
 
     let publishResult: PublishResult | null = null;
     if (proposal.status === "published") {
@@ -335,22 +357,6 @@ export async function applyDocumentAutopilot(input: {
     }
   }
 
-  let businessDocumentProcessed = false;
-  if (hasBusiness) {
-    const { data: businessResult, error: businessError } = await db.rpc("orchestrate_approved_business_document_atomic", {
-      p_workspace_id: input.workspaceId,
-      p_document_id: input.documentId,
-      p_actor_id: input.actorId
-    });
-    if (businessError) {
-      failed += 1;
-      errors.push(`Dokument finansowo-magazynowy: ${businessError.message}`);
-    } else {
-      const result = businessResult as Record<string, unknown> | null;
-      businessDocumentProcessed = result?.skipped !== true;
-    }
-  }
-
   await db.from("audit_events").insert({
     workspace_id: input.workspaceId,
     project_id: projectId,
@@ -368,6 +374,7 @@ export async function applyDocumentAutopilot(input: {
       protocol_drafts: protocolDrafts,
       boq_imported: boqImported,
       business_document_processed: businessDocumentProcessed,
+      business_document_count: businessDocumentCount,
       errors: errors.slice(0, 20),
       mode: "autonomous"
     }
