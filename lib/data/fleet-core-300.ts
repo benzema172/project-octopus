@@ -38,7 +38,7 @@ export async function getFleetCore300Data(workspaceId: string, options: CompanyP
     pageVehiclesQuery.order("registration_number").range(from, from + pageSize - 1),
     db.from("vehicles").select("id,registration_number,vin,vehicle_type,make,model,production_year,ownership_type,status,current_mileage,meter_type,current_engine_hours,fuel_type,tank_capacity_l,purchase_date,purchase_price,lease_end_date,responsible_employee_id,default_project_id,created_at,updated_at").eq("workspace_id", workspaceId).order("registration_number").limit(1500),
     db.from("projects").select("id,name,status").eq("workspace_id", workspaceId).order("name").limit(1000),
-    db.from("employees").select("id,employee_number,first_name,last_name,status,job_title").eq("workspace_id", workspaceId).order("last_name").order("first_name").limit(2000),
+    db.from("employees").select("id,employee_number,first_name,last_name,status").eq("workspace_id", workspaceId).order("last_name").order("first_name").limit(2000),
     db.from("counterparties").select("id,name,tax_id,role,active").eq("workspace_id", workspaceId).eq("active", true).order("name").limit(1500),
     db.rpc("get_fleet_core_summary_300", { p_workspace_id: workspaceId, p_reference_date: referenceDate }),
     db.from("fleet_document_reviews").select("id,document_id,document_version_id,project_id,document_type,document_number,document_date,registration_number,vin,valid_from,valid_until,provider_name,amount,currency,mileage,engine_hours,fuel_liters,fuel_type,service_type,workshop_name,claim_number,candidate_vehicle_id,confidence,status,decision_reason,applied_at,created_at,updated_at").eq("workspace_id", workspaceId).neq("status", "ignored").order("updated_at", { ascending: false }).limit(240),
