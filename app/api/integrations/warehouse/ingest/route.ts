@@ -17,6 +17,16 @@ function auth(request: Request) {
   return { integrationId, secret };
 }
 
+async function exactCodeLookup<T extends Record<string, unknown>>(table: string, workspaceId: string, code: string, fields: string[], select: string) {
+  const db = createServiceSupabaseClient();
+  for (const field of fields) {
+    const result = await db.from(table).select(select).eq("workspace_id", workspaceId).eq(field, code).limit(1).maybeSingle<T>();
+    if (result.error) throw result.error;
+    if (result.data) return result.data;
+  }
+  return null;
+}
+
 export async function POST(request: Request) {
   const { integrationId, secret } = auth(request);
   if (!integrationId || !secret) return NextResponse.json({ error: "Brak identyfikatora integracji lub sekretu webhooka." }, { status: 401 });
@@ -51,16 +61,16 @@ export async function POST(request: Request) {
       let warehouseId = s(e.warehouseId) || null;
 
       if (!stockItemId && code) {
-        const item = await db.from("stock_items").select("id").eq("workspace_id", workspaceId).or(`gtin.eq.${code},sku.eq.${code},barcode.eq.${code}`).limit(1).maybeSingle<{ id: string }>();
-        if (!item.error && item.data) stockItemId = item.data.id;
+        const item = await exactCodeLookup<{ id: string }>("stock_items", workspaceId, code, ["gtin", "sku", "barcode"], "id");
+        if (item) stockItemId = item.id;
       }
       if (!logisticUnitId && code) {
-        const unit = await db.from("warehouse_logistic_units").select("id,warehouse_id,location_id").eq("workspace_id", workspaceId).or(`sscc.eq.${code},label_code.eq.${code}`).limit(1).maybeSingle<{ id: string; warehouse_id: string; location_id: string | null }>();
-        if (!unit.error && unit.data) { logisticUnitId = unit.data.id; warehouseId ??= unit.data.warehouse_id; locationId ??= unit.data.location_id; }
+        const unit = await exactCodeLookup<{ id: string; warehouse_id: string; location_id: string | null }>("warehouse_logistic_units", workspaceId, code, ["sscc", "label_code"], "id,warehouse_id,location_id");
+        if (unit) { logisticUnitId = unit.id; warehouseId ??= unit.warehouse_id; locationId ??= unit.location_id; }
       }
       if (!locationId && code) {
-        const location = await db.from("warehouse_locations").select("id,warehouse_id").eq("workspace_id", workspaceId).or(`qr_token.eq.${code},code.eq.${code}`).limit(1).maybeSingle<{ id: string; warehouse_id: string }>();
-        if (!location.error && location.data) { locationId = location.data.id; warehouseId ??= location.data.warehouse_id; }
+        const location = await exactCodeLookup<{ id: string; warehouse_id: string }>("warehouse_locations", workspaceId, code, ["qr_token", "code"], "id,warehouse_id");
+        if (location) { locationId = location.id; warehouseId ??= location.warehouse_id; }
       }
 
       for (const [table, id, label] of [["warehouses", warehouseId, "Magazyn"], ["warehouse_locations", locationId, "Lokalizacja"], ["stock_items", stockItemId, "Kartoteka"], ["warehouse_logistic_units", logisticUnitId, "Jednostka logistyczna"]] as const) {
@@ -70,7 +80,7 @@ export async function POST(request: Request) {
       }
 
       const occurredAt = s(e.occurredAt) && !Number.isNaN(new Date(s(e.occurredAt)).getTime()) ? new Date(s(e.occurredAt)).toISOString() : new Date().toISOString();
-      const payload = { ...e, normalizedCode: code || null, source: "warehouse_webhook", requiresMovementConfirmation: true };
+      const payload: Record<string, unknown> = { ...e, normalizedCode: code || null, source: "warehouse_webhook", requiresMovementConfirmation: true };
       for (const key of Object.keys(payload)) if (/token|secret|password|authorization|api.?key|credential/i.test(key)) payload[key] = "[REDACTED]";
       const inserted = await db.from("warehouse_device_events").insert({ workspace_id: workspaceId, integration_id: integrationId, event_type: eventType, external_event_id: externalEventId, warehouse_id: warehouseId, location_id: locationId, stock_item_id: stockItemId, logistic_unit_id: logisticUnitId, occurred_at: occurredAt, payload, processed: false }).select("id").single<{ id: string }>();
       if (inserted.error?.code === "23505") duplicates += 1;
