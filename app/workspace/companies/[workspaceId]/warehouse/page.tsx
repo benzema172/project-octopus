@@ -1,16 +1,7 @@
 import { CompanyOperationalPage } from "@/components/company/company-operational-page";
-import { getWarehouseAi300Data } from "@/lib/data/warehouse-ai-300";
-import { getWarehouseWorkspaceData, type CompanyPageOptions } from "@/lib/data/company-operations";
+import { getWarehouseMarket400Data } from "@/lib/data/warehouse-market-400";
 
 export const dynamic = "force-dynamic";
-
-async function getWarehouse300Data(workspaceId: string, options: CompanyPageOptions) {
-  const [base, ai] = await Promise.all([
-    getWarehouseWorkspaceData(workspaceId, options),
-    getWarehouseAi300Data(workspaceId)
-  ]);
-  return { ...base, ...ai };
-}
 
 export default async function WarehousePage({ params, searchParams }: {
   params: Promise<{ workspaceId: string }>;
@@ -23,9 +14,9 @@ export default async function WarehousePage({ params, searchParams }: {
     query={query.q}
     domain="warehouse"
     kind="warehouse"
-    kicker="Magazyn"
-    title="Magazyn, materiały i sprzęt"
-    description="AI rozpoznaje towary i urządzenia, dopasowuje kartoteki, pilnuje cen i kieruje wyjątki do lekkiej Poczekalni. Rzeczywisty stan zmienia dopiero zatwierdzony ruch magazynowy."
-    loader={getWarehouse300Data}
+    kicker="Magazyn 4.0"
+    title="Magazyn, materiały, sprzęt i WMS"
+    description="AI rozpoznaje dokumenty i kartoteki, kontroluje historię cen, partie, ważność i gotowość materiałową inwestycji. WMS obsługuje zadania, jednostki logistyczne, zwroty, wysyłki i integracje urządzeń, a fizyczny stan nadal zmienia wyłącznie zatwierdzony ruch magazynowy."
+    loader={getWarehouseMarket400Data}
   />;
 }
