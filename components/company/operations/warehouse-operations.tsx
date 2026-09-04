@@ -1,6 +1,6 @@
 "use client";
 
-import { WarehouseMarket400 } from "@/components/company/warehouse-market-400";
+import { WarehouseMarket410 } from "@/components/company/warehouse-market-410";
 import type { Data } from "@/components/company/operations/module-shell";
 
 export default function WarehouseOperations({ workspaceId, data, canWrite, canApprove, query }: {
@@ -11,7 +11,7 @@ export default function WarehouseOperations({ workspaceId, data, canWrite, canAp
   pathname: string;
   query: string;
 }) {
-  return <WarehouseMarket400
+  return <WarehouseMarket410
     workspaceId={workspaceId}
     data={data}
     canWrite={canWrite}
