@@ -9,18 +9,20 @@ import {
   domainAccessPolicyAllows,
   domainForDocumentCategory,
   hasDomainAccess,
-  loadDomainAccessPolicy
+  loadDomainAccessPolicy,
+  type Domain
 } from "@/lib/authorization";
 import { isDocumentStorageSchemaReady, listDocumentsForWorkspace } from "@/lib/data/documents";
 import { listProjectsForWorkspace } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
+import { normalizeDocumentSourceModule, sourceModuleLabel } from "@/lib/documents/source-module";
 import type { DocumentSummary } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ workspaceId: string }>;
-  searchParams: Promise<{ upload?: string }>;
+  searchParams: Promise<{ upload?: string; sourceModule?: string }>;
 };
 
 async function safeWorkspaceDocuments(workspaceId: string, trashed = false) {
@@ -36,15 +38,24 @@ async function safeWorkspaceDocuments(workspaceId: string, trashed = false) {
   }
 }
 
+function sourceModuleDomain(sourceModule: ReturnType<typeof normalizeDocumentSourceModule>): Domain {
+  if (sourceModule === "warehouse") return "warehouse";
+  if (sourceModule === "hr") return "hr";
+  if (sourceModule === "fleet") return "fleet";
+  return "investments";
+}
+
 export default async function CompanyDocumentsPage({ params, searchParams }: Props) {
   const { workspaceId } = await params;
   const query = await searchParams;
+  const sourceModule = normalizeDocumentSourceModule(query.sourceModule);
   const user = await requireCurrentUser();
   const workspace = await getWorkspaceForUser(user, workspaceId);
 
   if (!workspace) notFound();
-  if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "investments", level: "read" })) {
-    return <DomainAccessDenied workspaceId={workspace.id} area="Dokumenty" />;
+  const pageDomain = sourceModuleDomain(sourceModule);
+  if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: pageDomain, level: "read" })) {
+    return <DomainAccessDenied workspaceId={workspace.id} area={sourceModule ? `Wrzutnia — ${sourceModuleLabel(sourceModule)}` : "Dokumenty"} />;
   }
 
   const [projects, allDocuments, allTrashedDocuments, storageReady, accessPolicy] = await Promise.all([
