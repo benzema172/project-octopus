@@ -1,6 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["dub1"],
+  "env": {
+    "GEMINI_WAREHOUSE_FALLBACK_MODEL": "gemini-3.6-flash"
+  },
   "git": {
     "deploymentEnabled": {
       "**": false,
