@@ -45,7 +45,7 @@ const RETRYABLE_GEMINI_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 const PARSER_VERSION = "warehouse-pdf-chunks-4.2";
 const PDF_PAGES_PER_CHUNK = 4;
 const PDF_OVERLAP_PAGES = 1;
-const PDF_CHUNK_CONCURRENCY = 4;
+const PDF_CHUNK_CONCURRENCY = 2;
 const MAX_WAREHOUSE_PDF_PAGES = 120;
 
 function delay(milliseconds: number) {
@@ -253,7 +253,7 @@ function mergeLines(current: WarehouseBusinessLine[], incoming: WarehouseBusines
 function suppliersConflict(a: WarehouseBusinessDocument, b: WarehouseBusinessDocument) {
   const taxA = normalizeToken(a.supplierTaxId);
   const taxB = normalizeToken(b.supplierTaxId);
-  if (taxA && taxB && taxA !== taxB) return true;
+  if (taxA && taxB) return taxA !== taxB;
   const nameA = normalizeToken(a.supplierName);
   const nameB = normalizeToken(b.supplierName);
   return Boolean(nameA && nameB && nameA !== nameB && !nameA.includes(nameB) && !nameB.includes(nameA));
@@ -379,7 +379,7 @@ async function deleteFile(name: string) {
 
 function modelCandidates() {
   const primary = getOptionalEnv("GEMINI_MODEL") ?? "gemini-3.5-flash";
-  const fallback = getOptionalEnv("GEMINI_WAREHOUSE_FALLBACK_MODEL") ?? getOptionalEnv("GEMINI_FALLBACK_MODEL") ?? "gemini-2.5-flash";
+  const fallback = getOptionalEnv("GEMINI_WAREHOUSE_FALLBACK_MODEL") ?? getOptionalEnv("GEMINI_FALLBACK_MODEL") ?? "gemini-3.5-flash-lite";
   return Array.from(new Set([primary, fallback].filter(Boolean)));
 }
 
