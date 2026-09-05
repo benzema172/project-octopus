@@ -11,6 +11,7 @@ describe("Warehouse 4.2 chunked multi-invoice PDF production path", () => {
   const autopilot = read("lib/ai/document-autopilot.ts");
   const multiInvoiceMigration = read("supabase/migrations/20260904102000_warehouse_multi_business_pdf_410.sql");
   const chunkCacheMigration = read("supabase/migrations/20260905131500_warehouse_pdf_chunk_cache_420.sql");
+  const finalQueueMigration = read("supabase/migrations/20260905142500_final_ai_queue_hardening_180.sql");
   const packageJson = read("package.json");
 
   it("splits a PDF into overlapping page chunks instead of one monolithic Gemini request", () => {
@@ -49,6 +50,17 @@ describe("Warehouse 4.2 chunked multi-invoice PDF production path", () => {
     expect(specialist).not.toContain('?? "gemini-2.5-flash"');
     expect(specialist).toContain("RETRYABLE_GEMINI_STATUS");
     expect(specialist).toContain("AbortSignal.timeout(60_000)");
+  });
+
+  it("never reclaims an approved immutable version and serializes heavy AI jobs", () => {
+    expect(finalQueueMigration).toContain("create or replace function public.claim_next_processing_job");
+    expect(finalQueueMigration).toContain("dc.status = 'approved'");
+    expect(finalQueueMigration).toContain("active.status = 'running'");
+    expect(finalQueueMigration).toContain("return;");
+    expect(finalQueueMigration).toContain("status = 'succeeded'");
+    expect(finalQueueMigration).toContain("stage = 'complete'");
+    expect(finalQueueMigration).toContain("perform public.recover_stale_processing_jobs(interval '6 minutes')");
+    expect(finalQueueMigration).toContain("/api/brain/worker?limit=1");
   });
 
   it("still routes warehouse uploads through the dedicated specialist", () => {
