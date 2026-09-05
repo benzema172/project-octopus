@@ -20,6 +20,7 @@ describe("Warehouse 4.2 chunked multi-invoice PDF production path", () => {
     expect(chunker).toContain("splitPdfIntoPageChunks");
     expect(specialist).toContain("PDF_PAGES_PER_CHUNK = 4");
     expect(specialist).toContain("PDF_OVERLAP_PAGES = 1");
+    expect(specialist).toContain("PDF_CHUNK_CONCURRENCY = 2");
     expect(specialist).toContain("analyzeWarehousePdfInChunks");
   });
 
@@ -30,6 +31,7 @@ describe("Warehouse 4.2 chunked multi-invoice PDF production path", () => {
     expect(specialist).toContain("mergeWarehouseBusinessDocuments");
     expect(specialist).toContain("sameBusinessDocument");
     expect(specialist).toContain("mergeLines");
+    expect(specialist).toContain("if (taxA && taxB) return taxA !== taxB");
   });
 
   it("persists successful chunks so an outer retry processes only failed page ranges", () => {
@@ -41,9 +43,10 @@ describe("Warehouse 4.2 chunked multi-invoice PDF production path", () => {
     expect(specialist).toContain("Udane porcje są zapisane i nie będą analizowane ponownie");
   });
 
-  it("falls back to a second Gemini model on timeout or temporary overload", () => {
+  it("falls back to a high-volume Gemini model on timeout or temporary overload", () => {
     expect(specialist).toContain("GEMINI_WAREHOUSE_FALLBACK_MODEL");
-    expect(specialist).toContain('"gemini-2.5-flash"');
+    expect(specialist).toContain('"gemini-3.5-flash-lite"');
+    expect(specialist).not.toContain('?? "gemini-2.5-flash"');
     expect(specialist).toContain("RETRYABLE_GEMINI_STATUS");
     expect(specialist).toContain("AbortSignal.timeout(60_000)");
   });
