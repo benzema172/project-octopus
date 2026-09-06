@@ -127,6 +127,9 @@ export async function POST(request: Request) {
       if (step === 5 && !finalAnswer) finalAnswer = text || "Zakończyłem dostępne kroki narzędziowe. Sprawdź wykonane działania i decyzje wymagające akceptacji.";
     }
   } catch (error) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      return jsonError("OctopusAI przekroczył limit czasu odpowiedzi dostawcy AI. Spróbuj ponownie.", 504);
+    }
     return jsonError(error instanceof Error ? error.message : "OctopusAI nie ukończył planu agentowego.", 502);
   }
 
