@@ -82,15 +82,21 @@ grant all on table public.ai_action_log to service_role;
 grant all on table public.ai_confidence_stats to service_role;
 grant all on table public.ai_briefings to service_role;
 
--- Keep clean installs and production in the same state. Production already has this
--- 768-dimensional vector column; ADD COLUMN IF NOT EXISTS makes the migration idempotent.
-alter table public.document_chunks
-  add column if not exists embedding_vector vector(768);
-
--- Existing document_chunks vectors are 768-dimensional. This index makes semantic retrieval scalable.
-create index if not exists document_chunks_embedding_vector_hnsw_ai20_idx
-  on public.document_chunks using hnsw (embedding_vector vector_cosine_ops)
-  where embedding_vector is not null;
+-- pgvector lives in the extensions schema on Supabase. The local PGlite
+-- migration harness intentionally does not ship pgvector. Keep the same
+-- migration chain portable: production gets vector(768)+HNSW, while the
+-- local validator gets a nullable text placeholder and lexical RAG only.
+create schema if not exists extensions;
+do $do$
+begin
+  if to_regtype('extensions.vector') is not null then
+    execute 'alter table public.document_chunks add column if not exists embedding_vector extensions.vector(768)';
+    execute 'create index if not exists document_chunks_embedding_vector_hnsw_ai20_idx on public.document_chunks using hnsw (embedding_vector extensions.vector_cosine_ops) where embedding_vector is not null';
+  else
+    alter table public.document_chunks add column if not exists embedding_vector text;
+  end if;
+end
+$do$;
 
 create or replace function public.calibrated_ai_confidence(
   p_workspace_id uuid,
@@ -117,78 +123,141 @@ $$;
 revoke all on function public.calibrated_ai_confidence(uuid,text,text,numeric) from public, anon, authenticated;
 grant execute on function public.calibrated_ai_confidence(uuid,text,text,numeric) to service_role;
 
-create or replace function public.search_octopus_hybrid(
-  p_workspace_id uuid,
-  p_query text,
-  p_query_embedding vector(768) default null,
-  p_project_id uuid default null,
-  p_limit integer default 30
-) returns table(
-  source_type text,
-  source_id text,
-  project_id uuid,
-  title text,
-  context text,
-  category text,
-  source_locator jsonb,
-  score real
-)
-language sql stable security definer set search_path='public'
-as $$
-  with q as (
-    select plainto_tsquery('simple', nullif(trim(p_query),'')) value
-  ), candidates as (
-    select
-      'chunk'::text source_type,
-      d.id::text source_id,
-      d.project_id,
-      d.name title,
-      left(dc.content,1800) context,
-      d.category,
-      jsonb_build_object('document_id',d.id,'version_id',dv.id,'chunk_no',dc.chunk_no,'page',dc.metadata->'page','section',dc.section_title) source_locator,
-      greatest(
-        coalesce(ts_rank(to_tsvector('simple',coalesce(dc.content,'')),q.value),0),
-        case when p_query_embedding is not null and dc.embedding_vector is not null then greatest(0,(1-(dc.embedding_vector <=> p_query_embedding)))::real else 0 end
-      )::real score
-    from public.document_chunks dc
-    join public.document_versions dv on dv.id=dc.document_version_id
-    join public.documents d on d.id=dv.document_id
-    cross join q
-    where d.workspace_id=p_workspace_id and d.deleted_at is null and (p_project_id is null or d.project_id=p_project_id)
-      and (q.value is not null or p_query_embedding is not null)
-      and (
-        (q.value is not null and to_tsvector('simple',coalesce(dc.content,'')) @@ q.value)
-        or (p_query_embedding is not null and dc.embedding_vector is not null)
+-- Hybrid RAG: create the vector overload only where pgvector exists. Keeping
+-- vector(768) and vector_cosine_ops inside dynamic SQL prevents the clean PGlite
+-- validator from parsing an unavailable extension type.
+do $do$
+begin
+  if to_regtype('extensions.vector') is not null then
+    execute $sql$
+      create or replace function public.search_octopus_hybrid(
+        p_workspace_id uuid,
+        p_query text,
+        p_query_embedding extensions.vector(768) default null,
+        p_project_id uuid default null,
+        p_limit integer default 30
+      ) returns table(
+        source_type text,
+        source_id text,
+        project_id uuid,
+        title text,
+        context text,
+        category text,
+        source_locator jsonb,
+        score real
       )
+      language sql stable security definer set search_path=public,extensions
+      as $fn$
+        with q as (
+          select plainto_tsquery('simple', nullif(trim(p_query),'')) value
+        ), candidates as (
+          select
+            'chunk'::text source_type,
+            d.id::text source_id,
+            d.project_id,
+            d.name title,
+            left(dc.content,1800) context,
+            d.category,
+            jsonb_build_object('document_id',d.id,'version_id',dv.id,'chunk_no',dc.chunk_no,'page',dc.metadata->'page','section',dc.section_title) source_locator,
+            greatest(
+              coalesce(ts_rank(to_tsvector('simple',coalesce(dc.content,'')),q.value),0),
+              case when p_query_embedding is not null and dc.embedding_vector is not null then greatest(0,(1-(dc.embedding_vector <=> p_query_embedding)))::real else 0 end
+            )::real score
+          from public.document_chunks dc
+          join public.document_versions dv on dv.id=dc.document_version_id
+          join public.documents d on d.id=dv.document_id
+          cross join q
+          where d.workspace_id=p_workspace_id and d.deleted_at is null and (p_project_id is null or d.project_id=p_project_id)
+            and (q.value is not null or p_query_embedding is not null)
+            and (
+              (q.value is not null and to_tsvector('simple',coalesce(dc.content,'')) @@ q.value)
+              or (p_query_embedding is not null and dc.embedding_vector is not null)
+            )
 
-    union all
-    select
-      'fact', pf.id::text, pf.project_id, pf.fact_type,
-      left(coalesce(pf.value_text,pf.value_json::text),1800), 'project_fact',
-      jsonb_build_object('source_reference_id',pf.source_reference_id),
-      coalesce(ts_rank(to_tsvector('simple',pf.fact_type||' '||coalesce(pf.value_text,'')||' '||pf.value_json::text),q.value),0)::real
-    from public.project_facts pf join public.projects p on p.id=pf.project_id cross join q
-    where p.workspace_id=p_workspace_id and (p_project_id is null or pf.project_id=p_project_id)
-      and pf.status in ('approved','proposed') and q.value is not null
-      and to_tsvector('simple',pf.fact_type||' '||coalesce(pf.value_text,'')||' '||pf.value_json::text) @@ q.value
+          union all
+          select
+            'fact', pf.id::text, pf.project_id, pf.fact_type,
+            left(coalesce(pf.value_text,pf.value_json::text),1800), 'project_fact',
+            jsonb_build_object('source_reference_id',pf.source_reference_id),
+            coalesce(ts_rank(to_tsvector('simple',pf.fact_type||' '||coalesce(pf.value_text,'')||' '||pf.value_json::text),q.value),0)::real
+          from public.project_facts pf join public.projects p on p.id=pf.project_id cross join q
+          where p.workspace_id=p_workspace_id and (p_project_id is null or pf.project_id=p_project_id)
+            and pf.status in ('approved','proposed') and q.value is not null
+            and to_tsvector('simple',pf.fact_type||' '||coalesce(pf.value_text,'')||' '||pf.value_json::text) @@ q.value
 
-    union all
-    select
-      'knowledge',ke.id::text,ke.source_project_id,ke.title,
-      left(ke.summary||' '||coalesce(ke.solution,''),1800),ke.entry_type,
-      jsonb_build_object('source_references',ke.source_references),
-      coalesce(ts_rank(to_tsvector('simple',ke.title||' '||ke.summary||' '||coalesce(ke.problem,'')||' '||coalesce(ke.solution,'')),q.value),0)::real
-    from public.knowledge_entries ke cross join q
-    where ke.workspace_id=p_workspace_id and (p_project_id is null or ke.source_project_id=p_project_id)
-      and ke.status='approved' and q.value is not null
-      and to_tsvector('simple',ke.title||' '||ke.summary||' '||coalesce(ke.problem,'')||' '||coalesce(ke.solution,'')) @@ q.value
-  )
-  select * from candidates
-  order by score desc, title
-  limit greatest(1,least(coalesce(p_limit,30),100));
-$$;
-revoke all on function public.search_octopus_hybrid(uuid,text,vector,uuid,integer) from public, anon, authenticated;
-grant execute on function public.search_octopus_hybrid(uuid,text,vector,uuid,integer) to service_role;
+          union all
+          select
+            'knowledge',ke.id::text,ke.source_project_id,ke.title,
+            left(ke.summary||' '||coalesce(ke.solution,''),1800),ke.entry_type,
+            jsonb_build_object('source_references',ke.source_references),
+            coalesce(ts_rank(to_tsvector('simple',ke.title||' '||ke.summary||' '||coalesce(ke.problem,'')||' '||coalesce(ke.solution,'')),q.value),0)::real
+          from public.knowledge_entries ke cross join q
+          where ke.workspace_id=p_workspace_id and (p_project_id is null or ke.source_project_id=p_project_id)
+            and ke.status='approved' and q.value is not null
+            and to_tsvector('simple',ke.title||' '||ke.summary||' '||coalesce(ke.problem,'')||' '||coalesce(ke.solution,'')) @@ q.value
+        )
+        select * from candidates
+        order by score desc, title
+        limit greatest(1,least(coalesce(p_limit,30),100));
+      $fn$;
+    $sql$;
+    execute 'revoke all on function public.search_octopus_hybrid(uuid,text,extensions.vector,uuid,integer) from public, anon, authenticated';
+    execute 'grant execute on function public.search_octopus_hybrid(uuid,text,extensions.vector,uuid,integer) to service_role';
+  else
+    execute $sql$
+      create or replace function public.search_octopus_hybrid(
+        p_workspace_id uuid,
+        p_query text,
+        p_query_embedding text default null,
+        p_project_id uuid default null,
+        p_limit integer default 30
+      ) returns table(
+        source_type text,
+        source_id text,
+        project_id uuid,
+        title text,
+        context text,
+        category text,
+        source_locator jsonb,
+        score real
+      )
+      language sql stable security definer set search_path=public
+      as $fn$
+        with q as (select plainto_tsquery('simple',nullif(trim(p_query),'')) value), candidates as (
+          select 'chunk'::text,d.id::text,d.project_id,d.name,left(dc.content,1800),d.category,
+            jsonb_build_object('document_id',d.id,'version_id',dv.id,'chunk_no',dc.chunk_no,'page',dc.metadata->'page','section',dc.section_title),
+            coalesce(ts_rank(to_tsvector('simple',coalesce(dc.content,'')),q.value),0)::real
+          from public.document_chunks dc
+          join public.document_versions dv on dv.id=dc.document_version_id
+          join public.documents d on d.id=dv.document_id
+          cross join q
+          where d.workspace_id=p_workspace_id and d.deleted_at is null and (p_project_id is null or d.project_id=p_project_id)
+            and q.value is not null and to_tsvector('simple',coalesce(dc.content,'')) @@ q.value
+          union all
+          select 'fact',pf.id::text,pf.project_id,pf.fact_type,left(coalesce(pf.value_text,pf.value_json::text),1800),'project_fact',
+            jsonb_build_object('source_reference_id',pf.source_reference_id),
+            coalesce(ts_rank(to_tsvector('simple',pf.fact_type||' '||coalesce(pf.value_text,'')||' '||pf.value_json::text),q.value),0)::real
+          from public.project_facts pf join public.projects p on p.id=pf.project_id cross join q
+          where p.workspace_id=p_workspace_id and (p_project_id is null or pf.project_id=p_project_id)
+            and pf.status in ('approved','proposed') and q.value is not null
+            and to_tsvector('simple',pf.fact_type||' '||coalesce(pf.value_text,'')||' '||pf.value_json::text) @@ q.value
+          union all
+          select 'knowledge',ke.id::text,ke.source_project_id,ke.title,left(ke.summary||' '||coalesce(ke.solution,''),1800),ke.entry_type,
+            jsonb_build_object('source_references',ke.source_references),
+            coalesce(ts_rank(to_tsvector('simple',ke.title||' '||ke.summary||' '||coalesce(ke.problem,'')||' '||coalesce(ke.solution,'')),q.value),0)::real
+          from public.knowledge_entries ke cross join q
+          where ke.workspace_id=p_workspace_id and (p_project_id is null or ke.source_project_id=p_project_id)
+            and ke.status='approved' and q.value is not null
+            and to_tsvector('simple',ke.title||' '||ke.summary||' '||coalesce(ke.problem,'')||' '||coalesce(ke.solution,'')) @@ q.value
+        )
+        select * from candidates order by score desc,title limit greatest(1,least(coalesce(p_limit,30),100));
+      $fn$;
+    $sql$;
+    execute 'revoke all on function public.search_octopus_hybrid(uuid,text,text,uuid,integer) from public, anon, authenticated';
+    execute 'grant execute on function public.search_octopus_hybrid(uuid,text,text,uuid,integer) to service_role';
+  end if;
+end
+$do$;
 
 create or replace function public.get_octopus_ai_health(p_workspace_id uuid)
 returns jsonb language sql stable security definer set search_path='public'
