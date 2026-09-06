@@ -55,7 +55,7 @@ describe("Kadry 4.0 + Magazyn 4.0 — market completion",()=>{
     expect(loader).toContain("getWarehouseWorkspaceData");
     expect(loader).toContain("getWarehouseAi300Data");
     expect(loader).toContain("get_warehouse_market_summary_400");
-    for(const label of ["WMS i partie","Planowanie AI","Dostawcy i zwroty","Wysyłki","Skanery i integracje"]) expect(ui).toContain(label);
+    for(const marker of ["Planowanie AI","AI Material Planner","FIFO / FEFO / LIFO","Autonomous Replenishment","Utwórz szkic PO"]) expect(ui).toContain(marker);
     expect(ui).toContain("Może utworzyć wyłącznie szkic PO");
     expect(api).toContain('body.action === "autonomous_replenishment"');
     expect(api).toContain("requiresHumanApproval: true");
