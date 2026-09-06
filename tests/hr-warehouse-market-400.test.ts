@@ -41,21 +41,21 @@ describe("Kadry 4.0 + Magazyn 4.0 — market completion",()=>{
     expect(sql).toContain("'draft'");
   });
 
-  it("wires Warehouse 4.0 loader, UI, API, offline scans and device webhook",()=>{
+  it("wires Warehouse 4.0 loader, Warehouse 4.1 UI, API, offline scans and device webhook",()=>{
     const page=read("app/workspace/companies/[workspaceId]/warehouse/page.tsx");
     const operations=read("components/company/operations/warehouse-operations.tsx");
     const loader=read("lib/data/warehouse-market-400.ts");
-    const ui=read("components/company/warehouse-market-400.tsx");
+    const ui=read("components/company/warehouse-market-410.tsx");
     const api=read("app/api/company/warehouse-market/route.ts");
     const webhook=read("app/api/integrations/warehouse/ingest/route.ts");
     const offline=read("lib/warehouse/offline-scan-queue.ts");
     expect(page).toContain("getWarehouseMarket400Data");
     expect(page).toContain("Magazyn 4.0");
-    expect(operations).toContain("WarehouseMarket400");
+    expect(operations).toContain("WarehouseMarket410");
     expect(loader).toContain("getWarehouseWorkspaceData");
     expect(loader).toContain("getWarehouseAi300Data");
     expect(loader).toContain("get_warehouse_market_summary_400");
-    for(const label of ["WMS i partie","Planowanie AI","Dostawcy i zwroty","Wysyłki","Skanery i integracje"]) expect(ui).toContain(label);
+    for(const marker of ["Planowanie AI","AI Material Planner","FIFO / FEFO / LIFO","Autonomous Replenishment","Utwórz szkic PO"]) expect(ui).toContain(marker);
     expect(ui).toContain("Może utworzyć wyłącznie szkic PO");
     expect(api).toContain('body.action === "autonomous_replenishment"');
     expect(api).toContain("requiresHumanApproval: true");

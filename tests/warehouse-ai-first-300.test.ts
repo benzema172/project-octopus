@@ -4,11 +4,11 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("Warehouse 3.0 -> 3.1 AI-first compatibility contract", () => {
-  it("uses a real top tab workspace with Magazyn and Poczekalnia under Warehouse 4.0", () => {
+  it("uses a real top tab workspace with Magazyn and Poczekalnia under Warehouse 4.1", () => {
     const operations = read("components/company/operations/warehouse-operations.tsx");
-    const market = read("components/company/warehouse-market-400.tsx");
+    const market = read("components/company/warehouse-market-410.tsx");
     const workspace = read("components/company/warehouse-workspace-300.tsx");
-    expect(operations).toContain("WarehouseMarket400");
+    expect(operations).toContain("WarehouseMarket410");
     expect(market).toContain("WarehouseWorkspace300");
     expect(operations).not.toContain("WarehouseCommandCenter");
     expect(workspace).toContain('label: "Magazyn"');

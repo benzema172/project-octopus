@@ -1,210 +1,163 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
+import { domainAccessPolicyAllows, domainForDocumentCategory, loadDomainAccessPolicy, type Domain } from "@/lib/authorization";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
-import { createServiceSupabaseClient } from "@/lib/supabase/service";
-import { domainAccessPolicyAllows, domainForDocumentCategory, loadDomainAccessPolicy } from "@/lib/authorization";
 import { JsonBodyError, readJsonBody } from "@/lib/http/json-body";
+import { geminiGenerate, loadAiWorkspacePolicy } from "@/lib/ai/control-plane";
+import { searchBrainHybrid, type BrainSource } from "@/lib/ai/brain-retrieval";
+import { executeAgentTool, geminiAgentTools, type AgentDomain } from "@/lib/ai/agent-tools";
+import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
+export const maxDuration = 120;
 
-type AssistantMessage = {
-  role?: "user" | "assistant";
-  content?: string;
-};
+type AssistantMessage = { role?: "user" | "assistant"; content?: string };
+type AssistantBody = { workspaceId?: string; message?: string; history?: AssistantMessage[] };
+type GeminiPart = { text?: string; functionCall?: { name?: string; args?: Record<string, unknown> } };
+type GeminiPayload = { candidates?: Array<{ content?: { parts?: GeminiPart[] }; finishReason?: string }>; promptFeedback?: { blockReason?: string; blockReasonMessage?: string } };
 
-type AssistantBody = {
-  workspaceId?: string;
-  message?: string;
-  history?: AssistantMessage[];
-};
+function jsonError(message: string, status: number) { return NextResponse.json({ error: message }, { status }); }
+function outputParts(payload: Record<string, unknown>) { return ((payload as GeminiPayload).candidates?.[0]?.content?.parts ?? []); }
+function textFromParts(parts: GeminiPart[]) { return parts.map((part) => part.text?.trim() ?? "").filter(Boolean).join("\n\n"); }
 
-type GeminiResponse = {
-  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>;
-  promptFeedback?: { blockReason?: string; blockReasonMessage?: string };
-  error?: { code?: number; message?: string; status?: string };
-};
-
-function jsonError(message: string, status: number) {
-  return NextResponse.json({ error: message }, { status });
-}
-
-function extractOutputText(payload: GeminiResponse) {
-  return (payload.candidates?.[0]?.content?.parts ?? [])
-    .map((part) => part.text?.trim())
-    .filter((text): text is string => Boolean(text))
-    .join("\n\n");
+function sourceDomain(source: BrainSource): Domain {
+  if (source.sourceType === "chunk") return domainForDocumentCategory(source.category);
+  if (source.sourceType === "knowledge") return "reports";
+  return "investments";
 }
 
 export async function POST(request: Request) {
+  const startedAt = performance.now();
   const user = await getRequestUser(request);
   if (!user) return jsonError("Brak aktywnej sesji.", 401);
 
   let body: AssistantBody;
-  try {
-    body = await readJsonBody<AssistantBody>(request);
-  } catch (error) {
-    if (error instanceof JsonBodyError) return jsonError(error.message, error.status);
-    throw error;
-  }
-
+  try { body = await readJsonBody<AssistantBody>(request); }
+  catch (error) { if (error instanceof JsonBodyError) return jsonError(error.message, error.status); throw error; }
   const workspaceId = body.workspaceId?.trim();
   const message = body.message?.trim();
   if (!workspaceId || !message) return jsonError("Brakuje firmy albo treści pytania.", 400);
-  if (message.length > 6000) return jsonError("Pytanie jest zbyt długie.", 413);
+  if (message.length > 8000) return jsonError("Pytanie jest zbyt długie.", 413);
 
   const workspace = await getWorkspaceForUser(user, workspaceId);
   if (!workspace) return jsonError("Nie znaleziono firmy lub nie masz do niej dostępu.", 404);
-  const accessPolicy = await loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id });
+  const accessPolicy = await loadDomainAccessPolicy({ workspaceId, userId: user.id });
+  const aiPolicy = await loadAiWorkspacePolicy(workspaceId);
+  const traceId = randomUUID();
+  const db = createServiceSupabaseClient();
 
-  const provider = (process.env.AI_PROVIDER || "gemini").trim().toLowerCase();
-  if (provider !== "gemini") return jsonError("OctopusAI jest skonfigurowany do pracy z Gemini. Ustaw AI_PROVIDER=gemini w Vercel.", 503);
-
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey) return jsonError("OctopusAI wymaga ustawienia GEMINI_API_KEY w Vercel.", 503);
-
-  const supabase = createServiceSupabaseClient();
-  const [projectsResult, documentsResult] = await Promise.all([
-    supabase
-      .from("projects")
-      .select("id, name, status, investor_name, location, description, updated_at")
-      .eq("workspace_id", workspace.id)
-      .order("updated_at", { ascending: false })
-      .limit(60),
-    supabase
-      .from("documents")
-      .select("id, project_id, name, category, updated_at")
-      .eq("workspace_id", workspace.id)
-      .is("deleted_at", null)
-      .order("updated_at", { ascending: false })
-      .limit(160)
-  ]);
-
-  if (projectsResult.error) return jsonError(`Nie udało się przygotować kontekstu inwestycji: ${projectsResult.error.message}`, 500);
-  if (documentsResult.error) return jsonError(`Nie udało się przygotować kontekstu dokumentów: ${documentsResult.error.message}`, 500);
-
-  const projects = (projectsResult.data ?? []).filter((project) => domainAccessPolicyAllows(accessPolicy, {
-    domain: "investments",
-    level: "read",
-    projectId: project.id
-  }));
-  const projectIds = projects.map((project) => project.id);
-  const projectNames = new Map(projects.map((project) => [project.id, project.name]));
-  const documents = (documentsResult.data ?? []).filter((document) => domainAccessPolicyAllows(accessPolicy, {
-    domain: domainForDocumentCategory(document.category),
-    level: "read",
-    projectId: document.project_id
-  }));
-
-  if (!accessPolicy.administrator && projects.length === 0 && documents.length === 0) {
-    return jsonError("Nie masz roli domenowej pozwalającej OctopusAI korzystać z danych firmy.", 403);
+  let retrieved: BrainSource[] = [];
+  try {
+    retrieved = (await searchBrainHybrid({ workspaceId, query: message, limit: 18 })).filter((source) =>
+      domainAccessPolicyAllows(accessPolicy, { domain: sourceDomain(source), level: "read", projectId: source.projectId })
+    ).slice(0, 12);
+  } catch {
+    retrieved = [];
   }
 
-  let facts: Array<Record<string, unknown>> = [];
-  let materials: Array<Record<string, unknown>> = [];
-  let devices: Array<Record<string, unknown>> = [];
-  let findings: Array<Record<string, unknown>> = [];
+  const sourceContext = retrieved.map((source, index) => ({
+    ref: `S${index + 1}`,
+    title: source.title,
+    category: source.category,
+    projectId: source.projectId,
+    locator: source.sourceLocator,
+    score: Number(source.score.toFixed(4)),
+    excerpt: source.context.slice(0, 1800)
+  }));
 
-  if (projectIds.length) {
-    const [factsResult, materialsResult, devicesResult, findingsResult] = await Promise.all([
-      supabase.from("project_facts").select("project_id,fact_type,value_text,confidence,updated_at").in("project_id", projectIds).order("updated_at", { ascending: false }).limit(220),
-      supabase.from("materials").select("project_id,name,installation,specification,updated_at").in("project_id", projectIds).order("updated_at", { ascending: false }).limit(160),
-      supabase.from("devices").select("project_id,name,installation,parameters,updated_at").in("project_id", projectIds).order("updated_at", { ascending: false }).limit(160),
-      supabase.from("ai_findings").select("project_id,severity,title,description,created_at").in("project_id", projectIds).order("created_at", { ascending: false }).limit(100)
-    ]);
+  const history = (body.history ?? []).slice(-12).filter((item): item is Required<AssistantMessage> =>
+    (item.role === "user" || item.role === "assistant") && typeof item.content === "string" && item.content.trim().length > 0
+  ).map((item) => ({ role: item.role === "assistant" ? "model" as const : "user" as const, parts: [{ text: item.content.trim().slice(0, 7000) }] }));
 
-    facts = (factsResult.data ?? []) as Array<Record<string, unknown>>;
-    materials = (materialsResult.data ?? []) as Array<Record<string, unknown>>;
-    devices = (devicesResult.data ?? []) as Array<Record<string, unknown>>;
-    findings = (findingsResult.data ?? []) as Array<Record<string, unknown>>;
-  }
-
-  const companyContext = {
-    company: {
-      name: workspace.name,
-      taxId: workspace.tax_id,
-      regon: workspace.regon,
-      address: [workspace.street, workspace.postal_code, workspace.city].filter(Boolean).join(", "),
-      industry: workspace.industry,
-      contactPerson: workspace.contact_person,
-      email: workspace.email,
-      phone: workspace.phone
-    },
-    investments: projects.map((project) => ({
-      id: project.id,
-      name: project.name,
-      status: project.status,
-      investor: project.investor_name,
-      location: project.location,
-      description: project.description
-    })),
-    documents: documents.map((document) => ({
-      name: document.name,
-      category: document.category,
-      investment: projectNames.get(document.project_id) ?? "Nieznana inwestycja"
-    })),
-    brain: {
-      facts: facts.map((item) => ({ ...item, investment: projectNames.get(String(item.project_id)) ?? "Nieznana inwestycja" })),
-      materials: materials.map((item) => ({ ...item, investment: projectNames.get(String(item.project_id)) ?? "Nieznana inwestycja" })),
-      devices: devices.map((item) => ({ ...item, investment: projectNames.get(String(item.project_id)) ?? "Nieznana inwestycja" })),
-      findings: findings.map((item) => ({ ...item, investment: projectNames.get(String(item.project_id)) ?? "Nieznana inwestycja" }))
-    }
-  };
-
-  const history = (body.history ?? [])
-    .slice(-8)
-    .filter((item): item is Required<AssistantMessage> =>
-      (item.role === "user" || item.role === "assistant") && typeof item.content === "string" && item.content.trim().length > 0
-    )
-    .map((item) => ({
-      role: item.role === "assistant" ? "model" : "user",
-      parts: [{ text: item.content.trim().slice(0, 6000) }]
-    }));
-
-  const instructions = [
-    "Jesteś OctopusAI — operacyjnym asystentem przedsiębiorstwa w aplikacji Project Octopus.",
-    `Pracujesz wyłącznie w kontekście firmy \"${workspace.name}\" i danych przekazanych poniżej.`,
-    "Sekcja brain zawiera wiedzę wydobytą z dokumentów przez pipeline: R2 → ekstrakcja → Gemini → strukturalne fakty. Korzystaj z niej jako głównej pamięci operacyjnej firmy.",
-    "Odpowiadaj po polsku, konkretnie i biznesowo. Nie wymyślaj danych. Jeśli informacji nie ma w kontekście, napisz wprost, że nie ma jej jeszcze w Project Octopus.",
-    "Jeżeli Brain zawiera ostrzeżenie lub sprzeczne dane, wskaż to. Rozróżniaj fakty od własnych rekomendacji.",
-    "Możesz analizować inwestycje i dokumenty, porównywać informacje, wskazywać ryzyka i proponować następne działania, ale nie twierdź, że wykonałeś operację w aplikacji, jeśli tylko o niej rozmawiasz.",
-    `KONTEKST FIRMY I BRAIN:\n${JSON.stringify(companyContext)}`
+  const system = [
+    "Jesteś OctopusAI 2.0 — Autonomous Company Brain, centralnym agentem operacyjnym Project Octopus.",
+    `Firma: ${workspace.name}.`,
+    `Poziom autonomii L${aiPolicy.autonomyLevel}. Odwracalne działania mogą być wykonywane tylko zgodnie z polityką; finanse, fizyczny magazyn i działania HR wysokiego ryzyka wymagają akceptacji człowieka.`,
+    "Najpierw używaj dostarczonych źródeł RAG i narzędzi. Nie zgaduj danych. Jeśli źródła są niewystarczające, użyj search_documents lub właściwego narzędzia domenowego.",
+    "Możesz samodzielnie tworzyć bezpieczne, odwracalne szkice i zadania, jeśli narzędzie na to pozwoli. Nigdy nie twierdź, że wykonałeś działanie, jeśli narzędzie nie zwróciło statusu powodzenia.",
+    "Nie zatwierdzaj fizycznego ruchu magazynowego, nie składaj zamówienia, nie zatwierdzaj wydatku ani decyzji kadrowej bez wymaganego approval. Szkic zamówienia jest dozwolony, ale ma pozostać draft.",
+    "W odpowiedzi oddziel fakty, wykryte ryzyka, wykonane działania i rzeczy wymagające decyzji. Przy faktach z dokumentów wskazuj ref S1/S2 itd. oraz stronę/sekcję, jeśli locator ją zawiera.",
+    `WSTĘPNIE ODNALEZIONE ŹRÓDŁA RAG:\n${JSON.stringify(sourceContext)}`
   ].join("\n\n");
 
-  const model = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
-  const contents = [...history, { role: "user", parts: [{ text: message }] }];
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const contents: Array<{ role: "user" | "model"; parts: Array<Record<string, unknown>> }> = [
+    ...history,
+    { role: "user", parts: [{ text: message }] }
+  ];
+  const allSources: BrainSource[] = [...retrieved];
+  const actions: Array<{ tool: string; result: unknown }> = [];
+  let finalAnswer = "";
+  let finalModel = "";
+  let totalLatencyMs = 0;
 
-  let geminiResponse: Response;
+  const canAccess = async (domain: AgentDomain, level: "read" | "write", projectId?: string | null) =>
+    domainAccessPolicyAllows(accessPolicy, { domain, level, projectId: projectId ?? null });
+
   try {
-    geminiResponse = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: instructions }] },
-        contents,
-        generationConfig: { maxOutputTokens: 1200 }
-      }),
-      signal: AbortSignal.timeout(55_000)
-    });
-  } catch (error) {
-    if (error instanceof Error && error.name === "TimeoutError") {
-      return jsonError("Przekroczono czas oczekiwania na odpowiedź Gemini.", 504);
+    for (let step = 0; step < 6; step += 1) {
+      const response = await geminiGenerate({ task: step === 0 ? "assistant" : "agent_plan", system, contents, tools: geminiAgentTools(), maxOutputTokens: 3200, temperature: 0.08, timeoutMs: 75_000 });
+      finalModel = response.model;
+      totalLatencyMs += response.latencyMs;
+      const parts = outputParts(response.payload);
+      const calls = parts.filter((part) => part.functionCall?.name);
+      const text = textFromParts(parts);
+      if (!calls.length) { finalAnswer = text; break; }
+
+      contents.push({ role: "model", parts: parts.map((part) => part.functionCall ? { functionCall: part.functionCall } : { text: part.text ?? "" }) });
+      const functionResponses: Array<Record<string, unknown>> = [];
+      for (const part of calls) {
+        const name = part.functionCall?.name ?? "";
+        const args = part.functionCall?.args ?? {};
+        try {
+          const result = await executeAgentTool({ workspaceId, userId: user.id, traceId, canAccess, modelName: response.model }, name, args);
+          actions.push({ tool: name, result });
+          const maybeSources = (result as { results?: unknown[] })?.results;
+          if (name === "search_documents" && Array.isArray(maybeSources)) {
+            for (const source of maybeSources as BrainSource[]) if (source?.sourceId && !allSources.some((existing) => existing.sourceId === source.sourceId && existing.sourceType === source.sourceType)) allSources.push(source);
+          }
+          functionResponses.push({ functionResponse: { name, response: { ok: true, result } } });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          actions.push({ tool: name, result: { error: errorMessage } });
+          functionResponses.push({ functionResponse: { name, response: { ok: false, error: errorMessage } } });
+        }
+      }
+      contents.push({ role: "user", parts: functionResponses });
+      if (step === 5 && !finalAnswer) finalAnswer = text || "Zakończyłem dostępne kroki narzędziowe. Sprawdź wykonane działania i decyzje wymagające akceptacji.";
     }
-    return jsonError(error instanceof Error ? `Nie udało się połączyć z Gemini: ${error.message}` : "Nie udało się połączyć z Gemini.", 502);
+  } catch (error) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      return jsonError("OctopusAI przekroczył limit czasu odpowiedzi dostawcy AI. Spróbuj ponownie.", 504);
+    }
+    return jsonError(error instanceof Error ? error.message : "OctopusAI nie ukończył planu agentowego.", 502);
   }
 
-  const payload = (await geminiResponse.json().catch(() => ({}))) as GeminiResponse;
-  if (!geminiResponse.ok) {
-    if (geminiResponse.status === 429) return jsonError("Darmowy limit Gemini został chwilowo wykorzystany. Spróbuj ponownie później.", 429);
-    return jsonError(payload.error?.message ?? `Gemini API zwróciło HTTP ${geminiResponse.status}.`, 502);
-  }
+  if (!finalAnswer) finalAnswer = "OctopusAI wykonał analizę, ale model nie zwrócił końcowej odpowiedzi tekstowej.";
+  const latencyMs = Math.round(performance.now() - startedAt);
+  await db.from("ai_quality_events").insert({
+    workspace_id: workspaceId,
+    entity_type: "assistant_trace",
+    entity_id: traceId,
+    event_type: "agent_run",
+    model_name: finalModel || null,
+    prompt_version: "octopus-ai-2-agent-v1",
+    schema_version: "ai20",
+    warnings_count: actions.filter((action) => JSON.stringify(action.result).includes("error")).length,
+    facts_count: allSources.length,
+    decision: actions.length ? "tools_used" : "answer_only",
+    corrected: false,
+    latency_ms: latencyMs,
+    payload: { toolCalls: actions.map((action) => action.tool), providerLatencyMs: totalLatencyMs, sources: allSources.length }
+  }).then(() => undefined);
 
-  if (payload.promptFeedback?.blockReason) {
-    return jsonError(payload.promptFeedback.blockReasonMessage ?? `Gemini zablokowało zapytanie: ${payload.promptFeedback.blockReason}.`, 422);
-  }
-
-  const answer = extractOutputText(payload);
-  if (!answer) return jsonError("OctopusAI nie zwrócił odpowiedzi tekstowej.", 502);
-
-  return NextResponse.json({ answer, model, provider: "gemini" }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({
+    answer: finalAnswer,
+    model: finalModel,
+    provider: "gemini",
+    traceId,
+    autonomyLevel: aiPolicy.autonomyLevel,
+    actions,
+    sources: allSources.slice(0, 20).map((source, index) => ({ ref: `S${index + 1}`, title: source.title, category: source.category, projectId: source.projectId, locator: source.sourceLocator, score: source.score }))
+  }, { headers: { "Cache-Control": "no-store", "X-Octopus-Trace-Id": traceId } });
 }
