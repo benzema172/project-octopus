@@ -2,6 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["dub1"],
   "env": {
+    "GEMINI_AGENT_MODEL": "gemini-3.6-flash",
+    "GEMINI_EMBEDDING_MODEL": "gemini-embedding-001",
     "GEMINI_WAREHOUSE_FALLBACK_MODEL": "gemini-3.5-flash-lite"
   },
   "git": {
@@ -16,6 +18,7 @@
     { "path": "/api/cron/operations", "schedule": "15 4 * * *" },
     { "path": "/api/cron/fleet-intelligence", "schedule": "45 4 * * *" },
     { "path": "/api/cron/hr-intelligence", "schedule": "0 5 * * *" },
-    { "path": "/api/cron/warehouse-intelligence", "schedule": "15 5 * * *" }
+    { "path": "/api/cron/warehouse-intelligence", "schedule": "15 5 * * *" },
+    { "path": "/api/cron/ai-night-shift", "schedule": "30 5 * * *" }
   ]
 }
