@@ -117,20 +117,30 @@ revoke all on function public.run_background_ai_queue_tick() from public, anon, 
 grant execute on function public.run_background_ai_queue_tick() to service_role;
 
 -- Replace the legacy 5-minute / limit=3 kick with a serialized 2-minute queue tick.
+-- pg_cron exists in production Supabase, but local migration validators (PGlite) do not
+-- expose it. Guard scheduler wiring so the schema remains portable and testable while
+-- preserving identical production behavior whenever pg_cron is available.
 do $$
 declare
   v_jobid bigint;
 begin
-  for v_jobid in
-    select jobid from cron.job where jobname = 'octopus-background-ai-queue-132'
+  if to_regclass('cron.job') is null then
+    raise notice 'pg_cron is unavailable; background queue schedule skipped in this environment.';
+    return;
+  end if;
+
+  for v_jobid in execute
+    'select jobid from cron.job where jobname = ''octopus-background-ai-queue-132'''
   loop
-    perform cron.unschedule(v_jobid);
+    execute format('select cron.unschedule(%s)', v_jobid);
   end loop;
+
+  execute $schedule$
+    select cron.schedule(
+      'octopus-background-ai-queue-132',
+      '*/2 * * * *',
+      $cron$select public.run_background_ai_queue_tick();$cron$
+    )
+  $schedule$;
 end;
 $$;
-
-select cron.schedule(
-  'octopus-background-ai-queue-132',
-  '*/2 * * * *',
-  $cron$select public.run_background_ai_queue_tick();$cron$
-);
