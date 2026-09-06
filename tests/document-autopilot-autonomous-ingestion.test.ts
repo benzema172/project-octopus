@@ -24,7 +24,7 @@ describe("autonomous document ingestion", () => {
 
   it("materializes BOQ, business documents and protocol drafts without confirmation questions", () => {
     expect(autopilot).toContain("approve_estimate_import_atomic");
-    expect(autopilot).toContain("orchestrate_approved_business_document_atomic");
+    expect(autopilot).toContain("orchestrate_approved_business_documents_atomic");
     expect(autopilot).toContain("save_protocol_result_atomic");
     expect(autopilot).toContain("generated_source_key: generatedSourceKey");
     expect(autopilot).toContain("formal_result_required: true");
