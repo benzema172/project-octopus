@@ -67,7 +67,7 @@ describe("Project Octopus functional contract", () => {
   const exportRoute = readFileSync("app/api/company/export/route.ts", "utf8");
 
   it("removes the legacy Power Tools surface and its heavy deferred data path from the app", () => {
-    expect(packageJson.version).toBe("1.7.0");
+    expect(packageJson.version).toBe("2.0.0");
     expect(layout).not.toContain("CompanyPowerTools");
     expect(layout).not.toContain("getCompanyPowerToolsData");
     expect(operationalPage).not.toContain("CompanyPowerTools");
