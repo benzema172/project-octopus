@@ -82,6 +82,11 @@ grant all on table public.ai_action_log to service_role;
 grant all on table public.ai_confidence_stats to service_role;
 grant all on table public.ai_briefings to service_role;
 
+-- Keep clean installs and production in the same state. Production already has this
+-- 768-dimensional vector column; ADD COLUMN IF NOT EXISTS makes the migration idempotent.
+alter table public.document_chunks
+  add column if not exists embedding_vector vector(768);
+
 -- Existing document_chunks vectors are 768-dimensional. This index makes semantic retrieval scalable.
 create index if not exists document_chunks_embedding_vector_hnsw_ai20_idx
   on public.document_chunks using hnsw (embedding_vector vector_cosine_ops)
