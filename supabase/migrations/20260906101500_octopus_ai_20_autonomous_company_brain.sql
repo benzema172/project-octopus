@@ -223,7 +223,8 @@ begin
       )
       language sql stable security definer set search_path=public
       as $fn$
-        with q as (select plainto_tsquery('simple',nullif(trim(p_query),'')) value), candidates as (
+        with q as (select plainto_tsquery('simple',nullif(trim(p_query),'')) value),
+        candidates(source_type,source_id,project_id,title,context,category,source_locator,score) as (
           select 'chunk'::text,d.id::text,d.project_id,d.name,left(dc.content,1800),d.category,
             jsonb_build_object('document_id',d.id,'version_id',dv.id,'chunk_no',dc.chunk_no,'page',dc.metadata->'page','section',dc.section_title),
             coalesce(ts_rank(to_tsvector('simple',coalesce(dc.content,'')),q.value),0)::real
