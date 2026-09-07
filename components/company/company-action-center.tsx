@@ -27,6 +27,7 @@ export function CompanyActionCenter({ items }: { items: CompanyActionItem[] }) {
   const critical = items.filter((item) => item.severity === "critical").length;
   const warnings = items.filter((item) => item.severity === "warning" || item.severity === "high").length;
   const visible = items.slice(0, DASHBOARD_ACTION_LIMIT);
+  const activeLabel = items.length >= 250 ? "250+ aktywnych" : `${items.length} aktywnych`;
 
   return (
     <section className="co-section" aria-labelledby="company-action-center-heading">
@@ -34,10 +35,9 @@ export function CompanyActionCenter({ items }: { items: CompanyActionItem[] }) {
         <div>
           <p className="co-kicker">Wymaga uwagi</p>
           <h2 id="company-action-center-heading">Jedna kolejka pracy całej firmy</h2>
-          <p>Octopus zbiera wyjątki z finansów, dokumentów, magazynu, kadr, floty i inwestycji. Kliknięcie prowadzi bezpośrednio do miejsca działania.</p>
         </div>
         <div className="co-company-address">
-          <strong>{`Co najmniej ${items.length} aktywnych`}</strong>
+          <strong>{activeLabel}</strong>
           <span>{critical} krytycznych · {warnings} ostrzeżeń</span>
         </div>
       </div>
@@ -46,7 +46,6 @@ export function CompanyActionCenter({ items }: { items: CompanyActionItem[] }) {
         <div className="co-empty-state">
           <CheckCircle2 size={22} aria-hidden="true" />
           <strong>Brak aktywnych wyjątków.</strong>
-          <p>Na podstawie aktualnych danych nie ma teraz spraw wymagających interwencji.</p>
         </div>
       ) : (
         <div className={styles.list} aria-label="Najpilniejsze wyjątki operacyjne">
@@ -58,7 +57,7 @@ export function CompanyActionCenter({ items }: { items: CompanyActionItem[] }) {
               <>
                 <span className="status-chip"><Icon size={13} aria-hidden="true" /> {severityLabel(item.severity)} · {item.domain}</span>
                 <strong>{item.title}</strong>
-                <small>{item.detail || "Otwórz moduł i wykonaj wymagane działanie."}</small>
+                {item.detail ? <small>{item.detail}</small> : null}
                 {due || amount ? <small>{due ? `Termin: ${due}` : ""}{due && amount ? " · " : ""}{amount ?? ""}</small> : null}
               </>
             );
