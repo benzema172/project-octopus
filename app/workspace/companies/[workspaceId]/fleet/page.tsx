@@ -1,10 +1,11 @@
 import { CompanyOperationalPage } from "@/components/company/company-operational-page";
-import { getFleetWorkspaceData, type CompanyPageOptions } from "@/lib/data/company-operations";
+import type { CompanyPageOptions } from "@/lib/data/company-operations";
+import { getFleetConnected400Data } from "@/lib/data/fleet-connected-400";
 
 export const dynamic = "force-dynamic";
 
 async function getFleetData(workspaceId: string, options: CompanyPageOptions) {
-  return getFleetWorkspaceData(workspaceId, options);
+  return getFleetConnected400Data(workspaceId, options);
 }
 
 export default async function FleetPage({ params, searchParams }: {
@@ -20,7 +21,6 @@ export default async function FleetPage({ params, searchParams }: {
     kind="fleet"
     kicker="Flota"
     title="Flota"
-    description="Pojazdy, eksploatacja, serwis, dokumenty, wyposażenie, szkody, koszty i wykorzystanie floty w jednym widoku operacyjnym."
     loader={getFleetData}
   />;
 }
