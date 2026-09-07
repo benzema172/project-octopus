@@ -19,7 +19,8 @@ describe("Warehouse 3.0 -> 3.1 AI-first compatibility contract", () => {
 
   it("makes Magazyn an A-Z canonical registry with full edit, merge and price history", () => {
     const workspace = read("components/company/warehouse-workspace-300.tsx");
-    expect(workspace).toContain('localeCompare(String(b.name ?? ""), "pl"');
+    expect(workspace).toContain('new Intl.Collator("pl"');
+    expect(workspace).toContain("collator.compare");
     expect(workspace).toContain("Kartoteki A–Z");
     expect(workspace).toContain("Nazwa kanoniczna");
     expect(workspace).toContain('act("stock_item_update"');
