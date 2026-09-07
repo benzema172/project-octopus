@@ -38,7 +38,7 @@ describe("Warehouse 3.1 implementation contract", () => {
   const atomicRoute = read("app/api/company/warehouse-atomic/route.ts");
   const data = read("lib/data/warehouse-ai-300.ts");
   const migration = read("supabase/migrations/20260903083000_warehouse_310_operational_completion.sql");
-  const equipmentBridge = read("supabase/migrations/20260907064500_warehouse_equipment_responsibility_bridge_430.sql");
+  const equipmentBridge = read("supabase/migrations/20260907064107_warehouse_equipment_responsibility_bridge_430.sql");
   const hrCore = read("components/company/hr/hr-workspace-core-300.tsx");
   const projectLayout = read("app/workspace/projects/[projectId]/layout.tsx");
 
@@ -52,7 +52,7 @@ describe("Warehouse 3.1 implementation contract", () => {
     expect(migration).toContain("create_warehouse_draft_for_review_31");
     expect(migration).toContain("'draft'");
     expect(migration).not.toContain("approve_stock_movement_atomic(v_review");
-    expect(atomicRoute).toContain('"stock_movement_approve"');
+    expect(atomicRoute).toContain('\"stock_movement_approve\"');
   });
 
   it("shows document-derived stock without silently approving physical movements", () => {
