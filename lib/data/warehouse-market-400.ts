@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getWarehouseAi300Data } from "@/lib/data/warehouse-ai-300";
+import { enrichWarehousePriceHistory450 } from "@/lib/data/warehouse-price-history-450";
 import { getWarehouseWorkspaceData, type CompanyPageOptions } from "@/lib/data/company-operations";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
@@ -88,6 +89,8 @@ export async function getWarehouseMarket400Data(workspaceId: string, options: Co
     : { data: [], error: null };
   const pendingLines = rows(pendingLinesResult as Result, "pozycji oczekujących ruchów");
   const projectedBalances = pendingStockProjection(physicalBalances, pendingMovements, pendingLines);
+  const globalPriceRows = rows(globalPricesResult as Result, "globalnej historii cen");
+  const enrichedGlobalPrices = await enrichWarehousePriceHistory450(workspaceId, globalPriceRows);
 
   return {
     ...base,
@@ -100,7 +103,7 @@ export async function getWarehouseMarket400Data(workspaceId: string, options: Co
     pendingDocumentBalances: projectedBalances.filter((row) => Number(row.pending_quantity ?? 0) !== 0),
     pendingDocumentMovements: pendingMovements,
     pendingDocumentMovementLines: pendingLines,
-    globalPriceObservations: rows(globalPricesResult as Result, "globalnej historii cen"),
+    globalPriceObservations: enrichedGlobalPrices,
     globalReservations: rows(globalReservationsResult as Result, "globalnych rezerwacji"),
     warehouse400Summary: (summary.data && typeof summary.data === "object" ? summary.data : {}) as Row,
     warehousePlanningItems: planningRows,
