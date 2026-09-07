@@ -1,16 +1,17 @@
 /*
- * Project Octopus — kompaktowe nagłówki.
+ * Project Octopus — kompaktowe nagłówki i karty.
  *
- * Usuwamy wyłącznie statyczne, opisowe leady bezpośrednio pod tytułami
- * stron/sekcji/kart. Nie ukrywamy komunikatów, ostrzeżeń, danych rekordów,
- * opisów dokumentów ani treści formularzy.
+ * Ukrywamy wyłącznie statyczne leady bezpośrednio związane z nagłówkami.
+ * Nie dotykamy metadanych rekordów, komunikatów, ostrzeżeń, opisów dokumentów
+ * ani treści formularzy.
  */
-.co-main .co-page-heading > div:first-child > p:not(.co-kicker),
-.co-main .co-section-heading > div > h2 + p,
-.co-main [class*="panelHeading"] h2 + p,
-.co-main [class*="panel-heading"] h2 + p,
-.co-main [class*="cardHeading"] h3 + p,
-.co-main [class*="card-heading"] h3 + p,
+.co-main .co-page-heading :is(h1, h2, h3) + p,
+.co-main .co-section-heading :is(h1, h2, h3) + p,
+.co-main [class*="heading" i] :is(h1, h2, h3) + p,
+.co-main [class*="header" i] :is(h1, h2, h3) + p,
+.co-main [class*="panelHeading" i] :is(h1, h2, h3) + p,
+.co-main [class*="cardHeading" i] :is(h1, h2, h3) + p,
+.co-main [class*="sectionLead" i],
 .co-main .section-lead {
   display: none !important;
 }
