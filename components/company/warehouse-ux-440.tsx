@@ -34,6 +34,7 @@ const tabFromLabel = (label: string) => {
 export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }: Props) {
   const router = useRouter();
   const activeTab = useRef<string>(initialTab);
+  const equipmentHostRef = useRef<HTMLElement | null>(null);
   const [equipmentHost, setEquipmentHost] = useState<HTMLElement | null>(null);
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -66,7 +67,11 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
       const section = document.querySelector<HTMLElement>('section[data-warehouse-experience="3.1"]');
       if (!section) return;
 
-      if (equipmentHost && !equipmentHost.isConnected) setEquipmentHost(null);
+      if (equipmentHostRef.current && !equipmentHostRef.current.isConnected) {
+        equipmentHostRef.current = null;
+        setEquipmentHost(null);
+      }
+
       const forms = Array.from(section.querySelectorAll<HTMLFormElement>("form"));
       const legacyForm = forms.find((form) => form.querySelector("strong")?.textContent?.trim() === "Zarejestruj egzemplarz");
       if (!legacyForm || legacyForm.dataset.octopusEquipmentReplaced === "1") return;
@@ -77,7 +82,18 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
       host.dataset.octopusEquipmentQuickRegister = "1";
       host.style.display = "contents";
       legacyForm.before(host);
+      equipmentHostRef.current = host;
       setEquipmentHost(host);
+    };
+
+    const onNavClick = (event: Event) => {
+      const target = event.target instanceof Element ? event.target.closest("button") : null;
+      if (!target) return;
+      activeTab.current = tabFromLabel(target.textContent ?? "");
+      window.requestAnimationFrame(() => {
+        applyVisibility();
+        syncEquipmentHost();
+      });
     };
 
     const sync = () => {
@@ -93,16 +109,6 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
       syncEquipmentHost();
     };
 
-    const onNavClick = (event: Event) => {
-      const target = event.target instanceof Element ? event.target.closest("button") : null;
-      if (!target) return;
-      activeTab.current = tabFromLabel(target.textContent ?? "");
-      window.requestAnimationFrame(() => {
-        applyVisibility();
-        syncEquipmentHost();
-      });
-    };
-
     observer = new MutationObserver(sync);
     observer.observe(document.body, { subtree: true, childList: true });
     sync();
@@ -111,15 +117,19 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
       observer?.disconnect();
       if (nav) nav.removeEventListener("click", onNavClick);
       const legacy = document.querySelector<HTMLElement>('form[data-octopus-equipment-replaced="1"]');
-      if (legacy) legacy.style.display = "";
-      const host = document.querySelector<HTMLElement>('[data-octopus-equipment-quick-register="1"]');
-      host?.remove();
+      if (legacy) {
+        legacy.style.display = "";
+        delete legacy.dataset.octopusEquipmentReplaced;
+      }
+      equipmentHostRef.current?.remove();
+      equipmentHostRef.current = null;
     };
-  }, [equipmentHost, initialTab]);
+  }, [initialTab]);
 
   const submitEquipment = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     setMessage(null);
     setError(null);
     startTransition(async () => {
@@ -143,7 +153,7 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
         const result = await response.json().catch(() => ({})) as EquipmentResult;
         if (!response.ok) throw new Error(result.error ?? "Nie udało się zarejestrować sprzętu.");
         setMessage(result.createdCatalog ? "Sprzęt dodano i automatycznie utworzono jego kartotekę." : "Sprzęt dodano do istniejącej kartoteki.");
-        event.currentTarget.reset();
+        formElement.reset();
         router.refresh();
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "Nie udało się zarejestrować sprzętu.");
