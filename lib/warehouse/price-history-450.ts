@@ -8,6 +8,10 @@ const sourcePriority = (row: WarehousePriceRow450) => {
 };
 
 const keyPart = (value: unknown) => String(value ?? "").trim().toLocaleLowerCase("pl");
+const numeric = (value: unknown) => {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 
 export function visibleWarehousePriceHistory450(rows: WarehousePriceRow450[]) {
   const sorted = [...rows].sort((a, b) => {
@@ -16,7 +20,7 @@ export function visibleWarehousePriceHistory450(rows: WarehousePriceRow450[]) {
     return sourcePriority(b) - sourcePriority(a);
   });
 
-  const bestByEvent = new Map<string, WarehousePriceRow450>();
+  const grouped = new Map<string, WarehousePriceRow450[]>();
   for (const row of sorted) {
     const invoiceNumber = keyPart(row.invoice_number);
     const key = [
@@ -24,15 +28,27 @@ export function visibleWarehousePriceHistory450(rows: WarehousePriceRow450[]) {
       keyPart(row.counterparty_id),
       keyPart(row.observed_at ?? row.created_at),
       keyPart(row.unit_price_net),
-      keyPart(row.quantity),
       keyPart(row.unit),
-      invoiceNumber || "bez-faktury"
+      invoiceNumber || `bez-faktury:${keyPart(row.source_type)}:${keyPart(row.source_id ?? row.id)}`
     ].join("|");
-    const current = bestByEvent.get(key);
-    if (!current || sourcePriority(row) > sourcePriority(current)) bestByEvent.set(key, row);
+    grouped.set(key, [...(grouped.get(key) ?? []), row]);
   }
 
-  return [...bestByEvent.values()].sort((a, b) => {
+  const events: WarehousePriceRow450[] = [];
+  for (const eventRows of grouped.values()) {
+    const highestPriority = Math.max(...eventRows.map(sourcePriority));
+    const canonicalRows = eventRows.filter((row) => sourcePriority(row) === highestPriority);
+    const representative = canonicalRows[0];
+    const quantity = canonicalRows.reduce((sum, row) => sum + numeric(row.quantity), 0);
+    events.push({
+      ...representative,
+      quantity,
+      purchase_event_line_count: canonicalRows.length,
+      purchase_event_source_count: eventRows.length
+    });
+  }
+
+  return events.sort((a, b) => {
     const date = String(b.observed_at ?? b.created_at ?? "").localeCompare(String(a.observed_at ?? a.created_at ?? ""));
     if (date) return date;
     return sourcePriority(b) - sourcePriority(a);
