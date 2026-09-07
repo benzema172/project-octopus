@@ -35,7 +35,6 @@ export default async function HrPage({ params }: { params: Promise<{ workspaceId
       <div>
         <p className="co-kicker">Kadry 4.0</p>
         <h1>Kadry i zasoby ludzkie</h1>
-        <p>Core kadrowy, ATS, onboarding/offboarding, delegacje, kompetencje i szkolenia, oceny i cele, workforce planning, wynagrodzenia, portal pracownika, RCP oraz People Readiness i bezpieczny AI HR Controller.</p>
       </div>
     </header>
     <HrWorkspace149
