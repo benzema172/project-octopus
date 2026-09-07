@@ -3,6 +3,7 @@ import { CompanyShell } from "@/components/layout/company-shell";
 import { requireCurrentUser } from "@/lib/auth";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { domainAccessPolicyAllows, loadDomainAccessPolicy, type Domain } from "@/lib/authorization";
+import "../company-cleanup.css";
 
 export const dynamic = "force-dynamic";
 
