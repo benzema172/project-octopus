@@ -427,6 +427,7 @@ function CountLineEditor({ line, item, canWrite, pending, act }: { line: Row; it
 }
 
 function PricesPanel({ pricesByItem, items, counterpartyById, purchaseOrders }: { pricesByItem: Map<string, Row[]>; items: Row[]; counterpartyById: Map<string, Row>; purchaseOrders: Row[] }) {
+  const [expandedItemIds, setExpandedItemIds] = useState<Set<string>>(() => new Set());
   const alerts = items.flatMap((item) => {
     const history = pricesByItem.get(String(item.id)) ?? [];
     if (history.length < 2) return [];
@@ -435,8 +436,25 @@ function PricesPanel({ pricesByItem, items, counterpartyById, purchaseOrders }: 
     const change = previous > 0 ? ((latest - previous) / previous) * 100 : 0;
     return Math.abs(change) >= 10 ? [{ item, latest: history[0], change }] : [];
   }).sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
-  const rows = items.flatMap((item) => (pricesByItem.get(String(item.id)) ?? []).slice(0, 6).map((price) => ({ item, price }))).sort((a, b) => String(b.price.observed_at).localeCompare(String(a.price.observed_at))).slice(0, 300);
-  return <div className={styles.priceLayout}><Panel title="Alerty zmian cen" icon={<AlertTriangle size={16} />}>{alerts.slice(0, 12).map(({ item, latest, change }) => <div className={styles.simpleRow} key={String(item.id)}><span><strong>{text(item.name)}</strong><small>{money(latest.unit_price_net, text(latest.currency,"PLN"))} · {text(counterpartyById.get(String(latest.counterparty_id))?.name)}</small></span><b className={change > 0 ? styles.priceUp : styles.priceDown}>{pct(change)}</b></div>)}{!alerts.length ? <Empty label="Brak istotnych zmian cen (≥10%)." /> : null}</Panel><Panel title="Ostatnie szkice zamówień" icon={<Package size={16} />}>{purchaseOrders.slice(0, 12).map((row) => <div className={styles.simpleRow} key={String(row.id)}><span><strong>{text(row.order_number)}</strong><small>{text(row.status)} · {dateLabel(row.created_at)}</small></span><b>{money(row.total_amount, text(row.currency,"PLN"))}</b></div>)}{!purchaseOrders.length ? <Empty label="Szkice pojawią się po rekomendacjach uzupełnień." /> : null}</Panel><section className={`${styles.section} ${styles.priceTable}`}><header className={styles.sectionHeader}><div><small>HISTORIA</small><h2>Ceny i dostawcy</h2><p>Znormalizowana cena jednostkowa i data dokumentu, nie data jego późniejszego uploadu.</p></div><b>{rows.length}</b></header><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Pozycja</th><th>Cena netto</th><th>Jednostka</th><th>Dostawca</th><th>Data zakupu</th><th>Źródło</th></tr></thead><tbody>{rows.map(({ item, price }) => <tr key={String(price.id)}><td><strong>{text(item.name)}</strong></td><td>{money(price.unit_price_net, text(price.currency,"PLN"))}</td><td>{text(price.unit, item.unit as string)}</td><td>{text(counterpartyById.get(String(price.counterparty_id))?.name)}</td><td>{dateLabel(price.observed_at)}</td><td>{text(price.source_type)}</td></tr>)}</tbody></table>{!rows.length ? <Empty /> : null}</div></section></div>;
+  const rows = items
+    .map((item) => ({ item, history: pricesByItem.get(String(item.id)) ?? [] }))
+    .filter(({ history }) => history.length > 0)
+    .sort((a, b) => String(b.history[0]?.observed_at ?? b.history[0]?.created_at ?? "").localeCompare(String(a.history[0]?.observed_at ?? a.history[0]?.created_at ?? "")))
+    .slice(0, 300);
+  const eventCount = rows.reduce((sum, row) => sum + row.history.length, 0);
+  const toggleHistory = (itemId: string) => setExpandedItemIds((current) => {
+    const next = new Set(current);
+    if (next.has(itemId)) next.delete(itemId);
+    else next.add(itemId);
+    return next;
+  });
+
+  return <div className={styles.priceLayout}><Panel title="Alerty zmian cen" icon={<AlertTriangle size={16} />}>{alerts.slice(0, 12).map(({ item, latest, change }) => <div className={styles.simpleRow} key={String(item.id)}><span><strong>{text(item.name)}</strong><small>{money(latest.unit_price_net, text(latest.currency,"PLN"))} · {text(counterpartyById.get(String(latest.counterparty_id))?.name)}</small></span><b className={change > 0 ? styles.priceUp : styles.priceDown}>{pct(change)}</b></div>)}{!alerts.length ? <Empty label="Brak istotnych zmian cen (≥10%)." /> : null}</Panel><Panel title="Ostatnie szkice zamówień" icon={<Package size={16} />}>{purchaseOrders.slice(0, 12).map((row) => <div className={styles.simpleRow} key={String(row.id)}><span><strong>{text(row.order_number)}</strong><small>{text(row.status)} · {dateLabel(row.created_at)}</small></span><b>{money(row.total_amount, text(row.currency,"PLN"))}</b></div>)}{!purchaseOrders.length ? <Empty label="Szkice pojawią się po rekomendacjach uzupełnień." /> : null}</Panel><section className={`${styles.section} ${styles.priceTable}`}><header className={styles.sectionHeader}><div><small>HISTORIA</small><h2>Ceny i dostawcy</h2><p>Jedna kartoteka = jeden wiersz. Pokazywana jest ostatnia cena, a pełną historię {eventCount} zdarzeń można rozwinąć przy danym produkcie.</p></div><b>{rows.length}</b></header><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Pozycja</th><th>Ostatnia cena netto</th><th>Jednostka</th><th>Ostatni dostawca</th><th>Ostatni zakup</th><th>Źródło</th><th>Historia</th></tr></thead>{rows.map(({ item, history }) => {
+    const itemId = String(item.id);
+    const latest = history[0];
+    const expanded = expandedItemIds.has(itemId);
+    return <tbody key={itemId}><tr><td><strong>{text(item.name)}</strong><small>{history.length} {history.length === 1 ? "zdarzenie cenowe" : "zdarzeń cenowych"}</small></td><td>{money(latest.unit_price_net, text(latest.currency,"PLN"))}</td><td>{text(latest.unit, item.unit as string)}</td><td>{text(counterpartyById.get(String(latest.counterparty_id))?.name)}</td><td>{dateLabel(latest.observed_at)}</td><td>{text(latest.source_type)}</td><td>{history.length > 1 ? <button type="button" className={styles.tableButton} aria-expanded={expanded} onClick={() => toggleHistory(itemId)}>{expanded ? "Zwiń" : `Rozwiń (${history.length})`}</button> : <span>1 zdarzenie</span>}</td></tr>{expanded ? <tr><td colSpan={7} style={{ background: "#fbfcfd", padding: "8px 10px 12px" }}><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Data zakupu</th><th>Cena netto</th><th>Jednostka</th><th>Dostawca</th><th>Źródło</th></tr></thead><tbody>{history.map((price, index) => <tr key={`${String(price.id)}:${index}`}><td>{dateLabel(price.observed_at)}</td><td>{money(price.unit_price_net, text(price.currency,"PLN"))}</td><td>{text(price.unit, item.unit as string)}</td><td>{text(counterpartyById.get(String(price.counterparty_id))?.name)}</td><td>{text(price.source_type)}</td></tr>)}</tbody></table></div></td></tr> : null}</tbody>;
+  })}</table>{!rows.length ? <Empty /> : null}</div></section></div>;
 }
 
 function LocationsPanel({ warehouses, locations, balances, aliases, itemById, canWrite, pending, act }: { warehouses: Row[]; locations: Row[]; balances: Row[]; aliases: Row[]; itemById: Map<string, Row>; canWrite: boolean; pending: boolean; act: Act }) {
