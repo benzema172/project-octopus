@@ -30,6 +30,7 @@ import "../../../project-submodules-compact.css";
 import "../../../project-section-rhythm-final.css";
 import "../../../project-actions.css";
 import "../../../project-intelligence-130.css";
+import "../../companies/company-cleanup.css";
 
 export const dynamic = "force-dynamic";
 type ProjectLayoutProps = { children: React.ReactNode; params: Promise<{ projectId: string }> };
