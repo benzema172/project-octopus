@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Save } from "lucide-react";
 import { WarehousePrices450 } from "@/components/company/warehouse-prices-450";
 import styles from "./warehouse-workspace-310.module.css";
+import uxStyles from "./warehouse-ux-460.module.css";
 
 type Row = Record<string, unknown>;
 
@@ -40,6 +41,7 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
   const router = useRouter();
   const activeTab = useRef<string>(initialTab);
   const equipmentHostRef = useRef<HTMLElement | null>(null);
+  const equipmentLayoutRef = useRef<HTMLElement | null>(null);
   const priceHostRef = useRef<HTMLElement | null>(null);
   const [equipmentHost, setEquipmentHost] = useState<HTMLElement | null>(null);
   const [priceHost, setPriceHost] = useState<HTMLElement | null>(null);
@@ -85,6 +87,11 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
 
       legacyForm.dataset.octopusEquipmentReplaced = "1";
       legacyForm.style.display = "none";
+      const layout = legacyForm.parentElement as HTMLElement | null;
+      if (layout) {
+        layout.dataset.octopusEquipmentLayout = "4.6";
+        equipmentLayoutRef.current = layout;
+      }
       const host = document.createElement("div");
       host.dataset.octopusEquipmentQuickRegister = "1";
       host.style.display = "contents";
@@ -154,6 +161,7 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
         legacyEquipment.style.display = "";
         delete legacyEquipment.dataset.octopusEquipmentReplaced;
       }
+      if (equipmentLayoutRef.current) delete equipmentLayoutRef.current.dataset.octopusEquipmentLayout;
       const legacyPrices = document.querySelector<HTMLElement>('[data-octopus-prices-replaced="1"]');
       if (legacyPrices) {
         legacyPrices.style.display = "";
@@ -162,6 +170,7 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
       equipmentHostRef.current?.remove();
       priceHostRef.current?.remove();
       equipmentHostRef.current = null;
+      equipmentLayoutRef.current = null;
       priceHostRef.current = null;
     };
   }, [initialTab]);
@@ -204,7 +213,7 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
   return <>
     {priceHost && priceHost.isConnected ? createPortal(<WarehousePrices450 items={items} prices={prices} counterparties={counterparties} purchaseOrders={purchaseOrders} />, priceHost) : null}
     {canWrite && equipmentHost && equipmentHost.isConnected ? createPortal(
-      <form className={styles.compactForm} onSubmit={submitEquipment} data-equipment-quick-register="4.4">
+      <form className={`${styles.compactForm} ${uxStyles.quickRegister}`} onSubmit={submitEquipment} data-equipment-quick-register="4.6">
         <strong>Zarejestruj sprzęt</strong>
         <div>
           <label>Nazwa sprzętu<input name="name" required placeholder="np. Wiertarka Bosch GBH 2-28" /></label>
