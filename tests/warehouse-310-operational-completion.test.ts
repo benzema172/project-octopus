@@ -120,4 +120,17 @@ describe("Warehouse 3.1 implementation contract", () => {
     expect(workspace).toContain("Automatyzacja AI");
     expect(workspace).toContain("Wartość FIFO");
   });
+
+  it("searches the whole catalog including suppliers and sorts every stock column both ways", () => {
+    expect(workspace).toContain("stockSearchIndex");
+    expect(workspace).toContain("relatedCounterparties");
+    expect(workspace).toContain("relatedAiLines");
+    expect(workspace).toContain("relatedLocations");
+    expect(workspace).toContain("Szukaj po wszystkim");
+    expect(workspace).toContain("SortHeader");
+    for (const key of ["name", "stock", "available", "reserved", "fifo", "price", "change", "supplier", "purchase"]) {
+      expect(workspace).toContain(`sortKey=\"${key}\"`);
+    }
+    expect(workspace).toContain('setSortDirection((current) => current === "asc" ? "desc" : "asc")');
+  });
 });
