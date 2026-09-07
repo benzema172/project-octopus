@@ -1,7 +1,8 @@
 "use client";
 
+import { PackageCheck } from "lucide-react";
 import { WarehouseMarket410 } from "@/components/company/warehouse-market-410";
-import type { Data } from "@/components/company/operations/module-shell";
+import type { Data, Row } from "@/components/company/operations/module-shell";
 
 export default function WarehouseOperations({ workspaceId, data, canWrite, canApprove, query }: {
   workspaceId: string;
@@ -11,11 +12,20 @@ export default function WarehouseOperations({ workspaceId, data, canWrite, canAp
   pathname: string;
   query: string;
 }) {
-  return <WarehouseMarket410
-    workspaceId={workspaceId}
-    data={data}
-    canWrite={canWrite}
-    canApprove={canApprove}
-    query={query}
-  />;
+  const pendingMovements = (data.pendingDocumentMovements ?? []) as Row[];
+  const pendingLines = (data.pendingDocumentMovementLines ?? []) as Row[];
+
+  return <>
+    {pendingMovements.length ? <div role="note" style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 9, padding: "8px 11px", border: "1px solid #cfe2d9", borderRadius: 11, background: "#f7fbf9", color: "#4e6259", fontSize: 10 }}>
+      <PackageCheck size={15} style={{ color: "#267257", flex: "0 0 auto" }} />
+      <span><strong style={{ color: "#285143" }}>Stan wg dokumentów jest już widoczny.</strong> Magazyn uwzględnia {pendingMovements.length} oczekujących szkiców PZ/WZ i {pendingLines.length} pozycji. Zatwierdzony stan fizyczny pozostaje oddzielny i zmieni się dopiero po akceptacji ruchu.</span>
+    </div> : null}
+    <WarehouseMarket410
+      workspaceId={workspaceId}
+      data={data}
+      canWrite={canWrite}
+      canApprove={canApprove}
+      query={query}
+    />
+  </>;
 }
