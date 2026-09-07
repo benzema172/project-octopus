@@ -27,7 +27,7 @@ export function CompanyActionCenter({ items }: { items: CompanyActionItem[] }) {
   const critical = items.filter((item) => item.severity === "critical").length;
   const warnings = items.filter((item) => item.severity === "warning" || item.severity === "high").length;
   const visible = items.slice(0, DASHBOARD_ACTION_LIMIT);
-  const activeLabel = items.length >= 250 ? "250+ aktywnych" : `${items.length} aktywnych`;
+  const activeLabel = `Co najmniej ${items.length} aktywnych`;
 
   return (
     <section className="co-section" aria-labelledby="company-action-center-heading">
