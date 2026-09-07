@@ -22,5 +22,15 @@ describe("Warehouse inventory UI stability", () => {
     expect(workspace).toContain('{ id: "counts", label: "Inwentaryzacje"');
     expect(workspace).toContain('tab === "counts" ? <CountsPanel');
     expect(workspace).toContain('Rozpocznij pierwszą inwentaryzację.');
+    expect(ux).toContain('if (value.startsWith("Inwentaryzacje")) return "counts"');
+  });
+
+  it("tears down tab-scoped portals before another Warehouse tab becomes active", () => {
+    expect(ux).toContain('if (activeTab.current !== "prices")');
+    expect(ux).toContain('if (activeTab.current !== "assets")');
+    expect(ux).toContain('if (nextTab !== "prices") teardownPriceHost()');
+    expect(ux).toContain('if (nextTab !== "assets") teardownEquipmentHost()');
+    expect(ux).toContain("priceHostRef.current?.remove()");
+    expect(ux).toContain("equipmentHostRef.current?.remove()");
   });
 });
