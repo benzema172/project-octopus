@@ -55,11 +55,11 @@ function taskSeverity(task: TaskRow, now: Date) {
   return "info";
 }
 
-export async function getCompanyActionCenter(workspaceId: string, limit = 100): Promise<CompanyActionItem[]> {
+export async function getCompanyActionCenter(workspaceId: string, limit = 250): Promise<CompanyActionItem[]> {
   const db = createServiceSupabaseClient();
   const safeLimit = Math.min(250, Math.max(1, limit));
   const [{ data, error }, { data: taskRows, error: taskError }] = await Promise.all([
-    db.rpc("get_company_action_center_v2", { p_workspace_id: workspaceId, p_limit: safeLimit }),
+    db.rpc("get_company_action_center_v3", { p_workspace_id: workspaceId, p_limit: safeLimit }),
     db.from("tasks")
       .select("id,project_id,title,description,status,priority,due_at,created_at")
       .eq("workspace_id", workspaceId)
