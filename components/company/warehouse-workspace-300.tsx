@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
-  AlertTriangle, ArrowLeft, ArrowRight, ArrowRightLeft, Boxes, ChartNoAxesCombined, Check,
+  AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowRightLeft, ArrowUp, ArrowUpDown, Boxes, ChartNoAxesCombined, Check,
   ClipboardCheck, FileClock, FileSearch, History, LayoutDashboard, MapPin, Package, PackageCheck,
   Pencil, Plus, QrCode, Save, Search, Sparkles, ToolCase, Undo2, Wrench, X
 } from "lucide-react";
@@ -13,6 +13,8 @@ import type { WarehouseAiLine300, WarehouseDocumentPreview300, WarehouseReview30
 import styles from "./warehouse-workspace-310.module.css";
 
 type Tab = "dashboard" | "stock" | "waiting" | "movements" | "needs" | "assets" | "counts" | "prices" | "locations";
+type StockSortKey = "name" | "stock" | "available" | "reserved" | "fifo" | "price" | "change" | "supplier" | "purchase";
+type SortDirection = "asc" | "desc";
 type Props = { workspaceId: string; data: Data; canWrite: boolean; canApprove: boolean; query?: string };
 type Act = (action: string, payload: Record<string, unknown>, success: string) => void;
 type Quality = { totalLines?: number; autoLines?: number; correctedLines?: number; learnedAliases?: number; automationRate?: number; correctionRate?: number; waitingDocuments?: number };
@@ -23,6 +25,12 @@ const num = (value: unknown, digits = 2) => new Intl.NumberFormat("pl-PL", { max
 const money = (value: unknown, currency = "PLN") => new Intl.NumberFormat("pl-PL", { style: "currency", currency: currency || "PLN", maximumFractionDigits: 2 }).format(Number(value ?? 0) || 0);
 const pct = (value: number) => `${value > 0 ? "+" : ""}${new Intl.NumberFormat("pl-PL", { maximumFractionDigits: 1 }).format(value)}%`;
 const normalize = (value: unknown) => String(value ?? "").trim().toLocaleLowerCase("pl");
+const searchableValues = (value: unknown): string[] => {
+  if (value === null || value === undefined) return [];
+  if (Array.isArray(value)) return value.flatMap(searchableValues);
+  if (typeof value === "object") return Object.values(value as Record<string, unknown>).flatMap(searchableValues);
+  return [String(value)];
+};
 const today = () => new Date().toISOString().slice(0, 10);
 const dateLabel = (value: unknown) => {
   const raw = String(value ?? "");
@@ -66,7 +74,6 @@ export function WarehouseWorkspace300({ workspaceId, data, canWrite, canApprove,
   const [undo, setUndo] = useState<UndoState>(null);
   const [pending, startTransition] = useTransition();
 
-  const pageItems = (data.items ?? []) as Row[];
   const catalogItems = ((data.catalogItems ?? data.items) ?? []) as Row[];
   const warehouses = (data.warehouses ?? []) as Row[];
   const movements = (data.movements ?? []) as Row[];
@@ -104,6 +111,30 @@ export function WarehouseWorkspace300({ workspaceId, data, canWrite, canApprove,
     aiLines.forEach((line) => map.set(line.review_id, [...(map.get(line.review_id) ?? []), line]));
     return map;
   }, [aiLines]);
+  const aiLinesByItem = useMemo(() => {
+    const map = new Map<string, WarehouseAiLine300[]>();
+    aiLines.forEach((line) => {
+      const id = String(line.candidate_stock_item_id ?? "");
+      if (id) map.set(id, [...(map.get(id) ?? []), line]);
+    });
+    return map;
+  }, [aiLines]);
+  const aliasesByItem = useMemo(() => {
+    const map = new Map<string, Row[]>();
+    aliases.forEach((row) => {
+      const id = String(row.stock_item_id ?? "");
+      if (id) map.set(id, [...(map.get(id) ?? []), row]);
+    });
+    return map;
+  }, [aliases]);
+  const assignmentsByItem = useMemo(() => {
+    const map = new Map<string, Row[]>();
+    locationAssignments.forEach((row) => {
+      const id = String(row.stock_item_id ?? "");
+      if (id) map.set(id, [...(map.get(id) ?? []), row]);
+    });
+    return map;
+  }, [locationAssignments]);
   const balanceByItem = useMemo(() => {
     const map = new Map<string, number>();
     balances.forEach((row) => { const id = String(row.stock_item_id ?? row.stockItemId ?? ""); map.set(id, (map.get(id) ?? 0) + Number(row.quantity ?? 0)); });
@@ -142,9 +173,56 @@ export function WarehouseWorkspace300({ workspaceId, data, canWrite, canApprove,
   const issuedInstances = instances.filter((row) => String(row.status) === "assigned");
   const totalStockValue = [...fifoByItem.values()].reduce((sum, row) => sum + row.value, 0);
 
-  const stockRows = useMemo(() => pageItems
-    .filter((row) => !search || [row.name, row.sku, row.manufacturer, row.model, row.barcode].some((value) => normalize(value).includes(normalize(search))))
-    .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? ""), "pl", { sensitivity: "base" })), [pageItems, search]);
+  const stockSearchIndex = useMemo(() => {
+    const index = new Map<string, string>();
+    catalogItems.forEach((row) => {
+      const id = String(row.id);
+      const history = pricesByItem.get(id) ?? [];
+      const relatedCounterparties = history.map((price) => counterpartyById.get(String(price.counterparty_id))).filter(Boolean) as Row[];
+      const relatedAliases = aliasesByItem.get(id) ?? [];
+      const relatedAiLines = aiLinesByItem.get(id) ?? [];
+      const relatedLocations = (assignmentsByItem.get(id) ?? []).map((assignment) => locationById.get(String(assignment.warehouse_location_id))).filter(Boolean) as Row[];
+      const balance = balanceByItem.get(id) ?? 0;
+      const reserved = reservedByItem.get(id) ?? 0;
+      const fifo = fifoByItem.get(id);
+      const formattedHistory = history.flatMap((price) => [
+        dateLabel(price.observed_at ?? price.created_at),
+        num(price.quantity),
+        num(price.unit_price_net),
+        money(price.unit_price_net, text(price.currency, "PLN")),
+        text(price.source_type, ""),
+        text(price.price_stage, "")
+      ]);
+      index.set(id, normalize(searchableValues([
+        row,
+        history,
+        formattedHistory,
+        relatedCounterparties,
+        relatedAliases,
+        relatedAiLines,
+        relatedLocations,
+        balance,
+        num(balance),
+        reserved,
+        num(reserved),
+        balance - reserved,
+        num(balance - reserved),
+        fifo?.quantity,
+        fifo?.value,
+        fifo ? money(fifo.value) : ""
+      ]).join(" ")));
+    });
+    return index;
+  }, [aiLinesByItem, aliasesByItem, assignmentsByItem, balanceByItem, catalogItems, counterpartyById, fifoByItem, locationById, pricesByItem, reservedByItem]);
+
+  const stockRows = useMemo(() => {
+    const terms = normalize(search).split(/\s+/).filter(Boolean);
+    if (!terms.length) return catalogItems;
+    return catalogItems.filter((row) => {
+      const haystack = stockSearchIndex.get(String(row.id)) ?? "";
+      return terms.every((term) => haystack.includes(term));
+    });
+  }, [catalogItems, search, stockSearchIndex]);
 
   const run = (endpoint: "ai" | "atomic", action: string, payload: Record<string, unknown>, success: string) => {
     setMessage(null);
@@ -182,12 +260,12 @@ export function WarehouseWorkspace300({ workspaceId, data, canWrite, canApprove,
 
   return <section className={styles.workspace} data-warehouse-experience="3.1">
     <form className={styles.searchbar} onSubmit={submitSearch}>
-      <label><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Szukaj po nazwie, SKU, producencie, modelu, EAN lub zeskanuj kod…" /></label>
+      <label><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Globalne wyszukiwanie Magazynu" placeholder="Szukaj po wszystkim: nazwie, SKU/EAN, dostawcy, cenie, dacie, lokalizacji…" /></label>
       {canWrite ? <ModuleDropzoneLink workspaceId={workspaceId} sourceModule="warehouse" variant="primary" /> : null}
     </form>
 
     <div className={styles.kpis}>
-      <Kpi label="Kartoteki" value={page.total || catalogItems.length} caption="globalny katalog A–Z" />
+      <Kpi label="Kartoteki" value={catalogItems.length} caption="globalny katalog A–Z" />
       <Kpi label="Poczekalnia" value={waitingReviews.length} caption="wyjątki wymagające decyzji" attention={waitingReviews.length > 0} />
       <Kpi label="Automatyzacja AI" value={`${num(quality.automationRate ?? 0, 1)}%`} caption={`${num(quality.autoLines ?? 0, 0)} pozycji bez ręcznej pracy`} />
       <Kpi label="Poniżej minimum" value={lowStock.length} caption="po uwzględnieniu rezerwacji" attention={lowStock.length > 0} />
@@ -203,7 +281,7 @@ export function WarehouseWorkspace300({ workspaceId, data, canWrite, canApprove,
     {error ? <div className={styles.error}><AlertTriangle size={15} />{error}</div> : null}
 
     {tab === "dashboard" ? <Dashboard waiting={waitingReviews} lowStock={lowStock} pendingMovements={pendingMovements} catalogItems={catalogItems} movements={movements} quality={quality} fifoByItem={fifoByItem} onOpen={setTab} /> : null}
-    {tab === "stock" ? <StockRegistry rows={stockRows} page={page} query={search} balanceByItem={balanceByItem} reservedByItem={reservedByItem} pricesByItem={pricesByItem} fifoByItem={fifoByItem} counterpartyById={counterpartyById} onOpen={setSelectedItemId} onPage={(next) => router.push(`?page=${next}${search.trim() ? `&q=${encodeURIComponent(search.trim())}` : ""}`)} /> : null}
+    {tab === "stock" ? <StockRegistry rows={stockRows} page={page} catalogTotal={catalogItems.length} query={search} balanceByItem={balanceByItem} reservedByItem={reservedByItem} pricesByItem={pricesByItem} fifoByItem={fifoByItem} counterpartyById={counterpartyById} onOpen={setSelectedItemId} onPage={(next) => router.push(`?page=${next}${search.trim() ? `&q=${encodeURIComponent(search.trim())}` : ""}`)} /> : null}
     {tab === "waiting" ? <WaitingRoom workspaceId={workspaceId} reviews={waitingReviews} currentReview={currentReview} currentLines={currentLines} currentPreview={currentPreview} itemById={itemById} items={catalogItems} selectedId={currentReview?.id ?? null} onSelect={setSelectedReviewId} matchChoice={matchChoice} setMatchChoice={setMatchChoice} pending={pending} canWrite={canWrite} act={aiAct} /> : null}
     {tab === "movements" ? <MovementsPanel rows={movements} lines={movementLines} warehouses={warehouses} items={catalogItems} projects={projects} warehouseById={warehouseById} projectById={projectById} canWrite={canWrite} canApprove={canApprove} pending={pending} act={atomicAct} /> : null}
     {tab === "needs" ? <NeedsPanel lowStock={lowStock} reservations={openReservations} balanceByItem={balanceByItem} reservedByItem={reservedByItem} pricesByItem={pricesByItem} itemById={itemById} projectById={projectById} warehouseById={warehouseById} counterpartyById={counterpartyById} canWrite={canWrite} pending={pending} act={atomicAct} /> : null}
@@ -251,9 +329,10 @@ function QualityCard({ label, value, note }: { label: string; value: ReactNode; 
   return <div className={styles.qualityCard}><small>{label}</small><strong>{value}</strong><span>{note}</span></div>;
 }
 
-function StockRegistry({ rows, page, query, balanceByItem, reservedByItem, pricesByItem, fifoByItem, counterpartyById, onOpen, onPage }: {
+function StockRegistry({ rows, page, catalogTotal, query, balanceByItem, reservedByItem, pricesByItem, fifoByItem, counterpartyById, onOpen, onPage }: {
   rows: Row[];
   page: PageMeta;
+  catalogTotal: number;
   query: string;
   balanceByItem: Map<string, number>;
   reservedByItem: Map<string, number>;
@@ -263,10 +342,64 @@ function StockRegistry({ rows, page, query, balanceByItem, reservedByItem, price
   onOpen: (id: string) => void;
   onPage: (page: number) => void;
 }) {
-  const pages = Math.max(1, Math.ceil(page.total / page.pageSize));
+  const [sortKey, setSortKey] = useState<StockSortKey>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const collator = useMemo(() => new Intl.Collator("pl", { sensitivity: "base", numeric: true }), []);
+  const defaultDirection = (key: StockSortKey): SortDirection => ["name", "supplier"].includes(key) ? "asc" : "desc";
+  const toggleSort = (key: StockSortKey) => {
+    if (sortKey === key) setSortDirection((current) => current === "asc" ? "desc" : "asc");
+    else {
+      setSortKey(key);
+      setSortDirection(defaultDirection(key));
+    }
+  };
+  const sortValue = (row: Row, key: StockSortKey): string | number | null => {
+    const id = String(row.id);
+    const history = pricesByItem.get(id) ?? [];
+    const latest = history[0];
+    const previous = history[1];
+    const reserved = reservedByItem.get(id) ?? 0;
+    const balance = balanceByItem.get(id) ?? 0;
+    if (key === "name") return String(row.name ?? "");
+    if (key === "stock") return balance;
+    if (key === "available") return balance - reserved;
+    if (key === "reserved") return reserved;
+    if (key === "fifo") return fifoByItem.get(id)?.value ?? 0;
+    if (key === "price") return latest ? Number(latest.unit_price_net ?? 0) : null;
+    if (key === "change") return latest && previous && Number(previous.unit_price_net) ? ((Number(latest.unit_price_net) - Number(previous.unit_price_net)) / Number(previous.unit_price_net)) * 100 : null;
+    if (key === "supplier") return latest ? String(counterpartyById.get(String(latest.counterparty_id))?.name ?? "") : "";
+    if (key === "purchase") {
+      const timestamp = latest ? Date.parse(String(latest.observed_at ?? latest.created_at ?? "")) : Number.NaN;
+      return Number.isFinite(timestamp) ? timestamp : null;
+    }
+    return null;
+  };
+  const sortedRows = useMemo(() => [...rows].sort((a, b) => {
+    const left = sortValue(a, sortKey);
+    const right = sortValue(b, sortKey);
+    if (left === null && right === null) return collator.compare(String(a.name ?? ""), String(b.name ?? ""));
+    if (left === null) return 1;
+    if (right === null) return -1;
+    const compared = typeof left === "number" && typeof right === "number" ? left - right : collator.compare(String(left), String(right));
+    if (compared === 0) return collator.compare(String(a.name ?? ""), String(b.name ?? ""));
+    return sortDirection === "asc" ? compared : -compared;
+  }), [balanceByItem, collator, counterpartyById, fifoByItem, pricesByItem, reservedByItem, rows, sortDirection, sortKey]);
+  const pages = Math.max(1, Math.ceil(sortedRows.length / page.pageSize));
+  const currentPage = Math.min(Math.max(1, page.page), pages);
+  const visibleRows = sortedRows.slice((currentPage - 1) * page.pageSize, currentPage * page.pageSize);
   return <section className={styles.section}>
-    <header className={styles.sectionHeader}><div><small>MAGAZYN</small><h2>Kartoteki A–Z</h2><p>Globalne wyszukiwanie, stany, FIFO, ceny i historia zakupów. Jedna pozycja = jedna kanoniczna kartoteka.</p></div><b>{page.total}</b></header>
-    <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Pozycja</th><th>Stan</th><th>Dostępne</th><th>Rezerwacje</th><th>FIFO</th><th>Ostatnia cena</th><th>Zmiana</th><th>Dostawca</th><th>Zakup</th></tr></thead><tbody>{rows.map((row) => {
+    <header className={styles.sectionHeader}><div><small>MAGAZYN</small><h2>Kartoteki A–Z</h2><p>Wyszukiwanie obejmuje cały katalog i dane powiązane. Kliknij dowolny nagłówek tabeli, aby sortować rosnąco lub malejąco.</p></div><b>{rows.length}{query.trim() ? ` / ${catalogTotal}` : ""}</b></header>
+    <div className={styles.tableWrap}><table className={styles.table}><thead><tr>
+      <SortHeader label="Pozycja" sortKey="name" activeKey={sortKey} direction={sortDirection} onSort={toggleSort} />
+      <SortHeader label="Stan" sortKey="stock" activeKey={sortKey} direction={sortDirection} onSort={toggleSort} />
+      <SortHeader label="Dostępne" sortKey="available" activeKey={sortKey} direction={sortDirection} onSort={toggleSort} />
+      <SortHeader label="Rezerwacje" sortKey="reserved" activeKey={sortKey} direction={sortDirection} onSort={toggleSort} />
+      <SortHeader label="FIFO" sortKey="fifo" activeKey={sortKey} direction={sortDirection} onSort={toggleSort} />
+      <SortHeader label="Ostatnia cena" sortKey="price" activeKey={sortKey} direction={sortDirection} onSort={toggleSort} />
+      <SortHeader label="Zmiana" sortKey="change" activeKey={sortKey} direction={sortDirection} onSort={toggleSort} />
+      <SortHeader label="Dostawca" sortKey="supplier" activeKey={sortKey} direction={sortDirection} onSort={toggleSort} />
+      <SortHeader label="Zakup" sortKey="purchase" activeKey={sortKey} direction={sortDirection} onSort={toggleSort} />
+    </tr></thead><tbody>{visibleRows.map((row) => {
       const id = String(row.id);
       const history = pricesByItem.get(id) ?? [];
       const latest = history[0];
@@ -276,9 +409,15 @@ function StockRegistry({ rows, page, query, balanceByItem, reservedByItem, price
       const balance = balanceByItem.get(id) ?? 0;
       const counterparty = latest ? counterpartyById.get(String(latest.counterparty_id)) : null;
       return <tr key={id} onClick={() => onOpen(id)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") onOpen(id); }}><td><strong>{text(row.name)}</strong><small>{[row.manufacturer, row.model, row.sku, row.barcode].filter(Boolean).join(" · ") || "bez dodatkowych oznaczeń"}</small></td><td><b>{num(balance)} {text(row.unit, "")}</b></td><td>{num(balance - reserved)} {text(row.unit, "")}</td><td>{num(reserved)}</td><td>{money(fifoByItem.get(id)?.value ?? 0)}</td><td>{latest ? money(latest.unit_price_net, text(latest.currency, "PLN")) : "—"}</td><td className={change !== null ? (change > 0 ? styles.priceUp : styles.priceDown) : ""}>{change === null ? "—" : pct(change)}</td><td>{text(counterparty?.name)}</td><td>{latest ? dateLabel(latest.observed_at) : "—"}</td></tr>;
-    })}</tbody></table>{!rows.length ? <Empty label={query ? "Brak kartotek dla tego wyszukiwania." : "Brak kartotek."} /> : null}</div>
-    {pages > 1 ? <div className={styles.pagination}><button type="button" disabled={page.page <= 1} onClick={() => onPage(page.page - 1)}><ArrowLeft size={14} /> Poprzednia</button><span>Strona <b>{page.page}</b> z {pages}</span><button type="button" disabled={page.page >= pages} onClick={() => onPage(page.page + 1)}>Następna <ArrowRight size={14} /></button></div> : null}
+    })}</tbody></table>{!visibleRows.length ? <Empty label={query ? "Brak kartotek dla tego wyszukiwania." : "Brak kartotek."} /> : null}</div>
+    {pages > 1 ? <div className={styles.pagination}><button type="button" disabled={currentPage <= 1} onClick={() => onPage(currentPage - 1)}><ArrowLeft size={14} /> Poprzednia</button><span>Strona <b>{currentPage}</b> z {pages} · {sortedRows.length} wyników</span><button type="button" disabled={currentPage >= pages} onClick={() => onPage(currentPage + 1)}>Następna <ArrowRight size={14} /></button></div> : null}
   </section>;
+}
+
+function SortHeader({ label, sortKey, activeKey, direction, onSort }: { label: string; sortKey: StockSortKey; activeKey: StockSortKey; direction: SortDirection; onSort: (key: StockSortKey) => void }) {
+  const active = sortKey === activeKey;
+  const Icon = active ? (direction === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return <th aria-sort={active ? (direction === "asc" ? "ascending" : "descending") : "none"}><button type="button" onClick={() => onSort(sortKey)} title={`Sortuj: ${label}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, border: 0, padding: 0, background: "transparent", color: active ? "#17664d" : "inherit", font: "inherit", fontWeight: active ? 900 : 800, textTransform: "inherit", letterSpacing: "inherit", cursor: "pointer", whiteSpace: "nowrap" }}>{label}<Icon size={11} aria-hidden="true" /></button></th>;
 }
 
 function WaitingRoom({ workspaceId, reviews, currentReview, currentLines, currentPreview, itemById, items, selectedId, onSelect, matchChoice, setMatchChoice, pending, canWrite, act }: {
