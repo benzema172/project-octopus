@@ -16,7 +16,6 @@ export default async function WarehousePage({ params, searchParams }: {
     kind="warehouse"
     kicker="Magazyn 4.0"
     title="Magazyn, materiały, sprzęt i WMS"
-    description="AI rozpoznaje dokumenty i kartoteki, kontroluje historię cen, partie, ważność i gotowość materiałową inwestycji. WMS obsługuje zadania, jednostki logistyczne, zwroty, wysyłki i integracje urządzeń, a fizyczny stan nadal zmienia wyłącznie zatwierdzony ruch magazynowy."
     loader={getWarehouseMarket400Data}
   />;
 }
