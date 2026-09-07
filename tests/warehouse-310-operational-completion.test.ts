@@ -60,8 +60,13 @@ describe("Warehouse 3.1 implementation contract", () => {
     expect(marketLoader).toContain("physicalBalances");
     expect(marketLoader).toContain("globalBalances: projectedBalances");
     expect(marketLoader).toContain("pendingDocumentMovements");
-    expect(operations).toContain("Stan wg dokumentów jest już widoczny");
-    expect(operations).toContain("Zatwierdzony stan fizyczny pozostaje oddzielny");
+    expect(operations).not.toContain("Stan wg dokumentów jest już widoczny");
+    expect(operations).not.toContain("Zatwierdzony stan fizyczny pozostaje oddzielny");
+  });
+
+  it("keeps the Warehouse heading compact without narrative helper copy", () => {
+    expect(page).not.toContain("description=");
+    expect(page).not.toContain("AI rozpoznaje dokumenty i kartoteki");
   });
 
   it("waits for the full document before automatic PZ/WZ draft generation", () => {
