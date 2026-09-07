@@ -23,7 +23,7 @@ async function fetchInvoiceLines(workspaceId: string, ids: string[]) {
       .eq("workspace_id", workspaceId)
       .in("id", ids.slice(index, index + 400));
     if (error) throw new Error(`Nie udało się powiązać historii cen z fakturami: ${error.message}`);
-    result.push(...((data ?? []) as Row[]));
+    result.push(...((data ?? []) as unknown as Row[]));
   }
   return result;
 }
@@ -35,7 +35,7 @@ async function fetchRowsByIds(workspaceId: string, table: "warehouse_ai_lines" |
     const query = db.from(table).select(select).eq("workspace_id", workspaceId).in("id", ids.slice(index, index + 400));
     const { data, error } = await query;
     if (error) throw new Error(`Nie udało się powiązać historii cen z dokumentami zakupu: ${error.message}`);
-    result.push(...((data ?? []) as Row[]));
+    result.push(...((data ?? []) as unknown as Row[]));
   }
   return result;
 }
