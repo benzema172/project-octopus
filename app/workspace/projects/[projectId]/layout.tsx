@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { CompanyShell } from "@/components/layout/company-shell";
 import { ProjectAutopilotDock } from "@/components/projects/project-autopilot-dock";
 import { ProjectAutopilotRouteGate } from "@/components/projects/project-autopilot-route-gate";
+import { ProjectEquipmentStrip430 } from "@/components/projects/project-equipment-strip-430";
 import { ProjectIntakeSlot } from "@/components/projects/project-intake-slot";
 import { ProjectNavigation } from "@/components/projects/project-navigation";
 import { requireCurrentUser } from "@/lib/auth";
@@ -99,6 +100,8 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
 
           <ProjectNavigation projectId={project.id} allowedDomains={allowedProjectDomains} />
         </section>
+
+        {allowedProjectDomains.includes("warehouse") ? <ProjectEquipmentStrip430 workspaceId={project.workspace_id} projectId={project.id} /> : null}
 
         {aiProposalCount > 0 && allowedProjectDomains.includes("investments") ? <Link className="pw-ai-proposal-alert" href={`/workspace/projects/${project.id}/documentation#ai-review-center`}><span>AI</span><strong>{aiProposalCount} propozycji wymaga weryfikacji</strong><small>Otwórz centrum decyzji</small></Link> : null}
 
