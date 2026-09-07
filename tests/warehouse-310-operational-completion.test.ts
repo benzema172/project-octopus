@@ -31,10 +31,14 @@ describe("Warehouse 3.1 implementation contract", () => {
   const page = read("app/workspace/companies/[workspaceId]/warehouse/page.tsx");
   const marketLoader = read("lib/data/warehouse-market-400.ts");
   const workspace = read("components/company/warehouse-workspace-300.tsx");
+  const operations = read("components/company/operations/warehouse-operations.tsx");
   const aiRoute = read("app/api/company/warehouse-ai/route.ts");
   const atomicRoute = read("app/api/company/warehouse-atomic/route.ts");
   const data = read("lib/data/warehouse-ai-300.ts");
   const migration = read("supabase/migrations/20260903083000_warehouse_310_operational_completion.sql");
+  const equipmentBridge = read("supabase/migrations/20260907064500_warehouse_equipment_responsibility_bridge_430.sql");
+  const hrCore = read("components/company/hr/hr-workspace-core-300.tsx");
+  const projectLayout = read("app/workspace/projects/[projectId]/layout.tsx");
 
   it("passes server search and pagination into the actual Warehouse loader", () => {
     expect(page).toContain("loader={getWarehouseMarket400Data}");
@@ -47,6 +51,15 @@ describe("Warehouse 3.1 implementation contract", () => {
     expect(migration).toContain("'draft'");
     expect(migration).not.toContain("approve_stock_movement_atomic(v_review");
     expect(atomicRoute).toContain('"stock_movement_approve"');
+  });
+
+  it("shows document-derived stock without silently approving physical movements", () => {
+    expect(marketLoader).toContain("pendingStockProjection");
+    expect(marketLoader).toContain("physicalBalances");
+    expect(marketLoader).toContain("globalBalances: projectedBalances");
+    expect(marketLoader).toContain("pendingDocumentMovements");
+    expect(operations).toContain("Stan wg dokumentów jest już widoczny");
+    expect(operations).toContain("Zatwierdzony stan fizyczny pozostaje oddzielny");
   });
 
   it("waits for the full document before automatic PZ/WZ draft generation", () => {
@@ -89,6 +102,16 @@ describe("Warehouse 3.1 implementation contract", () => {
     }
     expect(migration).toContain("warehouse_locations");
     expect(migration).toContain("create_replenishment_order_atomic");
+  });
+
+  it("connects equipment responsibility to one employee or project and mirrors it into views", () => {
+    expect(equipmentBridge).toContain("v_targets <> 1");
+    expect(equipmentBridge).toContain("issued_assets_open_stock_instance_uidx");
+    expect(equipmentBridge).toContain("asset_type='stock_instance'");
+    expect(marketLoader).toContain("globalStockInstances");
+    expect(marketLoader).toContain(".in(\"status\", [\"active\", \"planned\"])");
+    expect(hrCore).toContain("HrIssuedEquipmentStrip430");
+    expect(projectLayout).toContain("ProjectEquipmentStrip430");
   });
 
   it("loads a scalable operational read model and AI quality metrics", () => {
