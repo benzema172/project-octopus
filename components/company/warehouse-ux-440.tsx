@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Save } from "lucide-react";
+import { WarehousePrices450 } from "@/components/company/warehouse-prices-450";
 import styles from "./warehouse-workspace-310.module.css";
 
 type Row = Record<string, unknown>;
@@ -12,6 +13,10 @@ type Props = {
   workspaceId: string;
   canWrite: boolean;
   warehouses: Row[];
+  items: Row[];
+  prices: Row[];
+  counterparties: Row[];
+  purchaseOrders: Row[];
   initialTab: "dashboard" | "stock";
 };
 
@@ -31,11 +36,13 @@ const tabFromLabel = (label: string) => {
   return "other";
 };
 
-export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }: Props) {
+export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, prices, counterparties, purchaseOrders, initialTab }: Props) {
   const router = useRouter();
   const activeTab = useRef<string>(initialTab);
   const equipmentHostRef = useRef<HTMLElement | null>(null);
+  const priceHostRef = useRef<HTMLElement | null>(null);
   const [equipmentHost, setEquipmentHost] = useState<HTMLElement | null>(null);
+  const [priceHost, setPriceHost] = useState<HTMLElement | null>(null);
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +93,30 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
       setEquipmentHost(host);
     };
 
+    const syncPriceHost = () => {
+      const section = document.querySelector<HTMLElement>('section[data-warehouse-experience="3.1"]');
+      if (!section) return;
+
+      if (priceHostRef.current && !priceHostRef.current.isConnected) {
+        priceHostRef.current = null;
+        setPriceHost(null);
+      }
+      if (activeTab.current !== "prices") return;
+
+      const priceHeading = Array.from(section.querySelectorAll<HTMLHeadingElement>("h2")).find((heading) => heading.textContent?.trim() === "Ceny i dostawcy");
+      const priceSection = priceHeading?.closest("section") as HTMLElement | null;
+      const legacyRoot = priceSection?.parentElement as HTMLElement | null;
+      if (!legacyRoot || legacyRoot.dataset.octopusPricesReplaced === "1" || !legacyRoot.textContent?.includes("Alerty zmian cen")) return;
+
+      legacyRoot.dataset.octopusPricesReplaced = "1";
+      legacyRoot.style.display = "none";
+      const host = document.createElement("div");
+      host.dataset.octopusPrices450 = "1";
+      legacyRoot.before(host);
+      priceHostRef.current = host;
+      setPriceHost(host);
+    };
+
     const onNavClick = (event: Event) => {
       const target = event.target instanceof Element ? event.target.closest("button") : null;
       if (!target) return;
@@ -93,6 +124,7 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
       window.requestAnimationFrame(() => {
         applyVisibility();
         syncEquipmentHost();
+        syncPriceHost();
       });
     };
 
@@ -107,6 +139,7 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
       }
       applyVisibility();
       syncEquipmentHost();
+      syncPriceHost();
     };
 
     observer = new MutationObserver(sync);
@@ -116,13 +149,20 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
     return () => {
       observer?.disconnect();
       if (nav) nav.removeEventListener("click", onNavClick);
-      const legacy = document.querySelector<HTMLElement>('form[data-octopus-equipment-replaced="1"]');
-      if (legacy) {
-        legacy.style.display = "";
-        delete legacy.dataset.octopusEquipmentReplaced;
+      const legacyEquipment = document.querySelector<HTMLElement>('form[data-octopus-equipment-replaced="1"]');
+      if (legacyEquipment) {
+        legacyEquipment.style.display = "";
+        delete legacyEquipment.dataset.octopusEquipmentReplaced;
+      }
+      const legacyPrices = document.querySelector<HTMLElement>('[data-octopus-prices-replaced="1"]');
+      if (legacyPrices) {
+        legacyPrices.style.display = "";
+        delete legacyPrices.dataset.octopusPricesReplaced;
       }
       equipmentHostRef.current?.remove();
+      priceHostRef.current?.remove();
       equipmentHostRef.current = null;
+      priceHostRef.current = null;
     };
   }, [initialTab]);
 
@@ -161,26 +201,25 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
     });
   };
 
-  if (!canWrite || !equipmentHost || !equipmentHost.isConnected) return null;
-
-  return createPortal(
-    <form className={styles.compactForm} onSubmit={submitEquipment} data-equipment-quick-register="4.4">
-      <strong>Zarejestruj sprzęt</strong>
-      <div>
-        <label>Nazwa sprzętu<input name="name" required placeholder="np. Wiertarka Bosch GBH 2-28" /></label>
-        <label>Typ<select name="itemType" defaultValue="equipment"><option value="equipment">Sprzęt</option><option value="device">Urządzenie</option><option value="tool">Narzędzie</option></select></label>
-        <label>Magazyn<select name="warehouseId" defaultValue=""><option value="">—</option>{warehouses.map((row) => <option key={String(row.id)} value={String(row.id)}>{String(row.name ?? "Magazyn")}</option>)}</select></label>
-        <label>Numer seryjny<input name="serialNumber" required /></label>
-        <label>Tag/QR<input name="assetTag" /></label>
-        <label>Data zakupu<input name="purchaseDate" type="date" /></label>
-        <label>Cena zakupu<input name="purchasePrice" inputMode="decimal" /></label>
-        <label>Gwarancja do<input name="warrantyUntil" type="date" /></label>
-        <label>Stan<input name="condition" placeholder="np. dobry" /></label>
-      </div>
-      {message ? <small style={{ color: "#17643f", fontWeight: 750 }}>{message}</small> : null}
-      {error ? <small style={{ color: "#a52a36", fontWeight: 750 }}>{error}</small> : null}
-      <button type="submit" disabled={pending}><Save size={12} /> {pending ? "Dodawanie…" : "Dodaj"}</button>
-    </form>,
-    equipmentHost
-  );
+  return <>
+    {priceHost && priceHost.isConnected ? createPortal(<WarehousePrices450 items={items} prices={prices} counterparties={counterparties} purchaseOrders={purchaseOrders} />, priceHost) : null}
+    {canWrite && equipmentHost && equipmentHost.isConnected ? createPortal(
+      <form className={styles.compactForm} onSubmit={submitEquipment} data-equipment-quick-register="4.4">
+        <strong>Zarejestruj sprzęt</strong>
+        <div>
+          <label>Nazwa sprzętu<input name="name" required placeholder="np. Wiertarka Bosch GBH 2-28" /></label>
+          <label>Typ<select name="itemType" defaultValue="equipment"><option value="equipment">Sprzęt</option><option value="device">Urządzenie</option><option value="tool">Narzędzie</option></select></label>
+          <label>Magazyn<select name="warehouseId" defaultValue=""><option value="">—</option>{warehouses.map((row) => <option key={String(row.id)} value={String(row.id)}>{String(row.name ?? "Magazyn")}</option>)}</select></label>
+          <label>Numer seryjny<input name="serialNumber" required /></label>
+          <label>Tag/QR<input name="assetTag" /></label>
+          <label>Data zakupu<input name="purchaseDate" type="date" /></label>
+          <label>Cena zakupu<input name="purchasePrice" inputMode="decimal" /></label>
+          <label>Gwarancja do<input name="warrantyUntil" type="date" /></label>
+          <label>Stan<input name="condition" placeholder="np. dobry" /></label>
+        </div>
+        {message ? <small style={{ color: "#17643f", fontWeight: 750 }}>{message}</small> : null}
+        {error ? <small style={{ color: "#a52a36", fontWeight: 750 }}>{error}</small> : null}
+        <button type="submit" disabled={pending}><Save size={12} /> {pending ? "Dodawanie…" : "Dodaj"}</button>
+      </form>, equipmentHost) : null}
+  </>;
 }
