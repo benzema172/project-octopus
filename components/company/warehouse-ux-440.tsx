@@ -30,7 +30,11 @@ const tabFromLabel = (label: string) => {
   const value = label.replace(/\s+/g, " ").trim();
   if (value.startsWith("Pulpit")) return "dashboard";
   if (value.startsWith("Magazyn")) return "stock";
+  if (value.startsWith("Poczekalnia")) return "waiting";
+  if (value.startsWith("Ruchy")) return "movements";
+  if (value.startsWith("Braki i rezerwacje")) return "needs";
   if (value.startsWith("Sprzęt")) return "assets";
+  if (value.startsWith("Inwentaryzacje")) return "counts";
   if (value.startsWith("Ceny i dostawcy")) return "prices";
   if (value.startsWith("Lokalizacje")) return "locations";
   if (value.startsWith("Planowanie AI")) return "planning";
@@ -63,6 +67,40 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
       return section;
     };
 
+    const restoreLegacyEquipment = () => {
+      const legacyEquipment = document.querySelector<HTMLElement>('form[data-octopus-equipment-replaced="1"]');
+      if (legacyEquipment) {
+        legacyEquipment.style.display = "";
+        delete legacyEquipment.dataset.octopusEquipmentReplaced;
+      }
+      if (equipmentLayoutRef.current) {
+        delete equipmentLayoutRef.current.dataset.octopusEquipmentLayout;
+        equipmentLayoutRef.current = null;
+      }
+    };
+
+    const teardownEquipmentHost = (updateState = true) => {
+      restoreLegacyEquipment();
+      equipmentHostRef.current?.remove();
+      equipmentHostRef.current = null;
+      if (updateState) setEquipmentHost(null);
+    };
+
+    const restoreLegacyPrices = () => {
+      const legacyPrices = document.querySelector<HTMLElement>('[data-octopus-prices-replaced="1"]');
+      if (legacyPrices) {
+        legacyPrices.style.display = "";
+        delete legacyPrices.dataset.octopusPricesReplaced;
+      }
+    };
+
+    const teardownPriceHost = (updateState = true) => {
+      restoreLegacyPrices();
+      priceHostRef.current?.remove();
+      priceHostRef.current = null;
+      if (updateState) setPriceHost(null);
+    };
+
     const applyVisibility = () => {
       const scope = currentSection();
       if (!scope) return;
@@ -85,6 +123,11 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
     const syncEquipmentHost = () => {
       const scope = currentSection();
       if (!scope) return;
+
+      if (activeTab.current !== "assets") {
+        teardownEquipmentHost();
+        return;
+      }
 
       if (equipmentHostRef.current && !equipmentHostRef.current.isConnected) {
         equipmentHostRef.current = null;
@@ -114,11 +157,15 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
       const scope = currentSection();
       if (!scope) return;
 
+      if (activeTab.current !== "prices") {
+        teardownPriceHost();
+        return;
+      }
+
       if (priceHostRef.current && !priceHostRef.current.isConnected) {
         priceHostRef.current = null;
         setPriceHost(null);
       }
-      if (activeTab.current !== "prices") return;
 
       const priceHeading = Array.from(scope.querySelectorAll<HTMLHeadingElement>("h2")).find((heading) => heading.textContent?.trim() === "Ceny i dostawcy");
       const priceSection = priceHeading?.closest("section") as HTMLElement | null;
@@ -160,7 +207,10 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
     const onNavClick = (event: Event) => {
       const target = event.target instanceof Element ? event.target.closest("button") : null;
       if (!target) return;
-      activeTab.current = tabFromLabel(target.textContent ?? "");
+      const nextTab = tabFromLabel(target.textContent ?? "");
+      activeTab.current = nextTab;
+      if (nextTab !== "assets") teardownEquipmentHost();
+      if (nextTab !== "prices") teardownPriceHost();
       scheduleSync();
     };
 
@@ -186,22 +236,8 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
       if (attachFrame) window.cancelAnimationFrame(attachFrame);
       if (syncFrame) window.cancelAnimationFrame(syncFrame);
       if (nav) nav.removeEventListener("click", onNavClick);
-      const legacyEquipment = document.querySelector<HTMLElement>('form[data-octopus-equipment-replaced="1"]');
-      if (legacyEquipment) {
-        legacyEquipment.style.display = "";
-        delete legacyEquipment.dataset.octopusEquipmentReplaced;
-      }
-      if (equipmentLayoutRef.current) delete equipmentLayoutRef.current.dataset.octopusEquipmentLayout;
-      const legacyPrices = document.querySelector<HTMLElement>('[data-octopus-prices-replaced="1"]');
-      if (legacyPrices) {
-        legacyPrices.style.display = "";
-        delete legacyPrices.dataset.octopusPricesReplaced;
-      }
-      equipmentHostRef.current?.remove();
-      priceHostRef.current?.remove();
-      equipmentHostRef.current = null;
-      equipmentLayoutRef.current = null;
-      priceHostRef.current = null;
+      teardownEquipmentHost(false);
+      teardownPriceHost(false);
     };
   }, [initialTab]);
 
