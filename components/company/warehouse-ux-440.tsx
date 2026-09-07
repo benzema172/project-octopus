@@ -50,14 +50,24 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let section: HTMLElement | null = null;
     let nav: HTMLElement | null = null;
     let observer: MutationObserver | null = null;
+    let attachFrame = 0;
+    let syncFrame = 0;
+    let disposed = false;
+
+    const currentSection = () => {
+      if (section?.isConnected) return section;
+      section = document.querySelector<HTMLElement>('section[data-warehouse-experience="3.1"]');
+      return section;
+    };
 
     const applyVisibility = () => {
-      const section = document.querySelector<HTMLElement>('section[data-warehouse-experience="3.1"]');
-      if (!section) return;
+      const scope = currentSection();
+      if (!scope) return;
 
-      const searchInput = section.querySelector<HTMLInputElement>('input[aria-label="Globalne wyszukiwanie Magazynu"]');
+      const searchInput = scope.querySelector<HTMLInputElement>('input[aria-label="Globalne wyszukiwanie Magazynu"]');
       const searchLabel = searchInput?.closest("label") as HTMLElement | null;
       const searchForm = searchInput?.closest("form") as HTMLElement | null;
       if (searchLabel && searchForm) {
@@ -67,21 +77,21 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
         searchForm.style.justifyContent = showSearch ? "" : "end";
       }
 
-      const directDivs = Array.from(section.children).filter((node): node is HTMLElement => node instanceof HTMLElement && node.tagName === "DIV");
+      const directDivs = Array.from(scope.children).filter((node): node is HTMLElement => node instanceof HTMLElement && node.tagName === "DIV");
       const kpis = directDivs.find((node) => node.textContent?.includes("Kartoteki") && node.textContent?.includes("Wartość FIFO"));
       if (kpis) kpis.style.display = activeTab.current === "dashboard" ? "" : "none";
     };
 
     const syncEquipmentHost = () => {
-      const section = document.querySelector<HTMLElement>('section[data-warehouse-experience="3.1"]');
-      if (!section) return;
+      const scope = currentSection();
+      if (!scope) return;
 
       if (equipmentHostRef.current && !equipmentHostRef.current.isConnected) {
         equipmentHostRef.current = null;
         setEquipmentHost(null);
       }
 
-      const forms = Array.from(section.querySelectorAll<HTMLFormElement>("form"));
+      const forms = Array.from(scope.querySelectorAll<HTMLFormElement>("form"));
       const legacyForm = forms.find((form) => form.querySelector("strong")?.textContent?.trim() === "Zarejestruj egzemplarz");
       if (!legacyForm || legacyForm.dataset.octopusEquipmentReplaced === "1") return;
 
@@ -101,8 +111,8 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
     };
 
     const syncPriceHost = () => {
-      const section = document.querySelector<HTMLElement>('section[data-warehouse-experience="3.1"]');
-      if (!section) return;
+      const scope = currentSection();
+      if (!scope) return;
 
       if (priceHostRef.current && !priceHostRef.current.isConnected) {
         priceHostRef.current = null;
@@ -110,7 +120,7 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
       }
       if (activeTab.current !== "prices") return;
 
-      const priceHeading = Array.from(section.querySelectorAll<HTMLHeadingElement>("h2")).find((heading) => heading.textContent?.trim() === "Ceny i dostawcy");
+      const priceHeading = Array.from(scope.querySelectorAll<HTMLHeadingElement>("h2")).find((heading) => heading.textContent?.trim() === "Ceny i dostawcy");
       const priceSection = priceHeading?.closest("section") as HTMLElement | null;
       const legacyRoot = priceSection?.parentElement as HTMLElement | null;
       if (!legacyRoot || legacyRoot.dataset.octopusPricesReplaced === "1" || !legacyRoot.textContent?.includes("Alerty zmian cen")) return;
@@ -124,21 +134,11 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
       setPriceHost(host);
     };
 
-    const onNavClick = (event: Event) => {
-      const target = event.target instanceof Element ? event.target.closest("button") : null;
-      if (!target) return;
-      activeTab.current = tabFromLabel(target.textContent ?? "");
-      window.requestAnimationFrame(() => {
-        applyVisibility();
-        syncEquipmentHost();
-        syncPriceHost();
-      });
-    };
-
     const sync = () => {
-      const section = document.querySelector<HTMLElement>('section[data-warehouse-experience="3.1"]');
-      if (!section) return;
-      const nextNav = section.querySelector<HTMLElement>('nav[aria-label="Sekcje Magazynu 3.1"]');
+      if (disposed) return;
+      const scope = currentSection();
+      if (!scope) return;
+      const nextNav = scope.querySelector<HTMLElement>('nav[aria-label="Sekcje Magazynu 3.1"]');
       if (nextNav && nextNav !== nav) {
         if (nav) nav.removeEventListener("click", onNavClick);
         nav = nextNav;
@@ -149,12 +149,42 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
       syncPriceHost();
     };
 
-    observer = new MutationObserver(sync);
-    observer.observe(document.body, { subtree: true, childList: true });
-    sync();
+    const scheduleSync = () => {
+      if (disposed || syncFrame) return;
+      syncFrame = window.requestAnimationFrame(() => {
+        syncFrame = 0;
+        sync();
+      });
+    };
+
+    const onNavClick = (event: Event) => {
+      const target = event.target instanceof Element ? event.target.closest("button") : null;
+      if (!target) return;
+      activeTab.current = tabFromLabel(target.textContent ?? "");
+      scheduleSync();
+    };
+
+    const attach = () => {
+      if (disposed) return;
+      const scope = currentSection();
+      if (!scope) {
+        attachFrame = window.requestAnimationFrame(attach);
+        return;
+      }
+
+      const observedRoot = scope.parentElement ?? scope;
+      observer = new MutationObserver(scheduleSync);
+      observer.observe(observedRoot, { subtree: true, childList: true });
+      sync();
+    };
+
+    attach();
 
     return () => {
+      disposed = true;
       observer?.disconnect();
+      if (attachFrame) window.cancelAnimationFrame(attachFrame);
+      if (syncFrame) window.cancelAnimationFrame(syncFrame);
       if (nav) nav.removeEventListener("click", onNavClick);
       const legacyEquipment = document.querySelector<HTMLElement>('form[data-octopus-equipment-replaced="1"]');
       if (legacyEquipment) {
