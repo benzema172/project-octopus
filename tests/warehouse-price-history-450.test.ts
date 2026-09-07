@@ -20,7 +20,7 @@ describe("Warehouse price history 4.5", () => {
     expect(warehouseInvoiceLabel450({ invoice_number: "58/08/2026" })).toBe("FV 58/08/2026");
     const component = read("components/company/warehouse-prices-450.tsx");
     expect(component).toContain("Faktura");
-    expect(component).toContain("invoice_number");
+    expect(component).toContain("warehouseInvoiceLabel450");
     expect(component).not.toContain("<th>Źródło</th>");
     expect(component).not.toContain("source_type");
   });
