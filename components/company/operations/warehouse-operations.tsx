@@ -14,6 +14,11 @@ export default function WarehouseOperations({ workspaceId, data, canWrite, canAp
 }) {
   const pendingMovements = (data.pendingDocumentMovements ?? []) as Row[];
   const pendingLines = (data.pendingDocumentMovementLines ?? []) as Row[];
+  const employees = ((data.employees ?? []) as Row[]).map((row) => ({
+    ...row,
+    name: `${String(row.first_name ?? "").trim()} ${String(row.last_name ?? "").trim()}`.trim() || String(row.employee_number ?? "Pracownik")
+  }));
+  const normalizedData: Data = { ...data, employees };
 
   return <>
     {pendingMovements.length ? <div role="note" style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 9, padding: "8px 11px", border: "1px solid #cfe2d9", borderRadius: 11, background: "#f7fbf9", color: "#4e6259", fontSize: 10 }}>
@@ -22,7 +27,7 @@ export default function WarehouseOperations({ workspaceId, data, canWrite, canAp
     </div> : null}
     <WarehouseMarket410
       workspaceId={workspaceId}
-      data={data}
+      data={normalizedData}
       canWrite={canWrite}
       canApprove={canApprove}
       query={query}
