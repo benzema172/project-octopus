@@ -43,9 +43,17 @@ export default function FleetOperations({ workspaceId, data, canWrite, canApprov
         white-space: nowrap;
       }
 
+      /* KPI Floty są elementem Pulpitu, nie globalnym nagłówkiem modułu. */
       section[data-fleet-experience="3.0"] > div:nth-of-type(1) {
+        display: none;
         grid-column: 1 / -1;
         grid-row: 3;
+      }
+
+      section[data-fleet-experience="3.0"]:has(
+        > div:nth-of-type(2) nav > button:first-child[class*="tabActive"]
+      ) > div:nth-of-type(1) {
+        display: grid;
       }
 
       /* Pasek sekcji Floty ma ten sam kontrakt wizualny co Magazyn 3.1. */
