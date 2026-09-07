@@ -1,11 +1,10 @@
 import { CompanyOperationalPage } from "@/components/company/company-operational-page";
-import { getFleetConnected400Data } from "@/lib/data/fleet-connected-400";
-import type { CompanyPageOptions } from "@/lib/data/company-operations";
+import { getFleetWorkspaceData, type CompanyPageOptions } from "@/lib/data/company-operations";
 
 export const dynamic = "force-dynamic";
 
-async function getFleet400Data(workspaceId: string, options: CompanyPageOptions) {
-  return getFleetConnected400Data(workspaceId, options);
+async function getFleetData(workspaceId: string, options: CompanyPageOptions) {
+  return getFleetWorkspaceData(workspaceId, options);
 }
 
 export default async function FleetPage({ params, searchParams }: {
@@ -20,8 +19,8 @@ export default async function FleetPage({ params, searchParams }: {
     domain="fleet"
     kind="fleet"
     kicker="Flota"
-    title="Fleet 4.0 — Connected Intelligence"
-    description="Uniwersalny system floty dla polskich firm: operacje, GPS i geofencing, OBD/CAN, Fleet Readiness, Mission Fit, predykcyjny serwis, AI, bezpieczeństwo, e-TOLL/tachograf/SENT, EV, TCO i integracje z Kadrami, Magazynem, Finansami oraz Inwestycjami."
-    loader={getFleet400Data}
+    title="Flota"
+    description="Pojazdy, eksploatacja, serwis, dokumenty, wyposażenie, szkody, koszty i wykorzystanie floty w jednym widoku operacyjnym."
+    loader={getFleetData}
   />;
 }
