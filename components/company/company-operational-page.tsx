@@ -18,7 +18,7 @@ type Props = {
   kind: Kind;
   kicker: string;
   title: string;
-  description: string;
+  description?: string;
   loader: Loader;
 };
 
@@ -45,7 +45,7 @@ export async function CompanyOperationalPage({ workspaceId, page, query, domain,
         <div>
           <p className="co-kicker">{kicker}</p>
           <h1>{title}</h1>
-          <p>{description}</p>
+          {description ? <p>{description}</p> : null}
         </div>
       </header>
       <CompanyOperationsLazy
