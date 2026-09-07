@@ -32,6 +32,8 @@ describe("Warehouse 3.1 implementation contract", () => {
   const marketLoader = read("lib/data/warehouse-market-400.ts");
   const workspace = read("components/company/warehouse-workspace-300.tsx");
   const operations = read("components/company/operations/warehouse-operations.tsx");
+  const ux440 = read("components/company/warehouse-ux-440.tsx");
+  const equipmentRoute = read("app/api/company/warehouse-equipment/route.ts");
   const aiRoute = read("app/api/company/warehouse-ai/route.ts");
   const atomicRoute = read("app/api/company/warehouse-atomic/route.ts");
   const data = read("lib/data/warehouse-ai-300.ts");
@@ -132,5 +134,17 @@ describe("Warehouse 3.1 implementation contract", () => {
       expect(workspace).toContain(`sortKey=\"${key}\"`);
     }
     expect(workspace).toContain('setSortDirection((current) => current === "asc" ? "desc" : "asc")');
+  });
+
+  it("shows KPI only on the dashboard, limits search to the stock registry and removes mandatory catalog selection for equipment", () => {
+    expect(operations).toContain("WarehouseUx440");
+    expect(ux440).toContain('activeTab.current === "dashboard"');
+    expect(ux440).toContain('activeTab.current === "stock"');
+    expect(ux440).toContain('Globalne wyszukiwanie Magazynu');
+    expect(ux440).toContain("Nazwa sprzętu");
+    expect(ux440).not.toContain("Kartoteka");
+    expect(equipmentRoute).toContain('db.from("stock_items").insert');
+    expect(equipmentRoute).toContain("create_stock_instance_atomic");
+    expect(equipmentRoute).toContain("createdCatalog");
   });
 });
