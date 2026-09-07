@@ -13,6 +13,10 @@ export default function WarehouseOperations({ workspaceId, data, canWrite, canAp
   query: string;
 }) {
   const warehouses = (data.warehouses ?? []) as Row[];
+  const items = ((data.catalogItems ?? data.items) ?? []) as Row[];
+  const prices = ((data.globalPriceObservations ?? data.priceObservations) ?? []) as Row[];
+  const counterparties = (data.counterparties ?? []) as Row[];
+  const purchaseOrders = (data.warehousePurchaseOrders ?? []) as Row[];
   const page = (data.page ?? {}) as Row;
   const initialTab = query || Number(page.page ?? 1) > 1 ? "stock" : "dashboard";
   const employees = ((data.employees ?? []) as Row[]).map((row) => ({
@@ -22,7 +26,16 @@ export default function WarehouseOperations({ workspaceId, data, canWrite, canAp
   const normalizedData: Data = { ...data, employees };
 
   return <>
-    <WarehouseUx440 workspaceId={workspaceId} canWrite={canWrite} warehouses={warehouses} initialTab={initialTab} />
+    <WarehouseUx440
+      workspaceId={workspaceId}
+      canWrite={canWrite}
+      warehouses={warehouses}
+      items={items}
+      prices={prices}
+      counterparties={counterparties}
+      purchaseOrders={purchaseOrders}
+      initialTab={initialTab}
+    />
     <WarehouseMarket410
       workspaceId={workspaceId}
       data={normalizedData}
