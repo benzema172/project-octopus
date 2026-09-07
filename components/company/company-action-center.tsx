@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { AlertTriangle, CalendarClock, CheckCircle2, CircleAlert } from "lucide-react";
 import type { CompanyActionItem } from "@/lib/data/company-action-center";
+import styles from "./company-action-center.module.css";
+
+const DASHBOARD_ACTION_LIMIT = 4;
 
 function severityLabel(value: string) {
   if (value === "critical") return "Krytyczne";
@@ -23,7 +26,7 @@ function formatAmount(value: number | null) {
 export function CompanyActionCenter({ items }: { items: CompanyActionItem[] }) {
   const critical = items.filter((item) => item.severity === "critical").length;
   const warnings = items.filter((item) => item.severity === "warning" || item.severity === "high").length;
-  const visible = items.slice(0, 12);
+  const visible = items.slice(0, DASHBOARD_ACTION_LIMIT);
 
   return (
     <section className="co-section" aria-labelledby="company-action-center-heading">
@@ -46,7 +49,7 @@ export function CompanyActionCenter({ items }: { items: CompanyActionItem[] }) {
           <p>Na podstawie aktualnych danych nie ma teraz spraw wymagających interwencji.</p>
         </div>
       ) : (
-        <div className="co-project-strip" aria-label="Aktywne wyjątki operacyjne">
+        <div className={styles.list} aria-label="Najpilniejsze wyjątki operacyjne">
           {visible.map((item) => {
             const due = formatDue(item.dueAt);
             const amount = formatAmount(item.amount);
@@ -59,7 +62,9 @@ export function CompanyActionCenter({ items }: { items: CompanyActionItem[] }) {
                 {due || amount ? <small>{due ? `Termin: ${due}` : ""}{due && amount ? " · " : ""}{amount ?? ""}</small> : null}
               </>
             );
-            return item.href ? <Link href={item.href} key={item.itemKey}>{content}</Link> : <article key={item.itemKey}>{content}</article>;
+            return item.href
+              ? <Link className={styles.card} href={item.href} key={item.itemKey}>{content}</Link>
+              : <article className={styles.card} key={item.itemKey}>{content}</article>;
           })}
         </div>
       )}
