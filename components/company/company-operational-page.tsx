@@ -22,7 +22,7 @@ type Props = {
   loader: Loader;
 };
 
-export async function CompanyOperationalPage({ workspaceId, page, query, domain, kind, kicker, title, description, loader }: Props) {
+export async function CompanyOperationalPage({ workspaceId, page, query, domain, kind, kicker, title, loader }: Props) {
   const user = await requireCurrentUser();
   const workspace = await getWorkspaceForUser(user, workspaceId);
   if (!workspace) notFound();
@@ -45,7 +45,6 @@ export async function CompanyOperationalPage({ workspaceId, page, query, domain,
         <div>
           <p className="co-kicker">{kicker}</p>
           <h1>{title}</h1>
-          {description ? <p>{description}</p> : null}
         </div>
       </header>
       <CompanyOperationsLazy
