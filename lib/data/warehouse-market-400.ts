@@ -73,7 +73,7 @@ export async function getWarehouseMarket400Data(workspaceId: string, options: Co
     db.rpc("get_stock_balances", { p_workspace_id: workspaceId }),
     db.from("stock_movements").select("id,warehouse_id,target_warehouse_id,movement_type,status,document_number,movement_date,project_id").eq("workspace_id", workspaceId).in("status", ["draft", "pending", "review"]).order("created_at", { ascending: false }).limit(2000),
     db.from("stock_item_instances").select("id,stock_item_id,serial_number,asset_tag,purchase_date,purchase_price,warranty_until,status,condition,current_warehouse_id,employee_id,project_id,vehicle_id,last_service_date,next_service_date,notes,created_at,updated_at").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(3000),
-    db.from("projects").select("id,name,status").eq("workspace_id", workspaceId).in("status", ["active", "planned"]).order("name").limit(500),
+    db.from("projects").select("id,name,status").eq("workspace_id", workspaceId).in("status", ["active", "preparation"]).order("name").limit(500),
     db.from("price_observations").select("id,project_id,stock_item_id,counterparty_id,source_type,source_id,observed_at,quantity,unit,unit_price_net,currency,price_stage,canonical_purchase,created_at").eq("workspace_id", workspaceId).order("observed_at", { ascending: false }).limit(8000),
     db.from("reservations").select("id,project_id,warehouse_id,stock_item_id,quantity,required_at,status").eq("workspace_id", workspaceId).order("required_at").limit(5000)
   ]);
@@ -94,7 +94,7 @@ export async function getWarehouseMarket400Data(workspaceId: string, options: Co
     ...ai,
     catalogItems: planningRows,
     globalStockInstances: rows(globalInstancesResult as Result, "globalnego rejestru sprzętu"),
-    projects: rows(activeProjectsResult as Result, "aktywnych inwestycji"),
+    projects: rows(activeProjectsResult as Result, "aktywnych i przygotowywanych inwestycji"),
     physicalBalances,
     globalBalances: projectedBalances,
     pendingDocumentBalances: projectedBalances.filter((row) => Number(row.pending_quantity ?? 0) !== 0),
