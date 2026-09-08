@@ -2,6 +2,7 @@
 
 import { WarehouseMarket410 } from "@/components/company/warehouse-market-410";
 import { WarehousePriceAlertInspector490 } from "@/components/company/warehouse-price-alert-inspector-490";
+import { WarehouseStockValueOverlay480 } from "@/components/company/warehouse-stock-value-overlay-480";
 import { WarehouseUx440 } from "@/components/company/warehouse-ux-440";
 import type { Data, Row } from "@/components/company/operations/module-shell";
 import { visibleWarehousePriceHistory450 } from "@/lib/warehouse/price-history-450";
@@ -30,6 +31,8 @@ export default function WarehouseOperations({ workspaceId, data, canWrite, canAp
   const prices = visiblePrices(rawPrices);
   const counterparties = (data.counterparties ?? []) as Row[];
   const purchaseOrders = (data.warehousePurchaseOrders ?? []) as Row[];
+  const balances = ((data.globalBalances ?? data.balances) ?? []) as Row[];
+  const costLayers = (data.inventoryCostLayers ?? []) as Row[];
   const page = (data.page ?? {}) as Row;
   const initialTab = query || Number(page.page ?? 1) > 1 ? "stock" : "dashboard";
   const employees = ((data.employees ?? []) as Row[]).map((row) => ({
@@ -53,6 +56,12 @@ export default function WarehouseOperations({ workspaceId, data, canWrite, canAp
       counterparties={counterparties}
       purchaseOrders={purchaseOrders}
       initialTab={initialTab}
+    />
+    <WarehouseStockValueOverlay480
+      items={items}
+      prices={prices}
+      balances={balances}
+      costLayers={costLayers}
     />
     <WarehousePriceAlertInspector490 workspaceId={workspaceId} items={items} prices={prices} counterparties={counterparties} />
     <WarehouseMarket410
