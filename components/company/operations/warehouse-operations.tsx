@@ -1,6 +1,7 @@
 "use client";
 
 import { WarehouseMarket410 } from "@/components/company/warehouse-market-410";
+import { WarehouseMovementTruth531 } from "@/components/company/warehouse-movement-truth-531";
 import { WarehousePriceAlertInspector490 } from "@/components/company/warehouse-price-alert-inspector-490";
 import { WarehousePrices500 } from "@/components/company/warehouse-prices-500";
 import { WarehouseStockValueOverlay480 } from "@/components/company/warehouse-stock-value-overlay-480";
@@ -50,6 +51,7 @@ export default function WarehouseOperations({ workspaceId, data, canWrite, canAp
 
   return <>
     <WarehouseUiCleanup520 />
+    <WarehouseMovementTruth531 workspaceId={workspaceId} data={normalizedData} canWrite={canWrite} canApprove={canApprove} />
     <WarehouseUx440
       workspaceId={workspaceId}
       canWrite={canWrite}
