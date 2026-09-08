@@ -32,7 +32,9 @@ export function WarehousePrices500({ workspaceId, items, prices, counterparties 
 
   useEffect(() => {
     const saved = Number(window.localStorage.getItem(`octopus:warehouse-price-alert-window:${workspaceId}`));
-    if ((ALERT_WINDOW_OPTIONS as readonly number[]).includes(saved)) setAlertWindowDays(saved);
+    if (!(ALERT_WINDOW_OPTIONS as readonly number[]).includes(saved)) return;
+    const frame = window.requestAnimationFrame(() => setAlertWindowDays(saved));
+    return () => window.cancelAnimationFrame(frame);
   }, [workspaceId]);
 
   const changeAlertWindow = (days: number) => {
