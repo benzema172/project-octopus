@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, CircleCheck, CircleDashed, LoaderCircle, RefreshCcw, ShieldCheck } from "lucide-react";
 import { CompanyModuleShell, type Data, type FormSpec, type Row } from "@/components/company/operations/module-shell";
+import { InvoiceQuickPreview } from "@/components/documents/invoice-quick-preview";
 
 function money(value: unknown) { const n=Number(value ?? 0); return new Intl.NumberFormat("pl-PL",{maximumFractionDigits:0}).format(Number.isFinite(n)?n:0)+" zł"; }
 function str(value: unknown, fallback="—") { return value == null || value === "" ? fallback : String(value); }
@@ -53,7 +54,7 @@ export default function FinanceOperations({ workspaceId, data, canWrite, canAppr
   }
 
   return <CompanyModuleShell workspaceId={workspaceId} data={data} canWrite={canWrite} pathname={pathname} query={query} layoutVariant="finance" primaryMetricCount={4} metrics={metrics} forms={forms} rows={invoices} tableTitle="Faktury i rozrachunki" emptyLabel="Brak faktur dla bieżącego filtra." columns={[
-    {label:"Dokument",value:row=><strong>{str(row.invoice_number)}</strong>},
+    {label:"Dokument",value:row=><strong><InvoiceQuickPreview workspaceId={workspaceId} domain="finance" invoiceId={String(row.id)} invoiceNumber={str(row.invoice_number,"")}>{str(row.invoice_number)}</InvoiceQuickPreview></strong>},
     {label:"Kontrahent",value:row=>cpNames.get(String(row.counterparty_id)) ?? "—"},
     {label:"Przypisanie",value:row=>{const rows=allocationsByInvoice.get(String(row.id))??[];const names=[...new Set(rows.map(a=>projectNames.get(String(a.project_id))).filter(Boolean))];return names.length?names.join(", "):"Koszty ogólne / do alokacji";}},
     {label:"Brutto",value:row=>money(row.gross_amount)},
@@ -74,7 +75,7 @@ export default function FinanceOperations({ workspaceId, data, canWrite, canAppr
           const dimensionEntries:Array<[string,string]>=[["boq","BOQ"],["purchaseOrder","Zamówienie"],["receipt","PZ"],["quantity","Ilość"],["price","Cena"],["tax","VAT"]];
           const confidence=Math.round(Number(match.match_confidence??0)*100);
           return <article key={String(match.id)}>
-            <div className="finance-match-list__title"><strong>{str(line?.description,"Pozycja faktury")}</strong><small>{str(invoice?.invoice_number,"Faktura")} · pewność {confidence}%</small></div>
+            <div className="finance-match-list__title"><strong>{str(line?.description,"Pozycja faktury")}</strong><small><InvoiceQuickPreview workspaceId={workspaceId} domain="finance" invoiceLineId={line?.id ? String(line.id) : null} invoiceId={invoice?.id ? String(invoice.id) : null} invoiceNumber={str(invoice?.invoice_number,"")}>{str(invoice?.invoice_number,"Faktura")}</InvoiceQuickPreview> · pewność {confidence}%</small></div>
             <div className="finance-match-list__dimensions">{dimensionEntries.map(([key,label])=><span className={dimensions[key]===true?"is-ok":"is-missing"} key={key}>{dimensions[key]===true?<CircleCheck size={12}/>:<CircleDashed size={12}/>} {label}</span>)}</div>
             <dl><div><dt>Od zamówienia</dt><dd>{percent(match.price_variance_percent)}</dd></div><div><dt>Od BOQ</dt><dd>{percent(match.budget_price_variance_percent)}</dd></div><div><dt>Różnica ilości</dt><dd>{str(match.quantity_variance)}</dd></div></dl>
             <span className={`status-chip${["approved","matched"].includes(str(match.status,""))?" status-chip--positive":" status-chip--warning"}`}>{str(match.status)}</span>
