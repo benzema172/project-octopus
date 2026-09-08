@@ -25,12 +25,19 @@ describe("Warehouse inventory UI stability", () => {
     expect(ux).toContain('if (value.startsWith("Inwentaryzacje")) return "counts"');
   });
 
-  it("tears down tab-scoped portals before another Warehouse tab becomes active", () => {
-    expect(ux).toContain('if (activeTab.current !== "prices")');
+  it("keeps prices and suppliers as a native React tab so it cannot disappear with a detached portal host", () => {
+    expect(workspace).toContain('{ id: "prices", label: "Ceny i dostawcy"');
+    expect(workspace).toContain('tab === "prices" ? <PricesPanel');
+    expect(workspace).toContain('function PricesPanel');
+    expect(ux).not.toContain("priceHostRef");
+    expect(ux).not.toContain("teardownPriceHost");
+    expect(ux).not.toContain("data-octopus-prices-replaced");
+    expect(ux).not.toContain("WarehousePrices450");
+  });
+
+  it("still tears down the equipment-only portal before another Warehouse tab becomes active", () => {
     expect(ux).toContain('if (activeTab.current !== "assets")');
-    expect(ux).toContain('if (nextTab !== "prices") teardownPriceHost()');
     expect(ux).toContain('if (nextTab !== "assets") teardownEquipmentHost()');
-    expect(ux).toContain("priceHostRef.current?.remove()");
     expect(ux).toContain("equipmentHostRef.current?.remove()");
   });
 });
