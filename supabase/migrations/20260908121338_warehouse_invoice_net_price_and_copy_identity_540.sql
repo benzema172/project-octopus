@@ -45,6 +45,8 @@ create trigger invoices_source_document_touch_trg
 after insert or update of document_id on public.invoices
 for each row execute function private.invoice_source_document_touch();
 
+-- invoice_lines.unit_price jest zawsze ceną jednostkową NETTO. AI może się pomylić,
+-- ale baza nie ufa polu unitPrice, jeżeli zna kwotę netto i ilość.
 create or replace function private.canonicalize_invoice_line_net_unit()
 returns trigger
 language plpgsql
@@ -67,6 +69,47 @@ create trigger invoice_lines_canonical_net_unit_trg
 before insert or update of quantity, net_amount, unit_price on public.invoice_lines
 for each row execute function private.canonicalize_invoice_line_net_unit();
 
+-- Druga, niezależna bariera: obserwacja cenowa z pozycji faktury dziedziczy cenę
+-- NETTO z kanonicznej pozycji. Dzięki temu nawet starsza wersja RPC nie zapisze brutto
+-- do unit_price_net.
+create or replace function private.canonicalize_invoice_price_observation()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_unit_price_net numeric;
+  v_quantity numeric;
+  v_unit text;
+begin
+  if new.source_type='invoice_line' and new.source_id is not null then
+    select
+      round((il.net_amount / nullif(il.quantity,0))::numeric, 6),
+      il.quantity,
+      il.unit
+    into v_unit_price_net, v_quantity, v_unit
+    from public.invoice_lines il
+    where il.id=new.source_id;
+
+    if v_unit_price_net is not null then
+      new.unit_price_net := v_unit_price_net;
+      new.quantity := coalesce(new.quantity, v_quantity);
+      new.unit := coalesce(new.unit, v_unit);
+    end if;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function private.canonicalize_invoice_price_observation() from public, anon, authenticated;
+
+drop trigger if exists price_observations_canonical_invoice_net_trg on public.price_observations;
+create trigger price_observations_canonical_invoice_net_trg
+before insert or update of source_type, source_id, unit_price_net, quantity, unit on public.price_observations
+for each row execute function private.canonicalize_invoice_price_observation();
+
+-- Jedna faktura biznesowa może mieć kilka plików źródłowych (oryginał/kopia/skan).
+-- Deduplikacja jest po tożsamości biznesowej, nie po document_id.
 do $$
 declare
   v_def text;
@@ -131,11 +174,11 @@ $new$;
   if position(v_old in v_def)=0 then raise exception 'Nie znaleziono punktu wstawienia deduplikacji faktury.'; end if;
   v_def := replace(v_def,v_old,v_new);
 
-  v_old := $old$
-    v_qty:=public.octopus_numeric(v_line->>'quantity'); v_unit_price:=public.octopus_numeric(v_line->>'unitPrice'); v_line_net:=coalesce(public.octopus_numeric(v_line->>'netAmount'),case when v_qty is not null and v_unit_price is not null then round(v_qty*v_unit_price,2) else 0 end); v_line_gross:=coalesce(public.octopus_numeric(v_line->>'grossAmount'),v_line_net); v_key:=public.normalize_material_key(v_desc); v_stock:=null;
-$old$;
-  v_new := $new$
-    v_qty:=public.octopus_numeric(v_line->>'quantity'); v_unit_price:=public.octopus_numeric(v_line->>'unitPrice'); v_line_net:=coalesce(public.octopus_numeric(v_line->>'netAmount'),case when v_qty is not null and v_unit_price is not null then round(v_qty*v_unit_price,2) else 0 end); if v_qty is not null and v_qty<>0 and v_line_net is not null then v_unit_price:=round(v_line_net/v_qty,6); end if; v_line_gross:=coalesce(public.octopus_numeric(v_line->>'grossAmount'),v_line_net); v_key:=public.normalize_material_key(v_desc); v_stock:=null;
+  -- Ten krótki anchor jest stabilny między pełnym łańcuchem migracji a produkcją.
+  -- Odrzuca drugą identyczną logicznie pozycję tej samej faktury, niezależnie od tego,
+  -- czy AI nazwało jej unitPrice brutto czy netto.
+  v_old := $old$v_key:=public.normalize_material_key(v_desc); v_stock:=null;$old$;
+  v_new := $new$v_key:=public.normalize_material_key(v_desc); v_stock:=null;
     if exists(
       select 1 from public.invoice_lines il
       where il.invoice_id=v_invoice
@@ -147,9 +190,8 @@ $old$;
     ) then
       v_seen:=array_remove(v_seen,v_line_no);
       continue;
-    end if;
-$new$;
-  if position(v_old in v_def)=0 then raise exception 'Nie znaleziono punktu kanonizacji ceny netto.'; end if;
+    end if;$new$;
+  if position(v_old in v_def)=0 then raise exception 'Nie znaleziono stabilnego punktu deduplikacji pozycji faktury.'; end if;
   v_def := replace(v_def,v_old,v_new);
   execute v_def;
 end;
