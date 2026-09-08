@@ -1,9 +1,9 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useRef, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Save } from "lucide-react";
+import { Save, Search, X } from "lucide-react";
 import styles from "./warehouse-workspace-310.module.css";
 import uxStyles from "./warehouse-ux-460.module.css";
 
@@ -40,15 +40,47 @@ const tabFromLabel = (label: string) => {
   return "other";
 };
 
+const legacySearchInput = () =>
+  document.querySelector<HTMLInputElement>('section[data-warehouse-experience="3.1"] input[aria-label="Globalne wyszukiwanie Magazynu"]');
+
 export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }: Props) {
   const router = useRouter();
   const activeTab = useRef<string>(initialTab);
   const equipmentHostRef = useRef<HTMLElement | null>(null);
   const equipmentLayoutRef = useRef<HTMLElement | null>(null);
+  const stockSearchHostRef = useRef<HTMLElement | null>(null);
+  const stockSearchHeaderRef = useRef<HTMLElement | null>(null);
   const [equipmentHost, setEquipmentHost] = useState<HTMLElement | null>(null);
+  const [stockSearchHost, setStockSearchHost] = useState<HTMLElement | null>(null);
+  const [stockSearch, setStockSearch] = useState("");
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const updateStockSearch = (nextValue: string, submit = false) => {
+    setStockSearch(nextValue);
+    const input = legacySearchInput();
+    if (!input) return;
+
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    if (valueSetter) valueSetter.call(input, nextValue);
+    else input.value = nextValue;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+
+    if (submit) input.form?.requestSubmit();
+  };
+
+  const onStockSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      updateStockSearch("");
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      updateStockSearch(stockSearch, true);
+    }
+  };
 
   useEffect(() => {
     let section: HTMLElement | null = null;
@@ -76,11 +108,32 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
       }
     };
 
+    const restoreLegacySearch = () => {
+      const searchInput = legacySearchInput();
+      const searchLabel = searchInput?.closest("label") as HTMLElement | null;
+      const searchForm = searchInput?.closest("form") as HTMLElement | null;
+      if (searchLabel) searchLabel.style.display = "";
+      if (searchForm) {
+        searchForm.style.gridTemplateColumns = "";
+        searchForm.style.justifyContent = "";
+      }
+    };
+
     const teardownEquipmentHost = (updateState = true) => {
       restoreLegacyEquipment();
       equipmentHostRef.current?.remove();
       equipmentHostRef.current = null;
       if (updateState) setEquipmentHost(null);
+    };
+
+    const teardownStockSearchHost = (updateState = true) => {
+      stockSearchHostRef.current?.remove();
+      stockSearchHostRef.current = null;
+      if (stockSearchHeaderRef.current) {
+        delete stockSearchHeaderRef.current.dataset.octopusStockSearchLayout;
+        stockSearchHeaderRef.current = null;
+      }
+      if (updateState) setStockSearchHost(null);
     };
 
     const applyVisibility = () => {
@@ -91,15 +144,46 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
       const searchLabel = searchInput?.closest("label") as HTMLElement | null;
       const searchForm = searchInput?.closest("form") as HTMLElement | null;
       if (searchLabel && searchForm) {
-        const showSearch = activeTab.current === "stock";
-        searchLabel.style.display = showSearch ? "" : "none";
-        searchForm.style.gridTemplateColumns = showSearch ? "minmax(0,1fr) auto" : "auto";
-        searchForm.style.justifyContent = showSearch ? "" : "end";
+        searchLabel.style.display = "none";
+        searchForm.style.gridTemplateColumns = "auto";
+        searchForm.style.justifyContent = "end";
       }
 
       const directDivs = Array.from(scope.children).filter((node): node is HTMLElement => node instanceof HTMLElement && node.tagName === "DIV");
       const kpis = directDivs.find((node) => node.textContent?.includes("Kartoteki") && node.textContent?.includes("Wartość FIFO"));
       if (kpis) kpis.style.display = activeTab.current === "dashboard" ? "" : "none";
+    };
+
+    const syncStockSearchHost = () => {
+      const scope = currentSection();
+      if (!scope) return;
+
+      if (activeTab.current !== "stock") {
+        teardownStockSearchHost();
+        return;
+      }
+
+      if (stockSearchHostRef.current && !stockSearchHostRef.current.isConnected) {
+        stockSearchHostRef.current = null;
+        stockSearchHeaderRef.current = null;
+        setStockSearchHost(null);
+      }
+
+      const headers = Array.from(scope.querySelectorAll<HTMLElement>("header"));
+      const stockHeader = headers.find((header) => header.querySelector("h2")?.textContent?.trim() === "Kartoteki A–Z");
+      if (!stockHeader) return;
+      if (stockSearchHostRef.current?.parentElement === stockHeader) return;
+
+      teardownStockSearchHost();
+      const host = document.createElement("div");
+      host.dataset.octopusStockSearchHost = "4.7";
+      stockHeader.dataset.octopusStockSearchLayout = "4.7";
+      const countBadge = Array.from(stockHeader.children).find((node) => node.tagName === "B") ?? null;
+      stockHeader.insertBefore(host, countBadge);
+      stockSearchHostRef.current = host;
+      stockSearchHeaderRef.current = stockHeader;
+      setStockSearch(legacySearchInput()?.value ?? "");
+      setStockSearchHost(host);
     };
 
     const syncEquipmentHost = () => {
@@ -146,6 +230,7 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
         nav.addEventListener("click", onNavClick);
       }
       applyVisibility();
+      syncStockSearchHost();
       syncEquipmentHost();
     };
 
@@ -162,6 +247,7 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
       if (!target) return;
       const nextTab = tabFromLabel(target.textContent ?? "");
       activeTab.current = nextTab;
+      if (nextTab !== "stock") teardownStockSearchHost();
       if (nextTab !== "assets") teardownEquipmentHost();
       scheduleSync();
     };
@@ -188,7 +274,9 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
       if (attachFrame) window.cancelAnimationFrame(attachFrame);
       if (syncFrame) window.cancelAnimationFrame(syncFrame);
       if (nav) nav.removeEventListener("click", onNavClick);
+      teardownStockSearchHost(false);
       teardownEquipmentHost(false);
+      restoreLegacySearch();
     };
   }, [initialTab]);
 
@@ -228,6 +316,25 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
   };
 
   return <>
+    {stockSearchHost && stockSearchHost.isConnected ? createPortal(
+      <div className={uxStyles.stockSearch} data-warehouse-stock-search="4.7">
+        <Search size={14} aria-hidden="true" />
+        <input
+          value={stockSearch}
+          onChange={(event) => updateStockSearch(event.target.value)}
+          onKeyDown={onStockSearchKeyDown}
+          aria-label="Szukaj w kartotekach magazynu"
+          placeholder="Szukaj po wszystkim…"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        {stockSearch ? (
+          <button type="button" onClick={() => updateStockSearch("")} aria-label="Wyczyść wyszukiwanie" title="Wyczyść">
+            <X size={13} />
+          </button>
+        ) : null}
+      </div>, stockSearchHost) : null}
+
     {canWrite && equipmentHost && equipmentHost.isConnected ? createPortal(
       <form className={`${styles.compactForm} ${uxStyles.quickRegister}`} onSubmit={submitEquipment} data-equipment-quick-register="4.6">
         <strong>Zarejestruj sprzęt</strong>
