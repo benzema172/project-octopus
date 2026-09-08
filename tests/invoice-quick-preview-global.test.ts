@@ -35,14 +35,18 @@ describe("global invoice quick preview", () => {
     expect(enrichment).toContain('sourceType === "invoice_line"');
   });
 
-  it("is wired to warehouse alerts and finance invoice surfaces", () => {
+  it("is wired to warehouse alerts and all active finance invoice surfaces", () => {
     const warehouse = read("components/company/warehouse-price-alert-inspector-490.tsx");
     const finance = read("components/company/operations/finance-operations.tsx");
+    const flow = read("components/company/finance-enterprise-flow.tsx");
     expect(warehouse).toContain("InvoiceQuickPreview");
     expect(warehouse).toContain('domain="warehouse"');
     expect(warehouse).toContain("invoiceLineId={invoiceLineId(row)}");
     expect(finance).toContain("InvoiceQuickPreview");
     expect(finance).toContain('domain="finance"');
     expect(finance).toContain("invoiceLineId={line?.id ? String(line.id) : null}");
+    expect(flow).toContain("InvoiceQuickPreview");
+    expect(flow).toContain('domain="finance"');
+    expect(flow).toContain("invoiceLineId={line?.id ? String(line.id) : null}");
   });
 });
