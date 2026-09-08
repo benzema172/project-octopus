@@ -4,7 +4,6 @@ import { createPortal } from "react-dom";
 import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Save } from "lucide-react";
-import { WarehousePrices450 } from "@/components/company/warehouse-prices-450";
 import styles from "./warehouse-workspace-310.module.css";
 import uxStyles from "./warehouse-ux-460.module.css";
 
@@ -41,14 +40,12 @@ const tabFromLabel = (label: string) => {
   return "other";
 };
 
-export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, prices, counterparties, purchaseOrders, initialTab }: Props) {
+export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }: Props) {
   const router = useRouter();
   const activeTab = useRef<string>(initialTab);
   const equipmentHostRef = useRef<HTMLElement | null>(null);
   const equipmentLayoutRef = useRef<HTMLElement | null>(null);
-  const priceHostRef = useRef<HTMLElement | null>(null);
   const [equipmentHost, setEquipmentHost] = useState<HTMLElement | null>(null);
-  const [priceHost, setPriceHost] = useState<HTMLElement | null>(null);
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -84,21 +81,6 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
       equipmentHostRef.current?.remove();
       equipmentHostRef.current = null;
       if (updateState) setEquipmentHost(null);
-    };
-
-    const restoreLegacyPrices = () => {
-      const legacyPrices = document.querySelector<HTMLElement>('[data-octopus-prices-replaced="1"]');
-      if (legacyPrices) {
-        legacyPrices.style.display = "";
-        delete legacyPrices.dataset.octopusPricesReplaced;
-      }
-    };
-
-    const teardownPriceHost = (updateState = true) => {
-      restoreLegacyPrices();
-      priceHostRef.current?.remove();
-      priceHostRef.current = null;
-      if (updateState) setPriceHost(null);
     };
 
     const applyVisibility = () => {
@@ -153,34 +135,6 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
       setEquipmentHost(host);
     };
 
-    const syncPriceHost = () => {
-      const scope = currentSection();
-      if (!scope) return;
-
-      if (activeTab.current !== "prices") {
-        teardownPriceHost();
-        return;
-      }
-
-      if (priceHostRef.current && !priceHostRef.current.isConnected) {
-        priceHostRef.current = null;
-        setPriceHost(null);
-      }
-
-      const priceHeading = Array.from(scope.querySelectorAll<HTMLHeadingElement>("h2")).find((heading) => heading.textContent?.trim() === "Ceny i dostawcy");
-      const priceSection = priceHeading?.closest("section") as HTMLElement | null;
-      const legacyRoot = priceSection?.parentElement as HTMLElement | null;
-      if (!legacyRoot || legacyRoot.dataset.octopusPricesReplaced === "1" || !legacyRoot.textContent?.includes("Alerty zmian cen")) return;
-
-      legacyRoot.dataset.octopusPricesReplaced = "1";
-      legacyRoot.style.display = "none";
-      const host = document.createElement("div");
-      host.dataset.octopusPrices450 = "1";
-      legacyRoot.before(host);
-      priceHostRef.current = host;
-      setPriceHost(host);
-    };
-
     const sync = () => {
       if (disposed) return;
       const scope = currentSection();
@@ -193,7 +147,6 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
       }
       applyVisibility();
       syncEquipmentHost();
-      syncPriceHost();
     };
 
     const scheduleSync = () => {
@@ -210,7 +163,6 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
       const nextTab = tabFromLabel(target.textContent ?? "");
       activeTab.current = nextTab;
       if (nextTab !== "assets") teardownEquipmentHost();
-      if (nextTab !== "prices") teardownPriceHost();
       scheduleSync();
     };
 
@@ -237,7 +189,6 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
       if (syncFrame) window.cancelAnimationFrame(syncFrame);
       if (nav) nav.removeEventListener("click", onNavClick);
       teardownEquipmentHost(false);
-      teardownPriceHost(false);
     };
   }, [initialTab]);
 
@@ -277,7 +228,6 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, items, price
   };
 
   return <>
-    {priceHost && priceHost.isConnected ? createPortal(<WarehousePrices450 items={items} prices={prices} counterparties={counterparties} purchaseOrders={purchaseOrders} />, priceHost) : null}
     {canWrite && equipmentHost && equipmentHost.isConnected ? createPortal(
       <form className={`${styles.compactForm} ${uxStyles.quickRegister}`} onSubmit={submitEquipment} data-equipment-quick-register="4.6">
         <strong>Zarejestruj sprzęt</strong>
