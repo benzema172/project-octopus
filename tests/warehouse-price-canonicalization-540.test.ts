@@ -8,6 +8,7 @@ describe("Warehouse invoice price canonicalization 5.4", () => {
     expect(66.96 / 4).toBeCloseTo(16.74, 6);
     expect(migration).toContain("new.unit_price := round((new.net_amount / new.quantity)::numeric, 6)");
     expect(migration).toContain("'unitPriceBasis','net_amount_per_quantity'");
+    expect(migration).toContain("'rawUnitPrice',v_raw_unit_price");
     expect(migration).toContain("create trigger invoice_lines_canonical_net_unit_trg");
   });
 
@@ -20,11 +21,18 @@ describe("Warehouse invoice price canonicalization 5.4", () => {
     expect(migration).toContain("create trigger price_observations_canonical_invoice_net_trg");
   });
 
-  it("removes a historical gross-per-unit shadow and blocks a repeated logical line", () => {
+  it("collapses only the gross/net shadow of one logical invoice line", () => {
+    expect(migration).toContain("create or replace function private.collapse_invoice_gross_net_shadow()");
+    expect(migration).toContain("abs(v_existing.raw_unit_price-v_gross_unit)<0.02");
+    expect(migration).toContain("abs(v_new_raw-v_net_unit)<0.02");
+    expect(migration).toContain("new.line_number := v_existing.line_number");
+    expect(migration).toContain("'grossNetShadowCollapsed',true");
+    expect(migration).toContain("create trigger invoice_lines_gross_net_shadow_dedup_trg");
+  });
+
+  it("removes a historical gross-per-unit shadow", () => {
     expect(migration).toContain("abs(g.unit_price-(g.gross_amount/g.quantity))<0.02");
     expect(migration).toContain("delete from public.price_observations where source_type='invoice_line' and source_id=r.duplicate_id");
-    expect(migration).toContain("il.normalized_material_key=v_key");
-    expect(migration).toContain("v_seen:=array_remove(v_seen,v_line_no)");
   });
 
   it("treats original and copy uploads as sources of one business invoice", () => {
