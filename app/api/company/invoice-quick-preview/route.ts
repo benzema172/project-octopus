@@ -6,11 +6,19 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-const ALLOWED_DOMAINS = new Set<Domain>(["investments", "finance", "hr", "warehouse", "fleet", "templates", "reports", "settings"]);
+const ALLOWED_DOMAINS = new Set<Domain>(["finance", "warehouse", "fleet"]);
 type Row = Record<string, unknown>;
 
 function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status, headers: { "Cache-Control": "private, no-store" } });
+}
+
+function lineMatchesDomain(domain: Domain, line: Row | null) {
+  if (domain === "finance") return true;
+  if (!line) return false;
+  if (domain === "warehouse") return Boolean(line.stock_item_id);
+  if (domain === "fleet") return Boolean(line.vehicle_id);
+  return false;
 }
 
 export async function GET(request: Request) {
@@ -28,8 +36,9 @@ export async function GET(request: Request) {
   if (!workspaceId || !domainValue || (!invoiceLineId && !requestedInvoiceId && !invoiceNumber)) {
     return jsonError("Brakuje kontekstu faktury.", 400);
   }
-  if (!ALLOWED_DOMAINS.has(domainValue as Domain)) return jsonError("Nieprawidłowa domena dostępu.", 400);
+  if (!ALLOWED_DOMAINS.has(domainValue as Domain)) return jsonError("Ten moduł nie obsługuje podglądu faktur.", 400);
   const domain = domainValue as Domain;
+  if (domain !== "finance" && !invoiceLineId) return jsonError("Podgląd poza Finansami wymaga dokładnej pozycji faktury.", 400);
 
   const workspace = await getWorkspaceForUser(user, workspaceId);
   if (!workspace) return jsonError("Brak dostępu do firmy.", 403);
@@ -43,13 +52,14 @@ export async function GET(request: Request) {
 
   if (invoiceLineId) {
     const { data, error } = await db.from("invoice_lines")
-      .select("id,invoice_id,line_number,description,quantity,unit,unit_price,net_amount,tax_rate,gross_amount,stock_item_id,supplier_sku")
+      .select("id,invoice_id,line_number,description,quantity,unit,unit_price,net_amount,tax_rate,gross_amount,stock_item_id,vehicle_id,supplier_sku")
       .eq("workspace_id", workspaceId)
       .eq("id", invoiceLineId)
       .maybeSingle();
     if (error) return jsonError(`Nie udało się odczytać pozycji faktury: ${error.message}`, 500);
     if (!data) return jsonError("Nie znaleziono pozycji faktury.", 404);
     targetLine = data as Row;
+    if (!lineMatchesDomain(domain, targetLine)) return jsonError("Ta pozycja faktury nie należy do kontekstu tego modułu.", 403);
     invoiceId = String(targetLine.invoice_id ?? "");
   }
 
@@ -66,7 +76,7 @@ export async function GET(request: Request) {
 
   const [{ data: linesData, error: linesError }, { data: counterpartyData }, { data: documentData }] = await Promise.all([
     db.from("invoice_lines")
-      .select("id,invoice_id,line_number,description,quantity,unit,unit_price,net_amount,tax_rate,gross_amount,stock_item_id,supplier_sku")
+      .select("id,invoice_id,line_number,description,quantity,unit,unit_price,net_amount,tax_rate,gross_amount,stock_item_id,vehicle_id,supplier_sku")
       .eq("workspace_id", workspaceId)
       .eq("invoice_id", invoiceId)
       .order("line_number", { ascending: true }),
@@ -80,12 +90,8 @@ export async function GET(request: Request) {
   if (linesError) return jsonError(`Nie udało się odczytać pozycji faktury: ${linesError.message}`, 500);
   const lines = (linesData ?? []) as unknown as Row[];
 
-  if (!targetLine && stockItemId) {
-    targetLine = lines.find((line) => String(line.stock_item_id ?? "") === stockItemId) ?? null;
-  }
-  if (!targetLine && invoiceLineId) {
-    targetLine = lines.find((line) => String(line.id) === invoiceLineId) ?? null;
-  }
+  if (!targetLine && stockItemId) targetLine = lines.find((line) => String(line.stock_item_id ?? "") === stockItemId) ?? null;
+  if (!targetLine && invoiceLineId) targetLine = lines.find((line) => String(line.id) === invoiceLineId) ?? null;
 
   const document = documentData as Row | null;
   const versionId = String(document?.current_version_id ?? "");
