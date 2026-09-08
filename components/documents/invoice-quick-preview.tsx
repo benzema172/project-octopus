@@ -3,9 +3,9 @@
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ExternalLink } from "lucide-react";
-import type { Domain } from "@/lib/authorization";
 import styles from "./invoice-quick-preview.module.css";
 
+type Domain = "finance" | "warehouse" | "fleet";
 type Row = Record<string, unknown>;
 type Payload = {
   invoice: Row;
@@ -32,11 +32,16 @@ const cache = new Map<string, Payload>();
 const str = (value: unknown, fallback = "—") => value === null || value === undefined || value === "" ? fallback : String(value);
 const num = (value: unknown, digits = 2) => new Intl.NumberFormat("pl-PL", { maximumFractionDigits: digits }).format(Number(value ?? 0) || 0);
 const money = (value: unknown, currency = "PLN") => new Intl.NumberFormat("pl-PL", { style: "currency", currency: currency || "PLN", maximumFractionDigits: 2 }).format(Number(value ?? 0) || 0);
-const dateLabel = (value: unknown) => value ? new Intl.DateTimeFormat("pl-PL").format(new Date(String(value))) : "—";
+const dateLabel = (value: unknown) => {
+  if (!value) return "—";
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat("pl-PL").format(date);
+};
 
 function visibleLines(lines: Row[], targetLineId: string | null) {
   if (lines.length <= 8) return lines.map((line) => ({ kind: "line" as const, line }));
-  const targetIndex = Math.max(0, lines.findIndex((line) => String(line.id) === targetLineId));
+  const found = lines.findIndex((line) => String(line.id) === targetLineId);
+  const targetIndex = found >= 0 ? found : 0;
   const start = Math.max(0, targetIndex - 2);
   const end = Math.min(lines.length, targetIndex + 3);
   const result: Array<{ kind: "line"; line: Row } | { kind: "ellipsis"; key: string }> = [];
@@ -55,7 +60,7 @@ export function InvoiceQuickPreview({ workspaceId, domain, invoiceLineId, invoic
   const [error, setError] = useState<string | null>(null);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const key = [workspaceId, domain, invoiceLineId, invoiceId, invoiceNumber, stockItemId].map((v) => v ?? "").join("|");
-  const hasIdentity = Boolean(invoiceLineId || invoiceId || invoiceNumber);
+  const hasIdentity = Boolean(invoiceLineId || (domain === "finance" && (invoiceId || invoiceNumber)));
 
   const place = useCallback(() => {
     const rect = anchorRef.current?.getBoundingClientRect();
@@ -124,7 +129,9 @@ export function InvoiceQuickPreview({ workspaceId, domain, invoiceLineId, invoic
   const invoice = payload?.invoice;
   const currency = str(invoice?.currency, "PLN");
   const sourcePage = payload?.source ? Number(payload.source.page_no ?? payload.source.page_number ?? 0) : 0;
-  const fileHref = invoice?.id ? `/api/company/invoice-quick-preview/file?workspaceId=${encodeURIComponent(workspaceId)}&domain=${encodeURIComponent(domain)}&invoiceId=${encodeURIComponent(String(invoice.id))}${sourcePage ? `#page=${sourcePage}` : ""}` : "";
+  const fileParams = invoice?.id ? new URLSearchParams({ workspaceId, domain, invoiceId: String(invoice.id) }) : null;
+  if (fileParams && invoiceLineId) fileParams.set("invoiceLineId", invoiceLineId);
+  const fileHref = fileParams ? `/api/company/invoice-quick-preview/file?${fileParams.toString()}${sourcePage ? `#page=${sourcePage}` : ""}` : "";
   const renderedLines = payload ? visibleLines(payload.lines, payload.targetLineId) : [];
 
   return <>
