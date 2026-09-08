@@ -3,12 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Building2, CalendarDays, History, Search, TrendingDown, TrendingUp, X } from "lucide-react";
 import { InvoiceQuickPreview } from "@/components/documents/invoice-quick-preview";
+import { isWarehousePriceAlert550, recentWarehousePriceComparison550 } from "@/lib/warehouse/price-alert-policy-550";
 import { visibleWarehousePriceHistory450, warehouseInvoiceLabel450 } from "@/lib/warehouse/price-history-450";
 import styles from "./warehouse-prices-500.module.css";
 
 type Row = Record<string, unknown>;
 type Filter = "all" | "alerts" | "up" | "down";
 type Props = { workspaceId: string; items: Row[]; prices: Row[]; counterparties: Row[] };
+
+const ALERT_THRESHOLD_PCT = 10;
+const ALERT_WINDOW_OPTIONS = [30, 60, 90, 180] as const;
 
 const text = (value: unknown, fallback = "—") => value === null || value === undefined || value === "" ? fallback : String(value);
 const money = (value: unknown, currency = "PLN") => new Intl.NumberFormat("pl-PL", { style: "currency", currency: currency || "PLN", maximumFractionDigits: 2 }).format(Number(value ?? 0) || 0);
@@ -17,18 +21,25 @@ const dateLabel = (value: unknown) => { const raw = String(value ?? ""); if (!ra
 const normalized = (value: unknown) => String(value ?? "").replace(/\s+/g, " ").trim().toLocaleLowerCase("pl");
 const id = (value: unknown) => { const result = String(value ?? "").trim(); return result || null; };
 const invoiceLineId = (row: Row) => id(row.invoice_line_id) ?? (String(row.source_type ?? "") === "invoice_line" ? id(row.source_id) : null);
-const priceChange = (history: Row[]) => {
-  if (history.length < 2) return null;
-  const latest = Number(history[0].unit_price_net ?? 0);
-  const previous = Number(history[1].unit_price_net ?? 0);
-  return previous > 0 ? ((latest - previous) / previous) * 100 : null;
-};
 
 export function WarehousePrices500({ workspaceId, items, prices, counterparties }: Props) {
   const [active, setActive] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [alertWindowDays, setAlertWindowDays] = useState<number>(90);
+  const referenceDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  useEffect(() => {
+    const saved = Number(window.localStorage.getItem(`octopus:warehouse-price-alert-window:${workspaceId}`));
+    if ((ALERT_WINDOW_OPTIONS as readonly number[]).includes(saved)) setAlertWindowDays(saved);
+  }, [workspaceId]);
+
+  const changeAlertWindow = (days: number) => {
+    if (!(ALERT_WINDOW_OPTIONS as readonly number[]).includes(days)) return;
+    setAlertWindowDays(days);
+    window.localStorage.setItem(`octopus:warehouse-price-alert-window:${workspaceId}`, String(days));
+  };
 
   const counterpartyById = useMemo(() => new Map(counterparties.map((row) => [String(row.id), row])), [counterparties]);
   const histories = useMemo(() => {
@@ -46,12 +57,13 @@ export function WarehousePrices500({ workspaceId, items, prices, counterparties 
     const itemId = String(item.id);
     const history = histories.get(itemId) ?? [];
     const latest = history[0];
-    const change = priceChange(history);
+    const comparison = recentWarehousePriceComparison550(history, referenceDate, alertWindowDays);
+    const change = comparison?.changePct ?? null;
     const supplier = latest ? counterpartyById.get(String(latest.counterparty_id)) : undefined;
-    return { item, itemId, history, latest, change, supplier };
-  }).filter((row) => row.latest), [counterpartyById, histories, items]);
+    return { item, itemId, history, latest, comparison, change, supplier };
+  }).filter((row) => row.latest), [alertWindowDays, counterpartyById, histories, items, referenceDate]);
 
-  const alerts = useMemo(() => rows.filter((row) => row.change !== null && Math.abs(row.change) >= 10), [rows]);
+  const alerts = useMemo(() => rows.filter((row) => isWarehousePriceAlert550(row.comparison, ALERT_THRESHOLD_PCT)), [rows]);
   const increases = useMemo(() => alerts.filter((row) => Number(row.change) > 0).sort((a, b) => Number(b.change) - Number(a.change)), [alerts]);
   const decreases = useMemo(() => alerts.filter((row) => Number(row.change) < 0).sort((a, b) => Number(a.change) - Number(b.change)), [alerts]);
   const supplierCount = useMemo(() => new Set(rows.map((row) => String(row.latest?.counterparty_id ?? "")).filter(Boolean)).size, [rows]);
@@ -64,7 +76,7 @@ export function WarehousePrices500({ workspaceId, items, prices, counterparties 
     const terms = normalized(query).split(/\s+/).filter(Boolean);
     return rows.filter((row) => {
       const change = row.change;
-      if (filter === "alerts" && (change === null || Math.abs(change) < 10)) return false;
+      if (filter === "alerts" && !isWarehousePriceAlert550(row.comparison, ALERT_THRESHOLD_PCT)) return false;
       if (filter === "up" && (change === null || change <= 0)) return false;
       if (filter === "down" && (change === null || change >= 0)) return false;
       if (!terms.length) return true;
@@ -131,12 +143,19 @@ export function WarehousePrices500({ workspaceId, items, prices, counterparties 
 
   return <section className={styles.shell} data-warehouse-prices-500="">
     <header className={styles.titleBar}>
-      <div><small>CENY I DOSTAWCY</small><h2>Zakupy pod kontrolą</h2><p>Najważniejsze zmiany cen, dostawcy i pełna historia zakupów w jednym miejscu.</p></div>
+      <div><small>CENY I DOSTAWCY</small><h2>Zakupy pod kontrolą</h2><p>Pełna historia bez limitu. Alert powstaje tylko dla świeżych zakupów porównywalnych w wybranym oknie czasu.</p></div>
+      <label className={styles.alertWindow} data-price-alert-window="">
+        <span>Okno alertów</span>
+        <select value={alertWindowDays} onChange={(event) => changeAlertWindow(Number(event.target.value))} aria-label="Okno czasowe alertów cenowych">
+          {ALERT_WINDOW_OPTIONS.map((days) => <option key={days} value={days}>{days} dni</option>)}
+        </select>
+        <small>domyślnie 90 dni</small>
+      </label>
     </header>
 
     <div className={styles.metrics}>
       <div><History size={16} /><span><small>Pozycje z historią</small><strong>{rows.length}</strong></span></div>
-      <div><AlertTriangle size={16} /><span><small>Alerty ≥10%</small><strong>{alerts.length}</strong></span></div>
+      <div><AlertTriangle size={16} /><span><small>Alerty ≥10% · {alertWindowDays} dni</small><strong>{alerts.length}</strong></span></div>
       <div><Building2 size={16} /><span><small>Aktywni dostawcy</small><strong>{supplierCount}</strong></span></div>
       <div><CalendarDays size={16} /><span><small>Ostatnia aktualizacja</small><strong>{dateLabel(lastUpdate)}</strong></span></div>
     </div>
@@ -145,26 +164,26 @@ export function WarehousePrices500({ workspaceId, items, prices, counterparties 
       <section className={styles.signalCard}>
         <header><TrendingUp size={16} /><strong>Największe wzrosty</strong><span>{increases.length}</span></header>
         <div>{increases.slice(0, 6).map((row) => <button type="button" key={row.itemId} data-price-alert-item-id={row.itemId} className={styles.signalRow}>
-          <span><strong>{text(row.item.name)}</strong><small>{money(row.latest?.unit_price_net, text(row.latest?.currency, "PLN"))} · {text(row.supplier?.name)}</small></span>
+          <span><strong>{text(row.item.name)}</strong><small>{money(row.latest?.unit_price_net, text(row.latest?.currency, "PLN"))} · {text(row.supplier?.name)} · {row.comparison?.gapDays ?? 0} dni między zakupami</small></span>
           <b className={styles.up}>{pct(Number(row.change))}</b>
-        </button>)}{!increases.length ? <p className={styles.empty}>Brak istotnych wzrostów.</p> : null}</div>
+        </button>)}{!increases.length ? <p className={styles.empty}>Brak istotnych wzrostów w ostatnich {alertWindowDays} dniach.</p> : null}</div>
       </section>
       <section className={styles.signalCard}>
         <header><TrendingDown size={16} /><strong>Największe spadki</strong><span>{decreases.length}</span></header>
         <div>{decreases.slice(0, 6).map((row) => <button type="button" key={row.itemId} data-price-alert-item-id={row.itemId} className={styles.signalRow}>
-          <span><strong>{text(row.item.name)}</strong><small>{money(row.latest?.unit_price_net, text(row.latest?.currency, "PLN"))} · {text(row.supplier?.name)}</small></span>
+          <span><strong>{text(row.item.name)}</strong><small>{money(row.latest?.unit_price_net, text(row.latest?.currency, "PLN"))} · {text(row.supplier?.name)} · {row.comparison?.gapDays ?? 0} dni między zakupami</small></span>
           <b className={styles.down}>{pct(Number(row.change))}</b>
-        </button>)}{!decreases.length ? <p className={styles.empty}>Brak istotnych spadków.</p> : null}</div>
+        </button>)}{!decreases.length ? <p className={styles.empty}>Brak istotnych spadków w ostatnich {alertWindowDays} dniach.</p> : null}</div>
       </section>
     </div>
 
     <section className={styles.historyCard}>
       <header className={styles.historyHeader}>
-        <div><small>HISTORIA ZAKUPÓW</small><h2>Ceny i dostawcy</h2><p>{filteredRows.length} z {rows.length} kartotek · kliknij „Historia”, aby zobaczyć wcześniejsze zakupy.</p></div>
+        <div><small>HISTORIA ZAKUPÓW</small><h2>Ceny i dostawcy</h2><p>{filteredRows.length} z {rows.length} kartotek · historia pozostaje pełna niezależnie od okna alertów.</p></div>
         <div className={styles.controls}>
           <label className={styles.search}><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Produkt, dostawca, faktura…" aria-label="Szukaj w cenach i dostawcach" />{query ? <button type="button" onClick={() => setQuery("")} aria-label="Wyczyść"><X size={12} /></button> : null}</label>
           <div className={styles.filters}>
-            {([ ["all", "Wszystkie"], ["alerts", "Alerty ≥10%"], ["up", "Wzrosty"], ["down", "Spadki"] ] as Array<[Filter, string]>).map(([id, label]) => <button type="button" key={id} className={filter === id ? styles.filterActive : ""} onClick={() => setFilter(id)}>{label}</button>)}
+            {([ ["all", "Wszystkie"], ["alerts", "Alerty ≥10%"], ["up", "Wzrosty"], ["down", "Spadki"] ] as Array<[Filter, string]>).map(([filterId, label]) => <button type="button" key={filterId} className={filter === filterId ? styles.filterActive : ""} onClick={() => setFilter(filterId)}>{label}</button>)}
           </div>
         </div>
       </header>
@@ -174,7 +193,7 @@ export function WarehousePrices500({ workspaceId, items, prices, counterparties 
           return <tbody key={row.itemId}><tr>
             <td><strong>{text(row.item.name)}</strong><small>{[row.item.manufacturer, row.item.model, row.item.sku].filter(Boolean).join(" · ") || `${row.history.length} ${row.history.length === 1 ? "zakup" : "zakupów"}`}</small></td>
             <td><strong>{money(row.latest?.unit_price_net, text(row.latest?.currency, "PLN"))}</strong><small>{text(row.latest?.unit, row.item.unit as string)}</small></td>
-            <td>{row.change === null ? <span>—</span> : <button type="button" data-price-alert-item-id={row.itemId} className={`${styles.changeButton} ${row.change > 0 ? styles.up : styles.down}`}>{pct(row.change)}</button>}</td>
+            <td>{row.change === null ? <span title={`Brak świeżej bazy porównawczej w oknie ${alertWindowDays} dni`}>—</span> : <button type="button" data-price-alert-item-id={row.itemId} className={`${styles.changeButton} ${row.change > 0 ? styles.up : styles.down}`}>{pct(row.change)}</button>}</td>
             <td>{text(row.supplier?.name)}</td>
             <td>{dateLabel(row.latest?.observed_at ?? row.latest?.created_at)}</td>
             <td><InvoiceQuickPreview workspaceId={workspaceId} domain="warehouse" invoiceLineId={invoiceLineId(row.latest ?? {})} invoiceId={id(row.latest?.invoice_id)} invoiceNumber={id(row.latest?.invoice_number)} stockItemId={row.itemId}>{warehouseInvoiceLabel450(row.latest ?? {})}</InvoiceQuickPreview></td>
