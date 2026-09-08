@@ -10,7 +10,8 @@ const migration = read("supabase/migrations/20260908112232_warehouse_movement_de
 
 describe("Warehouse movement destination truth 5.3.1", () => {
   it("explains document-created drafts and shows actual source and destination before approval", () => {
-    expect(movementUi).toContain("AI · Wrzutnia");
+    expect(movementRoute).toContain("AI · Wrzutnia");
+    expect(movementUi).toContain("source_label");
     expect(movementUi).toContain("Zapas centralny");
     expect(movementUi).toContain("Przeznaczenie / odbiorca");
     expect(movementUi).toContain("Dopóki nie zatwierdzisz ruchu, rzeczywisty stan magazynu się nie zmienia");
