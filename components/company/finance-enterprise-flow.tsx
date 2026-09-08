@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowRightLeft, BadgeCheck, BookOpenCheck, Boxes, Check, ChevronDown, CircleDollarSign, FileInput, LoaderCircle, RefreshCw, Route, Send, TrendingDown, TrendingUp } from "lucide-react";
+import { InvoiceQuickPreview } from "@/components/documents/invoice-quick-preview";
 
 type Row = Record<string, unknown>;
 type Props = {
@@ -95,20 +96,14 @@ export function FinanceEnterpriseFlow({ workspaceId, data, canWrite, canApprove 
 
   return <section className="co-page enterprise-flow" aria-label="Obieg kosztu firmy">
     <header className="enterprise-flow-overview">
-      <div className="enterprise-flow-overview__title">
-        <span>Finanse</span>
-        <h1>Obieg kosztu</h1>
-      </div>
+      <div className="enterprise-flow-overview__title"><span>Finanse</span><h1>Obieg kosztu</h1></div>
       <ol className="enterprise-flow-steps" aria-label="Cztery etapy obiegu kosztu">
         <li><b>1</b><span><strong>Dokument</strong><small>Wrzutnia · KSeF · ERP</small></span></li>
         <li><b>2</b><span><strong>Kontrola</strong><small>AI · WM/PO/PZ/FV</small></span></li>
         <li><b>3</b><span><strong>Przypisanie</strong><small>inwestycja · firma</small></span></li>
         <li><b>4</b><span><strong>Rozliczenie</strong><small>NET/VAT · dekret</small></span></li>
       </ol>
-      <div className="enterprise-flow-overview__status" aria-label="Status obiegu">
-        <span><strong>{data.summary.matchingOk}</strong><small>zgodnych</small></span>
-        {data.summary.deviationsOpen > 0 ? <span className="enterprise-flow-overview__warning"><strong>{data.summary.deviationsOpen}</strong><small>wyjątków</small></span> : null}
-      </div>
+      <div className="enterprise-flow-overview__status" aria-label="Status obiegu"><span><strong>{data.summary.matchingOk}</strong><small>zgodnych</small></span>{data.summary.deviationsOpen > 0 ? <span className="enterprise-flow-overview__warning"><strong>{data.summary.deviationsOpen}</strong><small>wyjątków</small></span> : null}</div>
     </header>
 
     <div className="enterprise-flow-counters" aria-label="Bieżące zadania w obiegu">
@@ -124,7 +119,10 @@ export function FinanceEnterpriseFlow({ workspaceId, data, canWrite, canApprove 
     <Panel title="Dokumenty" eyebrow="1 · Wejście" meta={`${data.inbox.length} ostatnich`}>
       <p>Wrzutnia, KSeF, ERP i e-mail trafiają do jednego Inbox. Octopus odczytuje dokument i uruchamia dalszy obieg.</p>
       <div className="ops-simple-list">
-        {data.inbox.slice(0, 20).map((row) => <div key={String(row.id)}><span>{String(row.source_channel ?? "upload").toUpperCase()}</span><strong>{String(row.document_type ?? "dokument")} · {projectNames.get(String(row.project_id)) ?? "ogólne"}</strong><div className="ops-list-row__detail"><span className={statusClass(row.status)}>{String(row.status)}</span> · {date(row.received_at)}{row.invoice_id ? ` · faktura ${String(invoices.get(String(row.invoice_id))?.invoice_number ?? row.invoice_id)}` : ""}</div>{canWrite && row.document_id && ["error", "review"].includes(String(row.status)) ? <button className="secondary-button" disabled={pending} onClick={() => run("document_orchestrate", { documentId: row.document_id }, "Obieg dokumentu został przeliczony ponownie.")}><RefreshCw size={14}/>Ponów obieg</button> : null}</div>)}
+        {data.inbox.slice(0, 20).map((row) => {
+          const invoice = row.invoice_id ? invoices.get(String(row.invoice_id)) : undefined;
+          return <div key={String(row.id)}><span>{String(row.source_channel ?? "upload").toUpperCase()}</span><strong>{String(row.document_type ?? "dokument")} · {projectNames.get(String(row.project_id)) ?? "ogólne"}</strong><div className="ops-list-row__detail"><span className={statusClass(row.status)}>{String(row.status)}</span> · {date(row.received_at)}{invoice ? <> · faktura <InvoiceQuickPreview workspaceId={workspaceId} domain="finance" invoiceId={String(invoice.id)} invoiceNumber={String(invoice.invoice_number ?? "")}>{String(invoice.invoice_number ?? invoice.id)}</InvoiceQuickPreview></> : null}</div>{canWrite && row.document_id && ["error", "review"].includes(String(row.status)) ? <button className="secondary-button" disabled={pending} onClick={() => run("document_orchestrate", { documentId: row.document_id }, "Obieg dokumentu został przeliczony ponownie.")}><RefreshCw size={14}/>Ponów obieg</button> : null}</div>;
+        })}
         {!data.inbox.length ? <p className="ops-simple-list__empty">Brak dokumentów biznesowych. Pierwsza zatwierdzona faktura lub wpis integracyjny pojawi się tutaj automatycznie.</p> : null}
       </div>
       {canWrite ? <form className="ops-form" onSubmit={submitInbox}><div className="ops-auto-form-grid"><label>Kanał<select name="sourceChannel" defaultValue="api"><option value="api">API</option><option value="ksef">KSeF</option><option value="subiekt">Subiekt</option><option value="comarch">Comarch</option><option value="symfonia">Symfonia</option><option value="enova">enova</option><option value="email">E-mail</option></select></label><label>Identyfikator źródła<input name="externalKey" required placeholder="np. ERP:FV/123/2026"/></label><label>Typ<input name="documentType" defaultValue="invoice"/></label><label>Inwestycja<select name="projectId" defaultValue=""><option value="">Ogólne / nierozpoznane</option>{data.projects.map((project) => <option key={String(project.id)} value={String(project.id)}>{String(project.name)}</option>)}</select></label></div><button className="secondary-button" disabled={pending}><Send size={15}/>Przyjmij do Inbox</button></form> : null}
@@ -136,7 +134,7 @@ export function FinanceEnterpriseFlow({ workspaceId, data, canWrite, canApprove 
           const line = invoiceLines.get(String(row.invoice_line_id));
           const invoice = line ? invoices.get(String(line.invoice_id)) : undefined;
           const warnings = Array.isArray(row.warnings) ? row.warnings.map(String) : [];
-          return <div key={String(row.id)}><span>{String(invoice?.invoice_number ?? "Faktura")}</span><strong>{String(line?.description ?? `Pozycja ${row.invoice_line_id}`)}</strong><div className="ops-list-row__detail"><span className={statusClass(row.status)}>{String(row.status)}</span> · zamówiono {number(row.ordered_quantity)} · PZ {number(row.received_quantity)} · faktura {number(row.invoiced_quantity)} · cena PO {money(row.ordered_unit_price)} / FV {money(row.invoiced_unit_price)}{row.price_variance_percent != null ? ` · Δ ${number(row.price_variance_percent)}%` : ""}{warnings.length ? ` · ${warnings.join(" · ")}` : ""}</div><div className="ops-inline-action">{canWrite && invoice?.id ? <button className="secondary-button" disabled={pending} onClick={() => run("procurement_refresh", { invoiceId: invoice.id }, "Uzgodnienie zostało przeliczone.")}><RefreshCw size={14}/>Przelicz</button> : null}{canApprove && row.status === "review" ? <button className="approve-button" disabled={pending} onClick={() => run("procurement_approve", { matchId: row.id }, "Uzgodnienie zatwierdzone ręcznie z audytem.")}><Check size={14}/>Akceptuj wyjątek</button> : null}</div></div>;
+          return <div key={String(row.id)}><span><InvoiceQuickPreview workspaceId={workspaceId} domain="finance" invoiceLineId={line?.id ? String(line.id) : null} invoiceId={invoice?.id ? String(invoice.id) : null} invoiceNumber={invoice?.invoice_number ? String(invoice.invoice_number) : null}>{String(invoice?.invoice_number ?? "Faktura")}</InvoiceQuickPreview></span><strong>{String(line?.description ?? `Pozycja ${row.invoice_line_id}`)}</strong><div className="ops-list-row__detail"><span className={statusClass(row.status)}>{String(row.status)}</span> · zamówiono {number(row.ordered_quantity)} · PZ {number(row.received_quantity)} · faktura {number(row.invoiced_quantity)} · cena PO {money(row.ordered_unit_price)} / FV {money(row.invoiced_unit_price)}{row.price_variance_percent != null ? ` · Δ ${number(row.price_variance_percent)}%` : ""}{warnings.length ? ` · ${warnings.join(" · ")}` : ""}</div><div className="ops-inline-action">{canWrite && invoice?.id ? <button className="secondary-button" disabled={pending} onClick={() => run("procurement_refresh", { invoiceId: invoice.id }, "Uzgodnienie zostało przeliczone.")}><RefreshCw size={14}/>Przelicz</button> : null}{canApprove && row.status === "review" ? <button className="approve-button" disabled={pending} onClick={() => run("procurement_approve", { matchId: row.id }, "Uzgodnienie zatwierdzone ręcznie z audytem.")}><Check size={14}/>Akceptuj wyjątek</button> : null}</div></div>;
         })}
         {!data.procurementMatches.length ? <p className="ops-simple-list__empty">Brak pozycji do uzgodnienia. Mechanizm uruchomi się po pierwszej fakturze materiałowej.</p> : null}
       </div>
