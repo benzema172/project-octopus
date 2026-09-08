@@ -11,8 +11,11 @@ describe("HR quick compliance and module document library", () => {
     expect(hr).toContain("row.valid_until && isCurrent(row, referenceDate)");
     expect(hr).toContain('"medical_exam_create"');
     expect(hr).toContain('"safety_training_create"');
+    expect(hr).toContain('"qualification_create"');
+    expect(hr).toContain("Dodaj dokument umowy");
     expect(hr).toContain("Dodaj badanie lekarskie");
     expect(hr).toContain("Dodaj szkolenie BHP");
+    expect(hr).toContain("Dodaj uprawnienie");
     expect(hr).toContain('name="validUntil" type="date" min={referenceDate} required');
     expect(hr).toContain("Wygasa do 30 dni");
   });
