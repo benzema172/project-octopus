@@ -23,7 +23,7 @@ type Props = {
   data: HrData;
 };
 
-type QuickKind = "medical" | "bhp";
+type QuickKind = "medical" | "bhp" | "qualification";
 type QuickEntry = { kind: QuickKind; employeeId: string; employeeLabel: string } | null;
 
 function str(value: unknown, fallback = "—") {
@@ -120,7 +120,8 @@ export function HrFormalDocuments162({ workspaceId, referenceDate, canWrite, dat
     if (!quickEntry) return;
     const form = new FormData(event.currentTarget);
     const isMedical = quickEntry.kind === "medical";
-    const action = isMedical ? "medical_exam_create" : "safety_training_create";
+    const isBhp = quickEntry.kind === "bhp";
+    const action = isMedical ? "medical_exam_create" : isBhp ? "safety_training_create" : "qualification_create";
     const payload = isMedical
       ? {
           employeeId: quickEntry.employeeId,
@@ -129,13 +130,21 @@ export function HrFormalDocuments162({ workspaceId, referenceDate, canWrite, dat
           validUntil: form.get("validUntil"),
           result: form.get("result")
         }
-      : {
-          employeeId: quickEntry.employeeId,
-          trainingType: form.get("trainingType"),
-          provider: form.get("provider"),
-          completedAt: form.get("completedAt"),
-          validUntil: form.get("validUntil")
-        };
+      : isBhp
+        ? {
+            employeeId: quickEntry.employeeId,
+            trainingType: form.get("trainingType"),
+            provider: form.get("provider"),
+            completedAt: form.get("completedAt"),
+            validUntil: form.get("validUntil")
+          }
+        : {
+            employeeId: quickEntry.employeeId,
+            qualificationType: form.get("qualificationType"),
+            number: form.get("number"),
+            issuedAt: form.get("issuedAt"),
+            validUntil: form.get("validUntil")
+          };
 
     setQuickError(null);
     startTransition(async () => {
@@ -146,12 +155,17 @@ export function HrFormalDocuments162({ workspaceId, referenceDate, canWrite, dat
           body: JSON.stringify({ workspaceId, action, payload })
         });
         const result = await response.json().catch(() => ({})) as { error?: string };
-        if (!response.ok) throw new Error(result.error ?? "Nie udało się zapisać terminu.");
-        setCompletionMessage(isMedical ? `Zapisano badanie lekarskie: ${quickEntry.employeeLabel}.` : `Zapisano szkolenie BHP: ${quickEntry.employeeLabel}.`);
+        if (!response.ok) throw new Error(result.error ?? "Nie udało się zapisać informacji.");
+        const success = isMedical
+          ? `Zapisano badanie lekarskie: ${quickEntry.employeeLabel}.`
+          : isBhp
+            ? `Zapisano szkolenie BHP: ${quickEntry.employeeLabel}.`
+            : `Zapisano uprawnienie: ${quickEntry.employeeLabel}.`;
+        setCompletionMessage(success);
         setQuickEntry(null);
         router.refresh();
       } catch (error) {
-        setQuickError(error instanceof Error ? error.message : "Nie udało się zapisać terminu.");
+        setQuickError(error instanceof Error ? error.message : "Nie udało się zapisać informacji.");
       }
     });
   };
@@ -172,10 +186,10 @@ export function HrFormalDocuments162({ workspaceId, referenceDate, canWrite, dat
           <thead><tr><th>Pracownik</th><th>Umowa / akta</th><th>Badania</th><th>BHP</th><th>Uprawnienia</th><th>Terminy</th><th /></tr></thead>
           <tbody>{rows.map((row) => <tr key={row.employeeId}>
             <td><div className={styles.person}><strong>{employeeName(row.employee)}</strong><span>{str(row.activeEmployment?.position, "Bez stanowiska")} · {str(row.activeEmployment?.employment_type, "forma nieuzupełniona")}</span></div></td>
-            <td>{row.contractDocument ? <span className={`${styles.state} ${styles.ok}`}><CheckCircle2 size={12} /> Umowa w aktach · {row.links.length} plików</span> : <span className={`${styles.state} ${styles.bad}`}><CircleAlert size={12} /> Brak dokumentu umowy</span>}</td>
+            <td><div className={styles.stateWithAction}>{row.contractDocument ? <span className={`${styles.state} ${styles.ok}`}><CheckCircle2 size={12} /> Umowa w aktach · {row.links.length} plików</span> : <span className={`${styles.state} ${styles.bad}`}><CircleAlert size={12} /> Brak dokumentu umowy</span>}<button type="button" className={styles.quickAdd} disabled={!canWrite} onClick={() => openUploadForEmployee(row.employee)} aria-label={`Dodaj dokument umowy: ${employeeName(row.employee)}`} title="Dodaj dokument umowy"><Plus size={12} /></button></div></td>
             <td><div className={styles.stateWithAction}>{row.currentExam ? <span className={`${styles.state} ${styles.ok}`}><CheckCircle2 size={12} /> Ważne do {dateLabel(row.currentExam.valid_until)}</span> : <span className={`${styles.state} ${styles.bad}`}><CircleAlert size={12} /> Brak ważnego badania</span>}<button type="button" className={styles.quickAdd} disabled={!canWrite} onClick={() => openQuick("medical", row.employee)} aria-label={`Dodaj badanie lekarskie: ${employeeName(row.employee)}`} title="Dodaj badanie lekarskie"><Plus size={12} /></button></div></td>
             <td><div className={styles.stateWithAction}>{row.currentTraining ? <span className={`${styles.state} ${styles.ok}`}><CheckCircle2 size={12} /> Ważne do {dateLabel(row.currentTraining.valid_until)}</span> : <span className={`${styles.state} ${styles.bad}`}><CircleAlert size={12} /> Brak ważnego BHP</span>}<button type="button" className={styles.quickAdd} disabled={!canWrite} onClick={() => openQuick("bhp", row.employee)} aria-label={`Dodaj szkolenie BHP: ${employeeName(row.employee)}`} title="Dodaj szkolenie BHP"><Plus size={12} /></button></div></td>
-            <td><span className={`${styles.state} ${styles.neutral}`}>{row.qualifications.filter((item) => isCurrent(item, referenceDate)).length} aktywnych</span></td>
+            <td><div className={styles.stateWithAction}><span className={`${styles.state} ${styles.neutral}`}>{row.qualifications.filter((item) => isCurrent(item, referenceDate)).length} aktywnych</span><button type="button" className={styles.quickAdd} disabled={!canWrite} onClick={() => openQuick("qualification", row.employee)} aria-label={`Dodaj uprawnienie: ${employeeName(row.employee)}`} title="Dodaj uprawnienie"><Plus size={12} /></button></div></td>
             <td>{row.expired.length ? <span className={`${styles.state} ${styles.bad}`}>{row.expired.length} po terminie</span> : row.expiring.length ? <span className={`${styles.state} ${styles.warn}`}>{row.expiring.length} do 30 dni</span> : <span className={`${styles.state} ${styles.ok}`}>Bez pilnych terminów</span>}</td>
             <td><button type="button" className={styles.rowAction} disabled={!canWrite} onClick={() => openUploadForEmployee(row.employee)}>Uzupełnij →</button></td>
           </tr>)}</tbody>
@@ -187,7 +201,7 @@ export function HrFormalDocuments162({ workspaceId, referenceDate, canWrite, dat
     {quickEntry ? <div className={styles.modalBackdrop} role="presentation">
       <section className={styles.quickDialog} role="dialog" aria-modal="true" aria-labelledby="hr-quick-title">
         <header className={styles.quickHeader}>
-          <div><small>Szybkie uzupełnienie</small><strong id="hr-quick-title">{quickEntry.kind === "medical" ? "Badanie lekarskie" : "Szkolenie BHP"}</strong><span>{quickEntry.employeeLabel}</span></div>
+          <div><small>Szybkie uzupełnienie</small><strong id="hr-quick-title">{quickEntry.kind === "medical" ? "Badanie lekarskie" : quickEntry.kind === "bhp" ? "Szkolenie BHP" : "Uprawnienie"}</strong><span>{quickEntry.employeeLabel}</span></div>
           <button type="button" className={styles.quickClose} onClick={() => setQuickEntry(null)} aria-label="Zamknij"><X size={15} /></button>
         </header>
         <form className={styles.quickForm} onSubmit={submitQuick}>
@@ -198,15 +212,22 @@ export function HrFormalDocuments162({ workspaceId, referenceDate, canWrite, dat
               <label>Ważne do<input name="validUntil" type="date" min={referenceDate} required /></label>
             </div>
             <label>Wynik<select name="result" defaultValue="fit"><option value="fit">Zdolny do pracy</option><option value="fit_with_restrictions">Zdolny z ograniczeniami</option><option value="unfit">Niezdolny do pracy</option></select></label>
-          </> : <>
+          </> : quickEntry.kind === "bhp" ? <>
             <label>Rodzaj szkolenia<input name="trainingType" defaultValue="Okresowe" required /></label>
             <div className={styles.quickGrid}>
               <label>Data szkolenia<input name="completedAt" type="date" defaultValue={referenceDate} required /></label>
               <label>Ważne do<input name="validUntil" type="date" min={referenceDate} required /></label>
             </div>
             <label>Organizator / prowadzący<input name="provider" placeholder="opcjonalnie" /></label>
+          </> : <>
+            <label>Rodzaj uprawnienia<input name="qualificationType" placeholder="np. SEP G1, UDT, spawacz" required /></label>
+            <label>Numer / identyfikator<input name="number" placeholder="opcjonalnie" /></label>
+            <div className={styles.quickGrid}>
+              <label>Data wydania<input name="issuedAt" type="date" defaultValue={referenceDate} /></label>
+              <label>Ważne do<input name="validUntil" type="date" /></label>
+            </div>
           </>}
-          <p className={styles.quickNote}>Termin ważności jest wymagany, ponieważ na jego podstawie Kadry oznaczają braki, wygaśnięcie i pozycje kończące się w ciągu 30 dni.</p>
+          <p className={styles.quickNote}>{quickEntry.kind === "qualification" ? "Dla uprawnienia bezterminowego zostaw pole „Ważne do” puste. Jeśli podasz termin, Kadry automatycznie uwzględnią go w kontroli wygasania." : "Termin ważności jest wymagany, ponieważ na jego podstawie Kadry oznaczają braki, wygaśnięcie i pozycje kończące się w ciągu 30 dni."}</p>
           {quickError ? <div className={styles.quickError} role="alert">{quickError}</div> : null}
           <div className={styles.quickActions}><button type="button" className={styles.quickSecondary} onClick={() => setQuickEntry(null)}>Anuluj</button><button type="submit" className={styles.quickPrimary} disabled={pending}>{pending ? "Zapisywanie…" : "Zapisz"}</button></div>
         </form>
