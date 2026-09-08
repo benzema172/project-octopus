@@ -30,10 +30,10 @@ export function WarehousePriceAlertInspector490({ workspaceId, items, prices, co
   }, [prices]);
 
   useEffect(() => {
-    const root = document.querySelector<HTMLElement>('section[data-warehouse-experience="3.1"]');
-    if (!root) return;
     let frame = 0;
     const decorate = () => {
+      const root = document.querySelector<HTMLElement>('section[data-warehouse-experience="3.1"]');
+      if (!root) return;
       const panels = Array.from(root.querySelectorAll<HTMLElement>("section"));
       const panel = panels.find((node) => node.querySelector(":scope > header strong")?.textContent?.trim() === "Alerty zmian cen");
       const body = panel?.querySelector<HTMLElement>(":scope > div"); if (!body) return;
@@ -47,8 +47,8 @@ export function WarehousePriceAlertInspector490({ workspaceId, items, prices, co
     const openFromTarget = (target: EventTarget | null) => { const element = target instanceof Element ? target.closest<HTMLElement>("[data-price-alert-item-id]") : null; if (!element?.dataset.priceAlertItemId) return false; setSelectedItemId(element.dataset.priceAlertItemId); return true; };
     const onClick = (event: Event) => { if (openFromTarget(event.target)) return; const button = event.target instanceof Element ? event.target.closest("button") : null; if (button?.textContent?.replace(/\s+/g, " ").trim().startsWith("Ceny i dostawcy")) scheduleDecorate(); };
     const onKeyDown = (event: KeyboardEvent) => { if (!["Enter", " "].includes(event.key)) return; if (!openFromTarget(event.target)) return; event.preventDefault(); };
-    root.addEventListener("click", onClick); root.addEventListener("keydown", onKeyDown); scheduleDecorate();
-    return () => { if (frame) window.cancelAnimationFrame(frame); root.removeEventListener("click", onClick); root.removeEventListener("keydown", onKeyDown); };
+    document.addEventListener("click", onClick); document.addEventListener("keydown", onKeyDown); scheduleDecorate();
+    return () => { if (frame) window.cancelAnimationFrame(frame); document.removeEventListener("click", onClick); document.removeEventListener("keydown", onKeyDown); };
   }, [itemIdsByName]);
 
   const item = selectedItemId ? items.find((row) => String(row.id) === selectedItemId) : null;
