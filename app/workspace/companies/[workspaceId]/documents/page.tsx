@@ -156,11 +156,11 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
           </div>
           <div className={styles.moduleGroups}>
             {groupedDocuments.map((group) => (
-              <section className={`${styles.moduleCard} ${group.id === "unassigned" ? styles.unassigned : ""}`} key={group.id} aria-labelledby={`documents-module-${group.id}`}>
-                <header className={styles.moduleHeader}>
+              <details className={`${styles.moduleCard} ${group.id === "unassigned" ? styles.unassigned : ""}`} key={group.id}>
+                <summary className={styles.moduleHeader} aria-labelledby={`documents-module-${group.id}`}>
                   <div className={styles.moduleTitle}><span className={styles.moduleIcon}><FolderOpen size={17} aria-hidden="true" /></span><div><strong id={`documents-module-${group.id}`}>{group.label}</strong><small>{group.caption}</small></div></div>
-                  <span className={styles.moduleCount}>{group.documents.length}</span>
-                </header>
+                  <span className={styles.moduleMeta}><span className={styles.moduleCount}>{group.documents.length}</span><ChevronDown className={styles.moduleChevron} size={16} aria-hidden="true" /></span>
+                </summary>
                 <div className="co-document-table">
                   {group.documents.map((document) => {
                     const fallbackHref = document.project_id
@@ -177,7 +177,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
                     );
                   })}
                 </div>
-              </section>
+              </details>
             ))}
           </div>
         </> : <div className="co-empty-state"><strong>Brak dokumentów w firmie.</strong><p>Otwórz Wrzutnię i dodaj pierwszy plik.</p></div>}
