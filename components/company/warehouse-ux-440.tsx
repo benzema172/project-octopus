@@ -158,7 +158,8 @@ export function WarehouseUx440({ workspaceId, canWrite, warehouses, initialTab }
       const scope = currentSection();
       if (!scope) return;
 
-      if (activeTab.current !== "stock") {
+      const showStockSearch = activeTab.current === "stock";
+      if (!showStockSearch) {
         teardownStockSearchHost();
         return;
       }
