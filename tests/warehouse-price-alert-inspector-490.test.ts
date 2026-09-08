@@ -7,7 +7,7 @@ describe("Warehouse price alert inspector 4.9", () => {
   const inspector = read("components/company/warehouse-price-alert-inspector-490.tsx");
   const operations = read("components/company/operations/warehouse-operations.tsx");
 
-  it("mounts the price alert inspector next to the native warehouse workspace", () => {
+  it("mounts the price alert inspector next to the warehouse workspace", () => {
     expect(operations).toContain("WarehousePriceAlertInspector490");
     expect(operations).toContain("items={items} prices={prices} counterparties={counterparties}");
   });
@@ -20,10 +20,10 @@ describe("Warehouse price alert inspector 4.9", () => {
     expect(inspector).toContain("warehouseInvoiceLabel450");
   });
 
-  it("adds click and keyboard access without observing the whole document body", () => {
+  it("supports native and redesigned price rows without observing document.body", () => {
     expect(inspector).toContain("data-price-alert-item-id");
-    expect(inspector).toContain('root.addEventListener("click", onClick)');
-    expect(inspector).toContain('root.addEventListener("keydown", onKeyDown)');
+    expect(inspector).toContain('document.addEventListener("click", onClick)');
+    expect(inspector).toContain('document.addEventListener("keydown", onKeyDown)');
     expect(inspector).not.toContain("MutationObserver");
     expect(inspector).not.toContain("document.body");
   });
