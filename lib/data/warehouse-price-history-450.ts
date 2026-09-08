@@ -19,7 +19,7 @@ async function fetchInvoiceLines(workspaceId: string, ids: string[]) {
   const result: Row[] = [];
   for (let index = 0; index < ids.length; index += 400) {
     const { data, error } = await db.from("invoice_lines")
-      .select("id,invoice_id")
+      .select("id,invoice_id,stock_item_id,vehicle_id")
       .eq("workspace_id", workspaceId)
       .in("id", ids.slice(index, index + 400));
     if (error) throw new Error(`Nie udało się powiązać historii cen z fakturami: ${error.message}`);
@@ -79,36 +79,56 @@ export async function enrichWarehousePriceHistory450(workspaceId: string, observ
   const invoices = await fetchRowsByIds(workspaceId, "invoices", "id,invoice_number", [...invoiceIds]);
   const invoiceNumberById = new Map(invoices.map((row) => [String(row.id), String(row.invoice_number ?? "").trim()]));
 
-  const resolveInvoiceNumber = (row: Row) => {
+  const resolveInvoiceTarget = (row: Row) => {
     const sourceType = String(row.source_type ?? "");
     const sourceId = String(row.source_id ?? "");
-    if (!sourceId) return null;
+    if (!sourceId) return { invoice_number: null, invoice_id: null, invoice_line_id: null };
 
     if (sourceType === "invoice_line") {
       const line = invoiceLineById.get(sourceId);
-      return line ? invoiceNumberById.get(String(line.invoice_id ?? "")) || null : null;
+      const invoiceId = cleanId(line?.invoice_id);
+      return {
+        invoice_number: invoiceId ? invoiceNumberById.get(invoiceId) || null : null,
+        invoice_id: invoiceId,
+        invoice_line_id: line ? sourceId : null
+      };
     }
 
     if (sourceType === "warehouse_ai_line") {
       const line = aiLineById.get(sourceId);
       const review = line ? reviewById.get(String(line.review_id ?? "")) : null;
-      if (!review) return null;
-      return invoiceNumberById.get(String(review.invoice_id ?? "")) || String(review.document_number ?? "").trim() || null;
+      const invoiceId = cleanId(review?.invoice_id);
+      return {
+        invoice_number: invoiceId ? invoiceNumberById.get(invoiceId) || String(review?.document_number ?? "").trim() || null : String(review?.document_number ?? "").trim() || null,
+        invoice_id: invoiceId,
+        invoice_line_id: null
+      };
     }
 
     if (sourceType === "stock_movement_line") {
       const line = movementLineById.get(sourceId);
-      if (!line) return null;
-      const invoiceLine = invoiceLineById.get(String(line.source_invoice_line_id ?? ""));
-      const fromInvoiceLine = invoiceLine ? invoiceNumberById.get(String(invoiceLine.invoice_id ?? "")) : null;
-      if (fromInvoiceLine) return fromInvoiceLine;
+      if (!line) return { invoice_number: null, invoice_id: null, invoice_line_id: null };
+      const invoiceLineId = cleanId(line.source_invoice_line_id);
+      const invoiceLine = invoiceLineId ? invoiceLineById.get(invoiceLineId) : null;
+      const invoiceIdFromLine = cleanId(invoiceLine?.invoice_id);
+      if (invoiceIdFromLine) {
+        return {
+          invoice_number: invoiceNumberById.get(invoiceIdFromLine) || null,
+          invoice_id: invoiceIdFromLine,
+          invoice_line_id: invoiceLineId
+        };
+      }
       const movement = movementById.get(String(line.movement_id ?? ""));
-      if (!movement) return null;
-      return invoiceNumberById.get(String(movement.source_invoice_id ?? "")) || String(movement.document_number ?? "").trim() || null;
+      const invoiceId = cleanId(movement?.source_invoice_id);
+      return {
+        invoice_number: invoiceId ? invoiceNumberById.get(invoiceId) || String(movement?.document_number ?? "").trim() || null : String(movement?.document_number ?? "").trim() || null,
+        invoice_id: invoiceId,
+        invoice_line_id: null
+      };
     }
 
-    return null;
+    return { invoice_number: null, invoice_id: null, invoice_line_id: null };
   };
 
-  return observations.map((row) => ({ ...row, invoice_number: resolveInvoiceNumber(row) }));
+  return observations.map((row) => ({ ...row, ...resolveInvoiceTarget(row) }));
 }
