@@ -9,11 +9,20 @@ import { inlineContentDisposition } from "@/lib/r2/sanitize";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
-const ALLOWED_DOMAINS = new Set<Domain>(["investments", "finance", "hr", "warehouse", "fleet", "templates", "reports", "settings"]);
+const ALLOWED_DOMAINS = new Set<Domain>(["finance", "warehouse", "fleet"]);
 
 type InvoiceRow = { id: string; document_id: string | null };
 type DocumentRow = { id: string; current_version_id: string | null };
 type VersionRow = { id: string; file_name: string; mime_type: string; r2_bucket: string; r2_object_key: string; malware_scan_status: string | null };
+type InvoiceLineRow = { id: string; invoice_id: string; stock_item_id: string | null; vehicle_id: string | null };
+
+function lineMatchesDomain(domain: Domain, line: InvoiceLineRow | null) {
+  if (domain === "finance") return true;
+  if (!line) return false;
+  if (domain === "warehouse") return Boolean(line.stock_item_id);
+  if (domain === "fleet") return Boolean(line.vehicle_id);
+  return false;
+}
 
 export async function GET(request: Request) {
   const user = await getRequestUser(request);
@@ -22,17 +31,27 @@ export async function GET(request: Request) {
   const workspaceId = url.searchParams.get("workspaceId")?.trim() ?? "";
   const domainValue = url.searchParams.get("domain")?.trim() ?? "";
   const invoiceId = url.searchParams.get("invoiceId")?.trim() ?? "";
+  const invoiceLineId = url.searchParams.get("invoiceLineId")?.trim() ?? "";
   if (!workspaceId || !domainValue || !invoiceId) return new Response("Brakuje kontekstu faktury.", { status: 400 });
-  if (!ALLOWED_DOMAINS.has(domainValue as Domain)) return new Response("Nieprawidłowa domena dostępu.", { status: 400 });
+  if (!ALLOWED_DOMAINS.has(domainValue as Domain)) return new Response("Ten moduł nie obsługuje podglądu faktur.", { status: 400 });
   const domain = domainValue as Domain;
+  if (domain !== "finance" && !invoiceLineId) return new Response("Otwieranie faktury poza Finansami wymaga dokładnej pozycji.", { status: 400 });
 
   const workspace = await getWorkspaceForUser(user, workspaceId);
   if (!workspace) return new Response("Brak dostępu do firmy.", { status: 403 });
-  if (!await hasDomainAccess({ workspaceId, userId: user.id, domain, level: "read" })) {
-    return new Response("Brak dostępu do faktury w tym module.", { status: 403 });
-  }
+  if (!await hasDomainAccess({ workspaceId, userId: user.id, domain, level: "read" })) return new Response("Brak dostępu do faktury w tym module.", { status: 403 });
 
   const db = createServiceSupabaseClient();
+  if (invoiceLineId) {
+    const { data: line } = await db.from("invoice_lines")
+      .select("id,invoice_id,stock_item_id,vehicle_id")
+      .eq("workspace_id", workspaceId)
+      .eq("id", invoiceLineId)
+      .eq("invoice_id", invoiceId)
+      .maybeSingle<InvoiceLineRow>();
+    if (!line || !lineMatchesDomain(domain, line)) return new Response("Ta pozycja nie należy do kontekstu tego modułu.", { status: 403 });
+  }
+
   const { data: invoice } = await db.from("invoices").select("id,document_id").eq("workspace_id", workspaceId).eq("id", invoiceId).maybeSingle<InvoiceRow>();
   if (!invoice?.document_id) return new Response("Faktura nie ma zapisanego dokumentu źródłowego.", { status: 404 });
   const { data: document } = await db.from("documents").select("id,current_version_id").eq("workspace_id", workspaceId).eq("id", invoice.document_id).maybeSingle<DocumentRow>();
