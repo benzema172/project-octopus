@@ -2,6 +2,7 @@
 
 import { WarehouseMarket410 } from "@/components/company/warehouse-market-410";
 import { WarehousePriceAlertInspector490 } from "@/components/company/warehouse-price-alert-inspector-490";
+import { WarehousePrices500 } from "@/components/company/warehouse-prices-500";
 import { WarehouseStockValueOverlay480 } from "@/components/company/warehouse-stock-value-overlay-480";
 import { WarehouseUx440 } from "@/components/company/warehouse-ux-440";
 import type { Data, Row } from "@/components/company/operations/module-shell";
@@ -71,5 +72,6 @@ export default function WarehouseOperations({ workspaceId, data, canWrite, canAp
       canApprove={canApprove}
       query={query}
     />
+    <WarehousePrices500 workspaceId={workspaceId} items={items} prices={prices} counterparties={counterparties} />
   </>;
 }
