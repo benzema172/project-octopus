@@ -22,6 +22,15 @@ describe("Warehouse prices 5.0", () => {
     expect(inspector).toContain('document.addEventListener("click", onClick)');
   });
 
+  it("separates unlimited history from a configurable recent alert window", () => {
+    const source = read("components/company/warehouse-prices-500.tsx");
+    expect(source).toContain("recentWarehousePriceComparison550");
+    expect(source).toContain("Okno alertów");
+    expect(source).toContain("[30, 60, 90, 180]");
+    expect(source).toContain("Pełna historia bez limitu");
+    expect(source).toContain("octopus:warehouse-price-alert-window");
+  });
+
   it("is wired into the active warehouse operations shell", () => {
     const operations = read("components/company/operations/warehouse-operations.tsx");
     expect(operations).toContain("WarehousePrices500");
