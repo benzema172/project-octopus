@@ -1,6 +1,7 @@
 "use client";
 
 import { WarehouseMarket410 } from "@/components/company/warehouse-market-410";
+import { WarehousePriceAlertInspector490 } from "@/components/company/warehouse-price-alert-inspector-490";
 import { WarehouseUx440 } from "@/components/company/warehouse-ux-440";
 import type { Data, Row } from "@/components/company/operations/module-shell";
 import { visibleWarehousePriceHistory450 } from "@/lib/warehouse/price-history-450";
@@ -53,6 +54,7 @@ export default function WarehouseOperations({ workspaceId, data, canWrite, canAp
       purchaseOrders={purchaseOrders}
       initialTab={initialTab}
     />
+    <WarehousePriceAlertInspector490 items={items} prices={prices} counterparties={counterparties} />
     <WarehouseMarket410
       workspaceId={workspaceId}
       data={normalizedData}
