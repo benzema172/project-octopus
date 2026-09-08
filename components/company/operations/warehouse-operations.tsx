@@ -54,7 +54,7 @@ export default function WarehouseOperations({ workspaceId, data, canWrite, canAp
       purchaseOrders={purchaseOrders}
       initialTab={initialTab}
     />
-    <WarehousePriceAlertInspector490 items={items} prices={prices} counterparties={counterparties} />
+    <WarehousePriceAlertInspector490 workspaceId={workspaceId} items={items} prices={prices} counterparties={counterparties} />
     <WarehouseMarket410
       workspaceId={workspaceId}
       data={normalizedData}
