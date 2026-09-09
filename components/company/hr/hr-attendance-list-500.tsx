@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarDays, CalendarRange, ChevronDown, ChevronRight, Printer, UsersRound, X } from "lucide-react";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { isPolishWorkingDay } from "@/lib/hr/polish-work-calendar";
 import type { HrWorkspaceData } from "@/lib/hr/types";
 import styles from "./hr-attendance-list-500.module.css";
@@ -9,6 +9,7 @@ import styles from "./hr-attendance-list-500.module.css";
 type Row = Record<string, unknown>;
 
 type Props = {
+  workspaceId: string;
   data: HrWorkspaceData;
 };
 
@@ -16,8 +17,16 @@ type AttendanceDay = {
   date: string;
   dayName: string;
   status: string;
-  statusKind: "work" | "vacation" | "absence" | "missing" | "free" | "outside" | "conflict";
+  statusKind: "work" | "vacation" | "sick" | "absence" | "missing" | "free" | "outside" | "conflict";
   hours: number;
+};
+
+type DayStatusRow = {
+  id: string;
+  employee_id: string;
+  work_date: string;
+  status: string;
+  source?: string;
 };
 
 type PeriodReport = {
@@ -96,17 +105,32 @@ function monthName(value: string) {
   return new Date(`${value}-01T00:00:00Z`).toLocaleDateString("pl-PL", { month: "long", year: "numeric", timeZone: "UTC" });
 }
 
+function dayStatusKey(employeeId: string, date: string) {
+  return `${employeeId}|${date}`;
+}
+
 function summarize(rows: AttendanceDay[]) {
   return {
     workDays: rows.filter((row) => row.statusKind === "work").length,
     totalHours: rows.reduce((sum, row) => sum + row.hours, 0),
     vacationDays: rows.filter((row) => row.statusKind === "vacation").length,
+    sickDays: rows.filter((row) => row.statusKind === "sick").length,
     absenceDays: rows.filter((row) => row.statusKind === "absence").length,
     missingDays: rows.filter((row) => row.statusKind === "missing").length
   };
 }
 
-export function HrAttendanceList500({ data }: Props) {
+function mergeDayStatuses(current: DayStatusRow[], incoming: DayStatusRow[], from: string, to: string) {
+  const map = new Map<string, DayStatusRow>();
+  for (const row of current) {
+    const date = String(row.work_date).slice(0, 10);
+    if (date < from || date > to) map.set(dayStatusKey(String(row.employee_id), date), row);
+  }
+  for (const row of incoming) map.set(dayStatusKey(String(row.employee_id), String(row.work_date).slice(0, 10)), row);
+  return [...map.values()];
+}
+
+export function HrAttendanceList500({ workspaceId, data }: Props) {
   const [month, setMonth] = useState(data.referenceDate.slice(0, 7));
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [rangeEmployeeId, setRangeEmployeeId] = useState<string | null>(null);
@@ -115,6 +139,9 @@ export function HrAttendanceList500({ data }: Props) {
   const [rangeError, setRangeError] = useState<string | null>(null);
   const [report, setReport] = useState<PeriodReport | null>(null);
   const [printTarget, setPrintTarget] = useState<PrintTarget | null>(null);
+  const [dayStatuses, setDayStatuses] = useState<DayStatusRow[]>([]);
+  const [dayStatusError, setDayStatusError] = useState<string | null>(null);
+  const [dayStatusLoading, setDayStatusLoading] = useState(false);
 
   const dates = useMemo(() => monthDates(month), [month]);
   const monthStart = dates[0] ?? `${month}-01`;
@@ -142,6 +169,35 @@ export function HrAttendanceList500({ data }: Props) {
     return map;
   }, [data.leaves]);
 
+  const dayStatusIndex = useMemo(() => new Map(dayStatuses.map((row) => [dayStatusKey(String(row.employee_id), String(row.work_date).slice(0, 10)), row])), [dayStatuses]);
+
+  const fetchDayStatuses = useCallback(async (from: string, to: string) => {
+    const params = new URLSearchParams({ workspaceId, from, to });
+    const response = await fetch(`/api/company/hr/day-status?${params.toString()}`, { cache: "no-store" });
+    const result = await response.json().catch(() => ({})) as { rows?: DayStatusRow[]; error?: string };
+    if (!response.ok) throw new Error(result.error ?? "Nie udało się pobrać statusów Chorobowe.");
+    return result.rows ?? [];
+  }, [workspaceId]);
+
+  const loadDayStatuses = useCallback(async (from: string, to: string) => {
+    setDayStatusLoading(true);
+    setDayStatusError(null);
+    try {
+      const rows = await fetchDayStatuses(from, to);
+      setDayStatuses((current) => mergeDayStatuses(current, rows, from, to));
+      return true;
+    } catch (reason) {
+      setDayStatusError(reason instanceof Error ? reason.message : "Nie udało się pobrać statusów Chorobowe.");
+      return false;
+    } finally {
+      setDayStatusLoading(false);
+    }
+  }, [fetchDayStatuses]);
+
+  useEffect(() => {
+    void loadDayStatuses(monthStart, monthEnd);
+  }, [loadDayStatuses, monthEnd, monthStart]);
+
   const attendanceForDates = (employee: Row, requestedDates: string[]): AttendanceDay[] => {
     const id = String(employee.id);
     return requestedDates.map((date) => {
@@ -151,7 +207,11 @@ export function HrAttendanceList500({ data }: Props) {
       const hours = entries.reduce((sum, row) => sum + Number(row.hours ?? 0) + Number(row.overtime_hours ?? 0), 0);
       const workingDay = isPolishWorkingDay(date);
       const leave = workingDay ? (leaveIndex.get(id) ?? []).find((row) => inRange(date, row.date_from, row.date_to)) : undefined;
+      const sick = dayStatusIndex.get(dayStatusKey(id, date))?.status === "sick";
+      if (sick && leave) return { date, dayName, status: "Konflikt: chorobowe + urlop / nieobecność", statusKind: "conflict", hours };
+      if (sick && hours > 0) return { date, dayName, status: "Konflikt: chorobowe + praca", statusKind: "conflict", hours };
       if (leave && hours > 0) return { date, dayName, status: "Konflikt: nieobecność + praca", statusKind: "conflict", hours };
+      if (sick) return { date, dayName, status: "Chorobowe", statusKind: "sick", hours: 0 };
       if (leave) {
         const type = String(leave.leave_type ?? "other");
         return { date, dayName, status: leaveLabels[type] ?? "Nieobecność", statusKind: vacationTypes.has(type) ? "vacation" : "absence", hours: 0 };
@@ -196,13 +256,16 @@ export function HrAttendanceList500({ data }: Props) {
     setRangeError(null);
   };
 
-  const generateYearReport = (employeeId: string) => {
+  const generateYearReport = async (employeeId: string) => {
+    const from = `${selectedYear}-01-01`;
+    const to = `${selectedYear}-12-31`;
+    if (!(await loadDayStatuses(from, to))) return;
     setRangeEmployeeId(null);
     setRangeError(null);
-    setReport({ employeeId, from: `${selectedYear}-01-01`, to: `${selectedYear}-12-31`, label: `Podsumowanie roczne ${selectedYear}` });
+    setReport({ employeeId, from, to, label: `Podsumowanie roczne ${selectedYear}` });
   };
 
-  const generateRangeReport = (employeeId: string) => {
+  const generateRangeReport = async (employeeId: string) => {
     if (!rangeFrom || !rangeTo) {
       setRangeError("Wybierz datę początkową i końcową.");
       return;
@@ -211,13 +274,17 @@ export function HrAttendanceList500({ data }: Props) {
       setRangeError("Data początkowa nie może być późniejsza niż końcowa.");
       return;
     }
+    if (!(await loadDayStatuses(rangeFrom, rangeTo))) {
+      setRangeError("Nie udało się pobrać statusów Chorobowe dla wybranego okresu.");
+      return;
+    }
     setRangeError(null);
     setReport({ employeeId, from: rangeFrom, to: rangeTo, label: "Podsumowanie od daty do daty" });
   };
 
   const renderMonthlySheet = (employee: Row, printOnly = false) => {
     const rows = attendanceForDates(employee, dates);
-    const { vacationDays } = summarize(rows);
+    const { vacationDays, sickDays } = summarize(rows);
     return <article className={`${styles.sheet} ${printOnly ? styles.sheetPrintOnly : ""}`}>
       <div className={styles.sheetHeader}>
         <div><small>LISTA OBECNOŚCI</small><h3>{fullName(employee)}</h3><p>{monthLabel}</p></div>
@@ -226,7 +293,7 @@ export function HrAttendanceList500({ data }: Props) {
           {!printOnly ? <button type="button" className={styles.printButton} onClick={() => setPrintTarget({ kind: "month", employeeId: String(employee.id) })}><Printer size={14} /> Drukuj / Zapisz PDF</button> : null}
         </div>
       </div>
-      <div className={styles.summary}><span className={styles.vacationSummary}><b>{vacationDays}</b> dni urlopu</span></div>
+      <div className={styles.summary}><span className={styles.vacationSummary}><b>{vacationDays}</b> dni urlopu</span><span className={styles.sickSummary}><b>{sickDays}</b> dni chorobowego</span></div>
       <table className={styles.table}>
         <thead><tr><th>Lp.</th><th>Data</th><th>Dzień</th><th>Status</th><th>Godziny</th><th>Podpis pracownika</th></tr></thead>
         <tbody>{rows.map((row, index) => <tr key={row.date} className={styles[`row_${row.statusKind}`]}><td>{index + 1}</td><td>{row.date}</td><td>{row.dayName}</td><td><span className={styles.status}>{row.status}</span></td><td>{hoursLabel(row.hours)}</td><td><span className={styles.signature} /></td></tr>)}</tbody>
@@ -255,14 +322,15 @@ export function HrAttendanceList500({ data }: Props) {
         <span><small>Dni pracy</small><b>{totals.workDays}</b></span>
         <span><small>Godziny</small><b>{hoursLabel(totals.totalHours)}</b></span>
         <span className={styles.reportVacation}><small>Dni urlopu</small><b>{totals.vacationDays}</b></span>
+        <span className={styles.reportSick}><small>Chorobowe</small><b>{totals.sickDays}</b></span>
         <span><small>Inne nieobecności</small><b>{totals.absenceDays}</b></span>
         <span><small>Brak wpisu</small><b>{totals.missingDays}</b></span>
       </div>
       <div className={styles.reportTableWrap}><table className={styles.reportTable}>
-        <thead><tr><th>Miesiąc</th><th>Dni pracy</th><th>Godziny</th><th>Dni urlopu</th><th>Inne nieobecności</th><th>Brak wpisu</th></tr></thead>
+        <thead><tr><th>Miesiąc</th><th>Dni pracy</th><th>Godziny</th><th>Dni urlopu</th><th>Chorobowe</th><th>Inne nieobecności</th><th>Brak wpisu</th></tr></thead>
         <tbody>{monthRows.map(([key, rows]) => {
           const summary = summarize(rows);
-          return <tr key={key}><td>{monthName(key)}</td><td>{summary.workDays}</td><td>{hoursLabel(summary.totalHours)}</td><td><b>{summary.vacationDays}</b></td><td>{summary.absenceDays}</td><td>{summary.missingDays}</td></tr>;
+          return <tr key={key}><td>{monthName(key)}</td><td>{summary.workDays}</td><td>{hoursLabel(summary.totalHours)}</td><td><b>{summary.vacationDays}</b></td><td><b className={styles.sickValue}>{summary.sickDays}</b></td><td>{summary.absenceDays}</td><td>{summary.missingDays}</td></tr>;
         })}</tbody>
       </table></div>
     </section>;
@@ -276,16 +344,16 @@ export function HrAttendanceList500({ data }: Props) {
       <div className={styles.controls}><label><span>Miesiąc listy</span><input type="month" value={month} onChange={(event) => event.target.value && setMonth(event.target.value)} /></label></div>
     </header>
 
-    <div className={styles.info}><UsersRound size={15} /><span>{employees.length} {employees.length === 1 ? "pracownik" : "pracowników"}</span><b>·</b><span>{monthLabel}</span><b>·</b><span>listy domyślnie zwinięte</span></div>
+    <div className={styles.info}><UsersRound size={15} /><span>{employees.length} {employees.length === 1 ? "pracownik" : "pracowników"}</span><b>·</b><span>{monthLabel}</span><b>·</b><span>listy domyślnie zwinięte</span>{dayStatusLoading ? <><b>·</b><span>aktualizacja chorobowego…</span></> : null}{dayStatusError ? <><b>·</b><span className={styles.statusLoadError} role="alert">{dayStatusError}</span></> : null}</div>
 
     <div className={styles.employeeListWrap}>
       <table className={styles.employeeList}>
-        <thead><tr><th>Pracownik</th><th>Miesiąc</th><th>Urlop</th><th>Podsumowania</th></tr></thead>
+        <thead><tr><th>Pracownik</th><th>Miesiąc</th><th>Urlop</th><th>Chorobowe</th><th>Podsumowania</th></tr></thead>
         <tbody>{employees.map((employee) => {
           const employeeId = String(employee.id);
           const expanded = expandedIds.has(employeeId);
           const monthRows = attendanceForDates(employee, dates);
-          const vacationDays = summarize(monthRows).vacationDays;
+          const summary = summarize(monthRows);
           const activeInMonth = monthRows.some((row) => row.statusKind !== "outside");
           const showRange = rangeEmployeeId === employeeId;
           const currentReport = report?.employeeId === employeeId ? report : null;
@@ -293,18 +361,19 @@ export function HrAttendanceList500({ data }: Props) {
             <tr className={`${styles.employeeRow} ${expanded ? styles.employeeRowOpen : ""}`}>
               <td><button type="button" className={styles.employeeToggle} onClick={() => toggleEmployee(employeeId)} aria-expanded={expanded}>{expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}<span><strong>{fullName(employee)}</strong><small>Nr pracownika: {String(employee.employee_number ?? "—")}</small></span></button></td>
               <td><span className={styles.monthCell}>{monthLabel}</span>{!activeInMonth ? <small className={styles.outsideEmployment}>Poza zatrudnieniem</small> : null}</td>
-              <td><span className={styles.vacationCount}>{vacationDays} {vacationDays === 1 ? "dzień" : "dni"}</span></td>
-              <td><div className={styles.rowActions}><button type="button" onClick={() => generateYearReport(employeeId)}><CalendarDays size={14} /> Rok {selectedYear}</button><button type="button" onClick={() => openRange(employeeId)} className={showRange ? styles.actionActive : ""}><CalendarRange size={14} /> Od daty do daty</button></div></td>
+              <td><span className={styles.vacationCount}>{summary.vacationDays} {summary.vacationDays === 1 ? "dzień" : "dni"}</span></td>
+              <td><span className={styles.sickCount}>{summary.sickDays} {summary.sickDays === 1 ? "dzień" : "dni"}</span></td>
+              <td><div className={styles.rowActions}><button type="button" onClick={() => void generateYearReport(employeeId)}><CalendarDays size={14} /> Rok {selectedYear}</button><button type="button" onClick={() => openRange(employeeId)} className={showRange ? styles.actionActive : ""}><CalendarRange size={14} /> Od daty do daty</button></div></td>
             </tr>
-            {showRange ? <tr className={styles.detailRow}><td colSpan={4}><div className={styles.rangePanel}>
+            {showRange ? <tr className={styles.detailRow}><td colSpan={5}><div className={styles.rangePanel}>
               <div><strong>Podsumowanie za własny okres</strong><small>Wybierz datę początkową i końcową dla {fullName(employee)}.</small></div>
               <label><span>Od</span><input type="date" value={rangeFrom} onChange={(event) => setRangeFrom(event.target.value)} /></label>
               <label><span>Do</span><input type="date" value={rangeTo} onChange={(event) => setRangeTo(event.target.value)} /></label>
-              <button type="button" onClick={() => generateRangeReport(employeeId)}>Generuj podsumowanie</button>
+              <button type="button" onClick={() => void generateRangeReport(employeeId)} disabled={dayStatusLoading}>Generuj podsumowanie</button>
               {rangeError ? <p className={styles.rangeError}>{rangeError}</p> : null}
             </div></td></tr> : null}
-            {expanded ? <tr className={styles.detailRow}><td colSpan={4}><div className={styles.monthlyDetail}>{renderMonthlySheet(employee)}</div></td></tr> : null}
-            {currentReport ? <tr className={styles.detailRow}><td colSpan={4}>{renderPeriodReport(employee, currentReport)}</td></tr> : null}
+            {expanded ? <tr className={styles.detailRow}><td colSpan={5}><div className={styles.monthlyDetail}>{renderMonthlySheet(employee)}</div></td></tr> : null}
+            {currentReport ? <tr className={styles.detailRow}><td colSpan={5}>{renderPeriodReport(employee, currentReport)}</td></tr> : null}
           </Fragment>;
         })}</tbody>
       </table>
