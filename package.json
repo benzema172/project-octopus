@@ -31,11 +31,12 @@
     "@supabase/ssr": "0.12.4",
     "@supabase/supabase-js": "2.112.3",
     "lucide-react": "1.33.0",
-    "next": "16.3.2",
+    "next": "16.3.4",
     "pdf-lib": "1.17.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "0.0.1",
+    "sharp": "0.35.4",
     "word-extractor": "1.0.4",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
@@ -45,7 +46,7 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.3.2",
+    "eslint-config-next": "16.3.4",
     "typescript": "5.7.2",
     "vitest": "^4.1.11"
   }
