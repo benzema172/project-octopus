@@ -1,6 +1,8 @@
 -- Project Lifecycle & Archive Core 5.4
 -- Completed/archived projects keep their full history under the same project_id,
 -- but are removed from operational work and protected against new mutations.
+-- Status comparisons intentionally use text so the migration is portable between
+-- production (enum-backed status) and the local PGlite migration validator.
 
 alter table public.projects
   add column if not exists completed_at timestamptz,
@@ -8,12 +10,12 @@ alter table public.projects
 
 update public.projects
 set completed_at = coalesce(completed_at, updated_at, now())
-where status in ('completed'::public.project_status, 'archived'::public.project_status)
+where status::text in ('completed', 'archived')
   and completed_at is null;
 
 update public.projects
 set archived_at = coalesce(archived_at, updated_at, completed_at, now())
-where status = 'archived'::public.project_status
+where status::text = 'archived'
   and archived_at is null;
 
 create or replace function public.project_is_operational(p_project_id uuid)
@@ -27,7 +29,7 @@ as $$
     select 1
     from public.projects p
     where p.id = p_project_id
-      and p.status in ('preparation'::public.project_status, 'active'::public.project_status)
+      and p.status::text in ('preparation', 'active')
   );
 $$;
 
@@ -38,30 +40,41 @@ security definer
 set search_path = public
 as $$
 declare
-  v_old_status public.project_status;
-  v_new_status public.project_status;
+  v_old_status text;
+  v_new_status text;
   v_old_project uuid;
   v_new_project uuid;
 begin
   if tg_op in ('UPDATE', 'DELETE') then
     v_old_project := old.project_id;
     if v_old_project is not null then
-      select status into v_old_status from public.projects where id = v_old_project;
-      if v_old_status in ('completed'::public.project_status, 'archived'::public.project_status) then
+      select status::text into v_old_status from public.projects where id = v_old_project;
+      if v_old_status in ('completed', 'archived') then
         raise exception 'Inwestycja jest zakończona lub zarchiwizowana. Dane historyczne są tylko do odczytu.' using errcode = '55000';
       end if;
     end if;
   end if;
 
-  if tg_op in ('INSERT', 'UPDATE') then
+  if tg_op = 'INSERT' then
     v_new_project := new.project_id;
     if v_new_project is not null then
-      select status into v_new_status from public.projects where id = v_new_project;
+      select status::text into v_new_status from public.projects where id = v_new_project;
       if v_new_status is null then
         raise exception 'Nie znaleziono inwestycji.' using errcode = '23503';
       end if;
-      if v_new_status not in ('preparation'::public.project_status, 'active'::public.project_status) then
+      if v_new_status not in ('preparation', 'active') then
         raise exception 'Inwestycja nie jest dostępna do bieżącej pracy. Do nowych wpisów można używać tylko inwestycji przygotowywanych lub aktywnych.' using errcode = '55000';
+      end if;
+    end if;
+  elsif tg_op = 'UPDATE' and old.project_id is distinct from new.project_id then
+    v_new_project := new.project_id;
+    if v_new_project is not null then
+      select status::text into v_new_status from public.projects where id = v_new_project;
+      if v_new_status is null then
+        raise exception 'Nie znaleziono inwestycji.' using errcode = '23503';
+      end if;
+      if v_new_status not in ('preparation', 'active') then
+        raise exception 'Nie można przenieść wpisu do zakończonej, zarchiwizowanej ani wstrzymanej inwestycji.' using errcode = '55000';
       end if;
     end if;
   end if;
@@ -110,7 +123,7 @@ security definer
 set search_path = public
 as $$
 declare
-  v_project_status public.project_status;
+  v_project_status text;
   v_open_tasks integer := 0;
   v_pending_documents integer := 0;
   v_pending_materials integer := 0;
@@ -121,7 +134,7 @@ declare
   v_active_teams integer := 0;
   v_blockers integer := 0;
 begin
-  select status into v_project_status
+  select status::text into v_project_status
   from public.projects
   where id = p_project_id and workspace_id = p_workspace_id;
   if v_project_status is null then raise exception 'Nie znaleziono inwestycji.'; end if;
@@ -129,7 +142,7 @@ begin
   if to_regclass('public.project_tasks') is not null then
     select count(*)::integer into v_open_tasks
     from public.project_tasks
-    where workspace_id = p_workspace_id and project_id = p_project_id
+    where project_id = p_project_id
       and lower(coalesce(status, 'open')) not in ('done','completed','closed','cancelled','canceled','archived','rejected');
   end if;
 
@@ -147,7 +160,7 @@ begin
   if to_regclass('public.material_requests') is not null then
     select count(*)::integer into v_pending_materials
     from public.material_requests
-    where workspace_id = p_workspace_id and project_id = p_project_id
+    where project_id = p_project_id
       and lower(coalesce(status::text, 'draft')) not in ('approved','rejected','cancelled','canceled','closed','completed');
   end if;
 
@@ -188,7 +201,7 @@ begin
   v_blockers := v_open_tasks + v_pending_documents + v_pending_materials + v_pending_orders + v_pending_finance + v_draft_stock;
 
   return jsonb_build_object(
-    'projectStatus', v_project_status::text,
+    'projectStatus', v_project_status,
     'ready', v_blockers = 0,
     'blockers', v_blockers,
     'openTasks', v_open_tasks,
@@ -217,15 +230,15 @@ security definer
 set search_path = public
 as $$
 declare
-  v_output public.project_outputs%rowtype;
+  v_output record;
   v_required integer;
   v_complete integer;
   v_readiness jsonb;
-  v_status public.project_status;
+  v_status text;
 begin
-  select status into v_status from public.projects where id=p_project_id and workspace_id=p_workspace_id for update;
+  select status::text into v_status from public.projects where id=p_project_id and workspace_id=p_workspace_id for update;
   if v_status is null then raise exception 'Nie znaleziono inwestycji.'; end if;
-  if v_status in ('completed'::public.project_status, 'archived'::public.project_status) then
+  if v_status in ('completed', 'archived') then
     raise exception 'Inwestycja jest już zakończona lub zarchiwizowana.';
   end if;
 
@@ -271,7 +284,7 @@ begin
   insert into public.audit_events(workspace_id,project_id,actor_id,event_type,entity_type,entity_id,before_value,after_value)
   values(
     p_workspace_id,p_project_id,p_actor_id,'project_output.approved_atomic','project_output',p_output_id::text,
-    jsonb_build_object('status',v_output.status,'project_status',v_status::text),
+    jsonb_build_object('status',v_output.status,'project_status',v_status),
     jsonb_build_object('status','approved','project_status','completed','readiness',v_readiness)
   );
 
@@ -290,16 +303,16 @@ security definer
 set search_path = public
 as $$
 declare
-  v_status public.project_status;
+  v_status text;
 begin
-  select status into v_status from public.projects
+  select status::text into v_status from public.projects
   where id=p_project_id and workspace_id=p_workspace_id for update;
   if v_status is null then raise exception 'Nie znaleziono inwestycji.'; end if;
-  if v_status = 'archived'::public.project_status then
+  if v_status = 'archived' then
     return query select p_project_id,'archived'::text;
     return;
   end if;
-  if v_status <> 'completed'::public.project_status then
+  if v_status <> 'completed' then
     raise exception 'Do archiwum można przenieść wyłącznie zakończoną inwestycję.';
   end if;
 
@@ -341,7 +354,7 @@ begin
   if p_hours < 0 or p_overtime_hours < 0 or p_hours + p_overtime_hours > 24 then raise exception 'Nieprawidłowa liczba godzin.'; end if;
   if p_mode not in ('fill_missing', 'replace_single') then raise exception 'Nieprawidłowy tryb operacji.'; end if;
   if p_project_id is not null and not exists (
-    select 1 from public.projects where id=p_project_id and workspace_id=p_workspace_id and status in ('preparation'::public.project_status,'active'::public.project_status)
+    select 1 from public.projects where id=p_project_id and workspace_id=p_workspace_id and status::text in ('preparation','active')
   ) then raise exception 'Wybrana inwestycja nie jest dostępna do bieżącej pracy.'; end if;
   if exists (select 1 from unnest(p_employee_ids) as employee_id where not exists (select 1 from public.employees e where e.id=employee_id and e.workspace_id=p_workspace_id)) then raise exception 'Co najmniej jeden pracownik nie należy do aktywnej firmy.'; end if;
 
