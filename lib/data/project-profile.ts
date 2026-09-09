@@ -20,7 +20,9 @@ function normalizeProfile(value: unknown, project: ProjectSummary): ProjectProfi
   for (const key of Object.keys(normalized) as Array<keyof ProjectProfile>) if (typeof source[key] === "string") normalized[key] = source[key];
   normalized.description ||= project.description ?? "";
   normalized.projectName ||= project.name;
-  normalized.status ||= project.status;
+  // Status cyklu życia ma jedno źródło prawdy: projects.status / kontrolka statusu.
+  // Karta inwestycji nie może przywrócić starszego statusu zapisanego w project_facts.
+  normalized.status = project.status;
   normalized.investorName ||= project.investor_name ?? "";
   normalized.generalContractorName ||= project.general_contractor ?? "";
   normalized.city ||= project.location ?? "";
@@ -36,10 +38,11 @@ export const getProjectProfile = cache(async function getProjectProfile(project:
 
 export async function saveProjectProfile(project: ProjectSummary, profile: ProjectProfile) {
   const supabase = createServiceSupabaseClient();
+  const canonicalProfile = { ...profile, status: project.status };
   const { error } = await supabase.rpc("save_project_profile_atomic", {
     p_workspace_id: project.workspace_id,
     p_project_id: project.id,
-    p_profile: profile,
+    p_profile: canonicalProfile,
     p_actor_id: null
   });
   if (error) throw new Error(`Nie udało się atomowo zapisać danych inwestycji: ${error.message}`);

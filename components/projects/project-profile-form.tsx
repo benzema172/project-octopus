@@ -64,14 +64,16 @@ export function ProjectProfileForm({ projectId, profile, saved }: ProjectProfile
           <Field label="Rodzaj inwestycji" name="projectType" profile={profile} placeholder="np. budowa, przebudowa, remont" />
           <label className="profile-field">
             <span>Status</span>
-            <select name="status" defaultValue={profile.status}>
+            <select defaultValue={profile.status} disabled aria-label="Status inwestycji jest zmieniany w nagłówku">
               <option value="planned">Planowana</option>
               <option value="tender">Przetarg</option>
+              <option value="preparation">Przygotowanie</option>
               <option value="active">Aktywna</option>
               <option value="paused">Wstrzymana</option>
               <option value="completed">Zakończona</option>
               <option value="archived">Archiwalna</option>
             </select>
+            <small>Status zmieniasz klikając znacznik statusu w nagłówku inwestycji.</small>
           </label>
           <TextArea label="Opis i zakres inwestycji" name="description" profile={profile} />
         </div>
