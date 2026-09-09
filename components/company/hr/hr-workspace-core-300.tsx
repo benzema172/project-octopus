@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState, type ReactNode } from "react";
-import { BriefcaseBusiness, CalendarDays, Clock3, FileText, HardHat, Plus, ShieldCheck, UsersRound } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, ClipboardCheck, Clock3, FileText, HardHat, Plus, ShieldCheck, UsersRound } from "lucide-react";
 import { ModuleDropzoneLink } from "@/components/documents/module-dropzone-link";
 import type { HrWorkspaceData, HrWorkspaceTab } from "@/lib/hr/types";
 import { HrDashboardCore300 } from "./hr-dashboard-core-300";
@@ -16,6 +16,7 @@ function SectionLoading() { return <div className={styles.loading} role="status"
 const HrDashboardCalendar159 = dynamic(() => import("./hr-dashboard-calendar-159").then((module) => module.HrDashboardCalendar159), { loading: SectionLoading });
 const HrEmployeeRegistry300 = dynamic(() => import("./hr-employee-registry-300").then((module) => module.HrEmployeeRegistry300), { loading: SectionLoading });
 const HrTimeRecords400 = dynamic(() => import("./hr-time-records-400").then((module) => module.HrTimeRecords400), { loading: SectionLoading });
+const HrAttendanceList500 = dynamic(() => import("./hr-attendance-list-500").then((module) => module.HrAttendanceList500), { loading: SectionLoading });
 const HrLeavesStable165 = dynamic(() => import("./hr-leaves-stable-165").then((module) => module.HrLeavesStable165), { loading: SectionLoading });
 const HrComplianceCore300 = dynamic(() => import("./hr-compliance-core-300").then((module) => module.HrComplianceCore300), { loading: SectionLoading });
 const HrTeamCostControl430 = dynamic(() => import("./hr-team-cost-control-430").then((module) => module.HrTeamCostControl430), { loading: SectionLoading });
@@ -29,6 +30,7 @@ const tabs: Array<{ id: HrWorkspaceTab; label: string; icon: ReactNode }> = [
   { id: "dashboard", label: "Pulpit", icon: <BriefcaseBusiness size={15} /> },
   { id: "employees", label: "Pracownicy", icon: <UsersRound size={15} /> },
   { id: "time", label: "Czas pracy", icon: <Clock3 size={15} /> },
+  { id: "attendance", label: "Lista obecności", icon: <ClipboardCheck size={15} /> },
   { id: "leaves", label: "Urlopy i absencje", icon: <CalendarDays size={15} /> },
   { id: "compliance", label: "Uprawnienia i BHP", icon: <ShieldCheck size={15} /> },
   { id: "teams", label: "Zespoły i inwestycje", icon: <HardHat size={15} /> },
@@ -62,6 +64,7 @@ export function HrWorkspaceCore300(props: Props) {
     {tab === "dashboard" ? <><HrDashboardCore300 data={props.data} canViewPayroll={props.canViewPayroll} onNavigate={navigate} /><HrDashboardCalendar159 workspaceId={props.workspaceId} canWrite={props.canWrite} data={props.data} onOpenEmployeeCalendar={(employeeId, referenceDate) => { setTimeFocus({ employeeId, referenceDate }); setTab("time"); }} /></> : null}
     {tab === "employees" ? <><HrIssuedEquipmentStrip430 data={props.data} /><HrEmployeeRegistry300 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canApprove={props.canApprove} canViewPayroll={props.canViewPayroll} canManagePayroll={props.canManagePayroll} onOpenTime={openEmployeeTime} /></> : null}
     {tab === "time" ? <div className={timeCompactStyles.compact}><HrTimeRecords400 key={timeFocus ? `${timeFocus.employeeId}-${timeFocus.referenceDate}` : "all"} workspaceId={props.workspaceId} referenceDate={timeFocus?.referenceDate ?? props.data.referenceDate} employees={props.data.employees} projects={props.data.projects} timesheets={props.data.timesheets} assignments={props.data.assignments} leaves={props.data.leaves} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} initialEmployeeId={timeFocus?.employeeId ?? null} onClearEmployeeFocus={() => setTimeFocus(null)} /></div> : null}
+    {tab === "attendance" ? <HrAttendanceList500 data={props.data} /> : null}
     {tab === "leaves" ? <HrLeavesStable165 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canApprove={props.canApprove} companyCity={props.companyCity} /> : null}
     {tab === "compliance" ? <HrComplianceCore300 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} /> : null}
     {tab === "teams" ? <HrTeamCostControl430 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} /> : null}
