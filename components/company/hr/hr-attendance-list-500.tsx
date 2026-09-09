@@ -2,6 +2,7 @@
 
 import { CalendarDays, Printer, UsersRound } from "lucide-react";
 import { useMemo, useState } from "react";
+import { isPolishWorkingDay } from "@/lib/hr/polish-work-calendar";
 import type { HrWorkspaceData } from "@/lib/hr/types";
 import styles from "./hr-attendance-list-500.module.css";
 
@@ -46,11 +47,6 @@ function monthDates(month: string) {
   const result: string[] = [];
   for (const date = new Date(first); date < next; date.setUTCDate(date.getUTCDate() + 1)) result.push(iso(date));
   return result;
-}
-
-function isWeekend(date: string) {
-  const day = new Date(`${date}T00:00:00Z`).getUTCDay();
-  return day === 0 || day === 6;
 }
 
 function employedOn(employee: Row, date: string) {
@@ -109,14 +105,15 @@ export function HrAttendanceList500({ data }: Props) {
       if (!employedOn(employee, date)) return { date, dayName, status: "Poza zatrudnieniem", statusKind: "outside", hours: 0 };
       const entries = timesheetIndex.get(`${id}|${date}`) ?? [];
       const hours = entries.reduce((sum, row) => sum + Number(row.hours ?? 0) + Number(row.overtime_hours ?? 0), 0);
-      const leave = (leaveIndex.get(id) ?? []).find((row) => inRange(date, row.date_from, row.date_to));
+      const workingDay = isPolishWorkingDay(date);
+      const leave = workingDay ? (leaveIndex.get(id) ?? []).find((row) => inRange(date, row.date_from, row.date_to)) : undefined;
       if (leave && hours > 0) return { date, dayName, status: "Konflikt: nieobecność + praca", statusKind: "conflict", hours };
       if (leave) {
         const type = String(leave.leave_type ?? "other");
         return { date, dayName, status: leaveLabels[type] ?? "Nieobecność", statusKind: vacationTypes.has(type) ? "vacation" : "absence", hours: 0 };
       }
       if (hours > 0) return { date, dayName, status: "Praca", statusKind: "work", hours };
-      if (isWeekend(date)) return { date, dayName, status: "Dzień wolny", statusKind: "free", hours: 0 };
+      if (!workingDay) return { date, dayName, status: "Dzień wolny", statusKind: "free", hours: 0 };
       return { date, dayName, status: "Brak wpisu", statusKind: "missing", hours: 0 };
     });
   };
