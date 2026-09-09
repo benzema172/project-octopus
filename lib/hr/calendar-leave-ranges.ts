@@ -5,6 +5,7 @@ export type CalendarLeaveRange = {
   id: string;
   date_from: string;
   date_to: string;
+  days?: number | null;
 };
 
 export const HR_CALENDAR_LEAVE_POLICY = Object.freeze({
