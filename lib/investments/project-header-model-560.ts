@@ -1,4 +1,4 @@
-import type { ProjectProfile, ProjectSummary } from "@/lib/types";
+import type { ProjectProfile, ProjectSummary } from "../types";
 
 export type ProjectHeaderModel560 = {
   shortName: string;
