@@ -24,11 +24,12 @@ describe("HR automatic time finalization 4.3", () => {
     expect(editor).toContain('data-auto-final-timesheet="1"');
   });
 
-  it("auto-saves investment selection with the default workday", () => {
+  it("auto-saves investment or vacation selection with the default workday", () => {
     const editor = source("components/company/hr/hr-timesheet-entry-editor-159.tsx");
     expect(editor).toContain('defaultValue={entry ? String(entry.hours ?? "") : "8"}');
     expect(editor).toContain("form.requestSubmit()");
-    expect(editor).toContain("Zmiana inwestycji zapisuje się automatycznie");
+    expect(editor).toContain("Wybierz inwestycję, koszt ogólny albo Urlop — zmiana zapisuje się automatycznie");
+    expect(editor).toContain('<option value={VACATION_OPTION}>URLOP</option>');
   });
 
   it("shows work as work instead of an approval state", () => {
