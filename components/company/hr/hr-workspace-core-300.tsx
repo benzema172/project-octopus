@@ -8,6 +8,7 @@ import type { HrWorkspaceData, HrWorkspaceTab } from "@/lib/hr/types";
 import { HrDashboardCore300 } from "./hr-dashboard-core-300";
 import { HrApprovalProvider } from "./hr-approval-context-420";
 import { HrIssuedEquipmentStrip430 } from "./hr-issued-equipment-strip-430";
+import { HrOperationalProjectGuard540 } from "./hr-operational-project-guard-540";
 import styles from "./hr-core-300.module.css";
 import timeCompactStyles from "./hr-time-compact-401.module.css";
 
@@ -52,7 +53,8 @@ export function HrWorkspaceCore300(props: Props) {
     setTab("time");
   };
 
-  return <HrApprovalProvider canApprove={props.canApprove}><div className={styles.shell} data-hr-core="300">
+  return <HrApprovalProvider canApprove={props.canApprove}><div className={styles.shell} data-hr-core="300" data-project-lifecycle-guard="540">
+    <HrOperationalProjectGuard540 projects={props.data.projects} />
     <div className={styles.toolbar} data-hr-toolbar="split">
       <nav className={styles.tabs} aria-label="Sekcje modułu Kadry" data-hr-tabs="panel">{tabs.map((item) => <button type="button" key={item.id} className={`${styles.tab} ${tab === item.id ? styles.tabActive : ""}`} onClick={() => navigate(item.id)}>{item.icon}{item.label}</button>)}</nav>
       <div className={styles.actions} data-hr-toolbar-actions="1">

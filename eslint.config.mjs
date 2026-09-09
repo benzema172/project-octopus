@@ -9,11 +9,14 @@ const eslintConfig = [
   },
   {
     // Te widoki synchronizują stan React z danymi zewnętrznymi po montażu
-    // (m.in. localStorage kolejki skanów offline), więc aktualizacja stanu w efekcie jest zamierzona.
+    // (m.in. localStorage kolejki skanów offline i statusy dni pobierane z API),
+    // więc aktualizacja stanu w efekcie jest zamierzona.
     files: [
       "components/company/hr/hr-employee-registry-152.tsx",
       "components/company/hr/hr-leaves-161.tsx",
       "components/company/hr/hr-time-records-400.tsx",
+      "components/company/hr/hr-attendance-list-500.tsx",
+      "components/company/hr/hr-dashboard-calendar-159.tsx",
       "components/company/warehouse-market-400.tsx"
     ],
     rules: {

@@ -19,6 +19,7 @@ describe("HR calendar unified assignment select 530", () => {
     expect(editor).toContain('fetch("/api/company/hr/calendar-leave"');
     expect(editor).toContain('action: nextVacation ? "set" : "clear"');
     expect(editor).toContain("await setCalendarVacation(true)");
-    expect(editor).toContain("await setCalendarVacation(false)");
+    expect(editor).toContain("await setCalendarVacation(false, true)");
+    expect(editor).toContain("clearDayMarkers");
   });
 });
