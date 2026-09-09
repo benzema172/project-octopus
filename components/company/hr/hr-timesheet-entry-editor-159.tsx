@@ -19,12 +19,16 @@ type Props = {
   variant: "inline" | "cell";
   suggestedProjectId?: string;
   leave?: Row | null;
+  dayStatus?: "sick" | null;
+  enableSickStatus?: boolean;
+  onDayStatusChanged?: (status: "sick" | null) => void;
   onOpenDetails?: () => void;
   onChanged?: () => void;
 };
 
 const VACATION_TYPES = new Set(["annual", "on_demand", "unpaid"]);
 const VACATION_OPTION = "__vacation__";
+const SICK_OPTION = "__sick__";
 
 function num(value: unknown, digits = 1) {
   const parsed = Number(value ?? 0);
@@ -49,7 +53,7 @@ function isVacationLeave(leave?: Row | null) {
   return Boolean(leave && String(leave.status ?? "approved") === "approved" && VACATION_TYPES.has(String(leave.leave_type ?? "")));
 }
 
-export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeName, workDate, projects, entries, canWrite, variant, suggestedProjectId = "", leave = null, onOpenDetails, onChanged }: Props) {
+export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeName, workDate, projects, entries, canWrite, variant, suggestedProjectId = "", leave = null, dayStatus = null, enableSickStatus = false, onDayStatusChanged, onOpenDetails, onChanged }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [draftKeys, setDraftKeys] = useState<number[]>(() => entries.length === 0 ? [1] : []);
@@ -58,6 +62,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [calendarLeaveActive, setOptimisticCalendarLeaveActive] = useOptimistic(isVacationLeave(leave));
+  const [calendarSickActive, setOptimisticCalendarSickActive] = useOptimistic(dayStatus === "sick");
 
   const projectById = new Map(projects.map((row) => [String(row.id), String(row.name ?? "Inwestycja")]));
   const total = entries.reduce((sum, row) => sum + entryHours(row), 0);
@@ -96,12 +101,12 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
     }
   };
 
-  const setCalendarVacation = async (nextVacation: boolean) => {
+  const setCalendarVacation = async (nextVacation: boolean, quiet = false) => {
     if (!canWrite || busyId !== null || blockedAbsence) return false;
     if (nextVacation === calendarLeaveActive) return true;
     if (nextVacation && entries.length > 0 && !window.confirm("Ten dzień ma już wpis czasu pracy. Urlop zostanie zapisany, a kalendarz pokaże konflikt danych do wyjaśnienia. Kontynuować?")) return false;
     setBusyId("calendar-leave");
-    setMessage(null);
+    if (!quiet) setMessage(null);
     setError(null);
     try {
       const response = await fetch("/api/company/hr/calendar-leave", {
@@ -112,9 +117,11 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
       const result = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Nie udało się zmienić statusu dnia.");
       startTransition(() => setOptimisticCalendarLeaveActive(nextVacation));
-      setMessage(nextVacation
-        ? "Urlop zapisany. Wniosek urlopowy został utworzony i zatwierdzony automatycznie."
-        : "Urlop z kalendarza usunięty. Dzień jest ponownie dostępny do wpisania pracy.");
+      if (!quiet) {
+        setMessage(nextVacation
+          ? "Urlop zapisany. Wniosek urlopowy został utworzony i zatwierdzony automatycznie."
+          : "Urlop z kalendarza usunięty. Dzień jest ponownie dostępny do wpisania pracy.");
+      }
       router.refresh();
       onChanged?.();
       return true;
@@ -126,17 +133,90 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
     }
   };
 
+  const setCalendarSick = async (nextSick: boolean, quiet = false) => {
+    if (!enableSickStatus || !canWrite || busyId !== null || blockedAbsence) return false;
+    if (nextSick === calendarSickActive) return true;
+    if (nextSick && entries.length > 0 && !window.confirm("Ten dzień ma już wpis czasu pracy. Chorobowe zostanie zapisane jako znacznik dnia, a kalendarz pokaże konflikt danych do wyjaśnienia. Kontynuować?")) return false;
+    setBusyId("calendar-sick");
+    if (!quiet) setMessage(null);
+    setError(null);
+    try {
+      const response = await fetch("/api/company/hr/day-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId, employeeId, workDate, action: nextSick ? "set_sick" : "clear_sick" })
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Nie udało się zmienić statusu chorobowego.");
+      startTransition(() => setOptimisticCalendarSickActive(nextSick));
+      onDayStatusChanged?.(nextSick ? "sick" : null);
+      if (!quiet) {
+        setMessage(nextSick
+          ? "Chorobowe zapisane jako znacznik dnia. Nie utworzono wniosku urlopowego i nie zmieniono puli urlopu."
+          : "Znacznik chorobowego usunięty. Dzień jest ponownie dostępny do wpisania pracy.");
+      }
+      onChanged?.();
+      return true;
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Nie udało się zmienić statusu chorobowego.");
+      return false;
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const selectVacation = async () => {
+    if (calendarSickActive) {
+      const saved = await setCalendarVacation(true);
+      if (!saved) return false;
+      const cleared = await setCalendarSick(false, true);
+      if (!cleared) return false;
+      return true;
+    }
+    return setCalendarVacation(true);
+  };
+
+  const selectSick = async () => {
+    if (calendarLeaveActive) {
+      const cleared = await setCalendarVacation(false, true);
+      if (!cleared) return false;
+      const saved = await setCalendarSick(true);
+      if (!saved) {
+        await setCalendarVacation(true, true);
+        return false;
+      }
+      return true;
+    }
+    return setCalendarSick(true);
+  };
+
+  const clearDayMarkers = async () => {
+    if (calendarLeaveActive) {
+      const cleared = await setCalendarVacation(false, true);
+      if (!cleared) return false;
+    }
+    if (calendarSickActive) {
+      const cleared = await setCalendarSick(false, true);
+      if (!cleared) return false;
+    }
+    return true;
+  };
+
   const submitEntry = (entry?: Row, draftKey?: number) => async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const values = Object.fromEntries(new FormData(form).entries());
     const projectId = String(values.projectId ?? "");
     if (projectId === VACATION_OPTION) {
-      await setCalendarVacation(true);
+      await selectVacation();
       return;
     }
-    if (calendarLeaveActive) {
-      const cleared = await setCalendarVacation(false);
+    if (projectId === SICK_OPTION) {
+      await selectSick();
+      return;
+    }
+    if (calendarLeaveActive || calendarSickActive) {
+      const cleared = await clearDayMarkers();
       if (!cleared) return;
     }
     const id = entry?.id ? String(entry.id) : `new-${draftKey ?? "row"}`;
@@ -177,7 +257,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
   };
 
   const autoSubmit = (element: HTMLSelectElement | HTMLInputElement) => {
-    if (!canWrite || busyId !== null || calendarLeaveActive || blockedAbsence) return;
+    if (!canWrite || busyId !== null || calendarLeaveActive || calendarSickActive || blockedAbsence) return;
     const form = element.form;
     if (!form) return;
     queueMicrotask(() => form.requestSubmit());
@@ -186,19 +266,24 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
   const assignmentChange = async (element: HTMLSelectElement, entry?: Row, draftKey?: number) => {
     if (!canWrite || busyId !== null || blockedAbsence) return;
     const projectId = element.value;
-    const fallbackProjectId = entry?.project_id ? String(entry.project_id) : suggestedProjectId;
+    const fallbackProjectId = calendarSickActive ? SICK_OPTION : calendarLeaveActive ? VACATION_OPTION : entry?.project_id ? String(entry.project_id) : suggestedProjectId;
     if (projectId === VACATION_OPTION) {
-      const saved = await setCalendarVacation(true);
+      const saved = await selectVacation();
       if (!saved) element.value = fallbackProjectId;
       return;
     }
-    if (!calendarLeaveActive) {
+    if (projectId === SICK_OPTION) {
+      const saved = await selectSick();
+      if (!saved) element.value = fallbackProjectId;
+      return;
+    }
+    if (!calendarLeaveActive && !calendarSickActive) {
       autoSubmit(element);
       return;
     }
-    const cleared = await setCalendarVacation(false);
+    const cleared = await clearDayMarkers();
     if (!cleared) {
-      element.value = VACATION_OPTION;
+      element.value = calendarSickActive ? SICK_OPTION : calendarLeaveActive ? VACATION_OPTION : fallbackProjectId;
       return;
     }
     const form = element.form;
@@ -226,7 +311,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
   };
 
   const formFor = (entry?: Row, key = "new", draftKey?: number, showAdd = false) => {
-    const defaultProjectId = calendarLeaveActive && !entry ? VACATION_OPTION : entry?.project_id ? String(entry.project_id) : suggestedProjectId;
+    const defaultProjectId = calendarSickActive ? SICK_OPTION : calendarLeaveActive ? VACATION_OPTION : entry?.project_id ? String(entry.project_id) : suggestedProjectId;
     return <form className={styles.entryRow} onSubmit={submitEntry(entry, draftKey)} key={key}>
       <label className={styles.field}>
         <span>Inwestycja / status</span>
@@ -235,9 +320,10 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
           defaultValue={defaultProjectId}
           disabled={!canWrite || busyId !== null || blockedAbsence}
           onChange={(event) => void assignmentChange(event.currentTarget, entry, draftKey)}
-          title="Wybierz inwestycję, koszt ogólny albo Urlop — zmiana zapisuje się automatycznie"
+          title={enableSickStatus ? "Wybierz inwestycję, koszt ogólny, URLOP albo CHOROBOWE — zmiana zapisuje się automatycznie" : "Wybierz inwestycję, koszt ogólny albo Urlop — zmiana zapisuje się automatycznie"}
         >
           <option value={VACATION_OPTION}>URLOP</option>
+          {enableSickStatus ? <option value={SICK_OPTION}>CHOROBOWE</option> : null}
           <option value="">Koszt ogólny / bez inwestycji</option>
           {projects.map((project) => <option value={String(project.id)} key={String(project.id)}>{String(project.name ?? "Inwestycja")}</option>)}
         </select>
@@ -249,7 +335,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
           inputMode="decimal"
           defaultValue={entry ? String(entry.hours ?? "") : "8"}
           required
-          disabled={!canWrite || busyId !== null || calendarLeaveActive || blockedAbsence}
+          disabled={!canWrite || busyId !== null || calendarLeaveActive || calendarSickActive || blockedAbsence}
           onBlur={(event) => entry ? autoSubmit(event.currentTarget) : undefined}
         />
       </label>
@@ -259,14 +345,14 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
           name="overtimeHours"
           inputMode="decimal"
           defaultValue={entry ? String(entry.overtime_hours ?? 0) : "0"}
-          disabled={!canWrite || busyId !== null || calendarLeaveActive || blockedAbsence}
+          disabled={!canWrite || busyId !== null || calendarLeaveActive || calendarSickActive || blockedAbsence}
           onBlur={(event) => entry ? autoSubmit(event.currentTarget) : undefined}
         />
       </label>
-      {canWrite ? <button className={styles.save} type="submit" disabled={busyId !== null || calendarLeaveActive || blockedAbsence} aria-label={entry ? "Zapisz wpis czasu" : "Dodaj wpis czasu"} title="Zapisz"><Save size={14} /> {variant === "inline" ? null : entry ? "Zapisz" : "Dodaj"}</button> : null}
+      {canWrite ? <button className={styles.save} type="submit" disabled={busyId !== null || calendarLeaveActive || calendarSickActive || blockedAbsence} aria-label={entry ? "Zapisz wpis czasu" : "Dodaj wpis czasu"} title="Zapisz"><Save size={14} /> {variant === "inline" ? null : entry ? "Zapisz" : "Dodaj"}</button> : null}
       {entry && canWrite ? <button className={styles.delete} type="button" aria-label="Usuń wpis" title="Usuń wpis" disabled={busyId !== null} onClick={() => void removeEntry(entry)}><Trash2 size={14} /></button> : null}
       {!entry && canWrite && draftKey !== undefined ? <button className={styles.delete} type="button" aria-label="Usuń nowy wiersz" title="Usuń nowy wiersz" disabled={busyId !== null} onClick={() => removeDraft(draftKey)}><X size={14} /></button> : null}
-      {showAdd && canWrite ? <button type="button" className={styles.addEntry} disabled={busyId !== null || calendarLeaveActive || blockedAbsence} onClick={addDraft} aria-label="Dodaj kolejny wpis" title="Dodaj kolejny wpis"><Plus size={14} /></button> : null}
+      {showAdd && canWrite ? <button type="button" className={styles.addEntry} disabled={busyId !== null || calendarLeaveActive || calendarSickActive || blockedAbsence} onClick={addDraft} aria-label="Dodaj kolejny wpis" title="Dodaj kolejny wpis"><Plus size={14} /></button> : null}
     </form>;
   };
 
@@ -281,10 +367,11 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
   </div>;
 
   if (variant === "inline") {
-    return <div data-hr-inline-timesheet-editor="1" data-auto-final-timesheet="1" data-unified-vacation-select="1">{editor}</div>;
+    return <div data-hr-inline-timesheet-editor="1" data-auto-final-timesheet="1" data-unified-vacation-select="1" data-unified-sick-select={enableSickStatus ? "1" : undefined}>{editor}</div>;
   }
 
-  const summaryProject = calendarLeaveActive ? "Urlop" : projectNames.join(" / ") || "Brak wpisu";
+  const statusSummary = calendarSickActive ? "Chorobowe" : calendarLeaveActive ? "Urlop" : null;
+  const summaryProject = statusSummary ?? (projectNames.join(" / ") || "Brak wpisu");
   const openCell = () => {
     setMessage(null);
     setError(null);
@@ -295,17 +382,17 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
     setOpen(true);
     if (!entries.length && !draftKeys.length) setDraftKeys([nextDraftKey]);
   };
-  const hasDayValue = calendarLeaveActive || entries.length > 0;
+  const hasDayValue = Boolean(statusSummary) || entries.length > 0;
 
   return <>
     <button
       type="button"
       className={`${styles.cellButton} ${hasDayValue ? "" : styles.emptyCell}`}
       onClick={openCell}
-      title={calendarLeaveActive ? "Urlop — kliknij, aby zmienić przypisanie dnia" : entries.length ? `${summaryProject} · ${num(total)} h — kliknij, aby edytować pełne szczegóły dnia` : "Kliknij, aby wybrać inwestycję, koszt ogólny lub Urlop"}
-      aria-label={`${employeeName ?? "Pracownik"}, ${workDate}: ${calendarLeaveActive ? "urlop" : entries.length ? `${num(total)} godzin` : "brak wpisu"}. Otwórz pełne szczegóły dnia.`}
+      title={statusSummary ? `${statusSummary} — kliknij, aby zmienić przypisanie dnia` : entries.length ? `${summaryProject} · ${num(total)} h — kliknij, aby edytować pełne szczegóły dnia` : "Kliknij, aby wybrać inwestycję, koszt ogólny lub Urlop"}
+      aria-label={`${employeeName ?? "Pracownik"}, ${workDate}: ${statusSummary ? statusSummary.toLowerCase() : entries.length ? `${num(total)} godzin` : "brak wpisu"}. Otwórz pełne szczegóły dnia.`}
     >
-      <strong>{calendarLeaveActive ? "Urlop" : entries.length ? `${num(total)} h` : "+ wpis"}</strong>
+      <strong>{statusSummary ?? (entries.length ? `${num(total)} h` : "+ wpis")}</strong>
       <span>{summaryProject}</span>
     </button>
     {open && typeof document !== "undefined" ? createPortal(
@@ -320,7 +407,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
             <button type="button" className={styles.close} onClick={() => setOpen(false)} aria-label="Zamknij"><X size={17} /></button>
           </header>
           <div className={styles.modalBody}>
-            <div className={styles.inlineStatus}><b>{calendarLeaveActive ? "Urlop" : entries.length ? `${entries.length} wpis${entries.length === 1 ? "" : "y"}` : "Brak zapisanego wpisu"}</b><span>W jednym polu wybierz inwestycję, koszt ogólny albo URLOP. Zmiana aktualizuje kalendarz, wnioski urlopowe i koszty automatycznie.</span></div>
+            <div className={styles.inlineStatus}><b>{statusSummary ?? (entries.length ? `${entries.length} wpis${entries.length === 1 ? "" : "y"}` : "Brak zapisanego wpisu")}</b><span>{enableSickStatus ? "W jednym polu wybierz inwestycję, koszt ogólny, URLOP albo CHOROBOWE. Urlop tworzy wniosek; Chorobowe jest wyłącznie znacznikiem ewidencji dnia." : "W jednym polu wybierz inwestycję, koszt ogólny albo URLOP. Zmiana aktualizuje kalendarz, wnioski urlopowe i koszty automatycznie."}</span></div>
             {editor}
           </div>
         </section>
