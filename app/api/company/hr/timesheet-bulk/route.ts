@@ -27,6 +27,7 @@ type BulkResult = {
   updated?: number;
   skippedExisting?: number;
   skippedLeave?: number;
+  skippedSick?: number;
   skippedConflict?: number;
   affected?: number;
 };
@@ -103,6 +104,7 @@ export async function POST(request: Request) {
     updated: Number(result.updated ?? 0),
     skippedExisting: Number(result.skippedExisting ?? 0),
     skippedLeave: Number(result.skippedLeave ?? 0),
+    skippedSick: Number(result.skippedSick ?? 0),
     skippedConflict: Number(result.skippedConflict ?? 0),
     affected: Number(result.affected ?? 0)
   });
