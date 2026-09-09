@@ -42,7 +42,8 @@ export async function GET(request: Request) {
   const to = url.searchParams.get("to")?.trim() ?? "";
   if (!workspaceId || !from || !to) return NextResponse.json({ error: "Brakuje firmy lub zakresu dat." }, { status: 400 });
   if (!isIsoDate(from) || !isIsoDate(to) || from > to) return NextResponse.json({ error: "Nieprawidłowy zakres dat." }, { status: 400 });
-  if (daysBetween(from, to) > 3660) return NextResponse.json({ error: "Zakres odczytu jest zbyt szeroki. Maksymalnie 10 lat." }, { status: 400 });
+  const rangeDays = daysBetween(from, to);
+  if (rangeDays === null || rangeDays > 3660) return NextResponse.json({ error: "Zakres odczytu jest zbyt szeroki. Maksymalnie 10 lat." }, { status: 400 });
 
   const access = await workspaceForRequest(request, workspaceId, "read");
   if ("error" in access) return access.error;
