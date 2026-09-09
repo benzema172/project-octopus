@@ -1,0 +1,145 @@
+.root {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+}
+
+.root details {
+  position: relative;
+  display: inline-block;
+}
+
+.trigger {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.trigger::-webkit-details-marker { display: none; }
+.trigger::marker { display: none; }
+
+.trigger:hover {
+  filter: brightness(.97);
+  box-shadow: 0 0 0 2px rgba(103, 62, 174, .08);
+}
+
+.menu {
+  position: absolute;
+  z-index: 90;
+  top: calc(100% + 7px);
+  left: 0;
+  width: min(330px, calc(100vw - 40px));
+  overflow: hidden;
+  border: 1px solid #ded6e6;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 18px 48px rgba(47, 33, 62, .18);
+  padding: 6px;
+}
+
+.portfolio .menu {
+  top: calc(100% + 5px);
+}
+
+.menuTitle {
+  padding: 7px 9px 6px;
+  color: #8b8093;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.menu button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #362c3d;
+  padding: 8px 9px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu button:hover:not(:disabled) {
+  background: #f6f2fa;
+}
+
+.menu button:disabled {
+  cursor: default;
+}
+
+.activeOption {
+  background: #f3eef9 !important;
+}
+
+.optionIcon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 7px;
+  background: #f1edf6;
+  color: #6c3cab;
+}
+
+.menu button > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.menu strong {
+  color: #352a3c;
+  font-size: 10px;
+}
+
+.menu small {
+  color: #8b8192;
+  font-size: 8px;
+  line-height: 1.35;
+}
+
+.error {
+  position: absolute;
+  z-index: 91;
+  top: calc(100% + 7px);
+  left: 0;
+  width: min(360px, calc(100vw - 40px));
+  border: 1px solid #f0c8cf;
+  border-radius: 8px;
+  background: #fff3f5;
+  color: #aa3c52;
+  padding: 8px 10px;
+  font-size: 8px;
+  font-weight: 750;
+  box-shadow: 0 10px 30px rgba(94, 41, 54, .12);
+}
+
+.spin {
+  animation: projectStatusSpin .8s linear infinite;
+}
+
+@keyframes projectStatusSpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 720px) {
+  .menu {
+    position: fixed;
+    top: auto;
+    right: 14px;
+    bottom: 14px;
+    left: 14px;
+    width: auto;
+  }
+}
