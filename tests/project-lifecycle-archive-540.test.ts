@@ -40,6 +40,15 @@ describe("Project lifecycle & archive core 5.4", () => {
     expect(closeout).toContain("pod tym samym ID inwestycji");
   });
 
+  it("shows a clear top-level project status action and completes through a fresh closeout package", () => {
+    const closeout = source("components/projects/closeout-workspace.tsx");
+    expect(closeout).toContain('data-project-status-editor="540"');
+    expect(closeout).toContain("Zakończ inwestycję");
+    expect(closeout).toContain('const generated=await post({action:"generate"})');
+    expect(closeout).toContain('await post({action:"approve",outputId:generated.id})');
+    expect(closeout).toContain("Kliknij, aby zobaczyć co trzeba uzupełnić przed zakończeniem");
+  });
+
   it("separates current, completed and archived projects in the portfolio", () => {
     const portfolio = source("components/projects/company-investments-view.tsx");
     expect(portfolio).toContain('type PortfolioFilter = "current" | "attention" | "completed" | "archived" | "all"');
