@@ -11,7 +11,7 @@ describe("HR monthly historical detail editing", () => {
     expect(records).toContain('setDetailFocus({ employeeId, workDate: date })');
     expect(records).toContain('onOpenDay(date, id)');
     expect(records).toContain("Pełna korekta historyczna");
-    expect(records).toContain("historyczny dzień");
+    expect(records).toContain("Ten sam status dnia obowiązuje w kalendarzu, Czasie pracy i Liście obecności");
     expect(records).toContain("fixedWorkDate={detailFocus.workDate}");
     expect(records).toContain("referenceDate={detailFocus.workDate}");
     expect(editor).toContain("onOpenDetails?: () => void");
