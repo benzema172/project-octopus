@@ -1,7 +1,7 @@
 "use client";
 
-import { CalendarDays, Printer, UsersRound } from "lucide-react";
-import { useMemo, useState } from "react";
+import { CalendarDays, CalendarRange, ChevronDown, ChevronRight, Printer, UsersRound, X } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { isPolishWorkingDay } from "@/lib/hr/polish-work-calendar";
 import type { HrWorkspaceData } from "@/lib/hr/types";
 import styles from "./hr-attendance-list-500.module.css";
@@ -19,6 +19,17 @@ type AttendanceDay = {
   statusKind: "work" | "vacation" | "absence" | "missing" | "free" | "outside" | "conflict";
   hours: number;
 };
+
+type PeriodReport = {
+  employeeId: string;
+  from: string;
+  to: string;
+  label: string;
+};
+
+type PrintTarget =
+  | { kind: "month"; employeeId: string }
+  | { kind: "report"; employeeId: string; from: string; to: string; label: string };
 
 const vacationTypes = new Set(["annual", "on_demand", "unpaid"]);
 const leaveLabels: Record<string, string> = {
@@ -49,6 +60,18 @@ function monthDates(month: string) {
   return result;
 }
 
+function datesBetween(from: string, to: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) return [];
+  const result: string[] = [];
+  const current = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  for (let guard = 0; current <= end && guard < 36600; guard += 1) {
+    result.push(iso(current));
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+  return result;
+}
+
 function employedOn(employee: Row, date: string) {
   const from = employee.hired_at ? String(employee.hired_at).slice(0, 10) : "0000-01-01";
   const to = employee.terminated_at ? String(employee.terminated_at).slice(0, 10) : "9999-12-31";
@@ -63,20 +86,41 @@ function hoursLabel(hours: number) {
   return hours > 0 ? new Intl.NumberFormat("pl-PL", { maximumFractionDigits: 2 }).format(hours) : "—";
 }
 
+function periodLabel(from: string, to: string) {
+  const start = new Date(`${from}T00:00:00Z`).toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+  const end = new Date(`${to}T00:00:00Z`).toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+  return `${start} – ${end}`;
+}
+
+function monthName(value: string) {
+  return new Date(`${value}-01T00:00:00Z`).toLocaleDateString("pl-PL", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+function summarize(rows: AttendanceDay[]) {
+  return {
+    workDays: rows.filter((row) => row.statusKind === "work").length,
+    totalHours: rows.reduce((sum, row) => sum + row.hours, 0),
+    vacationDays: rows.filter((row) => row.statusKind === "vacation").length,
+    absenceDays: rows.filter((row) => row.statusKind === "absence").length,
+    missingDays: rows.filter((row) => row.statusKind === "missing").length
+  };
+}
+
 export function HrAttendanceList500({ data }: Props) {
   const [month, setMonth] = useState(data.referenceDate.slice(0, 7));
-  const [employeeId, setEmployeeId] = useState("");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const [rangeEmployeeId, setRangeEmployeeId] = useState<string | null>(null);
+  const [rangeFrom, setRangeFrom] = useState(`${data.referenceDate.slice(0, 4)}-01-01`);
+  const [rangeTo, setRangeTo] = useState(data.referenceDate);
+  const [rangeError, setRangeError] = useState<string | null>(null);
+  const [report, setReport] = useState<PeriodReport | null>(null);
+  const [printTarget, setPrintTarget] = useState<PrintTarget | null>(null);
+
   const dates = useMemo(() => monthDates(month), [month]);
   const monthStart = dates[0] ?? `${month}-01`;
   const monthEnd = dates[dates.length - 1] ?? `${month}-31`;
-
-  const employees = useMemo(() => data.employees.filter((row) => {
-    const hired = row.hired_at ? String(row.hired_at).slice(0, 10) : "0000-01-01";
-    const terminated = row.terminated_at ? String(row.terminated_at).slice(0, 10) : "9999-12-31";
-    return hired <= monthEnd && terminated >= monthStart;
-  }), [data.employees, monthEnd, monthStart]);
-
-  const visibleEmployees = useMemo(() => employeeId ? employees.filter((row) => String(row.id) === employeeId) : employees, [employeeId, employees]);
+  const selectedYear = month.slice(0, 4);
+  const employees = useMemo(() => [...data.employees].sort((left, right) => fullName(left).localeCompare(fullName(right), "pl")), [data.employees]);
 
   const timesheetIndex = useMemo(() => {
     const map = new Map<string, Row[]>();
@@ -98,9 +142,9 @@ export function HrAttendanceList500({ data }: Props) {
     return map;
   }, [data.leaves]);
 
-  const attendanceFor = (employee: Row): AttendanceDay[] => {
+  const attendanceForDates = (employee: Row, requestedDates: string[]): AttendanceDay[] => {
     const id = String(employee.id);
-    return dates.map((date) => {
+    return requestedDates.map((date) => {
       const dayName = new Date(`${date}T00:00:00Z`).toLocaleDateString("pl-PL", { weekday: "short", timeZone: "UTC" });
       if (!employedOn(employee, date)) return { date, dayName, status: "Poza zatrudnieniem", statusKind: "outside", hours: 0 };
       const entries = timesheetIndex.get(`${id}|${date}`) ?? [];
@@ -118,44 +162,159 @@ export function HrAttendanceList500({ data }: Props) {
     });
   };
 
-  const monthLabel = new Date(`${month}-01T00:00:00Z`).toLocaleDateString("pl-PL", { month: "long", year: "numeric", timeZone: "UTC" });
+  const monthLabel = monthName(month);
+
+  useEffect(() => {
+    if (!printTarget) return;
+    const afterPrint = () => setPrintTarget(null);
+    window.addEventListener("afterprint", afterPrint, { once: true });
+    const timer = window.setTimeout(() => window.print(), 80);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("afterprint", afterPrint);
+    };
+  }, [printTarget]);
+
+  const toggleEmployee = (employeeId: string) => {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(employeeId)) next.delete(employeeId);
+      else next.add(employeeId);
+      return next;
+    });
+  };
+
+  const openRange = (employeeId: string) => {
+    if (rangeEmployeeId === employeeId) {
+      setRangeEmployeeId(null);
+      setRangeError(null);
+      return;
+    }
+    setRangeEmployeeId(employeeId);
+    setRangeFrom(`${selectedYear}-01-01`);
+    setRangeTo(`${selectedYear}-12-31`);
+    setRangeError(null);
+  };
+
+  const generateYearReport = (employeeId: string) => {
+    setRangeEmployeeId(null);
+    setRangeError(null);
+    setReport({ employeeId, from: `${selectedYear}-01-01`, to: `${selectedYear}-12-31`, label: `Podsumowanie roczne ${selectedYear}` });
+  };
+
+  const generateRangeReport = (employeeId: string) => {
+    if (!rangeFrom || !rangeTo) {
+      setRangeError("Wybierz datę początkową i końcową.");
+      return;
+    }
+    if (rangeFrom > rangeTo) {
+      setRangeError("Data początkowa nie może być późniejsza niż końcowa.");
+      return;
+    }
+    setRangeError(null);
+    setReport({ employeeId, from: rangeFrom, to: rangeTo, label: "Podsumowanie od daty do daty" });
+  };
+
+  const renderMonthlySheet = (employee: Row, printOnly = false) => {
+    const rows = attendanceForDates(employee, dates);
+    const { vacationDays } = summarize(rows);
+    return <article className={`${styles.sheet} ${printOnly ? styles.sheetPrintOnly : ""}`}>
+      <div className={styles.sheetHeader}>
+        <div><small>LISTA OBECNOŚCI</small><h3>{fullName(employee)}</h3><p>{monthLabel}</p></div>
+        <div className={styles.sheetHeaderRight}>
+          <div className={styles.sheetMeta}><span>Nr pracownika: <b>{String(employee.employee_number ?? "—")}</b></span><span>Okres: <b>{monthStart} – {monthEnd}</b></span></div>
+          {!printOnly ? <button type="button" className={styles.printButton} onClick={() => setPrintTarget({ kind: "month", employeeId: String(employee.id) })}><Printer size={14} /> Drukuj / Zapisz PDF</button> : null}
+        </div>
+      </div>
+      <div className={styles.summary}><span className={styles.vacationSummary}><b>{vacationDays}</b> dni urlopu</span></div>
+      <table className={styles.table}>
+        <thead><tr><th>Lp.</th><th>Data</th><th>Dzień</th><th>Status</th><th>Godziny</th><th>Podpis pracownika</th></tr></thead>
+        <tbody>{rows.map((row, index) => <tr key={row.date} className={styles[`row_${row.statusKind}`]}><td>{index + 1}</td><td>{row.date}</td><td>{row.dayName}</td><td><span className={styles.status}>{row.status}</span></td><td>{hoursLabel(row.hours)}</td><td><span className={styles.signature} /></td></tr>)}</tbody>
+      </table>
+      <div className={styles.approval}><span>Podpis pracownika: <i /></span><span>Podpis przełożonego: <i /></span></div>
+    </article>;
+  };
+
+  const renderPeriodReport = (employee: Row, currentReport: PeriodReport, printOnly = false) => {
+    const reportDates = datesBetween(currentReport.from, currentReport.to);
+    const reportRows = attendanceForDates(employee, reportDates);
+    const totals = summarize(reportRows);
+    const monthly = new Map<string, AttendanceDay[]>();
+    for (const row of reportRows) {
+      const key = row.date.slice(0, 7);
+      monthly.set(key, [...(monthly.get(key) ?? []), row]);
+    }
+    const monthRows = [...monthly.entries()].sort(([left], [right]) => left.localeCompare(right));
+
+    return <section className={`${styles.reportCard} ${printOnly ? styles.reportPrintOnly : ""}`} aria-label={`${currentReport.label}: ${fullName(employee)}`}>
+      <header className={styles.reportHeader}>
+        <div><small>PODSUMOWANIE OBECNOŚCI</small><h3>{fullName(employee)}</h3><p>{currentReport.label} · {periodLabel(currentReport.from, currentReport.to)}</p></div>
+        {!printOnly ? <div className={styles.reportHeaderActions}><button type="button" onClick={() => setPrintTarget({ kind: "report", ...currentReport })}><Printer size={14} /> Drukuj / Zapisz PDF</button><button type="button" className={styles.closeButton} onClick={() => setReport(null)} aria-label="Zamknij podsumowanie"><X size={15} /></button></div> : null}
+      </header>
+      <div className={styles.reportStats}>
+        <span><small>Dni pracy</small><b>{totals.workDays}</b></span>
+        <span><small>Godziny</small><b>{hoursLabel(totals.totalHours)}</b></span>
+        <span className={styles.reportVacation}><small>Dni urlopu</small><b>{totals.vacationDays}</b></span>
+        <span><small>Inne nieobecności</small><b>{totals.absenceDays}</b></span>
+        <span><small>Brak wpisu</small><b>{totals.missingDays}</b></span>
+      </div>
+      <div className={styles.reportTableWrap}><table className={styles.reportTable}>
+        <thead><tr><th>Miesiąc</th><th>Dni pracy</th><th>Godziny</th><th>Dni urlopu</th><th>Inne nieobecności</th><th>Brak wpisu</th></tr></thead>
+        <tbody>{monthRows.map(([key, rows]) => {
+          const summary = summarize(rows);
+          return <tr key={key}><td>{monthName(key)}</td><td>{summary.workDays}</td><td>{hoursLabel(summary.totalHours)}</td><td><b>{summary.vacationDays}</b></td><td>{summary.absenceDays}</td><td>{summary.missingDays}</td></tr>;
+        })}</tbody>
+      </table></div>
+    </section>;
+  };
+
+  const printEmployee = printTarget ? employees.find((employee) => String(employee.id) === printTarget.employeeId) ?? null : null;
 
   return <section className={styles.panel} aria-label="Lista obecności pracowników">
     <header className={styles.header}>
-      <div className={styles.title}><span><CalendarDays size={18} /></span><div><p>Dokument kadrowy</p><h2>Lista obecności</h2><small>Miesięczna lista dla każdego pracownika — gotowa do wydruku, podpisu lub zapisania jako PDF.</small></div></div>
-      <div className={styles.controls}>
-        <label><span>Miesiąc</span><input type="month" value={month} onChange={(event) => event.target.value && setMonth(event.target.value)} /></label>
-        <label><span>Pracownik</span><select value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}><option value="">Wszyscy pracownicy</option>{employees.map((employee) => <option key={String(employee.id)} value={String(employee.id)}>{fullName(employee)}</option>)}</select></label>
-        <button type="button" onClick={() => window.print()}><Printer size={15} /> Drukuj / Zapisz PDF</button>
-      </div>
+      <div className={styles.title}><span><CalendarDays size={18} /></span><div><p>Dokument kadrowy</p><h2>Lista obecności</h2><small>Pracownicy są domyślnie zwinięci. Rozwiń osobę, aby zobaczyć miesięczną listę, albo wygeneruj podsumowanie roczne / za dowolny okres.</small></div></div>
+      <div className={styles.controls}><label><span>Miesiąc listy</span><input type="month" value={month} onChange={(event) => event.target.value && setMonth(event.target.value)} /></label></div>
     </header>
 
-    <div className={styles.info}><UsersRound size={15} /><span>{visibleEmployees.length} {visibleEmployees.length === 1 ? "pracownik" : "pracowników"}</span><b>·</b><span>{monthLabel}</span><b>·</b><span>{dates.length} dni kalendarzowych</span></div>
+    <div className={styles.info}><UsersRound size={15} /><span>{employees.length} {employees.length === 1 ? "pracownik" : "pracowników"}</span><b>·</b><span>{monthLabel}</span><b>·</b><span>listy domyślnie zwinięte</span></div>
 
-    <div className={styles.printArea}>
-      {visibleEmployees.map((employee) => {
-        const rows = attendanceFor(employee);
-        const totalHours = rows.reduce((sum, row) => sum + row.hours, 0);
-        const workDays = rows.filter((row) => row.statusKind === "work").length;
-        const vacationDays = rows.filter((row) => row.statusKind === "vacation").length;
-        const absenceDays = rows.filter((row) => row.statusKind === "absence").length;
-        const missingDays = rows.filter((row) => row.statusKind === "missing").length;
-        return <article className={styles.sheet} key={String(employee.id)}>
-          <div className={styles.sheetHeader}>
-            <div><small>LISTA OBECNOŚCI</small><h3>{fullName(employee)}</h3><p>{monthLabel}</p></div>
-            <div className={styles.sheetMeta}><span>Nr pracownika: <b>{String(employee.employee_number ?? "—")}</b></span><span>Okres: <b>{monthStart} – {monthEnd}</b></span></div>
-          </div>
-          <div className={styles.summary}>
-            <span><b>{workDays}</b> dni pracy</span><span><b>{hoursLabel(totalHours)}</b> h</span><span><b>{vacationDays}</b> dni urlopu</span><span><b>{absenceDays}</b> inne nieobecności</span>{missingDays ? <span className={styles.missingSummary}><b>{missingDays}</b> brak wpisu</span> : null}
-          </div>
-          <table className={styles.table}>
-            <thead><tr><th>Lp.</th><th>Data</th><th>Dzień</th><th>Status</th><th>Godziny</th><th>Podpis pracownika</th></tr></thead>
-            <tbody>{rows.map((row, index) => <tr key={row.date} className={styles[`row_${row.statusKind}`]}><td>{index + 1}</td><td>{row.date}</td><td>{row.dayName}</td><td><span className={styles.status}>{row.status}</span></td><td>{hoursLabel(row.hours)}</td><td><span className={styles.signature} /></td></tr>)}</tbody>
-          </table>
-          <div className={styles.approval}><span>Podpis pracownika: <i /></span><span>Podpis przełożonego: <i /></span></div>
-        </article>;
-      })}
-      {!visibleEmployees.length ? <div className={styles.empty}>Brak pracowników zatrudnionych w wybranym miesiącu.</div> : null}
+    <div className={styles.employeeListWrap}>
+      <table className={styles.employeeList}>
+        <thead><tr><th>Pracownik</th><th>Miesiąc</th><th>Urlop</th><th>Podsumowania</th></tr></thead>
+        <tbody>{employees.map((employee) => {
+          const employeeId = String(employee.id);
+          const expanded = expandedIds.has(employeeId);
+          const monthRows = attendanceForDates(employee, dates);
+          const vacationDays = summarize(monthRows).vacationDays;
+          const activeInMonth = monthRows.some((row) => row.statusKind !== "outside");
+          const showRange = rangeEmployeeId === employeeId;
+          const currentReport = report?.employeeId === employeeId ? report : null;
+          return <Fragment key={employeeId}>
+            <tr className={`${styles.employeeRow} ${expanded ? styles.employeeRowOpen : ""}`}>
+              <td><button type="button" className={styles.employeeToggle} onClick={() => toggleEmployee(employeeId)} aria-expanded={expanded}>{expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}<span><strong>{fullName(employee)}</strong><small>Nr pracownika: {String(employee.employee_number ?? "—")}</small></span></button></td>
+              <td><span className={styles.monthCell}>{monthLabel}</span>{!activeInMonth ? <small className={styles.outsideEmployment}>Poza zatrudnieniem</small> : null}</td>
+              <td><span className={styles.vacationCount}>{vacationDays} {vacationDays === 1 ? "dzień" : "dni"}</span></td>
+              <td><div className={styles.rowActions}><button type="button" onClick={() => generateYearReport(employeeId)}><CalendarDays size={14} /> Rok {selectedYear}</button><button type="button" onClick={() => openRange(employeeId)} className={showRange ? styles.actionActive : ""}><CalendarRange size={14} /> Od daty do daty</button></div></td>
+            </tr>
+            {showRange ? <tr className={styles.detailRow}><td colSpan={4}><div className={styles.rangePanel}>
+              <div><strong>Podsumowanie za własny okres</strong><small>Wybierz datę początkową i końcową dla {fullName(employee)}.</small></div>
+              <label><span>Od</span><input type="date" value={rangeFrom} onChange={(event) => setRangeFrom(event.target.value)} /></label>
+              <label><span>Do</span><input type="date" value={rangeTo} onChange={(event) => setRangeTo(event.target.value)} /></label>
+              <button type="button" onClick={() => generateRangeReport(employeeId)}>Generuj podsumowanie</button>
+              {rangeError ? <p className={styles.rangeError}>{rangeError}</p> : null}
+            </div></td></tr> : null}
+            {expanded ? <tr className={styles.detailRow}><td colSpan={4}><div className={styles.monthlyDetail}>{renderMonthlySheet(employee)}</div></td></tr> : null}
+            {currentReport ? <tr className={styles.detailRow}><td colSpan={4}>{renderPeriodReport(employee, currentReport)}</td></tr> : null}
+          </Fragment>;
+        })}</tbody>
+      </table>
+      {!employees.length ? <div className={styles.empty}>Brak pracowników w firmie.</div> : null}
     </div>
+
+    {printTarget && printEmployee ? <div className={styles.printDocument}>
+      {printTarget.kind === "month"
+        ? renderMonthlySheet(printEmployee, true)
+        : renderPeriodReport(printEmployee, { employeeId: printTarget.employeeId, from: printTarget.from, to: printTarget.to, label: printTarget.label }, true)}
+    </div> : null}
   </section>;
 }
