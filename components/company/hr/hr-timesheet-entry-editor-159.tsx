@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { startTransition, useOptimistic, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { CalendarDays, Plus, Save, Trash2, X } from "lucide-react";
@@ -56,11 +56,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [calendarLeaveActive, setCalendarLeaveActive] = useState(() => isVacationLeave(leave));
-
-  useEffect(() => {
-    if (leave !== null) setCalendarLeaveActive(isVacationLeave(leave));
-  }, [leave]);
+  const [calendarLeaveActive, setOptimisticCalendarLeaveActive] = useOptimistic(isVacationLeave(leave));
 
   const projectById = new Map(projects.map((row) => [String(row.id), String(row.name ?? "Inwestycja")]));
   const total = entries.reduce((sum, row) => sum + entryHours(row), 0);
@@ -114,7 +110,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
       });
       const result = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Nie udało się zmienić statusu dnia.");
-      setCalendarLeaveActive(nextVacation);
+      startTransition(() => setOptimisticCalendarLeaveActive(nextVacation));
       setMessage(nextVacation
         ? "Urlop zapisany. Wniosek urlopowy został utworzony i zatwierdzony automatycznie."
         : "Urlop z kalendarza usunięty. Dzień jest ponownie dostępny do wpisania pracy.");
