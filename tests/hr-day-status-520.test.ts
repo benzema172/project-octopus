@@ -10,10 +10,11 @@ describe("HR independent sick-day marker 5.2", () => {
   it("stores CHOROBOWE outside leave_requests", () => {
     const route = source("app/api/company/hr/day-status/route.ts");
     expect(route).toContain('const SICK_STATUS = "sick"');
+    expect(route).toContain('type Action = "set_sick" | "clear_sick"');
     expect(route).toMatch(/from\("hr_day_statuses"\)[\s\S]*?\.upsert\(/);
     expect(route).toMatch(/from\("leave_requests"\)[\s\S]*?\.select\(/);
     expect(route).not.toMatch(/from\("leave_requests"\)\s*\.(insert|upsert|update|delete)\s*\(/);
-    expect(route).toContain('action: nextSick ? "set_sick" : "clear_sick"');
+    expect(route).toContain('body.action === "clear_sick"');
   });
 
   it("keeps the sick marker separate from leave entitlement accounting", () => {
@@ -24,6 +25,7 @@ describe("HR independent sick-day marker 5.2", () => {
     expect(migration).toContain("unique (workspace_id, employee_id, work_date)");
     expect(loader).not.toContain("hr_day_statuses");
     expect(loader).toContain('const annualLeaveRows = leaves.filter');
+    expect(loader).toContain('["annual", "on_demand"]');
   });
 
   it("offers CHOROBOWE next to URLOP only in the calendar-enabled day selector", () => {
