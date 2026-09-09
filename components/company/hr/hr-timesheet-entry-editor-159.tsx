@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Plus, Save, Trash2, X } from "lucide-react";
+import { CalendarDays, Plus, Save, Trash2, X } from "lucide-react";
 import styles from "./hr-timesheet-entry-editor-159.module.css";
 
 type Row = Record<string, unknown>;
@@ -18,9 +18,12 @@ type Props = {
   canWrite: boolean;
   variant: "inline" | "cell";
   suggestedProjectId?: string;
+  leave?: Row | null;
   onOpenDetails?: () => void;
   onChanged?: () => void;
 };
+
+const VACATION_TYPES = new Set(["annual", "on_demand", "unpaid"]);
 
 function num(value: unknown, digits = 1) {
   const parsed = Number(value ?? 0);
@@ -41,7 +44,11 @@ function dayLabel(value: string) {
   return parsed.toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 }
 
-export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeName, workDate, projects, entries, canWrite, variant, suggestedProjectId = "", onOpenDetails, onChanged }: Props) {
+function isVacationLeave(leave?: Row | null) {
+  return Boolean(leave && String(leave.status ?? "approved") === "approved" && VACATION_TYPES.has(String(leave.leave_type ?? "")));
+}
+
+export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeName, workDate, projects, entries, canWrite, variant, suggestedProjectId = "", leave = null, onOpenDetails, onChanged }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [draftKeys, setDraftKeys] = useState<number[]>(() => entries.length === 0 ? [1] : []);
@@ -49,10 +56,16 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [calendarLeaveActive, setCalendarLeaveActive] = useState(() => isVacationLeave(leave));
+
+  useEffect(() => {
+    if (leave !== null) setCalendarLeaveActive(isVacationLeave(leave));
+  }, [leave]);
 
   const projectById = new Map(projects.map((row) => [String(row.id), String(row.name ?? "Inwestycja")]));
   const total = entries.reduce((sum, row) => sum + entryHours(row), 0);
   const projectNames = Array.from(new Set(entries.map((row) => row.project_id ? projectById.get(String(row.project_id)) ?? "Inwestycja" : "Koszt ogólny")));
+  const blockedAbsence = Boolean(leave && String(leave.status ?? "") === "approved" && !isVacationLeave(leave));
 
   const request = async (action: "create" | "update" | "delete", payload: Record<string, unknown>, busyKey: string) => {
     if (!canWrite || !workspaceId) return false;
@@ -81,6 +94,34 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Nie udało się zapisać czasu pracy.");
       return false;
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const changeCalendarLeave = async () => {
+    if (!canWrite || busyId !== null || blockedAbsence) return;
+    if (!calendarLeaveActive && entries.length > 0 && !window.confirm("Ten dzień ma już wpis czasu pracy. Urlop zostanie zapisany, a kalendarz pokaże konflikt danych do wyjaśnienia. Kontynuować?")) return;
+    const nextVacation = !calendarLeaveActive;
+    setBusyId("calendar-leave");
+    setMessage(null);
+    setError(null);
+    try {
+      const response = await fetch("/api/company/hr/calendar-leave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId, employeeId, workDate, action: nextVacation ? "set" : "clear" })
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Nie udało się zmienić statusu dnia.");
+      setCalendarLeaveActive(nextVacation);
+      setMessage(nextVacation
+        ? "Urlop zapisany. Wniosek urlopowy został utworzony i zatwierdzony automatycznie."
+        : "Urlop z kalendarza usunięty. Dzień jest ponownie dostępny do wpisania pracy.");
+      router.refresh();
+      onChanged?.();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Nie udało się zmienić statusu dnia.");
     } finally {
       setBusyId(null);
     }
@@ -128,7 +169,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
   };
 
   const autoSubmit = (element: HTMLSelectElement | HTMLInputElement) => {
-    if (!canWrite || busyId !== null) return;
+    if (!canWrite || busyId !== null || calendarLeaveActive || blockedAbsence) return;
     const form = element.form;
     if (!form) return;
     queueMicrotask(() => form.requestSubmit());
@@ -141,7 +182,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
         <select
           name="projectId"
           defaultValue={entry?.project_id ? String(entry.project_id) : suggestedProjectId}
-          disabled={!canWrite || busyId !== null}
+          disabled={!canWrite || busyId !== null || calendarLeaveActive || blockedAbsence}
           onChange={(event) => autoSubmit(event.currentTarget)}
           title="Zmiana inwestycji zapisuje się automatycznie"
         >
@@ -156,7 +197,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
           inputMode="decimal"
           defaultValue={entry ? String(entry.hours ?? "") : "8"}
           required
-          disabled={!canWrite || busyId !== null}
+          disabled={!canWrite || busyId !== null || calendarLeaveActive || blockedAbsence}
           onBlur={(event) => entry ? autoSubmit(event.currentTarget) : undefined}
         />
       </label>
@@ -166,22 +207,26 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
           name="overtimeHours"
           inputMode="decimal"
           defaultValue={entry ? String(entry.overtime_hours ?? 0) : "0"}
-          disabled={!canWrite || busyId !== null}
+          disabled={!canWrite || busyId !== null || calendarLeaveActive || blockedAbsence}
           onBlur={(event) => entry ? autoSubmit(event.currentTarget) : undefined}
         />
       </label>
-      {canWrite ? <button className={styles.save} type="submit" disabled={busyId !== null} aria-label={entry ? "Zapisz wpis czasu" : "Dodaj wpis czasu"} title="Zapisz"><Save size={14} /> {variant === "inline" ? null : entry ? "Zapisz" : "Dodaj"}</button> : null}
+      {canWrite ? <button className={styles.save} type="submit" disabled={busyId !== null || calendarLeaveActive || blockedAbsence} aria-label={entry ? "Zapisz wpis czasu" : "Dodaj wpis czasu"} title="Zapisz"><Save size={14} /> {variant === "inline" ? null : entry ? "Zapisz" : "Dodaj"}</button> : null}
       {entry && canWrite ? <button className={styles.delete} type="button" aria-label="Usuń wpis" title="Usuń wpis" disabled={busyId !== null} onClick={() => void removeEntry(entry)}><Trash2 size={14} /></button> : null}
       {!entry && canWrite && draftKey !== undefined ? <button className={styles.delete} type="button" aria-label="Usuń nowy wiersz" title="Usuń nowy wiersz" disabled={busyId !== null} onClick={() => removeDraft(draftKey)}><X size={14} /></button> : null}
-      {showAdd && canWrite ? <button type="button" className={styles.addEntry} disabled={busyId !== null} onClick={addDraft} aria-label="Dodaj kolejny wpis" title="Dodaj kolejny wpis"><Plus size={14} /></button> : null}
+      {showAdd && canWrite ? <button type="button" className={styles.addEntry} disabled={busyId !== null || calendarLeaveActive || blockedAbsence} onClick={addDraft} aria-label="Dodaj kolejny wpis" title="Dodaj kolejny wpis"><Plus size={14} /></button> : null}
     </form>;
   };
 
   const lastEntryIndex = draftKeys.length === 0 ? entries.length - 1 : -1;
   const lastDraftIndex = draftKeys.length - 1;
+  const showTimeForms = (!calendarLeaveActive && !blockedAbsence) || entries.length > 0;
   const editor = <div className={`${styles.inlineWrap} ${variant === "inline" ? styles.inlineCompact : ""}`}>
-    {entries.map((entry, index) => formFor(entry, String(entry.id ?? `${employeeId}-${workDate}-${index}`), undefined, index === lastEntryIndex))}
-    {draftKeys.map((draftKey, index) => formFor(undefined, `draft-${draftKey}`, draftKey, index === lastDraftIndex))}
+    <div className={`${styles.dayModeBar} ${calendarLeaveActive ? styles.dayModeVacation : blockedAbsence ? styles.dayModeAbsence : ""}`}>
+      <span><CalendarDays size={14} /><b>{blockedAbsence ? "Nieobecność" : calendarLeaveActive ? "Urlop" : "Dzień pracy"}</b>{variant === "inline" ? null : <small>{blockedAbsence ? "Zmianę wykonaj w zakładce Urlopy i absencje." : calendarLeaveActive ? "Wniosek urlopowy jest powiązany z tym dniem." : "Możesz przypisać pracę albo oznaczyć dzień jako urlop."}</small>}</span>
+      {canWrite && !blockedAbsence ? <button type="button" className={calendarLeaveActive ? styles.vacationActive : styles.vacationButton} disabled={busyId !== null} onClick={() => void changeCalendarLeave()}>{calendarLeaveActive ? "Przywróć pracę" : "Urlop"}</button> : null}
+    </div>
+    {showTimeForms ? <>{entries.map((entry, index) => formFor(entry, String(entry.id ?? `${employeeId}-${workDate}-${index}`), undefined, index === lastEntryIndex))}{!calendarLeaveActive && !blockedAbsence ? draftKeys.map((draftKey, index) => formFor(undefined, `draft-${draftKey}`, draftKey, index === lastDraftIndex)) : null}</> : <div className={styles.leaveNotice}>Brak wpisu czasu — ten dzień jest oznaczony jako {calendarLeaveActive ? "urlop" : "nieobecność"}.</div>}
     {!canWrite ? <div className={styles.readOnly}>Widok tylko do odczytu — zmiana ewidencji wymaga uprawnienia do zapisu Kadr.</div> : null}
     {message ? <div className={styles.message}>{message}</div> : null}
     {error ? <div className={styles.error} role="alert">{error}</div> : null}
@@ -208,7 +253,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
       type="button"
       className={`${styles.cellButton} ${entries.length ? "" : styles.emptyCell}`}
       onClick={openCell}
-      title={entries.length ? `${summaryProject} · ${num(total)} h — kliknij, aby edytować pełne szczegóły dnia` : "Kliknij, aby dodać inwestycję, godziny i szczegóły pracy"}
+      title={entries.length ? `${summaryProject} · ${num(total)} h — kliknij, aby edytować pełne szczegóły dnia` : "Kliknij, aby dodać inwestycję, godziny lub oznaczyć urlop"}
       aria-label={`${employeeName ?? "Pracownik"}, ${workDate}: ${entries.length ? `${num(total)} godzin` : "brak wpisu"}. Otwórz pełne szczegóły dnia.`}
     >
       <strong>{entries.length ? `${num(total)} h` : "+ wpis"}</strong>
@@ -221,12 +266,12 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
           <header className={styles.modalHeader}>
             <div>
               <p>{dayLabel(workDate)}</p>
-              <h3>{employeeName ?? "Pracownik"} — inwestycja i godziny</h3>
+              <h3>{employeeName ?? "Pracownik"} — przypisanie dnia</h3>
             </div>
             <button type="button" className={styles.close} onClick={() => setOpen(false)} aria-label="Zamknij"><X size={17} /></button>
           </header>
           <div className={styles.modalBody}>
-            <div className={styles.inlineStatus}><b>{entries.length ? `${entries.length} wpis${entries.length === 1 ? "" : "y"}` : "Brak zapisanego wpisu"}</b><span>Wybór inwestycji zapisuje domyślne 8 h automatycznie. Zmiana inwestycji lub godzin od razu aktualizuje koszt właściwego kontraktu.</span></div>
+            <div className={styles.inlineStatus}><b>{entries.length ? `${entries.length} wpis${entries.length === 1 ? "" : "y"}` : "Brak zapisanego wpisu"}</b><span>Wybierz inwestycję i godziny albo oznacz cały dzień jako Urlop. Zmiany aktualizują kalendarz i koszty automatycznie.</span></div>
             {editor}
           </div>
         </section>
