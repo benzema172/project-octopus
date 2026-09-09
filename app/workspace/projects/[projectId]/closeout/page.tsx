@@ -13,6 +13,22 @@ import { ExecutionLayerNotice } from "@/components/system/execution-layer-notice
 
 export const dynamic = "force-dynamic";
 
+type Readiness = {
+  projectStatus?: string;
+  ready?: boolean;
+  blockers?: number;
+  openTasks?: number;
+  pendingDocuments?: number;
+  pendingMaterialRequests?: number;
+  pendingPurchaseOrders?: number;
+  pendingFinance?: number;
+  draftStockMovements?: number;
+  activeAssignments?: number;
+  activeTeams?: number;
+  autoCloseAssignments?: number;
+  autoCloseTeams?: number;
+};
+
 export default async function CloseoutPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
   const user = await requireCurrentUser();
@@ -25,18 +41,29 @@ export default async function CloseoutPage({ params }: { params: Promise<{ proje
   ]);
   if (!schemaReady) return <div className="project-tab-content"><ExecutionLayerNotice /></div>;
   const db=createServiceSupabaseClient();
-  const [requirementsResult,documentsResult,outputsResult]=await Promise.all([
+  const [requirementsResult,documentsResult,outputsResult,readinessResult]=await Promise.all([
     db.from("closeout_requirements").select("id,category,title,required,status,document_id,due_at").eq("workspace_id",project.workspace_id).eq("project_id",project.id).order("category").order("title"),
     db.from("documents").select("id,name").eq("workspace_id",project.workspace_id).eq("project_id",project.id).is("deleted_at",null).order("name"),
-    db.from("project_outputs").select("id,title,version_number,status,generated_at,warnings").eq("workspace_id",project.workspace_id).eq("project_id",project.id).order("version_number",{ascending:false})
+    db.from("project_outputs").select("id,title,version_number,status,generated_at,warnings").eq("workspace_id",project.workspace_id).eq("project_id",project.id).order("version_number",{ascending:false}),
+    db.rpc("get_project_lifecycle_readiness_540",{p_workspace_id:project.workspace_id,p_project_id:project.id})
   ]);
+  const readiness=(readinessResult.data && typeof readinessResult.data==="object" ? readinessResult.data : {}) as Readiness;
+  const readOnly=["completed","archived"].includes(String(project.status));
   return <ProjectCompactShell
     icon={ShieldCheck}
     kicker="Zamknięcie inwestycji"
-    title="Paczka przekazania"
-    description="Checklista dowodów, wersjonowane eksporty i kontrolowane zatwierdzenie końcowe."
-    aside={canManage ? <OperationsActionButton projectId={project.id} action="initialize_closeout" label="Aktualizuj checklistę" /> : <small>Tylko odczyt</small>}
+    title="Paczka przekazania i archiwum"
+    description="Checklista dowodów, kontrola otwartych procesów, zamknięcie realizacji i bezpieczne archiwum całej historii."
+    aside={canManage && !readOnly ? <OperationsActionButton projectId={project.id} action="initialize_closeout" label="Aktualizuj checklistę" /> : <small>{project.status==="archived"?"Archiwum · tylko odczyt":project.status==="completed"?"Zakończona · gotowa do archiwizacji":"Tylko odczyt"}</small>}
   >
-    <CloseoutWorkspace projectId={project.id} canManage={canManage} requirements={(requirementsResult.data??[]).map(row=>({id:String(row.id),category:String(row.category),title:String(row.title),required:row.required!==false,status:String(row.status),document_id:row.document_id?String(row.document_id):null}))} documents={(documentsResult.data??[]).map(row=>({id:String(row.id),name:String(row.name)}))} outputs={(outputsResult.data??[]).map(row=>({id:String(row.id),title:String(row.title),version_number:Number(row.version_number),status:String(row.status),generated_at:String(row.generated_at),warnings:row.warnings}))}/>
+    <CloseoutWorkspace
+      projectId={project.id}
+      projectStatus={String(project.status)}
+      canManage={canManage}
+      readiness={readiness}
+      requirements={(requirementsResult.data??[]).map(row=>({id:String(row.id),category:String(row.category),title:String(row.title),required:row.required!==false,status:String(row.status),document_id:row.document_id?String(row.document_id):null}))}
+      documents={(documentsResult.data??[]).map(row=>({id:String(row.id),name:String(row.name)}))}
+      outputs={(outputsResult.data??[]).map(row=>({id:String(row.id),title:String(row.title),version_number:Number(row.version_number),status:String(row.status),generated_at:String(row.generated_at),warnings:row.warnings}))}
+    />
   </ProjectCompactShell>;
 }
