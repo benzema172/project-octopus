@@ -1,6 +1,6 @@
 export type HrRow = Record<string, unknown>;
 
-export type HrWorkspaceTab = "dashboard" | "employees" | "time" | "leaves" | "compliance" | "teams" | "documents";
+export type HrWorkspaceTab = "dashboard" | "employees" | "time" | "attendance" | "leaves" | "compliance" | "teams" | "documents";
 
 export type HrWorkspaceData = {
   referenceDate: string;
