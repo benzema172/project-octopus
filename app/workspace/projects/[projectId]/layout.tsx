@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { ArrowLeft, Building2, MapPin } from "lucide-react";
+import { Archive, ArrowLeft, Building2, LockKeyhole, MapPin } from "lucide-react";
 import { notFound } from "next/navigation";
 import { CompanyShell } from "@/components/layout/company-shell";
 import { ProjectAutopilotDock } from "@/components/projects/project-autopilot-dock";
@@ -35,7 +35,7 @@ import "../../companies/company-cleanup.css";
 export const dynamic = "force-dynamic";
 type ProjectLayoutProps = { children: React.ReactNode; params: Promise<{ projectId: string }> };
 
-const STATUS_LABELS: Record<string, string> = { planned: "Planowana", tender: "Przetarg", active: "Aktywna", paused: "Wstrzymana", completed: "Zakończona", archived: "Archiwalna" };
+const STATUS_LABELS: Record<string, string> = { planned: "Planowana", tender: "Przetarg", preparation: "Przygotowanie", active: "Aktywna", paused: "Wstrzymana", completed: "Zakończona", archived: "Archiwalna" };
 
 async function loadAutopilotSummary(projectId: string) {
   try { return await getReliableInvestmentAutopilotSummary(projectId); }
@@ -67,7 +67,8 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
   const domains: Domain[] = ["investments", "finance", "hr", "warehouse", "fleet", "templates", "reports", "settings"];
   const allowedProjectDomains = domains.filter((domain) => domainAccessPolicyAllows(policy, { domain, level: "read", projectId: project.id }));
   const allowedCompanyDomains = domains.filter((domain) => domainAccessPolicyAllows(policy, { domain, level: "read", projectId: null }));
-  const canUpload = domainAccessPolicyAllows(policy, { domain: "investments", level: "write", projectId: project.id });
+  const lifecycleReadOnly = ["completed", "archived"].includes(String(project.status));
+  const canUpload = !lifecycleReadOnly && domainAccessPolicyAllows(policy, { domain: "investments", level: "write", projectId: project.id });
 
   const location = [profile.street, [profile.postalCode, profile.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") || project.location || "Do uzupełnienia";
   const shortName = profile.shortName || project.name;
@@ -78,7 +79,7 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
 
   return (
     <CompanyShell workspaceId={workspace.id} companyName={workspace.name} userEmail={user.email ?? "Project Octopus"} allowedDomains={allowedCompanyDomains}>
-      <main className="workspace-page project-workspace co-project-workspace project-workspace-v2">
+      <main className="workspace-page project-workspace co-project-workspace project-workspace-v2" data-project-lifecycle-status={String(project.status)}>
         <section className="pw-project-top-shell" aria-label="Nagłówek i nawigacja inwestycji">
           <header className="pw-project-header pw-project-header--contract pw-project-header--compact pw-project-header--with-intake">
             <div className="pw-project-header__identity">
@@ -102,9 +103,16 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
           <ProjectNavigation projectId={project.id} allowedDomains={allowedProjectDomains} />
         </section>
 
+        {lifecycleReadOnly ? <div className="project-operation-card__success" data-project-readonly-banner="540">
+          {project.status === "archived" ? <Archive size={17} /> : <LockKeyhole size={17} />}
+          <strong>{project.status === "archived" ? "Archiwum inwestycji — tylko do odczytu." : "Inwestycja zakończona — tryb historyczny."}</strong>
+          <span>{project.status === "archived" ? "Dokumentacja, koszty, protokoły, godziny i historia AI pozostają dostępne bez zmiany project_id." : "Nowe operacyjne wpisy są zablokowane. Przejdź do Zamknięcia inwestycji, aby przenieść realizację do Archiwum."}</span>
+          <Link className="secondary-button" href={`/workspace/projects/${project.id}/closeout`}>{project.status === "archived" ? "Paczki archiwalne" : "Zamknięcie i archiwizacja"}</Link>
+        </div> : null}
+
         {allowedProjectDomains.includes("warehouse") ? <ProjectEquipmentStrip430 workspaceId={project.workspace_id} projectId={project.id} /> : null}
 
-        {aiProposalCount > 0 && allowedProjectDomains.includes("investments") ? <Link className="pw-ai-proposal-alert" href={`/workspace/projects/${project.id}/documentation#ai-review-center`}><span>AI</span><strong>{aiProposalCount} propozycji wymaga weryfikacji</strong><small>Otwórz centrum decyzji</small></Link> : null}
+        {!lifecycleReadOnly && aiProposalCount > 0 && allowedProjectDomains.includes("investments") ? <Link className="pw-ai-proposal-alert" href={`/workspace/projects/${project.id}/documentation#ai-review-center`}><span>AI</span><strong>{aiProposalCount} propozycji wymaga weryfikacji</strong><small>Otwórz centrum decyzji</small></Link> : null}
 
         {allowedProjectDomains.includes("investments") ? (
           <ProjectAutopilotRouteGate projectId={project.id}>
