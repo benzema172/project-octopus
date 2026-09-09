@@ -29,6 +29,7 @@ import "../../../investment-card-typography.css";
 import "../../../investment-menu-toggle-fix.css";
 import "../../../wrzutnia-mascot-refinement.css";
 import "../../../project-submodules-compact.css";
+import "../../../project-team-worklog-570.css";
 import "../../../project-section-rhythm-final.css";
 import "../../../project-actions.css";
 import "../../../project-intelligence-130.css";

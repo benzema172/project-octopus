@@ -22,7 +22,9 @@ describe("compact investment submodules after Schedule", () => {
     expect(route("requests")).toContain("<MaterialRequestsWorkflow");
     expect(route("requests")).toContain("<MaterialRequestIntegrityPanel");
     expect(route("protocols")).toContain("<ProtocolsProPanel");
-    expect(route("team")).toContain('kind="team"');
+    expect(route("team")).toContain("<ProjectTeamWorklog570");
+    expect(route("team")).toContain('statusLabel="Ewidencja z Kadr"');
+    expect(route("team")).not.toContain('kind="team"');
     expect(route("warehouse")).toContain('kind="warehouse"');
     expect(route("reports")).toContain('kind="reports"');
   });
