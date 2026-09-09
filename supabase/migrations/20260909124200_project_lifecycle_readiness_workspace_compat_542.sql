@@ -1,4 +1,6 @@
 -- Lifecycle 5.4.2: project_tasks and material_requests are project-scoped and do not carry workspace_id.
+-- Keep project status as text for compatibility with both enum-backed production
+-- and the local PGlite migration validation chain.
 create or replace function public.get_project_lifecycle_readiness_540(
   p_workspace_id uuid,
   p_project_id uuid
@@ -10,7 +12,7 @@ security definer
 set search_path = public
 as $$
 declare
-  v_project_status public.project_status;
+  v_project_status text;
   v_open_tasks integer := 0;
   v_pending_documents integer := 0;
   v_pending_materials integer := 0;
@@ -21,7 +23,7 @@ declare
   v_active_teams integer := 0;
   v_blockers integer := 0;
 begin
-  select status into v_project_status
+  select status::text into v_project_status
   from public.projects
   where id = p_project_id and workspace_id = p_workspace_id;
   if v_project_status is null then raise exception 'Nie znaleziono inwestycji.'; end if;
@@ -84,7 +86,7 @@ begin
 
   v_blockers := v_open_tasks + v_pending_documents + v_pending_materials + v_pending_orders + v_pending_finance + v_draft_stock;
   return jsonb_build_object(
-    'projectStatus', v_project_status::text,
+    'projectStatus', v_project_status,
     'ready', v_blockers = 0,
     'blockers', v_blockers,
     'openTasks', v_open_tasks,
