@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { getProjectHeaderModel560 } from "@/lib/investments/project-header-model-560";
-import type { ProjectProfile, ProjectSummary } from "@/lib/types";
+import { getProjectHeaderModel560 } from "../lib/investments/project-header-model-560";
+import type { ProjectProfile, ProjectSummary } from "../lib/types";
 
 const project = {
   id: "project-1",
