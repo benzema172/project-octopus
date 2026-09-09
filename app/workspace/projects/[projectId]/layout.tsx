@@ -15,6 +15,7 @@ import { getProjectProfile } from "@/lib/data/project-profile";
 import { getProjectAiProposalPendingCount } from "@/lib/data/project-ai-proposals";
 import { getProjectForUser } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
+import { getProjectHeaderModel560 } from "@/lib/investments/project-header-model-560";
 import { domainAccessPolicyAllows, loadDomainAccessPolicy, type Domain } from "@/lib/authorization";
 import "../../../project-workspace-v2.css";
 import "../../../project-intake.css";
@@ -69,13 +70,7 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
   const canManageStatus = domainAccessPolicyAllows(policy, { domain: "investments", level: "write", projectId: project.id });
   const lifecycleReadOnly = ["completed", "archived"].includes(String(project.status));
   const canUpload = !lifecycleReadOnly && canManageStatus;
-
-  const location = [profile.street, [profile.postalCode, profile.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") || project.location || "Do uzupełnienia";
-  const shortName = profile.shortName || project.name;
-  const descriptionContractName = project.description?.replace(/\s*Lokalizacja:.*$/i, "").trim();
-  const officialName = (profile.projectName && profile.projectName !== shortName ? profile.projectName : "") || descriptionContractName || profile.projectName || project.name;
-  const contractNumber = profile.contractNumber || "Do uzupełnienia";
-  const investorName = profile.investorName || project.investor_name || "Do uzupełnienia";
+  const header = getProjectHeaderModel560(project, profile);
 
   return (
     <CompanyShell workspaceId={workspace.id} companyName={workspace.name} userEmail={user.email ?? "Project Octopus"} allowedDomains={allowedCompanyDomains}>
@@ -84,17 +79,17 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
           <header className="pw-project-header pw-project-header--contract pw-project-header--compact pw-project-header--with-intake">
             <div className="pw-project-header__identity">
               <Link href={`/workspace/companies/${workspace.id}/investments`} className="pw-project-header__back" aria-label="Wszystkie inwestycje" title="Wszystkie inwestycje"><ArrowLeft size={15} aria-hidden="true" /></Link>
-              <div><ProjectStatusControl550 projectId={project.id} status={String(project.status)} canManage={canManageStatus} variant="header" /><h1>„{shortName}”</h1></div>
+              <div><ProjectStatusControl550 projectId={project.id} status={String(project.status)} canManage={canManageStatus} variant="header" /><h1>„{header.shortName}”</h1></div>
             </div>
 
             <div className="pw-project-contract" aria-label="Dane kontraktowe inwestycji">
-              <strong title={officialName}>{officialName}</strong>
-              <span>Numer kontraktu: {contractNumber}</span>
+              <strong title={header.officialName}>{header.officialName}</strong>
+              <span>Numer kontraktu: {header.contractNumber}</span>
             </div>
 
             <div className="pw-project-meta pw-project-meta--header">
-              <div><Building2 size={16} aria-hidden="true" /><span><small>Inwestor</small><strong title={investorName}>{investorName}</strong></span></div>
-              <div><MapPin size={16} aria-hidden="true" /><span><small>Lokalizacja</small><strong title={location}>{location}</strong></span></div>
+              <div><Building2 size={16} aria-hidden="true" /><span><small>Inwestor</small><strong title={header.investorName}>{header.investorName}</strong></span></div>
+              <div><MapPin size={16} aria-hidden="true" /><span><small>Lokalizacja</small><strong title={header.location}>{header.location}</strong></span></div>
             </div>
 
             {canUpload ? <div className="pw-project-header__intake"><ProjectIntakeSlot projectId={project.id} /></div> : null}
