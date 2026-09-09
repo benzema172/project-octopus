@@ -62,10 +62,11 @@ type ProjectCompactModulePageProps = {
   module: ProjectModuleDefinition;
   icon: LucideIcon;
   requiredDomain?: Domain;
+  statusLabel?: string;
   children?: React.ReactNode;
 };
 
-export async function ProjectCompactModulePage({ projectId, module, icon, requiredDomain, children }: ProjectCompactModulePageProps) {
+export async function ProjectCompactModulePage({ projectId, module, icon, requiredDomain, statusLabel, children }: ProjectCompactModulePageProps) {
   const user = await requireCurrentUser();
   const project = await getProjectForUser(user, projectId);
   if (!project) notFound();
@@ -88,7 +89,7 @@ export async function ProjectCompactModulePage({ projectId, module, icon, requir
       kicker={module.eyebrow}
       title={module.title}
       description={module.description}
-      status="KPI na żywo"
+      status={statusLabel ?? "KPI na żywo"}
       metrics={liveMetrics.map((metric) => ({ label: metric.label, value: metric.value, hint: metric.detail, tone: metric.tone }))}
     >
       {children}
