@@ -371,7 +371,7 @@ export function HrTimesheetEntryEditor159({ workspaceId, employeeId, employeeNam
   }
 
   const statusSummary = calendarSickActive ? "Chorobowe" : calendarLeaveActive ? "Urlop" : null;
-  const summaryProject = statusSummary ?? projectNames.join(" / ") || "Brak wpisu";
+  const summaryProject = statusSummary ?? (projectNames.join(" / ") || "Brak wpisu");
   const openCell = () => {
     setMessage(null);
     setError(null);
