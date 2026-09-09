@@ -34,7 +34,7 @@ export default async function CloseoutPage({ params }: { params: Promise<{ proje
   const user = await requireCurrentUser();
   const project = await getProjectForUser(user, projectId);
   if (!project) notFound();
-  if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id })) return <DomainAccessDenied workspaceId={project.workspace_id} area="Zamknięcie inwestycji" />;
+  if (!await hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "read", projectId: project.id })) return <DomainAccessDenied workspaceId={project.workspace_id} area="Paczka przekazania" />;
   const [schemaReady, canManage] = await Promise.all([
     isExecutionLayerSchemaReady(),
     hasDomainAccess({ workspaceId: project.workspace_id, userId: user.id, domain: "investments", level: "write", projectId: project.id })
@@ -51,10 +51,10 @@ export default async function CloseoutPage({ params }: { params: Promise<{ proje
   const readOnly=["completed","archived"].includes(String(project.status));
   return <ProjectCompactShell
     icon={ShieldCheck}
-    kicker="Zamknięcie inwestycji"
+    kicker="Dokumenty końcowe"
     title="Paczka przekazania i archiwum"
-    description="Checklista dowodów, kontrola otwartych procesów, zamknięcie realizacji i bezpieczne archiwum całej historii."
-    aside={canManage && !readOnly ? <OperationsActionButton projectId={project.id} action="initialize_closeout" label="Aktualizuj checklistę" /> : <small>{project.status==="archived"?"Archiwum · tylko odczyt":project.status==="completed"?"Zakończona · gotowa do archiwizacji":"Tylko odczyt"}</small>}
+    description="Opcjonalne uporządkowanie dokumentów i podgląd otwartych elementów. Nie jest to warunek zmiany statusu ani zakończenia inwestycji."
+    aside={canManage && !readOnly ? <OperationsActionButton projectId={project.id} action="initialize_closeout" label="Aktualizuj checklistę" /> : <small>Status zmienisz klikając znacznik przy nazwie inwestycji</small>}
   >
     <CloseoutWorkspace
       projectId={project.id}

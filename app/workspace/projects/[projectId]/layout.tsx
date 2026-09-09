@@ -8,6 +8,7 @@ import { ProjectAutopilotRouteGate } from "@/components/projects/project-autopil
 import { ProjectEquipmentStrip430 } from "@/components/projects/project-equipment-strip-430";
 import { ProjectIntakeSlot } from "@/components/projects/project-intake-slot";
 import { ProjectNavigation } from "@/components/projects/project-navigation";
+import { ProjectStatusControl550 } from "@/components/projects/project-status-control-550";
 import { requireCurrentUser } from "@/lib/auth";
 import { getReliableInvestmentAutopilotSummary } from "@/lib/data/investment-autopilot-summary";
 import { getProjectProfile } from "@/lib/data/project-profile";
@@ -34,8 +35,6 @@ import "../../companies/company-cleanup.css";
 
 export const dynamic = "force-dynamic";
 type ProjectLayoutProps = { children: React.ReactNode; params: Promise<{ projectId: string }> };
-
-const STATUS_LABELS: Record<string, string> = { planned: "Planowana", tender: "Przetarg", preparation: "Przygotowanie", active: "Aktywna", paused: "Wstrzymana", completed: "Zakończona", archived: "Archiwalna" };
 
 async function loadAutopilotSummary(projectId: string) {
   try { return await getReliableInvestmentAutopilotSummary(projectId); }
@@ -67,8 +66,9 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
   const domains: Domain[] = ["investments", "finance", "hr", "warehouse", "fleet", "templates", "reports", "settings"];
   const allowedProjectDomains = domains.filter((domain) => domainAccessPolicyAllows(policy, { domain, level: "read", projectId: project.id }));
   const allowedCompanyDomains = domains.filter((domain) => domainAccessPolicyAllows(policy, { domain, level: "read", projectId: null }));
+  const canManageStatus = domainAccessPolicyAllows(policy, { domain: "investments", level: "write", projectId: project.id });
   const lifecycleReadOnly = ["completed", "archived"].includes(String(project.status));
-  const canUpload = !lifecycleReadOnly && domainAccessPolicyAllows(policy, { domain: "investments", level: "write", projectId: project.id });
+  const canUpload = !lifecycleReadOnly && canManageStatus;
 
   const location = [profile.street, [profile.postalCode, profile.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") || project.location || "Do uzupełnienia";
   const shortName = profile.shortName || project.name;
@@ -84,7 +84,7 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
           <header className="pw-project-header pw-project-header--contract pw-project-header--compact pw-project-header--with-intake">
             <div className="pw-project-header__identity">
               <Link href={`/workspace/companies/${workspace.id}/investments`} className="pw-project-header__back" aria-label="Wszystkie inwestycje" title="Wszystkie inwestycje"><ArrowLeft size={15} aria-hidden="true" /></Link>
-              <div><span className="pw-project-status">{STATUS_LABELS[profile.status] ?? profile.status}</span><h1>„{shortName}”</h1></div>
+              <div><ProjectStatusControl550 projectId={project.id} status={String(project.status)} canManage={canManageStatus} variant="header" /><h1>„{shortName}”</h1></div>
             </div>
 
             <div className="pw-project-contract" aria-label="Dane kontraktowe inwestycji">
@@ -105,9 +105,9 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
 
         {lifecycleReadOnly ? <div className="project-operation-card__success" data-project-readonly-banner="540">
           {project.status === "archived" ? <Archive size={17} /> : <LockKeyhole size={17} />}
-          <strong>{project.status === "archived" ? "Archiwum inwestycji — tylko do odczytu." : "Inwestycja zakończona — tryb historyczny."}</strong>
-          <span>{project.status === "archived" ? "Dokumentacja, koszty, protokoły, godziny i historia AI pozostają dostępne bez zmiany project_id." : "Nowe operacyjne wpisy są zablokowane. Przejdź do Zamknięcia inwestycji, aby przenieść realizację do Archiwum."}</span>
-          <Link className="secondary-button" href={`/workspace/projects/${project.id}/closeout`}>{project.status === "archived" ? "Paczki archiwalne" : "Zamknięcie i archiwizacja"}</Link>
+          <strong>{project.status === "archived" ? "Inwestycja w Archiwum." : "Inwestycja zakończona — poza bieżącą pracą."}</strong>
+          <span>{project.status === "archived" ? "Pełna dokumentacja i historia są zachowane. Kliknij znacznik statusu przy nazwie inwestycji, aby przywrócić ją jako Zakończoną albo Aktywną do dalszej edycji." : "Nie można jej wybierać do nowych wpisów operacyjnych, w tym do pracy pracowników. Kliknij znacznik statusu, jeśli chcesz ją ponownie aktywować lub przenieść do Archiwum."}</span>
+          <Link className="secondary-button" href={`/workspace/projects/${project.id}/closeout`}>{project.status === "archived" ? "Paczki archiwalne" : "Paczka przekazania"}</Link>
         </div> : null}
 
         {allowedProjectDomains.includes("warehouse") ? <ProjectEquipmentStrip430 workspaceId={project.workspace_id} projectId={project.id} /> : null}

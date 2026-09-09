@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Archive, ArrowRight, Building2, CircleAlert, FileText, ListChecks, MapPin, Plus, Search, X } from "lucide-react";
 import { CreateProjectForm } from "@/components/projects/create-project-form";
+import { ProjectStatusControl550 } from "@/components/projects/project-status-control-550";
 import type { ProjectTaskSignal } from "@/lib/investments/project-tasks";
 import type { ProjectSummary } from "@/lib/types";
 
@@ -12,19 +13,10 @@ type CompanyInvestmentsViewProps = {
   projects: ProjectSummary[];
   taskSignals: Record<string, ProjectTaskSignal>;
   canCreate: boolean;
+  canManageProjectIds: string[];
 };
 
 type PortfolioFilter = "current" | "attention" | "completed" | "archived" | "all";
-
-const STATUS_LABELS: Record<string, string> = {
-  planned: "Planowana",
-  tender: "Przetarg",
-  preparation: "Przygotowanie",
-  active: "Aktywna",
-  paused: "Wstrzymana",
-  completed: "Zakończona",
-  archived: "Archiwalna"
-};
 
 const FILTERS: Array<{ value: PortfolioFilter; label: string }> = [
   { value: "current", label: "Bieżące" },
@@ -36,10 +28,11 @@ const FILTERS: Array<{ value: PortfolioFilter; label: string }> = [
 
 const CURRENT_STATUSES = new Set(["planned", "tender", "preparation", "active", "paused"]);
 
-export function CompanyInvestmentsView({ workspaceId, projects, taskSignals, canCreate }: CompanyInvestmentsViewProps) {
+export function CompanyInvestmentsView({ workspaceId, projects, taskSignals, canCreate, canManageProjectIds }: CompanyInvestmentsViewProps) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<PortfolioFilter>("current");
+  const manageable = useMemo(() => new Set(canManageProjectIds), [canManageProjectIds]);
   const normalized = query.trim().toLocaleLowerCase("pl-PL");
 
   const filteredProjects = useMemo(() => {
@@ -72,12 +65,12 @@ export function CompanyInvestmentsView({ workspaceId, projects, taskSignals, can
   }).length;
 
   return (
-    <main className="co-page co-investments-page" data-project-lifecycle-portfolio="540">
+    <main className="co-page co-investments-page" data-project-lifecycle-portfolio="550">
       <header className="co-page-heading co-investments-heading">
         <div>
           <p className="co-kicker">Inwestycje</p>
           <h1>Realizacje firmy</h1>
-          <p>Bieżące realizacje są oddzielone od zakończonych i archiwalnych. Archiwum zachowuje pełną dokumentację i historię inwestycji.</p>
+          <p>Kliknij status przy inwestycji, aby bezpośrednio zmienić jej stan. Zakończone i archiwalne realizacje zachowują pełną historię, ale nie są dostępne do nowej pracy operacyjnej.</p>
         </div>
         <div className="co-investments-heading__actions">
           <strong className="co-count-badge">{projects.length} inwestycji</strong>
@@ -102,7 +95,7 @@ export function CompanyInvestmentsView({ workspaceId, projects, taskSignals, can
           <div><small>Aktywne</small><strong>{activeCount}</strong></div>
           <div data-tone={attentionCount ? "warning" : "calm"}><small>Wymagają uwagi</small><strong>{attentionCount}</strong></div>
           <div><small>Zakończone</small><strong>{completedCount}</strong></div>
-          <div><small>Archiwum</small><strong>{archivedCount}</strong><span>tylko do odczytu</span></div>
+          <div><small>Archiwum</small><strong>{archivedCount}</strong><span>można przywrócić</span></div>
         </div>
 
         <div className="co-list-toolbar">
@@ -123,12 +116,12 @@ export function CompanyInvestmentsView({ workspaceId, projects, taskSignals, can
               <article className="co-investment-row" key={project.id} role="listitem" data-project-status={project.status}>
                 <div className="co-investment-row__main">
                   <div className="co-investment-row__state">
-                    <span className="co-investment-status">{STATUS_LABELS[project.status] ?? project.status}</span>
+                    <ProjectStatusControl550 projectId={project.id} status={project.status} canManage={manageable.has(project.id)} variant="portfolio" />
                     {CURRENT_STATUSES.has(project.status) && taskSignals[project.id]?.overdueCount ? <span className="co-investment-attention" data-tone="danger"><CircleAlert size={12} /> {taskSignals[project.id].overdueCount} po terminie</span> : CURRENT_STATUSES.has(project.status) && taskSignals[project.id]?.urgentCount ? <span className="co-investment-attention" data-tone="warning"><CircleAlert size={12} /> {taskSignals[project.id].urgentCount} ważne</span> : CURRENT_STATUSES.has(project.status) && taskSignals[project.id]?.openCount ? <span className="co-investment-attention"><ListChecks size={12} /> {taskSignals[project.id].openCount} działań</span> : project.status === "archived" ? <span className="co-investment-attention"><Archive size={12} /> pełna historia</span> : null}
                   </div>
                   <div>
                     <h3>{project.name}</h3>
-                    <p>{project.status === "archived" ? "Archiwalna realizacja — dokumentacja i historia pozostają dostępne w trybie tylko do odczytu." : taskSignals[project.id]?.nextTask ? `Następne: ${taskSignals[project.id].nextTask?.title}` : project.description || "Workspace inwestycji gotowy na dokumentację i analizę."}</p>
+                    <p>{project.status === "archived" ? "Archiwalna realizacja — pełna historia pozostaje zachowana. Zmień status, aby przywrócić ją do Zakończonych albo ponownie aktywować do edycji." : project.status === "completed" ? "Realizacja zakończona — pozostaje poza nowymi przypisaniami pracowników i inną bieżącą pracą." : taskSignals[project.id]?.nextTask ? `Następne: ${taskSignals[project.id].nextTask?.title}` : project.description || "Workspace inwestycji gotowy na dokumentację i analizę."}</p>
                   </div>
                 </div>
 

@@ -31,10 +31,13 @@ export default async function CompanyInvestmentsPage({ params }: CompanyInvestme
     domainAccessPolicyAllows(policy, { domain: "investments", level: "read", projectId: project.id })
   );
   const canCreate = domainAccessPolicyAllows(policy, { domain: "investments", level: "write", projectId: null });
+  const canManageProjectIds = projects
+    .filter((project) => domainAccessPolicyAllows(policy, { domain: "investments", level: "write", projectId: project.id }))
+    .map((project) => project.id);
   const taskSignals = await getProjectTaskSignals(workspace.id, projects.map((project) => project.id)).catch((error) => {
     console.error("Project Octopus: investment task signals unavailable", { workspaceId: workspace.id, message: error instanceof Error ? error.message : String(error) });
     return {};
   });
 
-  return <CompanyInvestmentsView workspaceId={workspace.id} projects={projects} taskSignals={taskSignals} canCreate={canCreate} />;
+  return <CompanyInvestmentsView workspaceId={workspace.id} projects={projects} taskSignals={taskSignals} canCreate={canCreate} canManageProjectIds={canManageProjectIds} />;
 }

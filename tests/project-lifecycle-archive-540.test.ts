@@ -6,47 +6,65 @@ import { describe, expect, it } from "vitest";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = (path: string) => readFileSync(resolve(root, path), "utf8");
 
-describe("Project lifecycle & archive core 5.4", () => {
-  it("keeps completed and archived projects immutable while preserving the same project_id", () => {
+describe("Project lifecycle & archive core 5.5", () => {
+  it("keeps completed and archived projects protected while preserving the same project_id", () => {
     const migration = source("supabase/migrations/20260909124000_project_lifecycle_archive_core_540.sql");
     const cleanup = source("supabase/migrations/20260909124100_project_lifecycle_update_cleanup_541.sql");
     expect(migration).toContain("completed_at timestamptz");
     expect(migration).toContain("archived_at timestamptz");
     expect(migration).toContain("guard_project_operational_write_540");
-    expect(migration).toContain("Dane historyczne są tylko do odczytu");
     expect(cleanup).toContain("old.project_id is distinct from new.project_id");
   });
 
-  it("requires operational readiness before closeout and auto-closes HR allocations", () => {
-    const migration = source("supabase/migrations/20260909124000_project_lifecycle_archive_core_540.sql");
-    const readiness = source("supabase/migrations/20260909124200_project_lifecycle_readiness_workspace_compat_542.sql");
-    expect(migration).toContain("get_project_lifecycle_readiness_540");
+  it("changes project status directly without checklist or blocker requirements", () => {
+    const migration = source("supabase/migrations/20260909134000_project_status_direct_control_550.sql");
+    const api = source("app/api/projects/status/route.ts");
+    const control = source("components/projects/project-status-control-550.tsx");
+    expect(migration).toContain("change_project_status_atomic_550");
+    expect(migration).not.toContain("get_project_lifecycle_readiness_540");
+    expect(migration).not.toContain("closeout_requirements");
+    expect(migration).toContain("p_status text");
+    expect(api).toContain('db.rpc("change_project_status_atomic_550"');
+    expect(control).toContain('/api/projects/status');
+    expect(control).toContain('label: "Zakończona"');
+    expect(control).toContain('label: "Archiwum"');
+  });
+
+  it("closes current HR allocations when a project becomes completed or archived", () => {
+    const migration = source("supabase/migrations/20260909134000_project_status_direct_control_550.sql");
     expect(migration).toContain("update public.assignments");
     expect(migration).toContain("update public.hr_teams");
-    expect(migration).toContain("status='completed'");
-    expect(readiness).toContain("pendingPurchaseOrders");
-    expect(readiness).toContain("draftStockMovements");
+    expect(migration).toContain("v_target in ('completed','archived')");
+    expect(migration).toContain("date_to = current_date");
   });
 
-  it("archives a completed investment without moving or deleting its documents", () => {
-    const migration = source("supabase/migrations/20260909124000_project_lifecycle_archive_core_540.sql");
-    const api = source("app/api/projects/closeout/route.ts");
-    const closeout = source("components/projects/closeout-workspace.tsx");
-    expect(migration).toContain("archive_project_atomic");
-    expect(migration).toContain("status='archived'");
-    expect(api).toContain('action?: "set_requirement" | "generate" | "approve" | "archive"');
-    expect(api).toContain('db.rpc("archive_project_atomic"');
-    expect(closeout).toContain("Przenieś do Archiwum");
-    expect(closeout).toContain("pod tym samym ID inwestycji");
+  it("lets archived projects be restored through the same status control", () => {
+    const control = source("components/projects/project-status-control-550.tsx");
+    const portfolio = source("components/projects/company-investments-view.tsx");
+    const layout = source("app/workspace/projects/[projectId]/layout.tsx");
+    expect(control).toContain("Przywrócić inwestycję z Archiwum do listy Zakończonych");
+    expect(control).toContain("Przywrócić inwestycję do bieżącej pracy");
+    expect(portfolio).toContain("można przywrócić");
+    expect(layout).toContain("aby przywrócić ją jako Zakończoną albo Aktywną");
   });
 
-  it("shows a clear top-level project status action and completes through a fresh closeout package", () => {
+  it("uses the status badge itself as the editor in project header and portfolio", () => {
+    const layout = source("app/workspace/projects/[projectId]/layout.tsx");
+    const portfolio = source("components/projects/company-investments-view.tsx");
+    expect(layout).toContain("ProjectStatusControl550");
+    expect(layout).toContain('variant="header"');
+    expect(portfolio).toContain("ProjectStatusControl550");
+    expect(portfolio).toContain('variant="portfolio"');
+    expect(portfolio).toContain('data-project-lifecycle-portfolio="550"');
+  });
+
+  it("keeps closeout checklist informational instead of blocking status changes", () => {
     const closeout = source("components/projects/closeout-workspace.tsx");
-    expect(closeout).toContain('data-project-status-editor="540"');
-    expect(closeout).toContain("Zakończ inwestycję");
-    expect(closeout).toContain('const generated=await post({action:"generate"})');
-    expect(closeout).toContain('await post({action:"approve",outputId:generated.id})');
-    expect(closeout).toContain("Kliknij, aby zobaczyć co trzeba uzupełnić przed zakończeniem");
+    const page = source("app/workspace/projects/[projectId]/closeout/page.tsx");
+    expect(closeout).toContain("nie zależy od checklisty ani otwartych procesów");
+    expect(closeout).toContain("nie blokują zmiany statusu inwestycji");
+    expect(closeout).not.toContain("Zatwierdź i zakończ inwestycję");
+    expect(page).toContain("Nie jest to warunek zmiany statusu ani zakończenia inwestycji");
   });
 
   it("separates current, completed and archived projects in the portfolio", () => {
@@ -57,22 +75,20 @@ describe("Project lifecycle & archive core 5.4", () => {
     expect(portfolio).toContain("Otwórz archiwum");
   });
 
-  it("removes closed projects from HR operational selectors but preserves historical context", () => {
+  it("removes completed and archived projects from HR operational selectors", () => {
     const guard = source("components/company/hr/hr-operational-project-guard-540.tsx");
-    const core = source("components/company/hr/hr-workspace-core-300.tsx");
     const migration = source("supabase/migrations/20260909124000_project_lifecycle_archive_core_540.sql");
     expect(guard).toContain('new Set(["preparation", "active"])');
     expect(guard).toContain("option.hidden");
     expect(guard).toContain("selectedBlocked");
-    expect(core).toContain("HrOperationalProjectGuard540");
     expect(migration).toContain("Wybrana inwestycja nie jest dostępna do bieżącej pracy");
   });
 
-  it("marks the whole project workspace read-only after completion or archive", () => {
+  it("keeps completed and archived workspaces non-operational until restored", () => {
     const layout = source("app/workspace/projects/[projectId]/layout.tsx");
     expect(layout).toContain('const lifecycleReadOnly = ["completed", "archived"]');
     expect(layout).toContain("data-project-readonly-banner=\"540\"");
-    expect(layout).toContain("Archiwum inwestycji — tylko do odczytu");
-    expect(layout).toContain("!lifecycleReadOnly && domainAccessPolicyAllows");
+    expect(layout).toContain("Nie można jej wybierać do nowych wpisów operacyjnych");
+    expect(layout).toContain("const canUpload = !lifecycleReadOnly && canManageStatus");
   });
 });
