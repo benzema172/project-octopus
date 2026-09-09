@@ -137,6 +137,31 @@ export async function POST(request: Request) {
     if (data) throw new Error("Dla tego pracownika, dnia, inwestycji, WBS i rodzaju czasu istnieje już wpis. Edytuj istniejący wpis albo wybierz inny zakres.");
   };
 
+  const ensureWorkDayAvailable = async (employeeId: string, workDate: string) => {
+    const [{ data: leave, error: leaveError }, { data: sick, error: sickError }] = await Promise.all([
+      db.from("leave_requests")
+        .select("id,leave_type")
+        .eq("workspace_id", workspace.id)
+        .eq("employee_id", employeeId)
+        .eq("status", "approved")
+        .lte("date_from", workDate)
+        .gte("date_to", workDate)
+        .limit(1)
+        .maybeSingle<{ id: string; leave_type: string }>(),
+      db.from("hr_day_statuses")
+        .select("id")
+        .eq("workspace_id", workspace.id)
+        .eq("employee_id", employeeId)
+        .eq("work_date", workDate)
+        .eq("status", "sick")
+        .maybeSingle<{ id: string }>()
+    ]);
+    if (leaveError) throw leaveError;
+    if (sickError) throw sickError;
+    if (leave) throw new Error("Ten dzień ma aktywny urlop lub nieobecność. Najpierw zmień status dnia, a dopiero potem zapisz pracę.");
+    if (sick) throw new Error("Ten dzień jest oznaczony jako Chorobowe. Najpierw zmień status dnia, a dopiero potem zapisz pracę.");
+  };
+
   try {
     if (body.action === "delete") {
       const timesheetId = await owned("timesheets", payload.timesheetId, "Wpis czasu");
@@ -180,6 +205,7 @@ export async function POST(request: Request) {
     if (body.action === "create") {
       const employeeId = await owned("employees", payload.employeeId, "Pracownik");
       const workDate = date(payload.workDate, "data");
+      await ensureWorkDayAvailable(employeeId!, workDate);
       await ensureUniqueEntry(employeeId!, workDate, projectId, wbsNodeId, workType);
       const row = {
         workspace_id: workspace.id,
@@ -208,6 +234,7 @@ export async function POST(request: Request) {
       .single<{ employee_id: string; work_date: string }>();
     if (existingError || !existing) throw existingError ?? new Error("Nie znaleziono wpisu czasu.");
     const workDate = String(existing.work_date).slice(0, 10);
+    await ensureWorkDayAvailable(String(existing.employee_id), workDate);
     await ensureUniqueEntry(String(existing.employee_id), workDate, projectId, wbsNodeId, workType, timesheetId!);
 
     const patch = {
