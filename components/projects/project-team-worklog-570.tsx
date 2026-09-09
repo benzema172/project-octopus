@@ -154,6 +154,7 @@ export async function ProjectTeamWorklog570({ projectId, selectedMonth }: { proj
                 const status = String(row.status ?? "");
                 const scope = String(row.work_scope ?? row.note ?? "").trim();
                 const workType = WORK_TYPE_LABELS[String(row.work_type ?? "")] ?? String(row.work_type ?? "").trim();
+                const statusLabel = (STATUS_LABELS[status] ?? status) || "—";
                 return (
                   <tr key={row.id}>
                     <td><strong>{formatDate(row.work_date)}</strong></td>
@@ -161,7 +162,7 @@ export async function ProjectTeamWorklog570({ projectId, selectedMonth }: { proj
                     <td>{formatHours(regular)}</td>
                     <td>{overtime > 0 ? formatHours(overtime) : "—"}</td>
                     <td>{timeRange(row.started_at, row.ended_at)}</td>
-                    <td><span className="pw-team-worklog__status" data-status={status}>{STATUS_LABELS[status] ?? status || "—"}</span></td>
+                    <td><span className="pw-team-worklog__status" data-status={status}>{statusLabel}</span></td>
                     <td>{scope || workType || "—"}</td>
                   </tr>
                 );
