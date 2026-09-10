@@ -21,12 +21,14 @@ export function AiInbox({
   items,
   workspaceId,
   projects = [],
-  currentUserId
+  currentUserId,
+  activeOnly = false
 }: {
   items: AiInboxItem[];
   workspaceId?: string;
   projects?: AiInboxProjectOption[];
   currentUserId?: string;
+  activeOnly?: boolean;
 }) {
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("all");
   const [message, setMessage] = useState<string | null>(null);
@@ -34,7 +36,12 @@ export function AiInbox({
   const [onlyMine, setOnlyMine] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
-  const filtered = useMemo(() => items.filter((item) => (tab === "all" || item.status === tab) && (!onlyMine || item.assignedTo === currentUserId)), [currentUserId, items, onlyMine, tab]);
+  const scopedItems = useMemo(
+    () => activeOnly ? items.filter((item) => item.status !== "ready" && item.status !== "rejected") : items,
+    [activeOnly, items]
+  );
+  const tabs = activeOnly ? TABS.filter((item) => item.key !== "ready" && item.key !== "rejected") : TABS;
+  const filtered = useMemo(() => scopedItems.filter((item) => (tab === "all" || item.status === tab) && (!onlyMine || item.assignedTo === currentUserId)), [currentUserId, onlyMine, scopedItems, tab]);
 
   function documentCorrection(item: AiInboxItem): DocumentCorrection {
     return corrections[item.id] ?? {
@@ -105,15 +112,15 @@ export function AiInbox({
   return (
     <section className="ai-inbox">
       <div className="ai-inbox__tabs" role="tablist" aria-label="Statusy Skrzynki AI">
-        {TABS.map((item) => {
-          const count = item.key === "all" ? items.length : items.filter((entry) => entry.status === item.key).length;
+        {tabs.map((item) => {
+          const count = item.key === "all" ? scopedItems.length : scopedItems.filter((entry) => entry.status === item.key).length;
           return <button key={item.key} type="button" role="tab" onClick={() => setTab(item.key)} aria-selected={tab === item.key}>{item.label}<span>{count}</span></button>;
         })}
         <button type="button" className={onlyMine ? "is-active" : undefined} onClick={() => setOnlyMine((value) => !value)} aria-pressed={onlyMine}><UserRoundCheck size={14} />Moje</button>
       </div>
       {message ? <p className="action-message">{message}</p> : null}
       <div className="ai-inbox__list">
-        {filtered.length === 0 ? <div className="empty-state"><FileCheck2 size={26} /><strong>Brak elementów w tym stanie</strong><span>Skrzynka pokaże dokumenty, importy, zmiany i zdarzenia wymagające decyzji.</span></div> : null}
+        {filtered.length === 0 ? <div className="empty-state"><FileCheck2 size={26} /><strong>{activeOnly ? "Brak aktywnych plików" : "Brak elementów w tym stanie"}</strong><span>{activeOnly ? "Po wrzuceniu pliku zobaczysz tutaj jego bieżący stan aż do zatwierdzenia lub odrzucenia." : "Skrzynka pokaże dokumenty, importy, zmiany i zdarzenia wymagające decyzji."}</span></div> : null}
         {filtered.map((item) => {
           const correction = item.entityType === "document" ? documentCorrection(item) : null;
           const canWrite = item.canWrite !== false;
