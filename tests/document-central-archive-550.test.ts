@@ -52,25 +52,31 @@ describe("Document Central Archive 5.5.0", () => {
     expect(archive).toContain("selected.flow?.resultHref");
   });
 
-  it("embeds the human review queue with correction and approval semantics", () => {
+  it("keeps human review inside the Do weryfikacji archive tab without a duplicate page section", () => {
     const page = source("app/workspace/companies/[workspaceId]/documents/page.tsx");
+    const archive = source("components/documents/document-central-archive.tsx");
     const inbox = source("components/brain/ai-inbox.tsx");
-    expect(page).toContain('id="document-review"');
-    expect(page).toContain("<AiInbox");
-    expect(page).toContain('item.entityType !== "document"');
+    expect(page).not.toContain('id="document-review"');
+    expect(archive).toContain("<AiInbox");
+    expect(archive).toContain('id={`document-review-${selected.id}`}');
     expect(inbox).toContain("Kategoria docelowa");
     expect(inbox).toContain("Przypisanie do inwestycji");
     expect(inbox).toContain('action: "approve" | "reject"');
-    expect(inbox).toContain('decide(item, "approve")');
-    expect(inbox).toContain('decide(item, "reject")');
   });
 
-  it("keeps completed documents out of the Documents review-all view", () => {
+  it("uses Wszystkie only as the upload home and shows only files uploaded in the current session", () => {
     const page = source("app/workspace/companies/[workspaceId]/documents/page.tsx");
-    const inbox = source("components/brain/ai-inbox.tsx");
-    expect(page).toContain("activeOnly");
-    expect(inbox).toContain('item.status !== "ready" && item.status !== "rejected"');
-    expect(inbox).toContain('item.key !== "ready" && item.key !== "rejected"');
-    expect(inbox).toContain("Po wrzuceniu pliku zobaczysz tutaj jego bieżący stan aż do zatwierdzenia lub odrzucenia.");
+    const archive = source("components/documents/document-central-archive.tsx");
+    const upload = source("components/documents/document-upload.tsx");
+    expect(page).toContain('displayMode="intake"');
+    expect(archive).toContain('tab === "all"');
+    expect(archive).toContain('data-documents-upload-home="1"');
+    expect(archive).toContain("uploadContent");
+    expect(archive).toContain('item.id === "all" ? null');
+    expect(upload).toContain('displayMode?: "library" | "intake"');
+    expect(upload).toContain("recentDocumentIds");
+    expect(upload).toContain("setRecentDocumentIds");
+    expect(upload).toContain("Stan przesłanych plików");
+    expect(upload).toContain("visibleDocuments.length > 0 || !isIntake");
   });
 });
