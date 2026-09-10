@@ -89,6 +89,11 @@
 .tabs button.activeTab { border-color: #7c3aed; background: #f5f1ff; color: #5b21b6; }
 .tabs button.activeTab span { background: #e9ddff; color: #5b21b6; }
 
+.uploadHome {
+  min-height: 260px;
+  padding: 2px 0 4px;
+}
+
 .archiveGrid {
   display: grid;
   grid-template-columns: minmax(320px, .95fr) minmax(420px, 1.35fr);
