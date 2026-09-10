@@ -201,12 +201,13 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
           <div><p className="co-kicker">Kontrola człowieka</p><h2 id="documents-review-title">Do weryfikacji</h2></div>
           <div className="co-heading-actions"><span>{reviewCount} decyzji · {errorCount} błędów</span><Link href={`/workspace/companies/${workspace.id}/ai-inbox`} className="co-text-link">Pełna Skrzynka AI →</Link></div>
         </div>
-        <p className="section-lead">Tutaj poprawiasz kategorię lub inwestycję i zatwierdzasz decyzję AI. Zatwierdzenie nie tworzy drugiego dokumentu — aktualizuje ten sam obieg i pozwala zasilić właściwy moduł.</p>
+        <p className="section-lead">Tutaj widzisz wyłącznie bieżący stan plików od momentu wrzucenia do zakończenia przetwarzania lub decyzji. Zatwierdzone i odrzucone dokumenty pozostają w centralnym archiwum oraz pełnej Skrzynce AI.</p>
         <AiInbox
           items={documentQueueItems}
           workspaceId={workspace.id}
           currentUserId={user.id}
           projects={projectOptions}
+          activeOnly
         />
       </section>
     </main>
