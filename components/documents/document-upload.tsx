@@ -283,7 +283,7 @@ export function DocumentUpload({
       return;
     }
     if (targetDocumentIdRef.current && selectedFiles.length > 1) {
-      setError("Nowa wersja dokumentu może zawierać jeden plik. Dla folderu użyj głównej Wrzutni.");
+      setError("Nowa wersja dokumentu może zawiera jeden plik. Dla folderu użyj głównej Wrzutni.");
       if (inputRef.current) inputRef.current.value = "";
       return;
     }
@@ -430,7 +430,7 @@ export function DocumentUpload({
 
   return (
     <div className={`${styles.workspace} ${isIntake ? styles.workspaceIntake : ""}`} data-document-flow-v2="1" data-upload-mode={displayMode}>
-      <details className={`${styles.uploader} ${isIntake ? styles.uploaderIntake : ""}`} defaultOpen={isIntake}>
+      <details className={`${styles.uploader} ${isIntake ? styles.uploaderIntake : ""}`} open={isIntake ? true : undefined}>
         <summary>
           <span className={styles.summaryLeft}>
             <UploadCloud size={16} aria-hidden="true" />
