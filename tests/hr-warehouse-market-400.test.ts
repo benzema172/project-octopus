@@ -38,7 +38,7 @@ describe("Kadry Core 3.0 + Magazyn 4.0 — retirement guard", () => {
       "hr_rcp_events", "hr_ai_recommendations"
     ]) expect(sql).toContain(`drop table if exists public.${table}`);
     expect(sql).toContain("drop table if exists private.hr_rcp_secrets");
-    for (const fn of ["build_hr_crew_400", "get_hr_market_summary_400", "hr_daily_controller_400", "set_hr_rcp_secret_hash_400", "verify_hr_rcp_secret_400"]) expect(sql).toContain(fn);
+    for (const fn of ["build_hr_crew_400", "get_hr_market_summary_400", "hr_daily_controller_400", "refresh_people_readiness_400", "set_hr_rcp_secret_hash_400", "verify_hr_rcp_secret_400"]) expect(sql).toContain(fn);
     expect(sql).not.toContain("drop function if exists public.bulk_apply_hr_timesheets_400");
     for (const protectedTable of ["hr_day_statuses", "hr_teams", "hr_team_members"]) expect(sql).not.toContain(`drop table if exists public.${protectedTable}`);
     expect(sql).toContain("20260910_hr_market_400_retired");
