@@ -29,7 +29,8 @@ describe("exclusive heavy views", () => {
     const hr = read("components/company/hr/hr-workspace-core-300.tsx");
     const time = read("components/company/hr/hr-time-records-400.tsx");
     const warehouse = read("components/company/warehouse-workspace-300.tsx");
-    expect(hr).toContain("setView(");
+    expect(hr).toContain("const [tab, setTab]");
+    expect(hr).toContain("setTab(");
     expect(time).toContain("setMode(");
     expect(warehouse).toContain("setTab(");
   });
