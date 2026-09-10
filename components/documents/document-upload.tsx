@@ -31,6 +31,7 @@ type DocumentUploadProps = {
   trashedDocuments: DocumentSummary[];
   storageReady: boolean;
   defaultCategory?: string;
+  displayMode?: "library" | "intake";
 };
 type UploadResponse = { uploadUrl: string; token: string; headers: Record<string, string> };
 type DownloadResponse = { downloadUrl: string };
@@ -155,7 +156,8 @@ export function DocumentUpload({
   documents,
   trashedDocuments,
   storageReady,
-  defaultCategory = ""
+  defaultCategory = "",
+  displayMode = "library"
 }: DocumentUploadProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -170,7 +172,9 @@ export function DocumentUpload({
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [expandedFlowId, setExpandedFlowId] = useState<string | null>(null);
+  const [recentDocumentIds, setRecentDocumentIds] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
+  const isIntake = displayMode === "intake";
 
   const categories = useMemo(
     () => Array.from(new Set(documents.map((document) => document.category).filter(Boolean))).sort() as string[],
@@ -187,6 +191,11 @@ export function DocumentUpload({
       return matchesText && (category === "all" || flowCategory === category);
     });
   }, [category, documents, query]);
+  const recentDocuments = useMemo(
+    () => recentDocumentIds.map((id) => documents.find((document) => document.id === id)).filter((document): document is DocumentSummary => Boolean(document)),
+    [documents, recentDocumentIds]
+  );
+  const visibleDocuments = isIntake ? recentDocuments : filteredDocuments;
 
   async function uploadFile(candidate: UploadCandidate, documentId: string | null, contextProjectId: string | null) {
     const { file } = candidate;
@@ -231,6 +240,7 @@ export function DocumentUpload({
       throw new Error(payload?.error ?? "Nie udało się zapisać dokumentu.");
     }
     const completed = await completeResponse.json() as CompleteResponse;
+    setRecentDocumentIds((current) => current.includes(completed.documentId) ? current : [completed.documentId, ...current].slice(0, 20));
 
     if (file.size <= 32 * 1024 * 1024) {
       setStatus("Dokument zapisany — Octopus Brain analizuje i wybiera miejsce docelowe");
@@ -419,12 +429,12 @@ export function DocumentUpload({
   }
 
   return (
-    <div className={styles.workspace} data-document-flow-v2="1">
-      <details className={styles.uploader}>
+    <div className={`${styles.workspace} ${isIntake ? styles.workspaceIntake : ""}`} data-document-flow-v2="1" data-upload-mode={displayMode}>
+      <details className={`${styles.uploader} ${isIntake ? styles.uploaderIntake : ""}`} defaultOpen={isIntake}>
         <summary>
           <span className={styles.summaryLeft}>
             <UploadCloud size={16} aria-hidden="true" />
-            <strong>Wrzutnia</strong>
+            <strong>{isIntake ? "Wrzutnia dokumentów" : "Wrzutnia"}</strong>
             <small>PDF, Word, Excel, obraz, XML lub ZIP → AI → właściwy moduł</small>
           </span>
           <ChevronDown size={16} aria-hidden="true" />
@@ -470,9 +480,9 @@ export function DocumentUpload({
             onDrop={(event) => { event.preventDefault(); setIsDragging(false); void handleDrop(event.dataTransfer); }}
             disabled={isPending || isUploading || !storageReady}
           >
-            <UploadCloud size={26} aria-hidden="true" />
+            <UploadCloud size={isIntake ? 34 : 26} aria-hidden="true" />
             <span className={styles.dropzoneText}>
-              <strong>{isUploading ? "Przetwarzanie dokumentacji" : "Przeciągnij pliki albo kliknij, aby wybrać"}</strong>
+              <strong>{isUploading ? "Przetwarzanie dokumentacji" : "Przeciągnij pliki tutaj albo kliknij, aby wybrać"}</strong>
               <span>Obsługiwane foldery i podfoldery · do {MAX_SUPPORTED_UPLOAD_BYTES / 1024 / 1024} MB na plik</span>
             </span>
           </button>
@@ -488,131 +498,142 @@ export function DocumentUpload({
         </div>
       </details>
 
-      <div className={styles.toolbar}>
-        <label className={styles.search}>
-          <Search size={16} aria-hidden="true" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Szukaj po nazwie, kategorii, celu lub module" />
-        </label>
-        <select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Kategoria dokumentu">
-          <option value="all">Wszystkie kategorie</option>
-          {categories.map((item) => <option key={item} value={item}>{documentCategoryLabel(item)}</option>)}
-        </select>
-        <span className={styles.count}>{filteredDocuments.length} / {documents.length}</span>
-      </div>
+      {!isIntake ? (
+        <div className={styles.toolbar}>
+          <label className={styles.search}>
+            <Search size={16} aria-hidden="true" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Szukaj po nazwie, kategorii, celu lub module" />
+          </label>
+          <select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Kategoria dokumentu">
+            <option value="all">Wszystkie kategorie</option>
+            {categories.map((item) => <option key={item} value={item}>{documentCategoryLabel(item)}</option>)}
+          </select>
+          <span className={styles.count}>{filteredDocuments.length} / {documents.length}</span>
+        </div>
+      ) : null}
 
-      {status && !isUploading ? <p className={styles.message}>{status}</p> : null}
-      {error ? <p className={`${styles.message} ${styles.error}`}>{error}</p> : null}
+      {!isIntake && status && !isUploading ? <p className={styles.message}>{status}</p> : null}
+      {!isIntake && error ? <p className={`${styles.message} ${styles.error}`}>{error}</p> : null}
 
-      <div className={styles.list}>
-        {filteredDocuments.length > 0 ? filteredDocuments.map((document) => {
-          const version = document.document_versions?.[0];
-          const projectName = projects.find((item) => item.id === document.project_id)?.name;
-          const quarantined = version?.malware_scan_status === "infected";
-          const flow = document.flow;
-          const recognizedCategory = flow?.category ?? document.category;
-          const recognized = recognizedCategory
-            ? `${documentCategoryLabel(recognizedCategory)} · ${confidenceLabel(flow?.confidence ?? document.ai_confidence)}`
-            : "Oczekuje na klasyfikację";
-          const destination = flow?.destination ?? (recognizedCategory
-            ? (DOCUMENT_DESTINATIONS.find((item) => item.value === recognizedCategory)?.destination ?? "Dokumenty → Do decyzji")
-            : "Jeszcze nie wybrano");
-          const outcome = flow?.outcome ?? aiStateLabel(document.ai_status);
-          const detailsOpen = expandedFlowId === document.id;
-          const hasAnalysis = Boolean(flow?.category || document.ai_status === "ready" || document.ai_status === "review");
-          const shouldRoute = flow?.stage === "classified";
-          const decisionHref = workspaceId ? `/workspace/companies/${workspaceId}/ai-inbox` : null;
+      {isIntake && visibleDocuments.length > 0 ? (
+        <div className={styles.sessionHeading}>
+          <div><Sparkles size={15} aria-hidden="true" /><strong>Stan przesłanych plików</strong></div>
+          <span>{visibleDocuments.length}</span>
+        </div>
+      ) : null}
 
-          return (
-            <article key={document.id} id={`document-${document.id}`} className={styles.card}>
-              <div className={styles.identity}>
-                <div className={styles.titleLine}>
-                  <FileText size={17} aria-hidden="true" />
-                  <h3>{document.name}</h3>
-                  <span className={styles.category}>{documentCategoryLabel(recognizedCategory)}</span>
+      {visibleDocuments.length > 0 || !isIntake ? (
+        <div className={styles.list}>
+          {visibleDocuments.length > 0 ? visibleDocuments.map((document) => {
+            const version = document.document_versions?.[0];
+            const projectName = projects.find((item) => item.id === document.project_id)?.name;
+            const quarantined = version?.malware_scan_status === "infected";
+            const flow = document.flow;
+            const recognizedCategory = flow?.category ?? document.category;
+            const recognized = recognizedCategory
+              ? `${documentCategoryLabel(recognizedCategory)} · ${confidenceLabel(flow?.confidence ?? document.ai_confidence)}`
+              : "Oczekuje na klasyfikację";
+            const destination = flow?.destination ?? (recognizedCategory
+              ? (DOCUMENT_DESTINATIONS.find((item) => item.value === recognizedCategory)?.destination ?? "Dokumenty → Do decyzji")
+              : "Jeszcze nie wybrano");
+            const outcome = flow?.outcome ?? aiStateLabel(document.ai_status);
+            const detailsOpen = expandedFlowId === document.id;
+            const hasAnalysis = Boolean(flow?.category || document.ai_status === "ready" || document.ai_status === "review");
+            const shouldRoute = flow?.stage === "classified";
+            const decisionHref = workspaceId ? `/workspace/companies/${workspaceId}/ai-inbox` : null;
+
+            return (
+              <article key={document.id} id={`document-${document.id}`} className={`${styles.card} ${isIntake ? styles.intakeStatusCard : ""}`}>
+                <div className={styles.identity}>
+                  <div className={styles.titleLine}>
+                    <FileText size={17} aria-hidden="true" />
+                    <h3>{document.name}</h3>
+                    <span className={styles.category}>{documentCategoryLabel(recognizedCategory)}</span>
+                  </div>
+                  <p className={styles.meta}>
+                    {projectName ?? (document.project_id ? "Inwestycja" : "Dokument firmowy")} · {version?.mime_type ?? "plik"} · {version ? formatFileSize(version.file_size_bytes) : "bez wersji"} · {version ? `v${version.version_number}` : "oczekuje"}
+                  </p>
+                  <span className={`${styles.stage} ${stageClass(flow?.stage)}`}>
+                    {flow?.stage === "ready" ? <CheckCircle2 size={12} aria-hidden="true" /> : <Sparkles size={12} aria-hidden="true" />}
+                    {stageLabel(flow?.stage)}
+                  </span>
+                  {quarantined ? <span className={`${styles.security} ${styles.securityBad}`}>Kwarantanna · dostęp do pliku zablokowany</span> : version?.malware_scan_status === "clean" ? <span className={styles.security}>Skan bezpieczeństwa: czysty</span> : null}
                 </div>
-                <p className={styles.meta}>
-                  {projectName ?? (document.project_id ? "Inwestycja" : "Dokument firmowy")} · {version?.mime_type ?? "plik"} · {version ? formatFileSize(version.file_size_bytes) : "bez wersji"} · {version ? `v${version.version_number}` : "oczekuje"}
-                </p>
-                <span className={`${styles.stage} ${stageClass(flow?.stage)}`}>
-                  {flow?.stage === "ready" ? <CheckCircle2 size={12} aria-hidden="true" /> : <Sparkles size={12} aria-hidden="true" />}
-                  {stageLabel(flow?.stage)}
-                </span>
-                {quarantined ? <span className={`${styles.security} ${styles.securityBad}`}>Kwarantanna · dostęp do pliku zablokowany</span> : version?.malware_scan_status === "clean" ? <span className={styles.security}>Skan bezpieczeństwa: czysty</span> : null}
-              </div>
 
-              <div className={styles.flow} aria-label="Przepływ dokumentu">
-                <div className={`${styles.flowCell} ${flowCellClass(flow?.stage)}`}>
-                  <span>Rozpoznano</span>
-                  <strong title={recognized}>{recognized}</strong>
-                </div>
-                <div className={`${styles.flowCell} ${flowCellClass(flow?.stage)}`}>
-                  <span>Cel</span>
-                  <strong title={destination}>{destination}</strong>
-                </div>
-                <div className={`${styles.flowCell} ${flowCellClass(flow?.stage)}`}>
-                  <span>Wynik</span>
-                  <strong title={outcome}>{outcome}</strong>
-                </div>
-              </div>
-
-              {version ? (
-                <div className={styles.actions}>
-                  {flow?.stage === "processing" ? (
-                    <button type="button" className="secondary-button" disabled><Sparkles size={14} aria-hidden="true" />Analizuję…</button>
-                  ) : hasAnalysis && flow?.stage !== "error" ? (
-                    <button type="button" className="secondary-button" onClick={() => setExpandedFlowId(detailsOpen ? null : document.id)}>
-                      <Info size={14} aria-hidden="true" />Szczegóły AI
-                    </button>
-                  ) : (
-                    <button type="button" className="secondary-button" onClick={() => void analyzeVersion(version.id)} disabled={isUploading}>
-                      <Sparkles size={14} aria-hidden="true" />{flow?.stage === "error" ? "Ponów analizę" : "Analizuj"}
-                    </button>
-                  )}
-                  {shouldRoute ? (
-                    <button type="button" className="secondary-button" onClick={() => void analyzeVersion(version.id)} disabled={isUploading}>
-                      <Sparkles size={14} aria-hidden="true" />Dokończ routing
-                    </button>
-                  ) : null}
-                  <button type="button" className="secondary-button" onClick={() => void previewVersion(version.id, document.project_id)} disabled={isUploading || quarantined}>
-                    <Eye size={14} aria-hidden="true" />Podgląd
-                  </button>
-                  <button type="button" className="secondary-button" onClick={() => void downloadVersion(version.id, document.project_id)} disabled={isUploading || quarantined}>
-                    <Download size={14} aria-hidden="true" />Pobierz
-                  </button>
-                  <button type="button" className="secondary-button" onClick={() => openFilePicker(document.id, document.project_id)} disabled={isUploading || !storageReady} title="Dodaj nową wersję">
-                    <FilePlus2 size={14} aria-hidden="true" />Nowa wersja
-                  </button>
-                  <button type="button" className="secondary-button secondary-button--danger" onClick={() => void changeDocumentState(document.id, "trashed", document.project_id)} disabled={isUploading || isPending} title="Przenieś do kosza">
-                    <Trash2 size={14} aria-hidden="true" />Do kosza
-                  </button>
-                </div>
-              ) : null}
-
-              {detailsOpen ? (
-                <div className={styles.details}>
-                  <div className={styles.detailBox}><span>Klasyfikacja</span><strong>{recognized}</strong></div>
-                  <div className={styles.detailBox}><span>Miejsce docelowe</span><strong>{destination}</strong></div>
-                  <div className={styles.detailBox}><span>Stan końcowy</span><strong>{outcome}</strong></div>
-                  {flow?.rationale ? <p className={styles.rationale}><strong>Dlaczego AI:</strong> {flow.rationale}</p> : null}
-                  <div className={styles.detailActions}>
-                    {flow?.resultHref ? <a href={flow.resultHref}>Otwórz miejsce docelowe →</a> : null}
-                    {flow?.stage === "review" && decisionHref && !flow.artifactId ? <a href={decisionHref}>Podejmij decyzję →</a> : null}
-                    {flow?.artifactId ? <span className={styles.count}>Rekord docelowy: {flow.artifactType ?? "rekord"} · {flow.artifactId.slice(0, 8)}</span> : null}
+                <div className={styles.flow} aria-label="Przepływ dokumentu">
+                  <div className={`${styles.flowCell} ${flowCellClass(flow?.stage)}`}>
+                    <span>Rozpoznano</span>
+                    <strong title={recognized}>{recognized}</strong>
+                  </div>
+                  <div className={`${styles.flowCell} ${flowCellClass(flow?.stage)}`}>
+                    <span>Cel</span>
+                    <strong title={destination}>{destination}</strong>
+                  </div>
+                  <div className={`${styles.flowCell} ${flowCellClass(flow?.stage)}`}>
+                    <span>Wynik</span>
+                    <strong title={outcome}>{outcome}</strong>
                   </div>
                 </div>
-              ) : null}
-            </article>
-          );
-        }) : (
-          <div className={styles.empty}>
-            <FileSearch size={22} aria-hidden="true" />
-            <h3>Brak pasujących dokumentów</h3>
-            <p>Wrzutnia przyjmie plik, Brain go rozpozna, pokaże cel i potwierdzi końcowy wynik routingu.</p>
-          </div>
-        )}
-      </div>
 
-      {trashedDocuments.length > 0 ? (
+                {!isIntake && version ? (
+                  <div className={styles.actions}>
+                    {flow?.stage === "processing" ? (
+                      <button type="button" className="secondary-button" disabled><Sparkles size={14} aria-hidden="true" />Analizuję…</button>
+                    ) : hasAnalysis && flow?.stage !== "error" ? (
+                      <button type="button" className="secondary-button" onClick={() => setExpandedFlowId(detailsOpen ? null : document.id)}>
+                        <Info size={14} aria-hidden="true" />Szczegóły AI
+                      </button>
+                    ) : (
+                      <button type="button" className="secondary-button" onClick={() => void analyzeVersion(version.id)} disabled={isUploading}>
+                        <Sparkles size={14} aria-hidden="true" />{flow?.stage === "error" ? "Ponów analizę" : "Analizuj"}
+                      </button>
+                    )}
+                    {shouldRoute ? (
+                      <button type="button" className="secondary-button" onClick={() => void analyzeVersion(version.id)} disabled={isUploading}>
+                        <Sparkles size={14} aria-hidden="true" />Dokończ routing
+                      </button>
+                    ) : null}
+                    <button type="button" className="secondary-button" onClick={() => void previewVersion(version.id, document.project_id)} disabled={isUploading || quarantined}>
+                      <Eye size={14} aria-hidden="true" />Podgląd
+                    </button>
+                    <button type="button" className="secondary-button" onClick={() => void downloadVersion(version.id, document.project_id)} disabled={isUploading || quarantined}>
+                      <Download size={14} aria-hidden="true" />Pobierz
+                    </button>
+                    <button type="button" className="secondary-button" onClick={() => openFilePicker(document.id, document.project_id)} disabled={isUploading || !storageReady} title="Dodaj nową wersję">
+                      <FilePlus2 size={14} aria-hidden="true" />Nowa wersja
+                    </button>
+                    <button type="button" className="secondary-button secondary-button--danger" onClick={() => void changeDocumentState(document.id, "trashed", document.project_id)} disabled={isUploading || isPending} title="Przenieś do kosza">
+                      <Trash2 size={14} aria-hidden="true" />Do kosza
+                    </button>
+                  </div>
+                ) : null}
+
+                {!isIntake && detailsOpen ? (
+                  <div className={styles.details}>
+                    <div className={styles.detailBox}><span>Klasyfikacja</span><strong>{recognized}</strong></div>
+                    <div className={styles.detailBox}><span>Miejsce docelowe</span><strong>{destination}</strong></div>
+                    <div className={styles.detailBox}><span>Stan końcowy</span><strong>{outcome}</strong></div>
+                    {flow?.rationale ? <p className={styles.rationale}><strong>Dlaczego AI:</strong> {flow.rationale}</p> : null}
+                    <div className={styles.detailActions}>
+                      {flow?.resultHref ? <a href={flow.resultHref}>Otwórz miejsce docelowe →</a> : null}
+                      {flow?.stage === "review" && decisionHref && !flow.artifactId ? <a href={decisionHref}>Podejmij decyzję →</a> : null}
+                      {flow?.artifactId ? <span className={styles.count}>Rekord docelowy: {flow.artifactType ?? "rekord"} · {flow.artifactId.slice(0, 8)}</span> : null}
+                    </div>
+                  </div>
+                ) : null}
+              </article>
+            );
+          }) : (
+            <div className={styles.empty}>
+              <FileSearch size={22} aria-hidden="true" />
+              <h3>Brak pasujących dokumentów</h3>
+              <p>Wrzutnia przyjmie plik, Brain go rozpozna, pokaże cel i potwierdzi końcowy wynik routingu.</p>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {!isIntake && trashedDocuments.length > 0 ? (
         <section className={styles.trash}>
           <div className={styles.trashHeader}><strong>Kosz</strong><p>{trashedDocuments.length} dokumentów · pliki w R2 pozostają zachowane</p></div>
           <div className={styles.list}>
