@@ -81,52 +81,69 @@ function proposalFrom(row: ProposalRow): DocumentLibraryProposal {
   };
 }
 
+function chunks<T>(items: T[], size: number) {
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
+  return result;
+}
+
 export async function listDocumentLibraryInsights(
   workspaceId: string,
   documentIds: string[]
 ): Promise<DocumentLibraryInsight[]> {
-  const ids = Array.from(new Set(documentIds.filter(Boolean))).slice(0, 200);
+  const ids = Array.from(new Set(documentIds.filter(Boolean)));
   if (!ids.length) return [];
 
   const supabase = createServiceSupabaseClient();
-  const [extractionsResult, textsResult, proposalsResult] = await Promise.all([
-    supabase
-      .from("document_extractions")
-      .select("document_id,document_version_id,schema_version,payload,warnings,confidence,status,created_at")
-      .eq("workspace_id", workspaceId)
-      .eq("extraction_type", "document_context")
-      .in("document_id", ids)
-      .order("created_at", { ascending: false })
-      .returns<ExtractionRow[]>(),
-    supabase
-      .from("document_texts")
-      .select("document_id,document_version_id,extraction_method,page_count,character_count,quality_score,extracted_text,updated_at")
-      .eq("workspace_id", workspaceId)
-      .in("document_id", ids)
-      .order("updated_at", { ascending: false })
-      .returns<TextRow[]>(),
-    supabase
-      .from("document_module_proposals")
-      .select("document_id,document_version_id,module,title,status,confidence,source_quote,created_at")
-      .eq("workspace_id", workspaceId)
-      .in("document_id", ids)
-      .neq("status", "superseded")
-      .order("created_at", { ascending: false })
-      .returns<ProposalRow[]>()
-  ]);
+  const batches = await Promise.all(chunks(ids, 100).map(async (batch) => {
+    const [extractionsResult, textsResult, proposalsResult] = await Promise.all([
+      supabase
+        .from("document_extractions")
+        .select("document_id,document_version_id,schema_version,payload,warnings,confidence,status,created_at")
+        .eq("workspace_id", workspaceId)
+        .eq("extraction_type", "document_context")
+        .in("document_id", batch)
+        .order("created_at", { ascending: false })
+        .returns<ExtractionRow[]>(),
+      supabase
+        .from("document_texts")
+        .select("document_id,document_version_id,extraction_method,page_count,character_count,quality_score,extracted_text,updated_at")
+        .eq("workspace_id", workspaceId)
+        .in("document_id", batch)
+        .order("updated_at", { ascending: false })
+        .returns<TextRow[]>(),
+      supabase
+        .from("document_module_proposals")
+        .select("document_id,document_version_id,module,title,status,confidence,source_quote,created_at")
+        .eq("workspace_id", workspaceId)
+        .in("document_id", batch)
+        .neq("status", "superseded")
+        .order("created_at", { ascending: false })
+        .returns<ProposalRow[]>()
+    ]);
+    return { extractionsResult, textsResult, proposalsResult };
+  }));
 
-  if (extractionsResult.error) console.error("Project Octopus: document archive extraction fallback", extractionsResult.error);
-  if (textsResult.error) console.error("Project Octopus: document archive text fallback", textsResult.error);
-  if (proposalsResult.error) console.error("Project Octopus: document archive proposal fallback", proposalsResult.error);
+  const extractionRows: ExtractionRow[] = [];
+  const textRows: TextRow[] = [];
+  const proposalRows: ProposalRow[] = [];
+  for (const batch of batches) {
+    if (batch.extractionsResult.error) console.error("Project Octopus: document archive extraction fallback", batch.extractionsResult.error);
+    else extractionRows.push(...(batch.extractionsResult.data ?? []));
+    if (batch.textsResult.error) console.error("Project Octopus: document archive text fallback", batch.textsResult.error);
+    else textRows.push(...(batch.textsResult.data ?? []));
+    if (batch.proposalsResult.error) console.error("Project Octopus: document archive proposal fallback", batch.proposalsResult.error);
+    else proposalRows.push(...(batch.proposalsResult.data ?? []));
+  }
 
   const latestExtraction = new Map<string, ExtractionRow>();
-  for (const row of extractionsResult.data ?? []) if (!latestExtraction.has(row.document_id)) latestExtraction.set(row.document_id, row);
+  for (const row of extractionRows) if (!latestExtraction.has(row.document_id)) latestExtraction.set(row.document_id, row);
 
   const latestText = new Map<string, TextRow>();
-  for (const row of textsResult.data ?? []) if (!latestText.has(row.document_id)) latestText.set(row.document_id, row);
+  for (const row of textRows) if (!latestText.has(row.document_id)) latestText.set(row.document_id, row);
 
   const proposalsByDocument = new Map<string, ProposalRow[]>();
-  for (const row of proposalsResult.data ?? []) {
+  for (const row of proposalRows) {
     const rows = proposalsByDocument.get(row.document_id) ?? [];
     if (rows.length < 8) rows.push(row);
     proposalsByDocument.set(row.document_id, rows);
