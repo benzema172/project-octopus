@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { AlertTriangle, ChevronDown, UploadCloud } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { notFound } from "next/navigation";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
-import { AiInbox } from "@/components/brain/ai-inbox";
 import { DocumentCentralArchive } from "@/components/documents/document-central-archive";
 import { DocumentUpload } from "@/components/documents/document-upload";
 import { requireCurrentUser } from "@/lib/auth";
@@ -146,8 +145,6 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
 
   const documentQueueItems = [...queueByDocumentId.values()].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
   const reviewCount = documentQueueItems.filter((item) => item.status === "review").length;
-  const errorCount = documentQueueItems.filter((item) => item.status === "error").length;
-  const uploadFocused = query.upload === "1";
   const projectOptions = projects.map((project) => ({ id: project.id, name: project.name }));
 
   return (
@@ -156,11 +153,11 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
         <div>
           <p className="co-kicker">Dokumenty</p>
           <h1>Centralne archiwum firmy</h1>
-          <p>Jedno źródło dokumentu: Wrzutnia zapisuje oryginał, Octopus AI klasyfikuje i odczytuje treść, a moduły korzystają z tego samego rekordu.</p>
+          <p>Wszystkie nowe pliki zaczynają we Wrzutni. Octopus AI rozpoznaje je, odczytuje i przekazuje do właściwego modułu, a archiwum zachowuje jedno źródło dokumentu.</p>
         </div>
         <div className="co-heading-actions">
           <strong className="co-count-badge">{documents.length} plików · {reviewCount} do weryfikacji</strong>
-          <Link href="#document-review" className="co-text-link">Kolejka decyzji ↓</Link>
+          <Link href={`/workspace/companies/${workspace.id}/ai-inbox`} className="co-text-link">Pełna Skrzynka AI →</Link>
         </div>
       </header>
 
@@ -171,20 +168,10 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
         </section>
       ) : null}
 
-      <details id="wrzutnia" className="co-upload-disclosure" open={uploadFocused}>
-        <summary>
-          <span><UploadCloud size={17} aria-hidden="true" /><strong>Wrzutnia</strong><small>PDF, Word, Excel, obraz, XML lub ZIP → prywatne R2 → AI / OCR → właściwy moduł</small></span>
-          <ChevronDown size={16} aria-hidden="true" />
-        </summary>
-        <div className="co-upload-disclosure__body">
-          <DocumentUpload workspaceId={workspace.id} projects={projects} documents={documents} trashedDocuments={trashedDocuments} storageReady={storageReady} />
-        </div>
-      </details>
-
       <section className="co-section co-section--compact" aria-labelledby="documents-archive-title">
         <div className="co-section-heading">
-          <div><p className="co-kicker">Biblioteka</p><h2 id="documents-archive-title">Archiwum, AI/OCR i routing</h2></div>
-          <span>Wyszukiwanie obejmuje nazwę, treść OCR, fakty AI, inwestycję i moduł docelowy</span>
+          <div><p className="co-kicker">Biblioteka</p><h2 id="documents-archive-title">Wrzutnia i archiwum AI/OCR</h2></div>
+          <span>„Wszystkie” to czysta Wrzutnia; pozostałe zakładki pokazują dokumenty już skierowane do odpowiednich obszarów.</span>
         </div>
         <DocumentCentralArchive
           workspaceId={workspace.id}
@@ -193,21 +180,16 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
           insights={insights}
           reviewItems={documentQueueItems}
           currentUserId={user.id}
-        />
-      </section>
-
-      <section id="document-review" className="co-section" aria-labelledby="documents-review-title">
-        <div className="co-section-heading">
-          <div><p className="co-kicker">Kontrola człowieka</p><h2 id="documents-review-title">Do weryfikacji</h2></div>
-          <div className="co-heading-actions"><span>{reviewCount} decyzji · {errorCount} błędów</span><Link href={`/workspace/companies/${workspace.id}/ai-inbox`} className="co-text-link">Pełna Skrzynka AI →</Link></div>
-        </div>
-        <p className="section-lead">Tutaj widzisz wyłącznie bieżący stan plików od momentu wrzucenia do zakończenia przetwarzania lub decyzji. Zatwierdzone i odrzucone dokumenty pozostają w centralnym archiwum oraz pełnej Skrzynce AI.</p>
-        <AiInbox
-          items={documentQueueItems}
-          workspaceId={workspace.id}
-          currentUserId={user.id}
-          projects={projectOptions}
-          activeOnly
+          uploadContent={(
+            <DocumentUpload
+              workspaceId={workspace.id}
+              projects={projects}
+              documents={documents}
+              trashedDocuments={trashedDocuments}
+              storageReady={storageReady}
+              displayMode="intake"
+            />
+          )}
         />
       </section>
     </main>
