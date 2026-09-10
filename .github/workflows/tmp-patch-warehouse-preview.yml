@@ -1,0 +1,80 @@
+name: Temporary warehouse invoice preview patch
+
+on:
+  push:
+    branches:
+      - fix/warehouse-item-invoice-preview-20260910
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[auto-patch]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: fix/warehouse-item-invoice-preview-20260910
+          fetch-depth: 1
+      - name: Apply exact source patch
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('components/company/warehouse-workspace-300.tsx')
+          source = path.read_text()
+
+          def once(old: str, new: str, label: str):
+              global source
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 occurrence, got {count}')
+              source = source.replace(old, new, 1)
+
+          once(
+              'import { ModuleDropzoneLink } from "@/components/documents/module-dropzone-link";',
+              'import { InvoiceQuickPreview } from "@/components/documents/invoice-quick-preview";\nimport { ModuleDropzoneLink } from "@/components/documents/module-dropzone-link";',
+              'import'
+          )
+          once(
+              'const normalize = (value: unknown) => String(value ?? "").trim().toLocaleLowerCase("pl");',
+              'const normalize = (value: unknown) => String(value ?? "").trim().toLocaleLowerCase("pl");\nconst optionalId = (value: unknown) => { const result = String(value ?? "").trim(); return result || null; };\nconst invoiceLineIdFromPrice = (row: Row) => optionalId(row.invoice_line_id) ?? (String(row.source_type ?? "") === "invoice_line" ? optionalId(row.source_id) : null);',
+              'helpers'
+          )
+          once(
+              '<ItemDrawer key={selectedItemId} item={itemById.get(selectedItemId)}',
+              '<ItemDrawer key={selectedItemId} workspaceId={workspaceId} item={itemById.get(selectedItemId)}',
+              'drawer invocation'
+          )
+          once(
+              'function ItemDrawer({ item, itemId, catalogItems, balances, reservations, aliases, prices, fifo, warehouses, counterparties, locations, locationAssignments, locationById, canWrite, pending, onClose, act }: {\n  item?: Row;',
+              'function ItemDrawer({ workspaceId, item, itemId, catalogItems, balances, reservations, aliases, prices, fifo, warehouses, counterparties, locations, locationAssignments, locationById, canWrite, pending, onClose, act }: {\n  workspaceId: string;\n  item?: Row;',
+              'drawer props'
+          )
+
+          pattern = re.compile(r'    <Panel title="Ostatnie zakupy i ceny" icon=\{<History size=\{15\} />\}>.*?</Panel>', re.S)
+          matches = pattern.findall(source)
+          if len(matches) != 1:
+              raise SystemExit(f'price panel: expected 1 occurrence, got {len(matches)}')
+          replacement = '''    <Panel title="Ostatnie zakupy i ceny" icon={<History size={15} />}>{prices.slice(0, 16).map((row) => {
+      const invoiceLineId = invoiceLineIdFromPrice(row);
+      const invoiceId = optionalId(row.invoice_id);
+      const invoiceNumber = optionalId(row.invoice_number);
+      const supplier = counterparties.get(String(row.counterparty_id));
+      return <div className={styles.simpleRow} key={String(row.id)}><span><strong>{money(row.unit_price_net, text(row.currency,"PLN"))} / {text(row.unit,item.unit as string)}</strong><small>{invoiceLineId ? <><InvoiceQuickPreview workspaceId={workspaceId} domain="warehouse" invoiceLineId={invoiceLineId} invoiceId={invoiceId} invoiceNumber={invoiceNumber} stockItemId={itemId}>{invoiceNumber ? `FV ${invoiceNumber}` : "Podgląd faktury"}</InvoiceQuickPreview><span> · </span></> : null}{text(supplier?.name ?? row.supplier_name)} · {dateLabel(row.observed_at)}</small></span></div>;
+    })}{!prices.length ? <Empty label="Historia cen pojawi się po rozpoznanych zakupach." /> : null}</Panel>'''
+          source = pattern.sub(replacement, source, count=1)
+          path.write_text(source)
+      - name: Verify focused diff
+        run: |
+          git diff --check
+          git diff -- components/company/warehouse-workspace-300.tsx
+      - name: Commit patch
+        run: |
+          git config user.name "benzema172"
+          git config user.email "purczynskiwiktor@gmail.com"
+          git add components/company/warehouse-workspace-300.tsx
+          git commit -m "Magazyn: podgląd faktury z pozycji kartoteki [auto-patch]"
+          git push origin HEAD:fix/warehouse-item-invoice-preview-20260910
