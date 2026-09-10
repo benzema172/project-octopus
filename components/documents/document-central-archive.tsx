@@ -6,6 +6,8 @@ import {
   AlertTriangle,
   BrainCircuit,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   FileSearch,
   FileText,
   FolderKanban,
@@ -121,7 +123,7 @@ function extractionMethodLabel(method: string | null | undefined) {
 export function DocumentCentralArchive({ workspaceId, documents, projects, insights, reviewItems, currentUserId, uploadContent }: Props) {
   const [tab, setTab] = useState<ArchiveTabId>("all");
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(documents[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
   const insightByDocument = useMemo(() => new Map(insights.map((insight) => [insight.documentId, insight])), [insights]);
@@ -159,7 +161,7 @@ export function DocumentCentralArchive({ workspaceId, documents, projects, insig
     });
   }, [documents, insightByDocument, projectNames, query, tab]);
 
-  const selected = filteredDocuments.find((document) => document.id === selectedId) ?? filteredDocuments[0] ?? null;
+  const selected = selectedId ? filteredDocuments.find((document) => document.id === selectedId) ?? null : null;
   const selectedInsight = selected ? insightByDocument.get(selected.id) ?? null : null;
   const selectedReviewItem = selected ? reviewByDocument.get(selected.id) ?? null : null;
   const selectedVersion = selected
@@ -173,10 +175,20 @@ export function DocumentCentralArchive({ workspaceId, documents, projects, insig
     : "#";
 
   return (
-    <div className={styles.archive} data-document-central-archive="1">
+    <div className={styles.archive} data-document-central-archive="1" data-documents-collapsed-default="1">
       <div className={styles.tabs} role="tablist" aria-label="Kategorie centralnego archiwum">
         {TABS.map((item) => (
-          <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? styles.activeTab : undefined} onClick={() => setTab(item.id)}>
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.id}
+            className={tab === item.id ? styles.activeTab : undefined}
+            onClick={() => {
+              setTab(item.id);
+              setSelectedId(null);
+            }}
+          >
             {item.label}{item.id === "all" ? null : <span>{counts.get(item.id) ?? 0}</span>}
           </button>
         ))}
@@ -202,10 +214,9 @@ export function DocumentCentralArchive({ workspaceId, documents, projects, insig
           </div>
 
           {filteredDocuments.length ? (
-            <div className={styles.archiveGrid}>
+            <div className={`${styles.archiveGrid} ${selected ? "" : styles.archiveGridCollapsed}`}>
               <div className={styles.list} aria-label="Lista dokumentów">
                 {filteredDocuments.map((document) => {
-                  const insight = insightByDocument.get(document.id);
                   const moduleId = moduleForDocument(document);
                   const isSelected = selected?.id === document.id;
                   const isReview = requiresReview(document);
@@ -214,18 +225,19 @@ export function DocumentCentralArchive({ workspaceId, documents, projects, insig
                       key={document.id}
                       type="button"
                       className={`${styles.row} ${isSelected ? styles.rowSelected : ""}`}
-                      onClick={() => setSelectedId(document.id)}
-                      aria-pressed={isSelected}
+                      onClick={() => setSelectedId(isSelected ? null : document.id)}
+                      aria-expanded={isSelected}
+                      title={isSelected ? "Zwiń szczegóły dokumentu" : "Rozwiń szczegóły dokumentu"}
                     >
-                      <span className={styles.fileIcon}><FileText size={18} aria-hidden="true" /></span>
+                      <span className={styles.fileIcon}><FileText size={16} aria-hidden="true" /></span>
                       <span className={styles.rowBody}>
                         <strong>{document.name}</strong>
                         <small>{document.project_id ? projectNames.get(document.project_id) ?? "Inwestycja" : MODULE_LABELS[moduleId]} · {documentCategoryLabel(document.flow?.category ?? document.category)}</small>
-                        {insight?.summary ? <em>{insight.summary}</em> : null}
                       </span>
                       <span className={styles.rowState}>
                         <span className={`${styles.stage} ${isReview ? styles.stageReview : document.flow?.stage === "error" ? styles.stageError : document.flow?.stage === "ready" ? styles.stageReady : ""}`}>{stageLabel(document)}</span>
                         <small>{document.updated_at ? new Date(document.updated_at).toLocaleDateString("pl-PL") : ""}</small>
+                        {isSelected ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
                       </span>
                     </button>
                   );
