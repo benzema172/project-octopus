@@ -8,6 +8,7 @@ begin;
 drop function if exists public.build_hr_crew_400(uuid, uuid);
 drop function if exists public.get_hr_market_summary_400(uuid, date);
 drop function if exists public.hr_daily_controller_400(uuid, date);
+drop function if exists public.refresh_people_readiness_400(uuid, date);
 drop function if exists public.set_hr_rcp_secret_hash_400(uuid, uuid, text);
 drop function if exists public.verify_hr_rcp_secret_400(uuid, text);
 
