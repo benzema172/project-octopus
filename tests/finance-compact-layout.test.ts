@@ -35,7 +35,7 @@ describe("finance compact layout", () => {
     expect(financePage).toContain('import "../../../../finance-compact.css"');
   });
 
-  it("replaces the presentation hero with a compact four-step operational flow", () => {
+  it("replaces the presentation hero with a compact four-step operational flow and one active heavy panel", () => {
     const flow = read("components/company/finance-enterprise-flow.tsx");
     const css = read("app/finance-compact.css");
 
@@ -47,10 +47,12 @@ describe("finance compact layout", () => {
     expect(flow).toContain("Rozliczenie");
     expect(flow).not.toContain("Jeden obieg: dokument → koszt → materiał → inwestycja → księgowość");
     expect(flow).not.toContain('className="ops-metrics-grid"');
-    expect(flow).toContain('<Panel title="Dokumenty" eyebrow="1 · Wejście"');
-    expect(flow).toContain('<Panel title="Kontrola zakupu" eyebrow="2 · WM → PO → PZ → FV"');
-    expect(flow).toContain('<Panel title="Przypisanie kosztu" eyebrow="3 · Inwestycja / firma"');
-    expect(flow).toContain('<Panel title="Księgowość" eyebrow="4 · Dekret i rozliczenie"');
+    expect(flow).toContain('<Panel {...panelState} id="documents" title="Dokumenty" eyebrow="1 · Wejście"');
+    expect(flow).toContain('<Panel {...panelState} id="procurement" title="Kontrola zakupu" eyebrow="2 · WM → PO → PZ → FV"');
+    expect(flow).toContain('<Panel {...panelState} id="allocation" title="Przypisanie kosztu" eyebrow="3 · Inwestycja / firma"');
+    expect(flow).toContain('<Panel {...panelState} id="accounting" title="Księgowość" eyebrow="4 · Dekret i rozliczenie"');
+    expect(flow).toContain("const [activePanel, setActivePanel]");
+    expect(flow).toContain("onToggle(open ? null : id)");
     expect(css).toContain(".enterprise-flow-overview");
     expect(css).toContain("grid-template-columns: auto minmax(0, 1fr) auto;");
     expect(css).toContain("min-height: 34px;");
