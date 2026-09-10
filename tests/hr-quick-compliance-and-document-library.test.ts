@@ -23,7 +23,8 @@ describe("HR quick compliance and module document library", () => {
 
   it("groups the company document library by application modules", () => {
     expect(library).toContain("DocumentCentralArchive");
-    expect(library).toContain("Archiwum, AI/OCR i routing");
+    expect(library).toContain("Wrzutnia i archiwum AI/OCR");
+    expect(library).toContain('displayMode="intake"');
     expect(archive).toContain("function moduleForDocument");
     expect(archive).toContain('{ id: "hr", label: "Kadry" }');
     expect(archive).toContain('{ id: "warehouse", label: "Magazyn" }');
