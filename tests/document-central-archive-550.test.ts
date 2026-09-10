@@ -79,4 +79,17 @@ describe("Document Central Archive 5.5.0", () => {
     expect(upload).toContain("Stan przesłanych plików");
     expect(upload).toContain("visibleDocuments.length > 0 || !isIntake");
   });
+
+  it("keeps archive documents collapsed by default and expands only the selected row", () => {
+    const archive = source("components/documents/document-central-archive.tsx");
+    const css = source("components/documents/document-central-archive.module.css");
+    expect(archive).toContain('useState<string | null>(null)');
+    expect(archive).toContain('data-documents-collapsed-default="1"');
+    expect(archive).toContain('setSelectedId(isSelected ? null : document.id)');
+    expect(archive).toContain('aria-expanded={isSelected}');
+    expect(archive).toContain("archiveGridCollapsed");
+    expect(css).toContain(".archiveGridCollapsed");
+    expect(css).toContain("min-height: 46px");
+    expect(css).not.toContain(".rowBody em");
+  });
 });
