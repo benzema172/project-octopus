@@ -60,7 +60,8 @@ describe("Document Central Archive 5.5.0", () => {
     expect(page).toContain('item.entityType !== "document"');
     expect(inbox).toContain("Kategoria docelowa");
     expect(inbox).toContain("Przypisanie do inwestycji");
-    expect(inbox).toContain('action: "approve"');
-    expect(inbox).toContain('action: "reject"');
+    expect(inbox).toContain('action: "approve" | "reject"');
+    expect(inbox).toContain('decide(item, "approve")');
+    expect(inbox).toContain('decide(item, "reject")');
   });
 });
