@@ -64,4 +64,13 @@ describe("Document Central Archive 5.5.0", () => {
     expect(inbox).toContain('decide(item, "approve")');
     expect(inbox).toContain('decide(item, "reject")');
   });
+
+  it("keeps completed documents out of the Documents review-all view", () => {
+    const page = source("app/workspace/companies/[workspaceId]/documents/page.tsx");
+    const inbox = source("components/brain/ai-inbox.tsx");
+    expect(page).toContain("activeOnly");
+    expect(inbox).toContain('item.status !== "ready" && item.status !== "rejected"');
+    expect(inbox).toContain('item.key !== "ready" && item.key !== "rejected"');
+    expect(inbox).toContain("Po wrzuceniu pliku zobaczysz tutaj jego bieżący stan aż do zatwierdzenia lub odrzucenia.");
+  });
 });
