@@ -132,7 +132,7 @@ function mergeDayStatuses(current: DayStatusRow[], incoming: DayStatusRow[], fro
 
 export function HrAttendanceList500({ workspaceId, data }: Props) {
   const [month, setMonth] = useState(data.referenceDate.slice(0, 7));
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(null);
   const [rangeEmployeeId, setRangeEmployeeId] = useState<string | null>(null);
   const [rangeFrom, setRangeFrom] = useState(`${data.referenceDate.slice(0, 4)}-01-01`);
   const [rangeTo, setRangeTo] = useState(data.referenceDate);
@@ -235,13 +235,27 @@ export function HrAttendanceList500({ workspaceId, data }: Props) {
     };
   }, [printTarget]);
 
+  const closeHeavyViews = () => {
+    setExpandedEmployeeId(null);
+    setRangeEmployeeId(null);
+    setRangeError(null);
+    setReport(null);
+  };
+
+  const changeMonth = (nextMonth: string) => {
+    if (!nextMonth) return;
+    closeHeavyViews();
+    setMonth(nextMonth);
+  };
+
   const toggleEmployee = (employeeId: string) => {
-    setExpandedIds((current) => {
-      const next = new Set(current);
-      if (next.has(employeeId)) next.delete(employeeId);
-      else next.add(employeeId);
-      return next;
-    });
+    const opening = expandedEmployeeId !== employeeId;
+    if (opening) {
+      setRangeEmployeeId(null);
+      setRangeError(null);
+      setReport(null);
+    }
+    setExpandedEmployeeId(opening ? employeeId : null);
   };
 
   const openRange = (employeeId: string) => {
@@ -250,6 +264,8 @@ export function HrAttendanceList500({ workspaceId, data }: Props) {
       setRangeError(null);
       return;
     }
+    setExpandedEmployeeId(null);
+    setReport(null);
     setRangeEmployeeId(employeeId);
     setRangeFrom(`${selectedYear}-01-01`);
     setRangeTo(`${selectedYear}-12-31`);
@@ -259,9 +275,11 @@ export function HrAttendanceList500({ workspaceId, data }: Props) {
   const generateYearReport = async (employeeId: string) => {
     const from = `${selectedYear}-01-01`;
     const to = `${selectedYear}-12-31`;
-    if (!(await loadDayStatuses(from, to))) return;
+    setExpandedEmployeeId(null);
     setRangeEmployeeId(null);
     setRangeError(null);
+    setReport(null);
+    if (!(await loadDayStatuses(from, to))) return;
     setReport({ employeeId, from, to, label: `Podsumowanie roczne ${selectedYear}` });
   };
 
@@ -274,10 +292,12 @@ export function HrAttendanceList500({ workspaceId, data }: Props) {
       setRangeError("Data początkowa nie może być późniejsza niż końcowa.");
       return;
     }
+    setExpandedEmployeeId(null);
     if (!(await loadDayStatuses(rangeFrom, rangeTo))) {
       setRangeError("Nie udało się pobrać statusów Chorobowe dla wybranego okresu.");
       return;
     }
+    setRangeEmployeeId(null);
     setRangeError(null);
     setReport({ employeeId, from: rangeFrom, to: rangeTo, label: "Podsumowanie od daty do daty" });
   };
@@ -340,18 +360,18 @@ export function HrAttendanceList500({ workspaceId, data }: Props) {
 
   return <section className={styles.panel} aria-label="Lista obecności pracowników">
     <header className={styles.header}>
-      <div className={styles.title}><span><CalendarDays size={18} /></span><div><p>Dokument kadrowy</p><h2>Lista obecności</h2><small>Pracownicy są domyślnie zwinięci. Rozwiń osobę, aby zobaczyć miesięczną listę, albo wygeneruj podsumowanie roczne / za dowolny okres.</small></div></div>
-      <div className={styles.controls}><label><span>Miesiąc listy</span><input type="month" value={month} onChange={(event) => event.target.value && setMonth(event.target.value)} /></label></div>
+      <div className={styles.title}><span><CalendarDays size={18} /></span><div><p>Dokument kadrowy</p><h2>Lista obecności</h2><small>Pracownicy są domyślnie zwinięci. Rozwiń osobę, aby zobaczyć miesięczną listę, albo wygeneruj podsumowanie roczne / za dowolny okres. Aktywny może być tylko jeden duży widok.</small></div></div>
+      <div className={styles.controls}><label><span>Miesiąc listy</span><input type="month" value={month} onChange={(event) => changeMonth(event.target.value)} /></label></div>
     </header>
 
-    <div className={styles.info}><UsersRound size={15} /><span>{employees.length} {employees.length === 1 ? "pracownik" : "pracowników"}</span><b>·</b><span>{monthLabel}</span><b>·</b><span>listy domyślnie zwinięte</span>{dayStatusLoading ? <><b>·</b><span>aktualizacja chorobowego…</span></> : null}{dayStatusError ? <><b>·</b><span className={styles.statusLoadError} role="alert">{dayStatusError}</span></> : null}</div>
+    <div className={styles.info}><UsersRound size={15} /><span>{employees.length} {employees.length === 1 ? "pracownik" : "pracowników"}</span><b>·</b><span>{monthLabel}</span><b>·</b><span>jeden aktywny widok</span>{dayStatusLoading ? <><b>·</b><span>aktualizacja chorobowego…</span></> : null}{dayStatusError ? <><b>·</b><span className={styles.statusLoadError} role="alert">{dayStatusError}</span></> : null}</div>
 
     <div className={styles.employeeListWrap}>
       <table className={styles.employeeList}>
         <thead><tr><th>Pracownik</th><th>Miesiąc</th><th>Urlop</th><th>Chorobowe</th><th>Podsumowania</th></tr></thead>
         <tbody>{employees.map((employee) => {
           const employeeId = String(employee.id);
-          const expanded = expandedIds.has(employeeId);
+          const expanded = expandedEmployeeId === employeeId;
           const monthRows = attendanceForDates(employee, dates);
           const summary = summarize(monthRows);
           const activeInMonth = monthRows.some((row) => row.statusKind !== "outside");
