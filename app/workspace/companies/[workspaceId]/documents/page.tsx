@@ -15,7 +15,7 @@ import {
 } from "@/lib/authorization";
 import { listDocumentLibraryInsights } from "@/lib/data/document-library";
 import { isDocumentStorageSchemaReady, listDocumentsForWorkspace } from "@/lib/data/documents";
-import { listAiInbox } from "@/lib/data/operations";
+import { listAiInbox, type AiInboxItem } from "@/lib/data/operations";
 import { listProjectsForWorkspace } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { normalizeDocumentSourceModule, sourceModuleLabel } from "@/lib/documents/source-module";
@@ -46,6 +46,10 @@ function sourceModuleDomain(sourceModule: ReturnType<typeof normalizeDocumentSou
   if (sourceModule === "hr") return "hr";
   if (sourceModule === "fleet") return "fleet";
   return "investments";
+}
+
+function documentNeedsReview(document: DocumentSummary) {
+  return document.flow?.stage === "review" || document.ai_status === "review";
 }
 
 export default async function CompanyDocumentsPage({ params, searchParams }: Props) {
@@ -90,7 +94,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
     return [];
   });
 
-  const documentQueueItems = allAiInboxItems.flatMap((item) => {
+  const visibleQueueItems = allAiInboxItems.flatMap((item) => {
     if (item.entityType !== "document") return [];
     const domain = domainForDocumentCategory(item.category);
     if (!domainAccessPolicyAllows(accessPolicy, { domain, level: "read", projectId: item.projectId })) return [];
@@ -98,11 +102,53 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
       ...item,
       canWrite: domainAccessPolicyAllows(accessPolicy, { domain, level: "write", projectId: item.projectId }),
       canApprove: domainAccessPolicyAllows(accessPolicy, { domain, level: "approve", projectId: item.projectId })
-    }];
+    } satisfies AiInboxItem];
   });
+
+  // Document Flow is the source of truth for the archive badge. Keep the actionable
+  // queue in sync even when a legacy/missing document_intakes row would otherwise
+  // make a "Do weryfikacji" document impossible to decide from the Documents view.
+  const queueByDocumentId = new Map(visibleQueueItems.map((item) => [item.id, item]));
+  for (const document of documents) {
+    if (!documentNeedsReview(document)) continue;
+    const previous = queueByDocumentId.get(document.id);
+    const category = document.flow?.category ?? previous?.category ?? document.category ?? "other";
+    const projectId = document.project_id ?? previous?.projectId ?? null;
+    const domain = domainForDocumentCategory(category);
+    if (!domainAccessPolicyAllows(accessPolicy, { domain, level: "read", projectId })) continue;
+    queueByDocumentId.set(document.id, {
+      id: document.id,
+      entityType: "document",
+      projectId,
+      title: document.name,
+      subtitle: previous?.subtitle ?? "Decyzja dokumentu · AI / OCR",
+      status: "review",
+      confidence: document.flow?.confidence ?? previous?.confidence ?? document.ai_confidence ?? null,
+      category,
+      createdAt: previous?.createdAt ?? document.updated_at ?? document.created_at,
+      detail: document.flow?.rationale ?? previous?.detail ?? document.flow?.outcome ?? "Sprawdź kategorię i przypisanie dokumentu przed zatwierdzeniem.",
+      proposedProjectId: previous?.proposedProjectId ?? projectId,
+      proposedProjectName: previous?.proposedProjectName ?? (projectId ? projects.find((project) => project.id === projectId)?.name ?? null : null),
+      requestedCategory: previous?.requestedCategory,
+      categoryLocked: previous?.categoryLocked,
+      matchStatus: previous?.matchStatus,
+      matchReason: previous?.matchReason,
+      channel: previous?.channel ?? "document-flow",
+      priority: previous?.priority ?? "normal",
+      assignedTo: previous?.assignedTo ?? null,
+      reviewDueAt: previous?.reviewDueAt ?? null,
+      escalationLevel: previous?.escalationLevel ?? 0,
+      overdue: previous?.overdue ?? false,
+      canWrite: domainAccessPolicyAllows(accessPolicy, { domain, level: "write", projectId }),
+      canApprove: domainAccessPolicyAllows(accessPolicy, { domain, level: "approve", projectId })
+    });
+  }
+
+  const documentQueueItems = [...queueByDocumentId.values()].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
   const reviewCount = documentQueueItems.filter((item) => item.status === "review").length;
   const errorCount = documentQueueItems.filter((item) => item.status === "error").length;
   const uploadFocused = query.upload === "1";
+  const projectOptions = projects.map((project) => ({ id: project.id, name: project.name }));
 
   return (
     <main className="co-page co-documents-simplified" data-documents-one-flow="1">
@@ -143,8 +189,10 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
         <DocumentCentralArchive
           workspaceId={workspace.id}
           documents={documents}
-          projects={projects.map((project) => ({ id: project.id, name: project.name }))}
+          projects={projectOptions}
           insights={insights}
+          reviewItems={documentQueueItems}
+          currentUserId={user.id}
         />
       </section>
 
@@ -158,7 +206,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
           items={documentQueueItems}
           workspaceId={workspace.id}
           currentUserId={user.id}
-          projects={projects.map((project) => ({ id: project.id, name: project.name }))}
+          projects={projectOptions}
         />
       </section>
     </main>

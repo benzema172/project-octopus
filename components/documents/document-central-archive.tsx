@@ -13,9 +13,11 @@ import {
   ShieldAlert,
   Sparkles
 } from "lucide-react";
+import { AiInbox } from "@/components/brain/ai-inbox";
 import { DocumentOpenLink } from "@/components/documents/document-open-link";
 import { documentCategoryLabel } from "@/lib/documents/classification";
 import type { DocumentLibraryInsight } from "@/lib/documents/library-types";
+import type { AiInboxItem } from "@/lib/data/operations";
 import type { DocumentSummary } from "@/lib/types";
 import styles from "./document-central-archive.module.css";
 
@@ -27,6 +29,8 @@ type Props = {
   documents: DocumentSummary[];
   projects: ProjectOption[];
   insights: DocumentLibraryInsight[];
+  reviewItems: AiInboxItem[];
+  currentUserId: string;
 };
 
 const MODULE_LABELS: Record<Exclude<ArchiveTabId, "all" | "review">, string> = {
@@ -113,13 +117,14 @@ function extractionMethodLabel(method: string | null | undefined) {
   return method;
 }
 
-export function DocumentCentralArchive({ workspaceId, documents, projects, insights }: Props) {
+export function DocumentCentralArchive({ workspaceId, documents, projects, insights, reviewItems, currentUserId }: Props) {
   const [tab, setTab] = useState<ArchiveTabId>("all");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(documents[0]?.id ?? null);
 
   const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
   const insightByDocument = useMemo(() => new Map(insights.map((insight) => [insight.documentId, insight])), [insights]);
+  const reviewByDocument = useMemo(() => new Map(reviewItems.map((item) => [item.id, item])), [reviewItems]);
 
   const counts = useMemo(() => new Map(TABS.map((item) => [item.id, documents.filter((document) => {
     if (item.id === "all") return true;
@@ -156,6 +161,7 @@ export function DocumentCentralArchive({ workspaceId, documents, projects, insig
 
   const selected = filteredDocuments.find((document) => document.id === selectedId) ?? filteredDocuments[0] ?? null;
   const selectedInsight = selected ? insightByDocument.get(selected.id) ?? null : null;
+  const selectedReviewItem = selected ? reviewByDocument.get(selected.id) ?? null : null;
   const selectedVersion = selected
     ? selected.document_versions?.find((version) => version.id === selected.current_version_id) ?? selected.document_versions?.[0] ?? null
     : null;
@@ -230,8 +236,20 @@ export function DocumentCentralArchive({ workspaceId, documents, projects, insig
               <div className={styles.actions}>
                 <DocumentOpenLink workspaceId={workspaceId} projectId={selected.project_id} versionId={selectedVersion?.id ?? selected.current_version_id} fallbackHref={fallbackHref} />
                 {selected.flow?.resultHref ? <Link href={selected.flow.resultHref}>Przejdź do modułu →</Link> : null}
-                {requiresReview(selected) ? <a href="#document-review">Zweryfikuj decyzję AI ↓</a> : null}
+                {requiresReview(selected) ? <a href={`#document-review-${selected.id}`}>Podejmij decyzję ↓</a> : null}
               </div>
+
+              {requiresReview(selected) && selectedReviewItem ? (
+                <section className={styles.aiPanel} id={`document-review-${selected.id}`} aria-label={`Decyzja dla dokumentu ${selected.name}`}>
+                  <div className={styles.panelTitle}><ShieldAlert size={17} /><div><strong>Decyzja wymagana</strong><span>Popraw kategorię lub inwestycję, a następnie zatwierdź albo odrzuć dokument.</span></div></div>
+                  <AiInbox
+                    items={[selectedReviewItem]}
+                    workspaceId={workspaceId}
+                    currentUserId={currentUserId}
+                    projects={projects}
+                  />
+                </section>
+              ) : null}
 
               <div className={styles.metaGrid}>
                 <div><span>Kategoria AI</span><strong>{documentCategoryLabel(selected.flow?.category ?? selected.category)}</strong></div>
