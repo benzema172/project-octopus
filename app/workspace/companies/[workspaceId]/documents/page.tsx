@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { AlertTriangle, ChevronDown, FileText, FolderOpen, UploadCloud } from "lucide-react";
+import { AlertTriangle, ChevronDown, UploadCloud } from "lucide-react";
 import { notFound } from "next/navigation";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
-import { DocumentOpenLink } from "@/components/documents/document-open-link";
+import { AiInbox } from "@/components/brain/ai-inbox";
+import { DocumentCentralArchive } from "@/components/documents/document-central-archive";
 import { DocumentUpload } from "@/components/documents/document-upload";
 import { requireCurrentUser } from "@/lib/auth";
 import {
@@ -12,12 +13,13 @@ import {
   loadDomainAccessPolicy,
   type Domain
 } from "@/lib/authorization";
+import { listDocumentLibraryInsights } from "@/lib/data/document-library";
 import { isDocumentStorageSchemaReady, listDocumentsForWorkspace } from "@/lib/data/documents";
+import { listAiInbox } from "@/lib/data/operations";
 import { listProjectsForWorkspace } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { normalizeDocumentSourceModule, sourceModuleLabel } from "@/lib/documents/source-module";
 import type { DocumentSummary } from "@/lib/types";
-import styles from "./documents-library.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -25,20 +27,6 @@ type Props = {
   params: Promise<{ workspaceId: string }>;
   searchParams: Promise<{ upload?: string; sourceModule?: string }>;
 };
-
-type LibraryModuleId = "hr" | "warehouse" | "fleet" | "finance" | "investments" | "templates" | "company" | "unassigned";
-type LibraryModule = { id: LibraryModuleId; label: string; caption: string };
-
-const libraryModules: LibraryModule[] = [
-  { id: "hr", label: "Kadry", caption: "Umowy, badania, BHP, urlopy i dokumenty pracowników" },
-  { id: "warehouse", label: "Magazyn", caption: "Faktury zakupowe, PZ/WZ, materiały, sprzęt i dokumenty magazynowe" },
-  { id: "finance", label: "Finanse", caption: "Faktury, koszty, płatności i dokumenty księgowe" },
-  { id: "fleet", label: "Flota", caption: "Pojazdy, serwis, ubezpieczenia i dokumentacja floty" },
-  { id: "investments", label: "Inwestycje", caption: "Dokumentacja projektowa, kosztorysy, protokoły i pliki inwestycji" },
-  { id: "templates", label: "Wzory i Brain", caption: "Szablony, wzory oraz dokumenty referencyjne dla AI" },
-  { id: "company", label: "Ogólne firmy", caption: "Dokumenty firmowe niezwiązane z jednym modułem" },
-  { id: "unassigned", label: "Nieprzypisane", caption: "Dokumenty, których moduł wymaga jeszcze ustalenia lub weryfikacji" }
-];
 
 async function safeWorkspaceDocuments(workspaceId: string, trashed = false) {
   try {
@@ -60,33 +48,6 @@ function sourceModuleDomain(sourceModule: ReturnType<typeof normalizeDocumentSou
   return "investments";
 }
 
-function normalizeLibraryClue(value: unknown) {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[łŁ]/g, "l")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-function containsAny(haystack: string, terms: string[]) {
-  return terms.some((term) => haystack.includes(term));
-}
-
-function libraryModuleForDocument(document: DocumentSummary): LibraryModuleId {
-  if (document.project_id) return "investments";
-  const clue = normalizeLibraryClue(`${document.category ?? ""} ${document.name ?? ""}`);
-  if (containsAny(clue, ["warehouse", "magazyn", "stock", "material", "sprzet magazyn"])) return "warehouse";
-  if (containsAny(clue, ["hr", "kadry", "employee", "pracownik", "employment", "badanie", "medical", "bhp", "urlop", "leave"])) return "hr";
-  if (containsAny(clue, ["fleet", "flota", "vehicle", "pojazd", "samochod", "ubezpieczenie pojazdu"])) return "fleet";
-  if (containsAny(clue, ["finance", "finanse", "invoice", "faktura", "ksieg", "platnosc", "payment", "koszt", "cost"])) return "finance";
-  if (containsAny(clue, ["project", "inwest", "boq", "wbs", "protokol", "harmonogram", "rysunek", "dokumentacja projektowa"])) return "investments";
-  if (containsAny(clue, ["template", "szablon", "wzor", "brain", "referencyj"])) return "templates";
-  if (containsAny(clue, ["company", "firmow", "ogoln", "corporate"])) return "company";
-  return "unassigned";
-}
-
 export default async function CompanyDocumentsPage({ params, searchParams }: Props) {
   const { workspaceId } = await params;
   const query = await searchParams;
@@ -100,7 +61,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
     return <DomainAccessDenied workspaceId={workspace.id} area={sourceModule ? `Wrzutnia — ${sourceModuleLabel(sourceModule)}` : "Dokumenty"} />;
   }
 
-  const [projects, allDocuments, allTrashedDocuments, storageReady, accessPolicy] = await Promise.all([
+  const [projects, allDocuments, allTrashedDocuments, storageReady, accessPolicy, allAiInboxItems] = await Promise.all([
     listProjectsForWorkspace(user, workspace.id).catch((error) => {
       console.error("Project Octopus: project list fallback in documents", error);
       return [];
@@ -108,7 +69,11 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
     safeWorkspaceDocuments(workspace.id),
     safeWorkspaceDocuments(workspace.id, true),
     isDocumentStorageSchemaReady().catch(() => false),
-    loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id })
+    loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id }),
+    listAiInbox(workspace.id).catch((error) => {
+      console.error("Project Octopus: AI review queue fallback in documents", error);
+      return [];
+    })
   ]);
 
   const canReadDocument = (document: { category: string | null; project_id: string | null }) =>
@@ -118,69 +83,83 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
       projectId: document.project_id
     });
 
-  const documentSummaries = allDocuments.filter(canReadDocument);
-  const documents = documentSummaries.slice(0, 100);
+  const documents = allDocuments.filter(canReadDocument);
   const trashedDocuments = allTrashedDocuments.filter(canReadDocument);
-  const projectNames = new Map(projects.map((project) => [project.id, project.name]));
+  const insights = await listDocumentLibraryInsights(workspace.id, documents.map((document) => document.id)).catch((error) => {
+    console.error("Project Octopus: central document archive insight fallback", error);
+    return [];
+  });
+
+  const documentQueueItems = allAiInboxItems.flatMap((item) => {
+    if (item.entityType !== "document") return [];
+    const domain = domainForDocumentCategory(item.category);
+    if (!domainAccessPolicyAllows(accessPolicy, { domain, level: "read", projectId: item.projectId })) return [];
+    return [{
+      ...item,
+      canWrite: domainAccessPolicyAllows(accessPolicy, { domain, level: "write", projectId: item.projectId }),
+      canApprove: domainAccessPolicyAllows(accessPolicy, { domain, level: "approve", projectId: item.projectId })
+    }];
+  });
+  const reviewCount = documentQueueItems.filter((item) => item.status === "review").length;
+  const errorCount = documentQueueItems.filter((item) => item.status === "error").length;
   const uploadFocused = query.upload === "1";
-  const groupedDocuments = libraryModules
-    .map((module) => ({ ...module, documents: documents.filter((document) => libraryModuleForDocument(document) === module.id) }))
-    .filter((module) => module.documents.length > 0);
 
   return (
-    <main className="co-page co-documents-simplified">
+    <main className="co-page co-documents-simplified" data-documents-one-flow="1">
       <header className="co-page-heading co-page-heading--compact">
-        <div><p className="co-kicker">Dokumenty</p><h1>Biblioteka firmy</h1><p>Dokumenty są uporządkowane według modułów, do których należą lub zostały przypisane przez AI.</p></div>
-        <div className="co-heading-actions"><strong className="co-count-badge">{documents.length} plików</strong><Link href={`/workspace/companies/${workspace.id}/ai-inbox`} className="co-text-link">Do weryfikacji →</Link></div>
+        <div>
+          <p className="co-kicker">Dokumenty</p>
+          <h1>Centralne archiwum firmy</h1>
+          <p>Jedno źródło dokumentu: Wrzutnia zapisuje oryginał, Octopus AI klasyfikuje i odczytuje treść, a moduły korzystają z tego samego rekordu.</p>
+        </div>
+        <div className="co-heading-actions">
+          <strong className="co-count-badge">{documents.length} plików · {reviewCount} do weryfikacji</strong>
+          <Link href="#document-review" className="co-text-link">Kolejka decyzji ↓</Link>
+        </div>
       </header>
 
       {!storageReady ? (
         <section className="co-schema-warning" role="status">
           <AlertTriangle size={17} aria-hidden="true" />
-          <div><strong>Wrzutnia jest chwilowo zablokowana.</strong><span>Biblioteka pozostaje dostępna w trybie bezpiecznym.</span></div>
+          <div><strong>Wrzutnia jest chwilowo zablokowana.</strong><span>Centralne archiwum pozostaje dostępne w trybie bezpiecznym.</span></div>
         </section>
       ) : null}
 
       <details id="wrzutnia" className="co-upload-disclosure" open={uploadFocused}>
-        <summary><span><UploadCloud size={17} aria-hidden="true" /><strong>Wrzutnia</strong><small>PDF, Word, Excel, obraz, XML lub ZIP → AI → właściwy moduł</small></span><ChevronDown size={16} aria-hidden="true" /></summary>
+        <summary>
+          <span><UploadCloud size={17} aria-hidden="true" /><strong>Wrzutnia</strong><small>PDF, Word, Excel, obraz, XML lub ZIP → prywatne R2 → AI / OCR → właściwy moduł</small></span>
+          <ChevronDown size={16} aria-hidden="true" />
+        </summary>
         <div className="co-upload-disclosure__body">
-          <DocumentUpload workspaceId={workspace.id} projects={projects} documents={documentSummaries} trashedDocuments={trashedDocuments} storageReady={storageReady} />
+          <DocumentUpload workspaceId={workspace.id} projects={projects} documents={documents} trashedDocuments={trashedDocuments} storageReady={storageReady} />
         </div>
       </details>
 
-      <section className="co-section co-section--compact">
-        <div className="co-section-heading"><div><p className="co-kicker">Biblioteka</p><h2>Dokumenty według modułów</h2></div><span>Najpierw moduł, potem konkretny dokument</span></div>
-        {documents.length ? <>
-          <div className={styles.moduleSummary} aria-label="Podsumowanie dokumentów według modułów">
-            {groupedDocuments.map((group) => <span className={styles.moduleChip} key={group.id}>{group.label}<b>{group.documents.length}</b></span>)}
-          </div>
-          <div className={styles.moduleGroups}>
-            {groupedDocuments.map((group) => (
-              <details className={`${styles.moduleCard} ${group.id === "unassigned" ? styles.unassigned : ""}`} key={group.id}>
-                <summary className={styles.moduleHeader} aria-labelledby={`documents-module-${group.id}`}>
-                  <div className={styles.moduleTitle}><span className={styles.moduleIcon}><FolderOpen size={17} aria-hidden="true" /></span><div><strong id={`documents-module-${group.id}`}>{group.label}</strong><small>{group.caption}</small></div></div>
-                  <span className={styles.moduleMeta}><span className={styles.moduleCount}>{group.documents.length}</span><ChevronDown className={styles.moduleChevron} size={16} aria-hidden="true" /></span>
-                </summary>
-                <div className="co-document-table">
-                  {group.documents.map((document) => {
-                    const fallbackHref = document.project_id
-                      ? `/workspace/projects/${document.project_id}/documentation#document-${document.id}`
-                      : `#document-${document.id}`;
-                    const versionId = document.current_version_id ?? document.document_versions?.[0]?.id ?? null;
-                    return (
-                      <article key={document.id} id={`document-${document.id}`}>
-                        <span className="co-document-icon"><FileText size={18} aria-hidden="true" /></span>
-                        <div><strong>{document.name}</strong><small>{document.category || "Dokument"} · {document.project_id ? projectNames.get(document.project_id) ?? "Inwestycja" : group.label}</small></div>
-                        <time>{document.updated_at ? new Date(document.updated_at).toLocaleDateString("pl-PL") : ""}</time>
-                        <DocumentOpenLink workspaceId={workspace.id} projectId={document.project_id} versionId={versionId} fallbackHref={fallbackHref} />
-                      </article>
-                    );
-                  })}
-                </div>
-              </details>
-            ))}
-          </div>
-        </> : <div className="co-empty-state"><strong>Brak dokumentów w firmie.</strong><p>Otwórz Wrzutnię i dodaj pierwszy plik.</p></div>}
+      <section className="co-section co-section--compact" aria-labelledby="documents-archive-title">
+        <div className="co-section-heading">
+          <div><p className="co-kicker">Biblioteka</p><h2 id="documents-archive-title">Archiwum, AI/OCR i routing</h2></div>
+          <span>Wyszukiwanie obejmuje nazwę, treść OCR, fakty AI, inwestycję i moduł docelowy</span>
+        </div>
+        <DocumentCentralArchive
+          workspaceId={workspace.id}
+          documents={documents}
+          projects={projects.map((project) => ({ id: project.id, name: project.name }))}
+          insights={insights}
+        />
+      </section>
+
+      <section id="document-review" className="co-section" aria-labelledby="documents-review-title">
+        <div className="co-section-heading">
+          <div><p className="co-kicker">Kontrola człowieka</p><h2 id="documents-review-title">Do weryfikacji</h2></div>
+          <div className="co-heading-actions"><span>{reviewCount} decyzji · {errorCount} błędów</span><Link href={`/workspace/companies/${workspace.id}/ai-inbox`} className="co-text-link">Pełna Skrzynka AI →</Link></div>
+        </div>
+        <p className="section-lead">Tutaj poprawiasz kategorię lub inwestycję i zatwierdzasz decyzję AI. Zatwierdzenie nie tworzy drugiego dokumentu — aktualizuje ten sam obieg i pozwala zasilić właściwy moduł.</p>
+        <AiInbox
+          items={documentQueueItems}
+          workspaceId={workspace.id}
+          currentUserId={user.id}
+          projects={projects.map((project) => ({ id: project.id, name: project.name }))}
+        />
       </section>
     </main>
   );

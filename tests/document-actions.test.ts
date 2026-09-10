@@ -11,10 +11,12 @@ const templateFixMigration = "supabase/migrations/20260902074112_fix_template_at
 describe("company document actions", () => {
   it("opens a stored document through the authorized signed-url endpoint", () => {
     const page = source("app/workspace/companies/[workspaceId]/documents/page.tsx");
+    const archive = source("components/documents/document-central-archive.tsx");
     const opener = source("components/documents/document-open-link.tsx");
 
-    expect(page).toContain("DocumentOpenLink");
-    expect(page).toContain("document.current_version_id");
+    expect(page).toContain("DocumentCentralArchive");
+    expect(archive).toContain("DocumentOpenLink");
+    expect(archive).toContain("selected.current_version_id");
     expect(opener).toContain('fetch("/api/storage/download-url"');
     expect(opener).toContain('disposition: "inline"');
     expect(opener).toContain("versionId");
