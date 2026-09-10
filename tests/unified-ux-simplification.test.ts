@@ -78,10 +78,14 @@ describe("unified operational UX", () => {
     expect(dashboard).not.toContain("pw-dashboard-more");
   });
 
-  it("makes Documents library-first and OctopusAI task-first", () => {
+  it("makes Documents upload-first on Wszystkie and OctopusAI task-first", () => {
     const documents = read("app/workspace/companies/[workspaceId]/documents/page.tsx");
+    const archive = read("components/documents/document-central-archive.tsx");
     const ai = read("app/workspace/companies/[workspaceId]/ai-center/page.tsx");
-    expect(documents).toContain("co-upload-disclosure");
+    expect(documents).toContain('displayMode="intake"');
+    expect(documents).not.toContain("co-upload-disclosure");
+    expect(archive).toContain('tab === "all"');
+    expect(archive).toContain('data-documents-upload-home="1"');
     expect(documents).not.toContain("document-principles");
     expect(documents).not.toContain("co-category-strip");
     expect(ai).toContain('aria-label="Tryb pracy OctopusAI"');
