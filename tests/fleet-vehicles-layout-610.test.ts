@@ -13,8 +13,17 @@ describe("Fleet vehicles compact registry layout", () => {
     expect(source).toContain('grid-template-columns: minmax(0, 1fr) !important');
     expect(source).toContain('article:has([class*="tableHead"])');
     expect(source).toContain('position: sticky');
-    expect(source).toContain('display: none');
     expect(source).toContain('background: #222047 !important');
+  });
+
+  it("keeps Fleet KPI only on dashboard and removes AI waiting/service navigation", () => {
+    const source = read("components/company/operations/fleet-operations.tsx");
+    expect(source).toContain('button:nth-child(3)');
+    expect(source).toContain('button:nth-child(5)');
+    expect(source).toContain('button:not(:first-child)[class*="tabActive"]');
+    expect(source).toContain('> div[class*="kpis"] > :nth-child(3)');
+    expect(source).toContain('> div[class*="kpis"] > :nth-child(4)');
+    expect(source).toContain('div[class*="actionRow"] > :first-child');
   });
 
   it("uses the existing fleet search as the vehicle list filter", () => {
