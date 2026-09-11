@@ -13,6 +13,8 @@ describe("Fleet vehicles compact registry layout", () => {
     expect(source).toContain('grid-template-columns: minmax(0, 1fr) !important');
     expect(source).toContain('article:has([class*="tableHead"])');
     expect(source).toContain('position: sticky');
+    expect(source).toContain('display: none');
+    expect(source).toContain('background: #222047 !important');
   });
 
   it("uses the existing fleet search as the vehicle list filter", () => {
