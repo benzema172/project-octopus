@@ -13,19 +13,16 @@ describe("Fleet Core 3.0", () => {
     expect(source).toContain("Nie zakładaj nowego pojazdu");
   });
 
-  it("zachowuje zoptymalizowany Core 3.0 jako bazę loadera i UI Connected 4.0", () => {
+  it("uruchamia Flotę bezpośrednio na Core 3.0 bez górnych trybów Connected/AI", () => {
     const page = read("app/workspace/companies/[workspaceId]/fleet/page.tsx");
     const operations = read("components/company/operations/fleet-operations.tsx");
-    const workspace400 = read("components/company/fleet-workspace-400.tsx");
-    const connected = read("lib/data/fleet-connected-400.ts");
     const loader = read("lib/data/fleet-core-300.ts");
-    expect(page).toContain("getFleetConnected400Data");
-    expect(page).not.toContain("getFleetWorkspaceData");
-    expect(connected).toContain('import { getFleetCore300Data } from "@/lib/data/fleet-core-300"');
-    expect(connected).toContain("await getFleetCore300Data(workspaceId, options)");
-    expect(operations).toContain("FleetWorkspace400");
-    expect(workspace400).toContain('import { FleetWorkspace300 } from "@/components/company/fleet-workspace-300"');
-    expect(workspace400).toContain("<FleetWorkspace300");
+    expect(page).toContain('import { getFleetCore300Data } from "@/lib/data/fleet-core-300"');
+    expect(page).toContain("getFleetCore300Data(workspaceId, options)");
+    expect(page).not.toContain("getFleetConnected400Data");
+    expect(operations).toContain('import { FleetWorkspace300 } from "@/components/company/fleet-workspace-300"');
+    expect(operations).toContain("<FleetWorkspace300");
+    expect(operations).not.toContain("FleetWorkspace400");
     expect(operations).not.toContain("CompanyModuleShell");
     expect(loader).toContain('{ count: "exact" }');
     expect(loader).toContain(".range(from, from + pageSize - 1)");
