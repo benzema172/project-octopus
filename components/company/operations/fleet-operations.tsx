@@ -24,9 +24,10 @@ export default function FleetOperations({ workspaceId, data, canWrite, canApprov
       <FleetEquipmentRegistry workspaceId={workspaceId} data={data} canWrite={canWrite} />
     </div>
     <style jsx global>{`
-      /* Flota ma jeden uproszczony poziom nawigacji: bez Poczekalni AI i bez Serwisu. */
+      /* Flota ma jeden uproszczony poziom nawigacji: bez Poczekalni AI, Serwisu i Szkód. */
       .fleet-vehicles-polish nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(3),
-      .fleet-vehicles-polish nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(5) {
+      .fleet-vehicles-polish nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(5),
+      .fleet-vehicles-polish nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(8) {
         display: none !important;
       }
 
@@ -35,16 +36,19 @@ export default function FleetOperations({ workspaceId, data, canWrite, canApprov
         display: none !important;
       }
 
-      /* Na Pulpicie nie pokazujemy wskaźników usuniętych funkcji AI/Serwis. */
+      /* Na Pulpicie nie pokazujemy wskaźników usuniętych funkcji AI/Serwis/Szkody. */
       .fleet-vehicles-polish section[data-fleet-experience="3.0"] > div[class*="kpis"] > :nth-child(3),
-      .fleet-vehicles-polish section[data-fleet-experience="3.0"] > div[class*="kpis"] > :nth-child(4) {
+      .fleet-vehicles-polish section[data-fleet-experience="3.0"] > div[class*="kpis"] > :nth-child(4),
+      .fleet-vehicles-polish section[data-fleet-experience="3.0"] > div[class*="kpis"] > :nth-child(5) {
         display: none !important;
       }
 
-      /* Usuń odwołania do Poczekalni AI i Serwisu z panelu „Do decyzji” na Pulpicie. */
+      /* Usuń odwołania do Poczekalni AI, Serwisu i Szkód z panelu „Do decyzji” na Pulpicie. */
       .fleet-vehicles-polish section[data-fleet-experience="3.0"] > div[class*="grid"]:first-of-type > article:first-child div[class*="list"] > :first-child,
+      .fleet-vehicles-polish section[data-fleet-experience="3.0"] > div[class*="grid"]:first-of-type > article:first-child div[class*="list"] > :nth-child(2),
       .fleet-vehicles-polish section[data-fleet-experience="3.0"] > div[class*="grid"]:first-of-type > article:first-child div[class*="list"] > :nth-child(4),
-      .fleet-vehicles-polish section[data-fleet-experience="3.0"] > div[class*="grid"]:first-of-type > article:first-child div[class*="actionRow"] > :first-child {
+      .fleet-vehicles-polish section[data-fleet-experience="3.0"] > div[class*="grid"]:first-of-type > article:first-child div[class*="actionRow"] > :first-child,
+      .fleet-vehicles-polish section[data-fleet-experience="3.0"] > div[class*="grid"]:first-of-type > article:first-child div[class*="actionRow"] > :nth-child(2) {
         display: none !important;
       }
 
