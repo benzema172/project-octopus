@@ -20,9 +20,30 @@ export default function FleetOperations({ workspaceId, data, canWrite, canApprov
       query={query}
     />
     <style jsx global>{`
-      .fleet-vehicles-polish:has(nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(2)[class*="tabActive"]) section[data-fleet-experience="3.0"] > div[class*="kpis"] {
-        display: none;
+      /* Flota ma jeden uproszczony poziom nawigacji: bez Poczekalni AI i bez Serwisu. */
+      .fleet-vehicles-polish nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(3),
+      .fleet-vehicles-polish nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(5) {
+        display: none !important;
       }
+
+      /* KPI są pulpitem zarządczym i nie powtarzają się w zakładkach roboczych. */
+      .fleet-vehicles-polish:has(nav[aria-label="Sekcje Fleet Core 3.0"] button:not(:first-child)[class*="tabActive"]) section[data-fleet-experience="3.0"] > div[class*="kpis"] {
+        display: none !important;
+      }
+
+      /* Na Pulpicie nie pokazujemy wskaźników usuniętych funkcji AI/Serwis. */
+      .fleet-vehicles-polish section[data-fleet-experience="3.0"] > div[class*="kpis"] > :nth-child(3),
+      .fleet-vehicles-polish section[data-fleet-experience="3.0"] > div[class*="kpis"] > :nth-child(4) {
+        display: none !important;
+      }
+
+      /* Usuń odwołania do Poczekalni AI i Serwisu z panelu „Do decyzji” na Pulpicie. */
+      .fleet-vehicles-polish section[data-fleet-experience="3.0"] > div[class*="grid"]:first-of-type > article:first-child div[class*="list"] > :first-child,
+      .fleet-vehicles-polish section[data-fleet-experience="3.0"] > div[class*="grid"]:first-of-type > article:first-child div[class*="list"] > :nth-child(4),
+      .fleet-vehicles-polish section[data-fleet-experience="3.0"] > div[class*="grid"]:first-of-type > article:first-child div[class*="actionRow"] > :first-child {
+        display: none !important;
+      }
+
       .fleet-vehicles-polish:has(nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(2)[class*="tabActive"]) section[data-fleet-experience="3.0"] > div[class*="grid"] {
         grid-template-columns: minmax(0, 1fr) !important;
         gap: 8px !important;
