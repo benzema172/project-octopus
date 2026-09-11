@@ -2,6 +2,7 @@
 
 import { FleetWorkspace300 } from "@/components/company/fleet-workspace-300";
 import { FleetEquipmentRegistry } from "@/components/company/fleet-equipment-registry";
+import { FleetCostsSimple } from "@/components/company/fleet-costs-simple";
 import type { Data } from "@/components/company/operations/module-shell";
 
 export default function FleetOperations({ workspaceId, data, canWrite, canApprove, query }: {
@@ -22,6 +23,9 @@ export default function FleetOperations({ workspaceId, data, canWrite, canApprov
     />
     <div className="fleet-equipment-registry-host">
       <FleetEquipmentRegistry workspaceId={workspaceId} data={data} canWrite={canWrite} />
+    </div>
+    <div className="fleet-costs-simple-host">
+      <FleetCostsSimple data={data} />
     </div>
     <style jsx global>{`
       /* Flota ma jeden uproszczony poziom nawigacji: bez Poczekalni AI, Serwisu i Szkód. */
@@ -122,6 +126,20 @@ export default function FleetOperations({ workspaceId, data, canWrite, canApprov
         display: none !important;
       }
       .fleet-vehicles-polish:has(nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(7)[class*="tabActive"]) section[data-fleet-experience="3.0"] > form[class*="searchbar"] {
+        display: none !important;
+      }
+
+      /* Koszty i wykorzystanie: prosty widok finansowy zamiast TCO, stawek i przypisań. */
+      .fleet-costs-simple-host {
+        display: none;
+      }
+      .fleet-vehicles-polish:has(nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(9)[class*="tabActive"]) .fleet-costs-simple-host {
+        display: block;
+      }
+      .fleet-vehicles-polish:has(nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(9)[class*="tabActive"]) section[data-fleet-experience="3.0"] > div[class*="grid"] {
+        display: none !important;
+      }
+      .fleet-vehicles-polish:has(nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(9)[class*="tabActive"]) section[data-fleet-experience="3.0"] > form[class*="searchbar"] {
         display: none !important;
       }
 
