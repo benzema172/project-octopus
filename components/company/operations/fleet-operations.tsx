@@ -1,6 +1,7 @@
 "use client";
 
 import { FleetWorkspace300 } from "@/components/company/fleet-workspace-300";
+import { FleetEquipmentRegistry } from "@/components/company/fleet-equipment-registry";
 import type { Data } from "@/components/company/operations/module-shell";
 
 export default function FleetOperations({ workspaceId, data, canWrite, canApprove, query }: {
@@ -19,6 +20,9 @@ export default function FleetOperations({ workspaceId, data, canWrite, canApprov
       canApprove={canApprove}
       query={query}
     />
+    <div className="fleet-equipment-registry-host">
+      <FleetEquipmentRegistry workspaceId={workspaceId} data={data} canWrite={canWrite} />
+    </div>
     <style jsx global>{`
       /* Flota ma jeden uproszczony poziom nawigacji: bez Poczekalni AI i bez Serwisu. */
       .fleet-vehicles-polish nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(3),
@@ -44,6 +48,7 @@ export default function FleetOperations({ workspaceId, data, canWrite, canApprov
         display: none !important;
       }
 
+      /* Pojazdy: kompaktowe dodawanie + rejestr na pełną szerokość. */
       .fleet-vehicles-polish:has(nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(2)[class*="tabActive"]) section[data-fleet-experience="3.0"] > div[class*="grid"] {
         grid-template-columns: minmax(0, 1fr) !important;
         gap: 8px !important;
@@ -101,6 +106,21 @@ export default function FleetOperations({ workspaceId, data, canWrite, canApprov
       .fleet-vehicles-polish:has(nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(2)[class*="tabActive"]) section[data-fleet-experience="3.0"] > div[class*="grid"] > article:has([class*="tableHead"]) [class*="row"]:hover {
         background: #fafaff;
       }
+
+      /* Wyposażenie i opony: zastępujemy stare kafle jednym rejestrem pojazdów. */
+      .fleet-equipment-registry-host {
+        display: none;
+      }
+      .fleet-vehicles-polish:has(nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(7)[class*="tabActive"]) .fleet-equipment-registry-host {
+        display: block;
+      }
+      .fleet-vehicles-polish:has(nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(7)[class*="tabActive"]) section[data-fleet-experience="3.0"] > div[class*="grid"] {
+        display: none !important;
+      }
+      .fleet-vehicles-polish:has(nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(7)[class*="tabActive"]) section[data-fleet-experience="3.0"] > form[class*="searchbar"] {
+        display: none !important;
+      }
+
       @media (max-width: 760px) {
         .fleet-vehicles-polish:has(nav[aria-label="Sekcje Fleet Core 3.0"] button:nth-child(2)[class*="tabActive"]) section[data-fleet-experience="3.0"] > div[class*="grid"] > article:has(> div + details[class*="formCard"]) > details[class*="formCard"][open] {
           padding: 8px !important;
