@@ -1,11 +1,11 @@
 import { CompanyOperationalPage } from "@/components/company/company-operational-page";
 import type { CompanyPageOptions } from "@/lib/data/company-operations";
-import { getFleetConnected400Data } from "@/lib/data/fleet-connected-400";
+import { getFleetCore300Data } from "@/lib/data/fleet-core-300";
 
 export const dynamic = "force-dynamic";
 
 async function getFleetData(workspaceId: string, options: CompanyPageOptions) {
-  return getFleetConnected400Data(workspaceId, options);
+  return getFleetCore300Data(workspaceId, options);
 }
 
 export default async function FleetPage({ params, searchParams }: {
