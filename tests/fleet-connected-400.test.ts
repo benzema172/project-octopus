@@ -88,26 +88,20 @@ describe("Fleet 4.0 Connected Intelligence — A+B+C",()=>{
     expect(route).toContain("fleet_provider_sync_runs");
   });
 
-  it("offers all A/B/C controls through a Fleet 4.0 workspace while preserving Fleet Core 3.0",()=>{
+  it("keeps Fleet 4.0 implementation dormant while the active Flota UI exposes only Core 3.0",()=>{
     const ui=read("components/company/fleet-workspace-400.tsx");
     const operations=read("components/company/operations/fleet-operations.tsx");
     expect(ui).toContain("FleetWorkspace300");
-    for(const label of ["Operacje","Mapa i Connected","Intelligence AI","Polska i integracje","Fleet Readiness","Mission Fit","Predictive Maintenance","Warranty Recovery","AI Workshop Score","Service Kits ↔ Magazyn","Buy / Rent / Lease / Sell","Incident Investigation Vault","Driver Score","EV Intelligence","AI Walkaround","e-TOLL / Tachograf / SENT / ADR"]) expect(ui).toContain(label);
-    expect(ui).toContain("LightFleetMap");
-    expect(ui).toContain("connection_create");
-    expect(ui).toContain("device_map");
-    expect(ui).toContain("checkout");
-    expect(ui).toContain("mission_create");
-    expect(ui).toContain("ai_enrich");
-    expect(ui).toContain("service_kit_replenish");
-    expect(ui).toContain("incident_vault_build");
-    expect(operations).toContain("FleetWorkspace400");
+    expect(operations).toContain("FleetWorkspace300");
+    expect(operations).not.toContain("FleetWorkspace400");
+    for(const label of ["Mapa i Connected","Intelligence AI","Polska i integracje"]) expect(operations).not.toContain(label);
   });
 
-  it("loads bounded Connected Fleet datasets rather than widening the legacy loader",()=>{
+  it("keeps bounded Connected Fleet datasets available but does not load them from the active Flota page",()=>{
     const page=read("app/workspace/companies/[workspaceId]/fleet/page.tsx");
     const loader=read("lib/data/fleet-connected-400.ts");
-    expect(page).toContain("getFleetConnected400Data");
+    expect(page).toContain("getFleetCore300Data");
+    expect(page).not.toContain("getFleetConnected400Data");
     expect(loader).toContain("getFleetCore300Data");
     expect(loader).toContain("Promise.all");
     expect(loader).toContain('.gte("captured_at", since24h)');
