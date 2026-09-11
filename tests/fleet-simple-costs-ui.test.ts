@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
+// Kontrakt regresyjny dla uproszczonego, produkcyjnego widoku kosztów Floty.
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("Fleet simple costs UI", () => {
