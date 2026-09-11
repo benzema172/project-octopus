@@ -33,6 +33,18 @@ describe("Fleet Core 3.0", () => {
     expect(loader).toContain("vehicle_checks");
   });
 
+  it("ujednolica górę Floty ze standardem Kadr i Magazynu", () => {
+    const css = read("components/company/fleet-workspace-300.module.css");
+    expect(css).toContain(".toolbar{grid-column:1;grid-row:1");
+    expect(css).toContain("border:1px solid #dde2ea");
+    expect(css).toContain("background:rgba(255,255,255,.96)");
+    expect(css).toContain(".searchbar{display:contents}");
+    expect(css).toContain(".searchbar>:not(label){grid-column:2;grid-row:1");
+    expect(css).toContain(".searchbar label{grid-column:1/-1;grid-row:2");
+    expect(css).toContain(".kpis{grid-column:1/-1;grid-row:3");
+    expect(css).toContain(".tabActive{background:#f1f0ff!important");
+  });
+
   it("udostępnia wszystkie dziewięć sekcji operacyjnych Fleet Core 3.0", () => {
     const workspace = read("components/company/fleet-workspace-300.tsx");
     for (const tab of ["dashboard", "vehicles", "waiting", "operations", "service", "documents", "equipment", "damages", "costs"]) expect(workspace).toContain(`id: "${tab}"`);
