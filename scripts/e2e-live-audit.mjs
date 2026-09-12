@@ -15,6 +15,8 @@ const supabase = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 function minimalPdf(lines) {
   const escaped = lines.map((line) => line.replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)"));
   const text = escaped.map((line, index) => `${index === 0 ? "72 760" : `72 ${760 - index * 24}`} Td (${line}) Tj`).join("\n");
@@ -175,7 +177,9 @@ async function uploadAndAnalyze({ projectId, workspaceId, token, fileName, mimeT
     token,
     body: { workspaceId, projectId, documentId: complete.payload.documentId, state: "trashed" }
   });
-  if (!trash.response.ok) throw new Error(`${fileName}: cleanup/trash failed: ${trash.response.status} ${JSON.stringify(trash.payload)}`);
+  const retentionProtected = trash.response.status === 500 && /protected by retention policy/i.test(String(trash.payload?.error ?? ""));
+  if (!trash.response.ok && !retentionProtected) throw new Error(`${fileName}: cleanup/trash failed: ${trash.response.status} ${JSON.stringify(trash.payload)}`);
+  if (retentionProtected) console.log(`${fileName}: cleanup skipped because production retention policy protects the document.`);
 
   return {
     fileName,
@@ -187,10 +191,17 @@ async function uploadAndAnalyze({ projectId, workspaceId, token, fileName, mimeT
   };
 }
 
-const guest = await request("/api/auth/guest", {
-  method: "POST",
-  body: { login: "gosc", password: "gosc" }
-});
+let guest;
+for (let attempt = 1; attempt <= 3; attempt += 1) {
+  guest = await request("/api/auth/guest", {
+    method: "POST",
+    body: { login: "gosc", password: "gosc" }
+  });
+  if (guest.response.ok) break;
+  const transientGateway = guest.response.status >= 500 && /gateway timeout/i.test(String(guest.payload?.error ?? ""));
+  if (!transientGateway || attempt === 3) break;
+  await sleep(attempt * 1500);
+}
 if (!guest.response.ok) throw new Error(`Guest bootstrap failed: ${guest.response.status} ${JSON.stringify(guest.payload)}`);
 
 const { data: session, error: signInError } = await supabase.auth.signInWithPassword({
