@@ -1,2 +1,3 @@
 2026-08-20 Brain project_facts subject compatibility: verify R2 PUT -> complete -> Gemini -> Brain on production
 2026-09-12 Full production release verification: deploy latest main and run live E2E + tenant isolation/security audits
+2026-09-12 Retry after hardening live E2E cleanup for retention policy and transient guest bootstrap timeouts
