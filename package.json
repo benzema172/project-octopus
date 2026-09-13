@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "npm run test:hr-stress && npm run test:document-flow && next build",
+    "build:app": "next build",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run tests",
