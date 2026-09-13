@@ -19,3 +19,7 @@ revoke execute on function public.reconcile_approved_business_document_proposals
 
 -- Trigger execution remains valid after these revokes. The functions are SECURITY DEFINER and are
 -- invoked by their database triggers / owning server-side routines, not directly from the browser.
+
+insert into public.app_schema_versions(version, applied_at)
+values ('20260913_full_app_audit_hardening', now())
+on conflict (version) do update set applied_at = excluded.applied_at;
