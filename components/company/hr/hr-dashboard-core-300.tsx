@@ -44,15 +44,6 @@ export function HrDashboardCore300({ data, canViewPayroll, onNavigate }: { data:
   const severityIcon = (severity: string) => severity === "critical" ? <CircleAlert size={17} /> : severity === "warning" ? <AlertTriangle size={17} /> : <Info size={17} />;
 
   return <div className={styles.dashboard} data-hr-core-dashboard="300">
-    <section className={styles.kpis} data-equal-height-row="hr-kpis">
-      <article className={styles.kpi} data-equal-height-card><small>Aktywni</small><strong>{num(data.summary.activeEmployees)}</strong><span>pracowników</span></article>
-      <article className={styles.kpi} data-equal-height-card><small>Na inwestycjach</small><strong>{num(data.summary.todayOnSites)}</strong><span>dzisiaj bez absencji</span></article>
-      <article className={styles.kpi} data-equal-height-card><small>Problemy krytyczne</small><strong>{issueSummary.critical}</strong><span>{issueSummary.affectedEmployees} osób z uwagami</span></article>
-      <article className={styles.kpi} data-equal-height-card><small>Terminy ≤30 dni</small><strong>{num(data.summary.expiring30)}</strong><span>{num(data.summary.expired)} po terminie</span></article>
-      <article className={styles.kpi} data-equal-height-card><small>Do decyzji</small><strong>{num(data.summary.pendingDecisions)}</strong><span>urlopy + czas pracy</span></article>
-      <article className={styles.kpi} data-equal-height-card><small>Bez inwestycji</small><strong>{num(data.summary.unassigned)}</strong><span>aktywnych osób</span></article>
-    </section>
-
     <section className={styles.grid} data-equal-height-row="hr-dashboard-actions">
       <article className={styles.panel} data-equal-height-card>
         <header className={styles.panelHeader}><div><p className={styles.kicker}>Centrum problemów pracownika</p><h2>Co wymaga działania</h2></div><span className={styles.badge}>{issueSummary.issues.length} spraw</span></header>
