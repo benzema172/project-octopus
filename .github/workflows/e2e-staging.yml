@@ -4,8 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - "scripts/e2e-live-trigger.txt"
 
 permissions:
   contents: read
@@ -17,7 +15,7 @@ concurrency:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       NEXT_TELEMETRY_DISABLED: "1"
       NEXT_PUBLIC_SUPABASE_URL: https://tlbqwbdfoeuvwdlmdzhd.supabase.co
@@ -30,6 +28,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --no-audit --no-fund
+      - name: Wait until production serves this exact commit
+        run: node scripts/wait-for-production-commit.mjs
       - name: Build deployed main
         run: npm run build
       - name: Black-box production integration audit

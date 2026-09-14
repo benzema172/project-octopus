@@ -111,7 +111,7 @@ describe("Fleet 4.0 Connected Intelligence — A+B+C",()=>{
     expect(loader).toContain("providerSyncRuns");
   });
 
-  it("runs deterministic Fleet Intelligence daily and keeps Gemini as an explicit value-add action",()=>{
+  it("keeps deterministic Fleet Intelligence available on demand but does not schedule the retired feature",()=>{
     const cron=read("app/api/cron/fleet-intelligence/route.ts");
     const vercel=read("vercel.json");
     const api=read("app/api/company/fleet-connected/route.ts");
@@ -121,7 +121,7 @@ describe("Fleet 4.0 Connected Intelligence — A+B+C",()=>{
     expect(cron).toContain("refresh_fleet_regulatory_recommendations_400");
     expect(cron).toContain("refresh_fleet_connection_health_400");
     expect(cron).not.toContain("GEMINI_API_KEY");
-    expect(vercel).toContain('"/api/cron/fleet-intelligence"');
+    expect(vercel).not.toContain('"/api/cron/fleet-intelligence"');
     expect(api).toContain('body.action === "ai_enrich"');
     expect(gemini).toContain("Nie wymyślaj usterek, cen, lokalizacji, przepisów ani oszczędności");
     expect(gemini).toContain("GEMINI_API_KEY");

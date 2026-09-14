@@ -62,5 +62,5 @@ jobs:
         run: npm run test:migrations
       - name: Lint
         run: npm run lint
-      - name: Build
-        run: npm run build
+      - name: Build application
+        run: npm run build:app
