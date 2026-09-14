@@ -21,8 +21,8 @@ describe("unified UX finalization", () => {
   it("makes HR exception-first and keeps employee context in the drawer", () => {
     const dashboard = read("components/company/hr/hr-dashboard-core-300.tsx");
     const registry = read("components/company/hr/hr-employee-registry-300.tsx");
-    expect(ordered(dashboard, ["Aktywni", "Problemy krytyczne", "Terminy ≤30 dni", "Do decyzji"])).toBe(true);
-    expect(dashboard).toContain("Co wymaga działania");
+    expect(dashboard).not.toContain('data-equal-height-row="hr-kpis"');
+    expect(ordered(dashboard, ["Co wymaga działania", "Zespół na inwestycjach"])).toBe(true);
     expect(registry).toContain("onOpenTime");
     expect(registry).toContain("issueSummary");
   });
