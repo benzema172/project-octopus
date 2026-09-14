@@ -17,16 +17,16 @@ describe("equal-height card layout contract", () => {
     expect(equalHeight).toContain(".pw-decision-grid > :where(a, div)");
   });
 
-  it("marks the HR dashboard pair and KPI groups as equal-height rows", () => {
+  it("marks the remaining HR dashboard and payroll groups as equal-height rows", () => {
     const dashboard = read("components/company/hr/hr-dashboard-core-300.tsx");
 
-    expect(dashboard).toContain('data-equal-height-row="hr-kpis"');
+    expect(dashboard).not.toContain('data-equal-height-row="hr-kpis"');
     expect(dashboard).toContain('data-equal-height-row="hr-dashboard-actions"');
     expect(dashboard).toContain('data-equal-height-row="hr-payroll-kpis"');
-    expect(dashboard.match(/data-equal-height-card/g)?.length ?? 0).toBeGreaterThanOrEqual(11);
+    expect(dashboard.match(/data-equal-height-card/g)?.length ?? 0).toBeGreaterThanOrEqual(5);
   });
 
-  it("aligns the two HR action panels to the exact six-column KPI geometry", () => {
+  it("aligns the two HR action panels to the shared six-column grid geometry", () => {
     const equalHeight = read("app/equal-height-audit.css");
 
     expect(equalHeight).toContain('[data-equal-height-row="hr-dashboard-actions"]');
