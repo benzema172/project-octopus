@@ -1,0 +1,88 @@
+.fct-shell {
+  width: 100%;
+  max-width: 1600px;
+  min-width: 0;
+  box-sizing: border-box;
+  justify-self: stretch;
+  align-self: stretch;
+}
+
+.fct-shell > * {
+  min-width: 0;
+}
+
+.fct-hero {
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  border-radius: 15px;
+}
+
+.fct-eyebrow {
+  font-size: 11px;
+  letter-spacing: .07em;
+}
+
+.fct-hero h1 {
+  margin: 2px 0 4px;
+  font-size: clamp(22px, 2.2vw, 30px);
+  line-height: 1.08;
+}
+
+.fct-hero p {
+  max-width: 900px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.fct-hero__status {
+  grid-template-columns: repeat(3, minmax(96px, 1fr));
+  gap: 7px;
+  min-width: 320px;
+}
+
+.fct-hero__status span {
+  min-height: 58px;
+  padding: 7px 10px;
+  border-radius: 11px;
+}
+
+.fct-hero__status strong {
+  font-size: 20px;
+  line-height: 1.05;
+}
+
+.fct-hero__status small {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+@media (max-width: 1180px) {
+  .fct-hero {
+    align-items: stretch;
+  }
+
+  .fct-hero__status {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .fct-shell {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .fct-hero {
+    padding: 12px 14px;
+  }
+
+  .fct-hero h1 {
+    font-size: 23px;
+  }
+
+  .fct-hero p {
+    font-size: 13px;
+  }
+}
