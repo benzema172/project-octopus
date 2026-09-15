@@ -11,51 +11,76 @@
   min-width: 0;
 }
 
+/* Nagłówek Finansów ma zachowywać się jak tytuł sekcji, nie jak osobny kafel. */
 .fct-hero {
   align-items: center;
-  gap: 16px;
-  padding: 14px 18px;
-  border-radius: 15px;
+  gap: 20px;
+  padding: 2px 2px 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .fct-eyebrow {
-  font-size: 11px;
-  letter-spacing: .07em;
+  font-size: 10px;
+  letter-spacing: .075em;
 }
 
 .fct-hero h1 {
-  margin: 2px 0 4px;
-  font-size: clamp(22px, 2.2vw, 30px);
+  margin: 3px 0 3px;
+  font-size: clamp(22px, 2vw, 28px);
   line-height: 1.08;
 }
 
 .fct-hero p {
   max-width: 900px;
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: 13px;
+  line-height: 1.38;
 }
 
+/* Statusy zostają jako lekka informacja pomocnicza bez kolejnych kafli. */
 .fct-hero__status {
-  grid-template-columns: repeat(3, minmax(96px, 1fr));
-  gap: 7px;
-  min-width: 320px;
+  display: flex;
+  grid-template-columns: none;
+  gap: 0;
+  min-width: auto;
+  margin-left: auto;
+  align-items: center;
 }
 
 .fct-hero__status span {
-  min-height: 58px;
-  padding: 7px 10px;
-  border-radius: 11px;
+  min-width: 108px;
+  min-height: 0;
+  padding: 2px 14px;
+  border: 0;
+  border-left: 1px solid var(--border, #dfe5ea);
+  border-radius: 0;
+  background: transparent;
+}
+
+.fct-hero__status span:first-child {
+  border-left: 0;
 }
 
 .fct-hero__status strong {
-  font-size: 20px;
-  line-height: 1.05;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .fct-hero__status small {
-  margin-top: 2px;
-  font-size: 11px;
+  margin-top: 3px;
+  font-size: 10.5px;
   line-height: 1.2;
+}
+
+.fct-hero__status .is-warning {
+  border-color: var(--border, #dfe5ea);
+  background: transparent;
+}
+
+.fct-hero__status .is-warning strong {
+  color: #a96816;
 }
 
 @media (max-width: 1180px) {
@@ -64,7 +89,13 @@
   }
 
   .fct-hero__status {
+    width: 100%;
     min-width: 0;
+    margin-left: 0;
+  }
+
+  .fct-hero__status span {
+    flex: 1 1 0;
   }
 }
 
@@ -75,7 +106,7 @@
   }
 
   .fct-hero {
-    padding: 12px 14px;
+    padding: 0 1px 2px;
   }
 
   .fct-hero h1 {
@@ -83,6 +114,16 @@
   }
 
   .fct-hero p {
-    font-size: 13px;
+    font-size: 12.5px;
+  }
+
+  .fct-hero__status {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .fct-hero__status span {
+    min-width: 0;
+    padding: 4px 8px;
   }
 }
