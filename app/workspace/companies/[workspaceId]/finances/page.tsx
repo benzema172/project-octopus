@@ -22,20 +22,22 @@ export default async function FinancePage({
       <Suspense fallback={<section className="fct-shell"><div className="fct-panel"><p className="empty-copy">Ładowanie Finance Control Tower…</p></div></section>}>
         <FinanceControlTowerSection workspaceId={workspaceId} />
       </Suspense>
-      <CompanyOperationalPage
-        workspaceId={workspaceId}
-        page={query.page}
-        query={query.q}
-        domain="finance"
-        kind="finance"
-        kicker="Finanse operacyjne"
-        title="Dokumenty i rozrachunki"
-        description="Warstwa źródłowa Finance Control Tower: faktury, płatności, zobowiązania, pozycje kosztowe i alokacje."
-        loader={getFinanceWorkspaceData}
-      />
-      <Suspense fallback={<section className="ops-panel ops-panel--wide"><p className="empty-copy">Ładowanie spójnego obiegu finansowego…</p></section>}>
-        <FinanceEnterpriseFlowSection workspaceId={workspaceId} />
-      </Suspense>
+      <div className="finance-source-layer">
+        <CompanyOperationalPage
+          workspaceId={workspaceId}
+          page={query.page}
+          query={query.q}
+          domain="finance"
+          kind="finance"
+          kicker="Finanse operacyjne"
+          title="Dokumenty i rozrachunki"
+          description="Warstwa źródłowa Finance Control Tower: faktury, płatności, zobowiązania, pozycje kosztowe i alokacje."
+          loader={getFinanceWorkspaceData}
+        />
+        <Suspense fallback={<section className="ops-panel ops-panel--wide"><p className="empty-copy">Ładowanie spójnego obiegu finansowego…</p></section>}>
+          <FinanceEnterpriseFlowSection workspaceId={workspaceId} />
+        </Suspense>
+      </div>
     </>
   );
 }
