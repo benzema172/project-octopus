@@ -3,6 +3,7 @@ import { WalletCards } from "lucide-react";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { ProjectCompactShell } from "@/components/projects/project-compact-module-page";
 import { ProjectFinanceDashboard } from "@/components/projects/project-finance-dashboard";
+import { ProjectFinanceDocumentFlow } from "@/components/projects/project-finance-document-flow";
 import { ExecutionLayerNotice } from "@/components/system/execution-layer-notice";
 import { requireCurrentUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
@@ -14,6 +15,7 @@ import { getProjectForUser } from "@/lib/data/projects";
 import { applyProjectLaborCost } from "@/lib/investments/project-finance-labor";
 import { parseLocalizedNumber } from "@/lib/numbers/parse-localized-number";
 import "../../../../project-finance-dashboard.css";
+import "../../../../project-finance-unified-flow.css";
 
 export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ projectId: string }> };
@@ -61,7 +63,10 @@ export default async function ProjectFinancePage({ params }: Props) {
       message: error instanceof Error ? error.message : String(error)
     });
   }
-  if (data) return <ProjectFinanceDashboard projectId={project.id} currency={profile.currency || "PLN"} canWrite={canWrite} data={data} />;
+  if (data) return <>
+    <ProjectFinanceDashboard projectId={project.id} currency={profile.currency || "PLN"} canWrite={canWrite} data={data} />
+    <ProjectFinanceDocumentFlow workspaceId={project.workspace_id} projectId={project.id} currency={profile.currency || "PLN"} />
+  </>;
   return (
     <ProjectCompactShell icon={WalletCards} kicker="Finanse" title="Finanse inwestycji" description="Umowa · BOQ/WBS · przerób · koszty · płatności · prognoza" status="Błąd danych">
       <section className="pf-data-error" role="alert">
