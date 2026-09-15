@@ -83,6 +83,17 @@
   color: #a96816;
 }
 
+/* Źródłowe dokumenty i obieg finansowy są częścią wyłącznie zakładki Dokumenty. */
+.finance-source-layer {
+  display: none;
+  width: 100%;
+  min-width: 0;
+}
+
+.fct-shell:has(.fct-tabs button:nth-child(5).is-active) + .finance-source-layer {
+  display: block;
+}
+
 @media (max-width: 1180px) {
   .fct-hero {
     align-items: stretch;
