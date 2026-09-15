@@ -507,7 +507,7 @@ from public.ksef_inbox_items k where k.invoice_id is not null
 on conflict(workspace_id,source_channel,external_key) do update set invoice_id=excluded.invoice_id,document_id=coalesce(excluded.document_id,public.invoice_source_observations.document_id),updated_at=now();
 
 insert into public.invoice_source_observations(workspace_id,invoice_id,document_id,source_channel,external_key,observed_at,metadata)
-select s.workspace_id,s.invoice_id,s.document_id,coalesce(nullif(d.metadata->>'source_channel',''),'upload'),s.document_id::text,coalesce(s.created_at,now()),jsonb_build_object('backfill',true,'comparisonStatus',s.comparison_status,'sourceRole',s.source_role)
+select s.workspace_id,s.invoice_id,s.document_id,coalesce(nullif(d.metadata->>'source_channel',''),'upload'),s.document_id::text||':'||s.invoice_id::text,coalesce(s.created_at,now()),jsonb_build_object('backfill',true,'comparisonStatus',s.comparison_status,'sourceRole',s.source_role)
 from public.invoice_source_documents s join public.documents d on d.id=s.document_id
 on conflict(workspace_id,source_channel,external_key) do update set invoice_id=excluded.invoice_id,updated_at=now();
 
