@@ -4,6 +4,7 @@ import { FinanceControlTowerSection } from "@/components/company/finance-control
 import { FinanceEnterpriseFlowSection } from "@/components/company/finance-enterprise-flow-section";
 import { getFinanceWorkspaceData } from "@/lib/data/company-operations";
 import "../../../../finance-control-tower.css";
+import "../../../../finance-control-tower-layout-fix.css";
 import "../../../../finance-compact.css";
 
 export const dynamic = "force-dynamic";
