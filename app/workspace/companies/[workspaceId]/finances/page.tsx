@@ -1,7 +1,9 @@
 import { Suspense } from "react";
 import { CompanyOperationalPage } from "@/components/company/company-operational-page";
+import { FinanceControlTowerSection } from "@/components/company/finance-control-tower-section";
 import { FinanceEnterpriseFlowSection } from "@/components/company/finance-enterprise-flow-section";
 import { getFinanceWorkspaceData } from "@/lib/data/company-operations";
+import "../../../../finance-control-tower.css";
 import "../../../../finance-compact.css";
 
 export const dynamic = "force-dynamic";
@@ -16,15 +18,18 @@ export default async function FinancePage({
   const [{ workspaceId }, query] = await Promise.all([params, searchParams]);
   return (
     <>
+      <Suspense fallback={<section className="fct-shell"><div className="fct-panel"><p className="empty-copy">Ładowanie Finance Control Tower…</p></div></section>}>
+        <FinanceControlTowerSection workspaceId={workspaceId} />
+      </Suspense>
       <CompanyOperationalPage
         workspaceId={workspaceId}
         page={query.page}
         query={query.q}
         domain="finance"
         kind="finance"
-        kicker="Finanse"
-        title="Finanse przedsiębiorstwa"
-        description="Faktury, rozrachunki, płatności i zobowiązania spięte z inwestycjami oraz cash flow firmy. Koszt zarządczy inwestycji jest liczony netto, a VAT i rozrachunek brutto pozostają osobnymi warstwami."
+        kicker="Finanse operacyjne"
+        title="Dokumenty i rozrachunki"
+        description="Warstwa źródłowa Finance Control Tower: faktury, płatności, zobowiązania, pozycje kosztowe i alokacje."
         loader={getFinanceWorkspaceData}
       />
       <Suspense fallback={<section className="ops-panel ops-panel--wide"><p className="empty-copy">Ładowanie spójnego obiegu finansowego…</p></section>}>
