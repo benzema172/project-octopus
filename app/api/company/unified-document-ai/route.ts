@@ -24,12 +24,11 @@ type Row = Record<string, unknown>;
 
 function text(value: unknown) { return String(value ?? ""); }
 function number(value: unknown) { const parsed = Number(value ?? 0); return Number.isFinite(parsed) ? parsed : 0; }
-function object(value: unknown): Row { return value && typeof value === "object" && !Array.isArray(value) ? value as Row : {}; }
 
 async function applyRecommendation(args: { workspaceId: string; reviewId: string; insightId: string; actorId: string; recommendation: string; projectId: string | null }) {
   const db = createServiceSupabaseClient();
-  const decision = args.recommendation === "duplicate_same" ? "same" : args.recommendation === "assign_project" ? "assign_project" : null;
-  if (!decision) throw new Error("Ta rekomendacja AI nie może być zastosowana automatycznie.");
+  const decision = args.recommendation === "duplicate_same" ? "same" : args.recommendation === "duplicate_distinct" ? "distinct" : args.recommendation === "assign_project" ? "assign_project" : null;
+  if (!decision) throw new Error("Ta rekomendacja AI wymaga ręcznej decyzji.");
   const { data, error } = await db.rpc("resolve_finance_document_review_atomic", {
     p_workspace_id: args.workspaceId,
     p_review_id: args.reviewId,
