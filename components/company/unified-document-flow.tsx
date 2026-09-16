@@ -30,6 +30,8 @@ function policyLabel(value: UnifiedAiPolicyMode) {
   return value === "advisory" ? "Doradczy" : value === "autopilot" ? "Autopilot" : "Chroniony";
 }
 
+type AiAction = "analyze_review" | "analyze_queue" | "ask" | "apply_ai" | "set_policy";
+
 export function UnifiedDocumentFlow({ workspaceId, data, canWrite, canApprove }: { workspaceId: string; data: UnifiedDocumentFlowData; canWrite: boolean; canApprove: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -59,12 +61,12 @@ export function UnifiedDocumentFlow({ workspaceId, data, canWrite, canApprove }:
     });
   };
 
-  const aiCall = (action: "analyze_review" | "analyze_queue" | "ask" | "apply_ai" | "set_policy", payload: Record<string, unknown> = {}, busyKey = action) => {
+  const aiCall = (action: AiAction, payload: Record<string, unknown> = {}, busyKey: string = action) => {
     setMessage(null); setError(null); setAiBusy(busyKey);
     startTransition(async () => {
       try {
         const response = await fetch("/api/company/unified-document-ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, action, ...payload }) });
-        const result = await response.json().catch(() => ({})) as { error?: string; answer?: string; analyzed?: number; remaining?: number; autopilot?: { applied?: boolean; reason?: string }; applied?: string };
+        const result = await response.json().catch(() => ({})) as { error?: string; answer?: string; analyzed?: number; remaining?: number; autopilot?: { applied?: boolean; reason?: string } };
         if (!response.ok) throw new Error(result.error ?? "Octopus AI nie wykonał operacji.");
         if (action === "ask") {
           setAiAnswer(result.answer ?? "Brak odpowiedzi AI.");
