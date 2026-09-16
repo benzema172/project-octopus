@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { canAutoApplyUnifiedAi } from "@/lib/ai/unified-document-ai-policy";
-import type { UnifiedAiPolicy } from "@/lib/types/unified-document-ai";
+import { canAutoApplyUnifiedAi } from "../lib/ai/unified-document-ai-policy";
+import type { UnifiedAiPolicy } from "../lib/types/unified-document-ai";
 
 const autopilot: UnifiedAiPolicy = {
   mode: "autopilot",
