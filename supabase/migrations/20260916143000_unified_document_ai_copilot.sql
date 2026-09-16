@@ -45,16 +45,20 @@ create unique index if not exists ux_finance_document_ai_insights_active_review
   where status='active';
 create index if not exists idx_finance_document_ai_insights_workspace_queue
   on public.finance_document_ai_insights(workspace_id,status,risk_score desc,created_at desc);
-create index if not exists idx_finance_document_ai_insights_invoice
-  on public.finance_document_ai_insights(invoice_id) where invoice_id is not null;
-create index if not exists idx_finance_document_ai_insights_candidate
-  on public.finance_document_ai_insights(candidate_invoice_id) where candidate_invoice_id is not null;
-create index if not exists idx_finance_document_ai_insights_project
-  on public.finance_document_ai_insights(recommended_project_id) where recommended_project_id is not null;
-create index if not exists idx_finance_document_ai_insights_accepted_by
-  on public.finance_document_ai_insights(accepted_by) where accepted_by is not null;
-create index if not exists idx_finance_ai_policies_updated_by
-  on public.finance_ai_policies(updated_by) where updated_by is not null;
+-- Full covering indexes for all foreign keys. These intentionally remain non-partial so deletes/updates
+-- on referenced rows can use them for every historical insight, not only currently active records.
+create index if not exists idx_finance_document_ai_insights_review_fk
+  on public.finance_document_ai_insights(review_id);
+create index if not exists idx_finance_document_ai_insights_invoice_fk
+  on public.finance_document_ai_insights(invoice_id);
+create index if not exists idx_finance_document_ai_insights_candidate_fk
+  on public.finance_document_ai_insights(candidate_invoice_id);
+create index if not exists idx_finance_document_ai_insights_project_fk
+  on public.finance_document_ai_insights(recommended_project_id);
+create index if not exists idx_finance_document_ai_insights_accepted_by_fk
+  on public.finance_document_ai_insights(accepted_by);
+create index if not exists idx_finance_ai_policies_updated_by_fk
+  on public.finance_ai_policies(updated_by);
 
 alter table public.finance_ai_policies enable row level security;
 alter table public.finance_document_ai_insights enable row level security;
