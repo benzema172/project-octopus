@@ -52,11 +52,16 @@ export async function POST(request: Request) {
   if (!selected) return NextResponse.json({ error: "Nieobsługiwany provider AI." }, { status: 400 });
   const secret = body.apiKey?.trim() ?? "";
   if (secret.length < 8) return NextResponse.json({ error: "Klucz API jest pusty lub zbyt krótki." }, { status: 400 });
+  if (selected === "groq" && (!secret.startsWith("gsk_") || secret.length < 40)) {
+    return NextResponse.json({ error: "Wklej pełny klucz Groq z okna po utworzeniu klucza, nie skrócony podgląd z tabeli API Keys." }, { status: 400 });
+  }
 
   try {
     const test = await testMultiAiProvider({ provider: selected, secret, accountId: body.accountId });
     if (!test.ok) {
-      return NextResponse.json({ error: `Provider odrzucił połączenie (HTTP ${test.status}). Sprawdź token i uprawnienia.`, test }, { status: 422 });
+      const providerName = selected === "groq" ? "Groq" : "Cloudflare Workers AI";
+      const detail = test.error ? ` ${test.error}` : "";
+      return NextResponse.json({ error: `${providerName} odrzucił połączenie (HTTP ${test.status}, etap: ${test.stage}).${detail}`, test }, { status: 422 });
     }
     await saveMultiAiProviderSecret({ workspaceId: ctx.workspace.id, provider: selected, secret, accountId: body.accountId });
     const status = await getMultiAiProviderStatus(ctx.workspace.id);
