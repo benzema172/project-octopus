@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { analyzeUnifiedDocumentReview } from "@/lib/ai/unified-document-copilot";
+import { analyzeUnifiedDocumentReviewMulti } from "@/lib/ai/multi-ai-core";
 import { getOptionalEnv } from "@/lib/env";
 import { errorFields, operationalLog, requestIdFrom } from "@/lib/observability/server-logger";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -11,8 +11,8 @@ export const maxDuration = 300;
 const BACKGROUND_TOKEN_HEADER = "x-octopus-background-token";
 
 type ReviewRow = { id: string; workspace_id: string; created_at: string };
-type InsightRow = { review_id: string };
-type WorkerResult = { reviewId: string; workspaceId: string; status: "analyzed" | "failed"; mode?: string; error?: string };
+type ConsensusRow = { review_id: string };
+type WorkerResult = { reviewId: string; workspaceId: string; status: "analyzed" | "failed"; mode?: string; agreement?: number; providers?: number; error?: string };
 
 function safeSecretEqual(expected: string | null | undefined, received: string | null | undefined) {
   if (!expected || !received) return false;
@@ -38,42 +38,51 @@ async function handleWorker(request: Request) {
 
   const url = new URL(request.url);
   const limit = Math.max(1, Math.min(3, Number(url.searchParams.get("limit")) || 2));
+  const refresh = url.searchParams.get("refresh") === "1";
   const db = createServiceSupabaseClient();
-  const [{ data: reviewData, error: reviewError }, { data: insightData, error: insightError }] = await Promise.all([
-    db.from("finance_document_reviews").select("id,workspace_id,created_at").eq("status", "open").order("created_at", { ascending: true }).limit(80),
-    db.from("finance_document_ai_insights").select("review_id").eq("status", "active").limit(5000)
+  const [{ data: reviewData, error: reviewError }, { data: consensusData, error: consensusError }] = await Promise.all([
+    db.from("finance_document_reviews").select("id,workspace_id,created_at").eq("status", "open").order("created_at", { ascending: true }).limit(100),
+    db.from("ai_consensus_events").select("review_id").order("created_at", { ascending: false }).limit(5000)
   ]);
-  if (reviewError || insightError) {
-    const error = reviewError ?? insightError;
-    operationalLog("error", { event: "finance_ai_worker.queue_failed", route: "/api/company/unified-document-ai/worker", method: request.method, module: "finance", requestId, status: 500, ...errorFields(error) });
-    return NextResponse.json({ error: `Nie udało się pobrać kolejki AI: ${error?.message ?? "błąd bazy"}` }, { status: 500 });
+  if (reviewError || consensusError) {
+    const error = reviewError ?? consensusError;
+    operationalLog("error", { event: "finance_multi_ai_worker.queue_failed", route: "/api/company/unified-document-ai/worker", method: request.method, module: "finance", requestId, status: 500, ...errorFields(error) });
+    return NextResponse.json({ error: `Nie udało się pobrać kolejki Multi-AI: ${error?.message ?? "błąd bazy"}` }, { status: 500 });
   }
 
-  const analyzedIds = new Set(((insightData ?? []) as InsightRow[]).map((row) => row.review_id));
-  const queue = ((reviewData ?? []) as ReviewRow[]).filter((review) => !analyzedIds.has(review.id)).slice(0, limit);
+  const consensusIds = new Set(((consensusData ?? []) as ConsensusRow[]).map((row) => row.review_id));
+  const reviews = (reviewData ?? []) as ReviewRow[];
+  const queue = (refresh ? reviews : reviews.filter((review) => !consensusIds.has(review.id))).slice(0, limit);
   const results: WorkerResult[] = [];
 
   for (const review of queue) {
     try {
-      const insight = await analyzeUnifiedDocumentReview(review.workspace_id, review.id);
-      results.push({ reviewId: review.id, workspaceId: review.workspace_id, status: "analyzed", mode: insight.mode });
+      const insight = await analyzeUnifiedDocumentReviewMulti(review.workspace_id, review.id);
+      results.push({
+        reviewId: review.id,
+        workspaceId: review.workspace_id,
+        status: "analyzed",
+        mode: insight.mode,
+        agreement: insight.multiAi.agreement,
+        providers: insight.multiAi.providers.length
+      });
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Nieznany błąd AI";
+      const message = caught instanceof Error ? caught.message : "Nieznany błąd Multi-AI";
       results.push({ reviewId: review.id, workspaceId: review.workspace_id, status: "failed", error: message });
-      operationalLog("warn", { event: "finance_ai_worker.review_failed", route: "/api/company/unified-document-ai/worker", method: request.method, module: "finance", workspaceId: review.workspace_id, requestId, status: "partial", ...errorFields(caught), meta: { reviewId: review.id } });
+      operationalLog("warn", { event: "finance_multi_ai_worker.review_failed", route: "/api/company/unified-document-ai/worker", method: request.method, module: "finance", workspaceId: review.workspace_id, requestId, status: "partial", ...errorFields(caught), meta: { reviewId: review.id } });
     }
   }
 
   operationalLog("info", {
-    event: "finance_ai_worker.finished",
+    event: "finance_multi_ai_worker.finished",
     route: "/api/company/unified-document-ai/worker",
     method: request.method,
     module: "finance",
     requestId,
     status: 200,
-    meta: { limit, queued: queue.length, analyzed: results.filter((item) => item.status === "analyzed").length, failed: results.filter((item) => item.status === "failed").length }
+    meta: { limit, refresh, queued: queue.length, analyzed: results.filter((item) => item.status === "analyzed").length, failed: results.filter((item) => item.status === "failed").length }
   });
-  return NextResponse.json({ ok: true, processed: results.length, results }, { headers: { "Cache-Control": "no-store", "X-Request-Id": requestId } });
+  return NextResponse.json({ ok: true, processed: results.length, refresh, results }, { headers: { "Cache-Control": "no-store", "X-Request-Id": requestId } });
 }
 
 export async function POST(request: Request) { return handleWorker(request); }
