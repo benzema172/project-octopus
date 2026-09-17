@@ -155,31 +155,34 @@ async function callGemini(context: Context, provider: "gemini-fast" | "gemini-de
   const key = process.env.GEMINI_API_KEY?.trim();
   if (!key) return null;
   const started = Date.now();
-  const attempts = provider === "gemini-deep" ? 2 : 1;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
+  const candidateModels = provider === "gemini-deep"
+    ? [...new Set([model, process.env.GEMINI_DEEP_FALLBACK_MODEL?.trim() || "gemini-3.5-flash"])].filter(Boolean)
+    : [model];
+
+  for (let index = 0; index < candidateModels.length; index += 1) {
+    const candidateModel = candidateModels[index];
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(candidateModel)}:generateContent?key=${encodeURIComponent(key)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: promptFor(context) }] }],
           generationConfig: {
-            temperature: 0.05,
-            maxOutputTokens: provider === "gemini-deep" ? 1600 : 900,
+            maxOutputTokens: provider === "gemini-deep" ? 1800 : 900,
             responseMimeType: "application/json",
-            thinkingConfig: { thinkingLevel: provider === "gemini-deep" && attempt === 0 ? "low" : "minimal" }
+            thinkingConfig: { thinkingLevel: provider === "gemini-deep" && index === 0 ? "low" : "minimal" }
           }
         }),
-        signal: AbortSignal.timeout(provider === "gemini-deep" ? 45000 : 20000)
+        signal: AbortSignal.timeout(provider === "gemini-deep" ? 28000 : 20000)
       });
       if (!response.ok) continue;
       const body = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
       const raw = body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("\n").trim() ?? "";
       const parsed = parseJson(raw);
-      const vote = parsed ? validateVote(parsed, context, provider, model, Date.now() - started) : null;
+      const vote = parsed ? validateVote(parsed, context, provider, candidateModel, Date.now() - started) : null;
       if (vote) return vote;
     } catch {
-      // Retry Deep once with a lower thinking level; fast path remains single-shot.
+      // Dla Gemini Deep kolejny stabilny model jest automatycznym fallbackiem.
     }
   }
   return null;
@@ -205,29 +208,34 @@ async function callGroq(context: Context, key: string | null): Promise<Vote | nu
 
 async function callCloudflare(context: Context, token: string | null, accountId: string | null): Promise<Vote | null> {
   if (!token || !accountId) return null;
-  const model = process.env.CLOUDFLARE_AI_MODEL?.trim() || "@cf/zai-org/glm-4.7-flash";
+  const primaryModel = process.env.CLOUDFLARE_AI_MODEL?.trim() || "@cf/zai-org/glm-4.7-flash";
+  const candidateModels = [...new Set([primaryModel, "@cf/meta/llama-3.3-70b-instruct-fp8-fast"])];
   const started = Date.now();
-  try {
-    const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${model}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ messages: [{ role: "user", content: promptFor(context) }], temperature: 0.05, max_tokens: 2000 }),
-      signal: AbortSignal.timeout(45000)
-    });
-    if (!response.ok) return null;
-    const body = await response.json() as {
-      result?: {
-        response?: string;
-        choices?: Array<{ message?: { content?: string | null; reasoning_content?: string | null } }>;
+
+  for (const candidateModel of candidateModels) {
+    try {
+      const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${candidateModel}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ messages: [{ role: "user", content: promptFor(context) }], temperature: 0.05, max_tokens: 1600 }),
+        signal: AbortSignal.timeout(25000)
+      });
+      if (!response.ok) continue;
+      const body = await response.json() as {
+        result?: {
+          response?: string;
+          choices?: Array<{ message?: { content?: string | null } }>;
+        };
       };
-    };
-    const raw = body.result?.response
-      ?? body.result?.choices?.[0]?.message?.content
-      ?? body.result?.choices?.[0]?.message?.reasoning_content
-      ?? "";
-    const parsed = parseJson(raw);
-    return parsed ? validateVote(parsed, context, "cloudflare", model, Date.now() - started) : null;
-  } catch { return null; }
+      const raw = body.result?.response ?? body.result?.choices?.[0]?.message?.content ?? "";
+      const parsed = parseJson(raw);
+      const vote = parsed ? validateVote(parsed, context, "cloudflare", candidateModel, Date.now() - started) : null;
+      if (vote) return vote;
+    } catch {
+      // Jeśli model reasoningowy nie odpowie w limicie, próbujemy szybkiego niezależnego modelu Workers AI.
+    }
+  }
+  return null;
 }
 
 function baseVote(base: Awaited<ReturnType<typeof analyzeUnifiedDocumentReview>>): Vote {
@@ -324,17 +332,14 @@ export async function analyzeUnifiedDocumentReviewMulti(workspaceId: string, rev
 
   if (shouldEscalate) {
     const deepModel = process.env.GEMINI_AGENT_MODEL?.trim() || "gemini-3.6-flash";
-    const [deep, groq] = await Promise.all([
+    const [deep, groq, cloudflare] = await Promise.all([
       callGemini(context, "gemini-deep", deepModel),
-      callGroq(context, providerSecrets.groqApiKey)
+      callGroq(context, providerSecrets.groqApiKey),
+      callCloudflare(context, providerSecrets.cloudflareApiToken, providerSecrets.cloudflareAccountId)
     ]);
     if (deep) votes.push(deep);
     if (groq) votes.push(groq);
-    const current = consensus(votes);
-    if (current.requiresHuman || current.agreement < 0.72 || gross >= 50000) {
-      const cloudflare = await callCloudflare(context, providerSecrets.cloudflareApiToken, providerSecrets.cloudflareAccountId);
-      if (cloudflare) votes.push(cloudflare);
-    }
+    if (cloudflare) votes.push(cloudflare);
   }
 
   const selected = consensus(votes);
