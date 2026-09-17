@@ -12,10 +12,13 @@ describe("Unified Document AI runtime health", () => {
     expect(route).not.toContain("key,");
   });
 
-  it("tests the configured Gemini model with structured JSON output", () => {
-    expect(route).toContain('process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash"');
+  it("tests the configured Gemini model with structured JSON output and a safe thinking budget", () => {
+    expect(route).toContain('process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite"');
     expect(route).toContain("responseMimeType: \"application/json\"");
+    expect(route).toContain('thinkingConfig: { thinkingLevel: "minimal" }');
+    expect(route).toContain("maxOutputTokens: 256");
     expect(route).toContain("geminiHttpStatus");
     expect(route).toContain("candidatePresent");
+    expect(route).toContain("finishReason");
   });
 });
