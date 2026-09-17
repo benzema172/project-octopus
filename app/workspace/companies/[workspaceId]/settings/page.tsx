@@ -2,8 +2,10 @@ import { AlertTriangle, CheckCircle2, Database, PlugZap, ShieldCheck, SlidersHor
 import { notFound } from "next/navigation";
 import { updateCompanyAction } from "@/app/actions";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
+import { MultiAiProviderSettings } from "@/components/settings/multi-ai-provider-settings";
 import { RoleGrantForm } from "@/components/settings/role-grant-form";
 import { SettingsAutomationConsole } from "@/components/settings/settings-automation-console";
+import { getMultiAiProviderStatus } from "@/lib/ai/provider-vault";
 import { requireCurrentUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { isExecutionLayerSchemaReady } from "@/lib/data/operations";
@@ -44,17 +46,19 @@ export default async function CompanySettingsPage({ params, searchParams }: Prop
   }
 
   const db = createServiceSupabaseClient();
-  const [schemaReady, executionReady, canWrite, membersResult, projectsResult, grantsResult, integrationsResult, rulesResult, notificationsResult, ksefResult] = await Promise.all([
+  const [schemaReady, executionReady, canWrite, canAdminAi, membersResult, projectsResult, grantsResult, integrationsResult, rulesResult, notificationsResult, ksefResult, multiAiStatus] = await Promise.all([
     isCompanyProfileSchemaReady().catch(() => false),
     isExecutionLayerSchemaReady().catch(() => false),
     hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "settings", level: "write" }),
+    hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: "settings", level: "admin" }),
     db.from("workspace_members").select("user_id,role").eq("workspace_id", workspace.id),
     db.from("projects").select("id,name").eq("workspace_id", workspace.id).order("name"),
     db.from("domain_role_grants").select("id,user_id,domain,access_level,project_id,valid_from,valid_until").eq("workspace_id", workspace.id).order("created_at", { ascending: false }).limit(200),
     db.from("integration_connections").select("id,integration_type,display_name,status,configuration,last_sync_at").eq("workspace_id", workspace.id).order("updated_at", { ascending: false }).limit(100),
     db.from("notification_rules").select("id,project_id,event_type,lead_time_days,active").eq("workspace_id", workspace.id).order("created_at", { ascending: false }).limit(100),
     db.from("notifications").select("id,event_type,title,body,severity,read_at,created_at").eq("workspace_id", workspace.id).order("created_at", { ascending: false }).limit(100),
-    db.from("ksef_connections").select("status,environment,inbound_enabled,sales_enabled,last_successful_sync_at").eq("workspace_id", workspace.id).maybeSingle<KsefRow>()
+    db.from("ksef_connections").select("status,environment,inbound_enabled,sales_enabled,last_successful_sync_at").eq("workspace_id", workspace.id).maybeSingle<KsefRow>(),
+    getMultiAiProviderStatus(workspace.id)
   ]);
 
   const members = (membersResult.data ?? []) as MemberRow[];
@@ -110,6 +114,8 @@ export default async function CompanySettingsPage({ params, searchParams }: Prop
         <article><PlugZap size={21} /><div><strong>Integracje</strong><p>{integrations.length} wpisów w rejestrze · {activeIntegrations} oznaczonych jako aktywne.</p></div></article>
         <article><SlidersHorizontal size={21} /><div><strong>Automatyzacja</strong><p>{activeRules} aktywnych reguł · {unreadNotifications} nieprzeczytanych alertów.</p></div></article>
       </section>
+
+      <MultiAiProviderSettings workspaceId={workspace.id} canWrite={canAdminAi} initialStatus={multiAiStatus} />
 
       <section id="security-automation" className="section-band">
         <div className="section-heading"><div><p className="eyebrow">Bezpieczeństwo i automatyzacja</p><h2>Kontrola dostępu, integracje i alerty operacyjne</h2></div><span className={`status-chip ${executionReady ? "status-chip--positive" : "status-chip--warning"}`}>{executionReady ? "Warstwa aktywna" : "Wymaga migracji"}</span></div>
