@@ -136,10 +136,11 @@ export async function testMultiAiProvider(input: { provider: MultiAiProvider; se
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
       body: JSON.stringify({
         model,
-        messages: [{ role: "user", content: "Return only JSON: {\"ok\":true}." }],
-        temperature: 0,
-        max_completion_tokens: 64,
-        response_format: { type: "json_object" }
+        messages: [{ role: "user", content: "Reply with exactly OK." }],
+        temperature: 0.1,
+        max_completion_tokens: 128,
+        include_reasoning: false,
+        reasoning_effort: "low"
       }),
       signal: AbortSignal.timeout(20000)
     });
