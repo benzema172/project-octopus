@@ -155,22 +155,34 @@ async function callGemini(context: Context, provider: "gemini-fast" | "gemini-de
   const key = process.env.GEMINI_API_KEY?.trim();
   if (!key) return null;
   const started = Date.now();
-  try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: promptFor(context) }] }],
-        generationConfig: { temperature: 0.05, maxOutputTokens: provider === "gemini-deep" ? 1200 : 900, responseMimeType: "application/json", thinkingConfig: { thinkingLevel: provider === "gemini-deep" ? "low" : "minimal" } }
-      }),
-      signal: AbortSignal.timeout(provider === "gemini-deep" ? 30000 : 20000)
-    });
-    if (!response.ok) return null;
-    const body = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-    const raw = body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("\n").trim() ?? "";
-    const parsed = parseJson(raw);
-    return parsed ? validateVote(parsed, context, provider, model, Date.now() - started) : null;
-  } catch { return null; }
+  const attempts = provider === "gemini-deep" ? 2 : 1;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: promptFor(context) }] }],
+          generationConfig: {
+            temperature: 0.05,
+            maxOutputTokens: provider === "gemini-deep" ? 1600 : 900,
+            responseMimeType: "application/json",
+            thinkingConfig: { thinkingLevel: provider === "gemini-deep" && attempt === 0 ? "low" : "minimal" }
+          }
+        }),
+        signal: AbortSignal.timeout(provider === "gemini-deep" ? 45000 : 20000)
+      });
+      if (!response.ok) continue;
+      const body = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+      const raw = body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("\n").trim() ?? "";
+      const parsed = parseJson(raw);
+      const vote = parsed ? validateVote(parsed, context, provider, model, Date.now() - started) : null;
+      if (vote) return vote;
+    } catch {
+      // Retry Deep once with a lower thinking level; fast path remains single-shot.
+    }
+  }
+  return null;
 }
 
 async function callGroq(context: Context, key: string | null): Promise<Vote | null> {
@@ -199,12 +211,21 @@ async function callCloudflare(context: Context, token: string | null, accountId:
     const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${model}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ messages: [{ role: "user", content: promptFor(context) }], temperature: 0.05, max_tokens: 1200 }),
-      signal: AbortSignal.timeout(30000)
+      body: JSON.stringify({ messages: [{ role: "user", content: promptFor(context) }], temperature: 0.05, max_tokens: 2000 }),
+      signal: AbortSignal.timeout(45000)
     });
     if (!response.ok) return null;
-    const body = await response.json() as { result?: { response?: string } };
-    const parsed = parseJson(body.result?.response ?? "");
+    const body = await response.json() as {
+      result?: {
+        response?: string;
+        choices?: Array<{ message?: { content?: string | null; reasoning_content?: string | null } }>;
+      };
+    };
+    const raw = body.result?.response
+      ?? body.result?.choices?.[0]?.message?.content
+      ?? body.result?.choices?.[0]?.message?.reasoning_content
+      ?? "";
+    const parsed = parseJson(raw);
     return parsed ? validateVote(parsed, context, "cloudflare", model, Date.now() - started) : null;
   } catch { return null; }
 }
