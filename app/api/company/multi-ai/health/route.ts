@@ -30,12 +30,13 @@ async function authorized(request: Request) {
 export async function GET(request: Request) {
   if (!await authorized(request)) return NextResponse.json({ error: "Brak uprawnień." }, { status: 401 });
   const db = createServiceSupabaseClient();
+  const workspaceId = new URL(request.url).searchParams.get("workspaceId");
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const [{ data: recentRuns }, { data: recentConsensus }] = await Promise.all([
     db.from("ai_model_runs").select("provider,model,status,created_at").gte("created_at", since).order("created_at", { ascending: false }).limit(1000),
     db.from("ai_consensus_events").select("requires_human,agreement_ratio,created_at").gte("created_at", since).order("created_at", { ascending: false }).limit(1000)
   ]);
-  const providers = await getMultiAiProviderHealth();
+  const providers = await getMultiAiProviderHealth(workspaceId);
   const runs = (recentRuns ?? []) as Array<{ provider: string; model: string; status: string }>;
   const consensus = (recentConsensus ?? []) as Array<{ requires_human: boolean; agreement_ratio: number }>;
   const byProvider = Object.fromEntries(Object.entries(providers).map(([key, value]) => {
@@ -46,6 +47,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     ok: true,
     architecture: "Octopus Multi-AI Core 1.0",
+    workspaceScoped: Boolean(workspaceId),
     providers: byProvider,
     consensus24h: consensus.length,
     humanReview24h: consensus.filter((row) => row.requires_human).length,
