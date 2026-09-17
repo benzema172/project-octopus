@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { getMultiAiProviderSecrets } from "@/lib/ai/provider-vault";
 import { analyzeUnifiedDocumentReview } from "@/lib/ai/unified-document-copilot";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { UnifiedAiRecommendation } from "@/lib/types/unified-document-ai";
@@ -172,8 +173,7 @@ async function callGemini(context: Context, provider: "gemini-fast" | "gemini-de
   } catch { return null; }
 }
 
-async function callGroq(context: Context): Promise<Vote | null> {
-  const key = process.env.GROQ_API_KEY?.trim();
+async function callGroq(context: Context, key: string | null): Promise<Vote | null> {
   if (!key) return null;
   const model = process.env.GROQ_MODEL?.trim() || "openai/gpt-oss-120b";
   const started = Date.now();
@@ -191,9 +191,7 @@ async function callGroq(context: Context): Promise<Vote | null> {
   } catch { return null; }
 }
 
-async function callCloudflare(context: Context): Promise<Vote | null> {
-  const token = process.env.CLOUDFLARE_AI_API_TOKEN?.trim();
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
+async function callCloudflare(context: Context, token: string | null, accountId: string | null): Promise<Vote | null> {
   if (!token || !accountId) return null;
   const model = process.env.CLOUDFLARE_AI_MODEL?.trim() || "@cf/zai-org/glm-4.7-flash";
   const started = Date.now();
@@ -297,6 +295,7 @@ async function persistRun(workspaceId: string, reviewId: string, insightId: stri
 export async function analyzeUnifiedDocumentReviewMulti(workspaceId: string, reviewId: string) {
   const base = await analyzeUnifiedDocumentReview(workspaceId, reviewId);
   const context = await loadContext(workspaceId, reviewId);
+  const providerSecrets = await getMultiAiProviderSecrets(workspaceId);
   const votes: Vote[] = [baseVote(base)];
   const gross = Math.abs(number(context.review.impact_amount ?? context.invoice?.gross_amount));
   const threshold = Math.max(0, Number(process.env.MULTI_AI_ESCALATION_MIN_GROSS ?? 25000) || 25000);
@@ -304,12 +303,15 @@ export async function analyzeUnifiedDocumentReviewMulti(workspaceId: string, rev
 
   if (shouldEscalate) {
     const deepModel = process.env.GEMINI_AGENT_MODEL?.trim() || "gemini-3.6-flash";
-    const [deep, groq] = await Promise.all([callGemini(context, "gemini-deep", deepModel), callGroq(context)]);
+    const [deep, groq] = await Promise.all([
+      callGemini(context, "gemini-deep", deepModel),
+      callGroq(context, providerSecrets.groqApiKey)
+    ]);
     if (deep) votes.push(deep);
     if (groq) votes.push(groq);
     const current = consensus(votes);
     if (current.requiresHuman || current.agreement < 0.72 || gross >= 50000) {
-      const cloudflare = await callCloudflare(context);
+      const cloudflare = await callCloudflare(context, providerSecrets.cloudflareApiToken, providerSecrets.cloudflareAccountId);
       if (cloudflare) votes.push(cloudflare);
     }
   }
@@ -369,12 +371,13 @@ export async function analyzeUnifiedDocumentReviewMulti(workspaceId: string, rev
   };
 }
 
-export async function getMultiAiProviderHealth() {
+export async function getMultiAiProviderHealth(workspaceId?: string | null) {
   const geminiKey = Boolean(process.env.GEMINI_API_KEY?.trim());
+  const secrets = await getMultiAiProviderSecrets(workspaceId);
   return {
     primary: { provider: "gemini", model: process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite", configured: geminiKey },
     deep: { provider: "gemini", model: process.env.GEMINI_AGENT_MODEL?.trim() || "gemini-3.6-flash", configured: geminiKey },
-    groq: { provider: "groq", model: process.env.GROQ_MODEL?.trim() || "openai/gpt-oss-120b", configured: Boolean(process.env.GROQ_API_KEY?.trim()) },
-    cloudflare: { provider: "cloudflare", model: process.env.CLOUDFLARE_AI_MODEL?.trim() || "@cf/zai-org/glm-4.7-flash", configured: Boolean(process.env.CLOUDFLARE_AI_API_TOKEN?.trim() && process.env.CLOUDFLARE_ACCOUNT_ID?.trim()) }
+    groq: { provider: "groq", model: process.env.GROQ_MODEL?.trim() || "openai/gpt-oss-120b", configured: Boolean(secrets.groqApiKey) },
+    cloudflare: { provider: "cloudflare", model: process.env.CLOUDFLARE_AI_MODEL?.trim() || "@cf/zai-org/glm-4.7-flash", configured: Boolean(secrets.cloudflareApiToken && secrets.cloudflareAccountId) }
   };
 }
