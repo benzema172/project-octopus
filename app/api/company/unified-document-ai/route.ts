@@ -4,12 +4,13 @@ import { hasDomainAccess } from "@/lib/authorization";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { getUnifiedDocumentFlow } from "@/lib/data/unified-document-flow";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
-import { analyzeUnifiedDocumentReview, answerUnifiedDocumentQueueQuestion, getUnifiedAiPolicy, markUnifiedAiInsightApplied, setUnifiedAiPolicy } from "@/lib/ai/unified-document-copilot";
+import { answerUnifiedDocumentQueueQuestion, getUnifiedAiPolicy, markUnifiedAiInsightApplied, setUnifiedAiPolicy } from "@/lib/ai/unified-document-copilot";
+import { analyzeUnifiedDocumentReviewMulti } from "@/lib/ai/multi-ai-core";
 import { canAutoApplyUnifiedAi } from "@/lib/ai/unified-document-ai-policy";
 import type { UnifiedAiPolicy } from "@/lib/types/unified-document-ai";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 90;
 
 type Action = "analyze_review" | "analyze_queue" | "ask" | "apply_ai" | "set_policy";
 type Body = {
@@ -41,7 +42,7 @@ async function applyRecommendation(args: { workspaceId: string; reviewId: string
   return data;
 }
 
-async function maybeRunAutopilot(workspaceId: string, actorId: string, insight: Awaited<ReturnType<typeof analyzeUnifiedDocumentReview>>) {
+async function maybeRunAutopilot(workspaceId: string, actorId: string, insight: Awaited<ReturnType<typeof analyzeUnifiedDocumentReviewMulti>>) {
   const db = createServiceSupabaseClient();
   const [policy, reviewResult] = await Promise.all([
     getUnifiedAiPolicy(workspaceId),
@@ -89,17 +90,17 @@ export async function POST(request: Request) {
     }
     if (body.action === "analyze_review") {
       if (!body.reviewId) return NextResponse.json({ error: "Brakuje decyzji do analizy." }, { status: 400 });
-      const insight = await analyzeUnifiedDocumentReview(workspace.id, body.reviewId);
+      const insight = await analyzeUnifiedDocumentReviewMulti(workspace.id, body.reviewId);
       const autopilot = await maybeRunAutopilot(workspace.id, user.id, insight);
       return NextResponse.json({ ok: true, insight, autopilot });
     }
     if (body.action === "analyze_queue") {
       const flow = await getUnifiedDocumentFlow(workspace.id);
-      const queue = flow.reviews.filter((review) => !review.aiInsight).slice(0, 6);
+      const queue = flow.reviews.filter((review) => !review.aiInsight || !String(review.aiInsight.model ?? "").startsWith("octopus-consensus[")).slice(0, 6);
       const insights = [];
       for (let offset = 0; offset < queue.length; offset += 2) {
         const batch = await Promise.all(queue.slice(offset, offset + 2).map(async (review) => {
-          const insight = await analyzeUnifiedDocumentReview(workspace.id, review.id);
+          const insight = await analyzeUnifiedDocumentReviewMulti(workspace.id, review.id);
           const autopilot = await maybeRunAutopilot(workspace.id, user.id, insight);
           return { insight, autopilot };
         }));
