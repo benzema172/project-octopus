@@ -1,0 +1,1 @@
+-- Invoice quality gate before automatic PZ.
