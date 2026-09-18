@@ -39,8 +39,24 @@ type CompleteResponse = { documentId: string; versionId: string; versionNumber: 
 type AnalysisResponse = {
   alreadyAnalyzed?: boolean;
   message?: string;
-  analysis?: { package?: { accepted?: number; rejected?: number; queuedVersionIds?: string[] } };
+  analysis?: { effectiveCategory?: string; package?: { accepted?: number; rejected?: number; queuedVersionIds?: string[] } };
   materialization?: { destination?: string | null; status?: string; entityType?: string | null; entityId?: string | null };
+  invoiceReadiness?: Array<{
+    score: number;
+    requiresReview: boolean;
+    critical: string[];
+    warnings: string[];
+    invoiceNumber: string;
+  }>;
+  financeAi?: { analyzed: number; failed: number; maxProviders: number; requiresHuman: number } | null;
+  invoiceCheckError?: string | null;
+};
+type UploadOutcome = {
+  invoice: boolean;
+  invoiceReady: boolean;
+  invoiceReview: boolean;
+  aiProviders: number;
+  aiAnalyzed: number;
 };
 type UploadCandidate = { file: File; relativePath: string };
 type BrowserFileEntry = {
@@ -197,7 +213,7 @@ export function DocumentUpload({
   );
   const visibleDocuments = isIntake ? recentDocuments : filteredDocuments;
 
-  async function uploadFile(candidate: UploadCandidate, documentId: string | null, contextProjectId: string | null) {
+  async function uploadFile(candidate: UploadCandidate, documentId: string | null, contextProjectId: string | null): Promise<UploadOutcome> {
     const { file } = candidate;
     setError(null);
     const validationError = validateUploadFile(file.name, file.type || "application/octet-stream", file.size);
@@ -260,15 +276,49 @@ export function DocumentUpload({
           body: JSON.stringify({ workspaceId, versionId })
         })));
         setStatus(`Paczka gotowa — ${packageInfo.accepted ?? 0} dokumentów ma osobne zadania AI.`);
-      } else {
-        setStatus(analysisResponse.ok
-          ? (analysisPayload.message ?? "Analiza i routing zakończone")
-          : "Dokument zapisany — analiza pozostaje w kolejce");
+        startTransition(() => router.refresh());
+        return { invoice: false, invoiceReady: false, invoiceReview: false, aiProviders: 0, aiAnalyzed: 0 };
       }
-    } else {
-      setStatus("Dokument zapisany — duży plik oczekuje w kolejce workera");
+
+      const readiness = analysisPayload.invoiceReadiness ?? [];
+      const isInvoice = analysisPayload.analysis?.effectiveCategory === "invoice" || readiness.length > 0;
+      if (analysisResponse.ok && readiness.length > 0) {
+        const reviewCount = readiness.filter((item) => item.requiresReview).length;
+        const readyCount = readiness.length - reviewCount;
+        const averageScore = readiness.reduce((sum, item) => sum + item.score, 0) / readiness.length;
+        const providers = analysisPayload.financeAi?.maxProviders ?? 0;
+        const council = providers > 0 ? ` · AI Council: ${providers}/4` : "";
+        setStatus(reviewCount
+          ? `Faktura odczytana · jakość ${Math.round(averageScore * 100)}% · ${reviewCount} wymaga sprawdzenia${council}`
+          : `Faktura odczytana poprawnie · jakość ${Math.round(averageScore * 100)}% · ${readyCount} gotowa${council}`);
+        startTransition(() => router.refresh());
+        return {
+          invoice: true,
+          invoiceReady: reviewCount === 0,
+          invoiceReview: reviewCount > 0,
+          aiProviders: providers,
+          aiAnalyzed: analysisPayload.financeAi?.analyzed ?? 0
+        };
+      }
+
+      setStatus(analysisResponse.ok
+        ? (analysisPayload.invoiceCheckError
+          ? `Faktura zapisana — kontrola jakości wymaga ponowienia: ${analysisPayload.invoiceCheckError}`
+          : (analysisPayload.message ?? "Analiza i routing zakończone"))
+        : "Dokument zapisany — analiza pozostaje w kolejce");
+      startTransition(() => router.refresh());
+      return {
+        invoice: isInvoice,
+        invoiceReady: false,
+        invoiceReview: false,
+        aiProviders: analysisPayload.financeAi?.maxProviders ?? 0,
+        aiAnalyzed: analysisPayload.financeAi?.analyzed ?? 0
+      };
     }
+
+    setStatus("Dokument zapisany — duży plik oczekuje w kolejce workera");
     startTransition(() => router.refresh());
+    return { invoice: false, invoiceReady: false, invoiceReview: false, aiProviders: 0, aiAnalyzed: 0 };
   }
 
   async function handleCandidates(candidates: UploadCandidate[]) {
@@ -291,18 +341,32 @@ export function DocumentUpload({
     setIsUploading(true);
     setError(null);
     const failures: string[] = [];
+    const outcomes: UploadOutcome[] = [];
     let completed = 0;
     const hasFolderStructure = selectedFiles.some((candidate) => candidate.relativePath.includes("/"));
     for (const [index, candidate] of selectedFiles.entries()) {
       try {
         setStatus(`Plik ${index + 1} z ${selectedFiles.length}: ${candidate.relativePath}`);
-        await uploadFile(candidate, targetDocumentIdRef.current, targetProjectIdRef.current);
+        const outcome = await uploadFile(candidate, targetDocumentIdRef.current, targetProjectIdRef.current);
+        outcomes.push(outcome);
         completed += 1;
       } catch (uploadError) {
         failures.push(`${candidate.relativePath}: ${uploadError instanceof Error ? uploadError.message : "upload nie powiódł się"}`);
       }
     }
-    if (completed) setStatus(`Zapisano ${completed} z ${selectedFiles.length} plików${hasFolderStructure ? " z zachowaniem informacji o folderach" : ""}. Document Flow działa w tle.`);
+    if (completed) {
+      const invoices = outcomes.filter((outcome) => outcome.invoice);
+      if (invoices.length) {
+        const ready = invoices.filter((outcome) => outcome.invoiceReady).length;
+        const review = invoices.filter((outcome) => outcome.invoiceReview).length;
+        const pending = invoices.length - ready - review;
+        const providers = invoices.reduce((max, outcome) => Math.max(max, outcome.aiProviders), 0);
+        const council = providers > 0 ? ` · AI Council do ${providers}/4 modeli` : "";
+        setStatus(`Zapisano ${completed}/${selectedFiles.length} plików · faktury: ${invoices.length} · gotowe: ${ready} · do sprawdzenia: ${review}${pending ? ` · w toku: ${pending}` : ""}${council}.`);
+      } else {
+        setStatus(`Zapisano ${completed} z ${selectedFiles.length} plików${hasFolderStructure ? " z zachowaniem informacji o folderach" : ""}. Document Flow działa w tle.`);
+      }
+    }
     if (failures.length) setError(failures.join(" · "));
     if (!completed) setStatus(null);
     try {
