@@ -19,6 +19,10 @@ export type UnifiedDocumentReview = {
   suggestedProjectId: string | null;
   suggestedProjectName: string | null;
   confidence: number;
+  kind: "standard" | "invoice_quality";
+  qualityScore: number | null;
+  qualityIssues: string[];
+  qualityWarnings: string[];
   title: string;
   description: string | null;
   createdAt: string;
@@ -47,6 +51,7 @@ export type UnifiedDocumentFlowData = {
     openReviews: number;
     projectAssignments: number;
     duplicateReviews: number;
+    qualityReviews: number;
     aiAnalyzedOpen: number;
     aiHighConfidence: number;
     aiHighRisk: number;
@@ -150,11 +155,15 @@ export async function getUnifiedDocumentFlow(workspaceId: string): Promise<Unifi
     projectsByInvoice.get(invoiceId)?.add(projectMap.get(projectId) ?? "Inwestycja");
   }
   const reviewTypesByInvoice = new Map<string, Set<string>>();
+  const qualityReviewInvoiceIds = new Set<string>();
   for (const row of reviews) {
     const invoiceId = nullableText(row.invoice_id);
     if (!invoiceId) continue;
     if (!reviewTypesByInvoice.has(invoiceId)) reviewTypesByInvoice.set(invoiceId, new Set());
     reviewTypesByInvoice.get(invoiceId)?.add(text(row.review_type));
+    const metadata = object(row.metadata);
+    const qualityGate = object(metadata.qualityGate);
+    if (text(metadata.kind) === "invoice_quality" || Object.keys(qualityGate).length > 0) qualityReviewInvoiceIds.add(invoiceId);
   }
 
   const mappedReviews: UnifiedDocumentReview[] = reviews.map((row) => {
@@ -162,6 +171,8 @@ export async function getUnifiedDocumentFlow(workspaceId: string): Promise<Unifi
     const inbox = nullableText(row.business_inbox_item_id) ? inboxMap.get(text(row.business_inbox_item_id)) : null;
     const business = object(inbox?.canonical_payload);
     const metadata = object(row.metadata);
+    const qualityGate = object(metadata.qualityGate);
+    const kind: UnifiedDocumentReview["kind"] = text(metadata.kind) === "invoice_quality" ? "invoice_quality" : "standard";
     const candidate = nullableText(row.candidate_invoice_id) ? invoiceMap.get(text(row.candidate_invoice_id)) : null;
     const insight = latestInsightByReview.get(text(row.id));
     const recommendedProjectId = insight ? nullableText(insight.recommended_project_id) : null;
@@ -196,6 +207,10 @@ export async function getUnifiedDocumentFlow(workspaceId: string): Promise<Unifi
       suggestedProjectId: nullableText(row.suggested_project_id),
       suggestedProjectName: nullableText(row.suggested_project_id) ? projectMap.get(text(row.suggested_project_id)) ?? null : null,
       confidence: number(row.confidence),
+      kind,
+      qualityScore: Object.keys(qualityGate).length ? clamp(qualityGate.score) : (kind === "invoice_quality" ? clamp(row.confidence) : null),
+      qualityIssues: arrayText(qualityGate.critical),
+      qualityWarnings: arrayText(qualityGate.warnings),
       title: text(row.title),
       description: nullableText(row.description),
       createdAt: text(row.created_at),
@@ -218,7 +233,7 @@ export async function getUnifiedDocumentFlow(workspaceId: string): Promise<Unifi
       sources: [...(sourcesByInvoice.get(id) ?? new Set<string>())],
       projectNames: [...(projectsByInvoice.get(id) ?? new Set<string>())],
       status,
-      statusLabel: status === "conflict" ? "Konflikt źródeł" : status === "duplicate" ? "Możliwy duplikat" : status === "assignment" ? "Do przypisania" : "Gotowa"
+      statusLabel: status === "conflict" ? (qualityReviewInvoiceIds.has(id) ? "Kontrola jakości" : "Konflikt źródeł") : status === "duplicate" ? "Możliwy duplikat" : status === "assignment" ? "Do przypisania" : "Gotowa"
     };
   });
 
@@ -232,6 +247,7 @@ export async function getUnifiedDocumentFlow(workspaceId: string): Promise<Unifi
       openReviews: mappedReviews.length,
       projectAssignments: mappedReviews.filter((review) => review.type === "project_assignment").length,
       duplicateReviews: mappedReviews.filter((review) => review.type === "duplicate_candidate").length,
+      qualityReviews: mappedReviews.filter((review) => review.kind === "invoice_quality").length,
       aiAnalyzedOpen: mappedReviews.filter((review) => review.aiInsight).length,
       aiHighConfidence: mappedReviews.filter((review) => (review.aiInsight?.confidence ?? 0) >= 0.95 && (review.aiInsight?.riskScore ?? 1) < 0.35).length,
       aiHighRisk: mappedReviews.filter((review) => (review.aiInsight?.riskScore ?? 0) >= 0.6).length,
