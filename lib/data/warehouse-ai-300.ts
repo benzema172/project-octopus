@@ -116,7 +116,7 @@ export async function getWarehouseAi300Data(workspaceId: string) {
       .eq("workspace_id", workspaceId).eq("active", true).order("name").limit(5000),
     supabase.from("warehouse_locations")
       .select("id,warehouse_id,parent_id,code,name,qr_token,active,zone_type,capacity_units,sequence_no,putaway_priority,allowed_item_types,created_at,updated_at")
-      .eq("workspace_id", workspaceId).eq("active", true).order("code").limit(1200),
+      .eq("workspace_id", workspaceId).eq("active", true).order("code").limit(5000),
     supabase.from("stock_item_location_assignments")
       .select("id,stock_item_id,warehouse_location_id,preferred,created_at")
       .eq("workspace_id", workspaceId).limit(5000),
