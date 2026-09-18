@@ -27,6 +27,8 @@ type Movement = Row & {
   target_warehouse_name?: string | null;
   source_label?: string | null;
   source_document_name?: string | null;
+  recipient_employee_id?: string | null;
+  recipient_employee_label?: string | null;
 };
 type FlowResponse = {
   movements?: Movement[];
@@ -67,7 +69,7 @@ function routeText(row: Movement) {
   const type = String(row.movement_type ?? "").toUpperCase();
   const mode = String(row.destination_mode ?? "unassigned");
   if (type === "PZ" && mode === "central_stock") return `Zapas centralny · ${label(row.warehouse_name, "magazyn")}`;
-  if (mode === "direct_project") return `Inwestycja · ${label(row.project_name)}`;
+  if (mode === "direct_project") return `Inwestycja · ${label(row.project_name)}${row.recipient_employee_label ? ` · odbiorca: ${row.recipient_employee_label}` : ""}`;
   if (mode === "external_customer") return `Klient · ${label(row.counterparty_name)}`;
   if (type === "MM") return `Magazyn · ${label(row.target_warehouse_name)}`;
   if (type === "ZW" && row.project_name) return `Zwrot z · ${label(row.project_name)}`;
@@ -277,11 +279,11 @@ export function WarehouseMovementTruth531({ workspaceId, data, canWrite, canAppr
   return createPortal(
     <section className={styles.section} data-warehouse-movement-truth="5.3.1">
       <header className={styles.header}>
-        <div><small>OPERACJE · ŹRÓDŁO I PRZEZNACZENIE</small><h2>Ruchy magazynowe</h2><p>PZ przyjmuje zapas, WZ go wydaje. Zanim stan fizyczny się zmieni, zawsze widać dokument źródłowy, kontrahenta i miejsce docelowe.</p></div>
+        <div><small>OPERACJE · ŹRÓDŁO I PRZEZNACZENIE</small><h2>Ruchy magazynowe</h2><p>Faktura ustala koszt zakupu, PZ przyjmuje zapas, a MM/RW/WZ przenosi materiał na inwestycję. Przy MM Octopus pokazuje także rozpoznanego odbiorcę-pracownika.</p></div>
         {canWrite ? <button type="button" className={styles.primary} onClick={() => setFormOpen((value) => !value)}>{formOpen ? <X size={14} /> : <Plus size={14} />}{formOpen ? "Zamknij" : "Nowy ruch"}</button> : null}
       </header>
 
-      {aiDrafts > 0 ? <div className={styles.info}><AlertTriangle size={16} /><div><strong>{aiDrafts} {aiDrafts === 1 ? "szkic powstał" : "szkiców powstało"} automatycznie z dokumentów we Wrzutni.</strong><span>To nie są sztuczne ruchy. AI odczytało faktury/WZ i przygotowało propozycje. Dopóki nie zatwierdzisz ruchu, rzeczywisty stan magazynu się nie zmienia.</span></div></div> : null}
+      {aiDrafts > 0 ? <div className={styles.info}><AlertTriangle size={16} /><div><strong>{aiDrafts} {aiDrafts === 1 ? "szkic powstał" : "szkiców powstało"} automatycznie z dokumentów we Wrzutni.</strong><span>To nie są sztuczne ruchy. AI odczytało faktury/PZ/MM/RW/WZ i przygotowało propozycje. Dopóki nie zatwierdzisz ruchu, rzeczywisty stan magazynu się nie zmienia.</span></div></div> : null}
       {message ? <div className={styles.success}><Check size={15} />{message}</div> : null}
       {error ? <div className={styles.error}><AlertTriangle size={15} />{error}</div> : null}
 
