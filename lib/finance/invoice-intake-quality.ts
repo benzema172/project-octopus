@@ -1,0 +1,1 @@
+export const INVOICE_INTAKE_QUALITY_VERSION = 1;
