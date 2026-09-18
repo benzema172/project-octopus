@@ -10,6 +10,13 @@ export type InvoiceIntakeAssessment = InvoiceReadinessResult & {
   invoiceNumber: string;
   inboxId: string | null;
   reviewId: string | null;
+  warehouseReceipt: {
+    skipped: boolean;
+    reason: string | null;
+    approved: number;
+    failed: number;
+    requiresHumanReview: boolean;
+  } | null;
 };
 
 function text(value: unknown) {
@@ -185,7 +192,7 @@ export async function assessDocumentInvoiceReadiness(input: {
       }
     }
 
-    await db.from("audit_events").insert({
+    const { error: auditError } = await db.from("audit_events").insert({
       workspace_id: input.workspaceId,
       project_id: null,
       actor_id: input.actorId ?? null,
@@ -195,13 +202,42 @@ export async function assessDocumentInvoiceReadiness(input: {
       entity_id: invoiceId,
       after_value: qualityPayload
     });
+    if (auditError) throw new Error(`Nie udało się zapisać bramki jakości faktury: ${auditError.message}`);
+
+    let warehouseReceipt: InvoiceIntakeAssessment["warehouseReceipt"] = null;
+    if (!result.requiresReview && text(invoice.direction) === "purchase") {
+      const { data: receiptData, error: receiptError } = await db.rpc("auto_receive_purchase_invoice_atomic", {
+        p_workspace_id: input.workspaceId,
+        p_invoice_id: invoiceId,
+        p_actor_id: input.actorId ?? null
+      });
+      if (receiptError) {
+        warehouseReceipt = {
+          skipped: false,
+          reason: "auto_receive_error",
+          approved: 0,
+          failed: 1,
+          requiresHumanReview: true
+        };
+      } else {
+        const receipt = object(receiptData);
+        warehouseReceipt = {
+          skipped: receipt.skipped === true,
+          reason: nullableText(receipt.reason),
+          approved: Math.max(0, Number(receipt.approved ?? 0) || 0),
+          failed: Math.max(0, Number(receipt.failed ?? 0) || 0),
+          requiresHumanReview: receipt.requiresHumanReview === true
+        };
+      }
+    }
 
     assessments.push({
       ...result,
       invoiceId,
       invoiceNumber: text(invoice.invoice_number) || "Faktura bez numeru",
       inboxId: inbox ? text(inbox.id) : null,
-      reviewId
+      reviewId,
+      warehouseReceipt
     });
   }
 
