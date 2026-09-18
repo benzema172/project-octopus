@@ -7,10 +7,21 @@ import { getOptionalEnv, requireServerEnv } from "@/lib/env";
 import { normalizeDocumentCategory } from "@/lib/documents/classification";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
-export type WarehouseBusinessLine = DocumentAnalysis["businessDocument"]["lines"][number];
+export type WarehouseBusinessLine = DocumentAnalysis["businessDocument"]["lines"][number] & {
+  manufacturer: string;
+  model: string;
+  ean: string;
+};
 export type WarehouseBusinessDocument = DocumentAnalysis["businessDocument"] & {
   sourcePageStart: number;
   sourcePageEnd: number;
+  projectCode: string;
+  projectName: string;
+  projectAddress: string;
+  recipientEmployeeName: string;
+  recipientEmployeeNumber: string;
+  sourceWarehouse: string;
+  targetWarehouse: string;
 };
 
 export type WarehouseDocumentAnalysis = DocumentAnalysis & {
@@ -42,7 +53,7 @@ type ChunkAnalysisResult = {
 };
 
 const RETRYABLE_GEMINI_STATUS = new Set([408, 429, 500, 502, 503, 504]);
-const PARSER_VERSION = "warehouse-pdf-chunks-4.2";
+const PARSER_VERSION = "warehouse-pdf-chunks-4.3-material-flow";
 const PDF_PAGES_PER_CHUNK = 4;
 const PDF_OVERLAP_PAGES = 1;
 const PDF_CHUNK_CONCURRENCY = 2;
@@ -83,23 +94,26 @@ const LINE_SCHEMA = {
     expenseCategory: { type: "STRING" },
     sku: { type: "STRING" }, description: { type: "STRING" }, quantity: { type: "NUMBER" }, unit: { type: "STRING" },
     unitPrice: { type: "NUMBER" }, netAmount: { type: "NUMBER" }, taxRate: { type: "NUMBER" }, grossAmount: { type: "NUMBER" },
-    purchaseOrderNumber: { type: "STRING" }, vehicleRegistration: { type: "STRING" }, liters: { type: "NUMBER" }, mileage: { type: "NUMBER" }, confidence: { type: "NUMBER" }
+    purchaseOrderNumber: { type: "STRING" }, manufacturer: { type: "STRING" }, model: { type: "STRING" }, ean: { type: "STRING" }, vehicleRegistration: { type: "STRING" }, liters: { type: "NUMBER" }, mileage: { type: "NUMBER" }, confidence: { type: "NUMBER" }
   },
-  required: ["lineType", "expenseCategory", "sku", "description", "quantity", "unit", "unitPrice", "netAmount", "taxRate", "grossAmount", "purchaseOrderNumber", "vehicleRegistration", "liters", "mileage", "confidence"]
+  required: ["lineType", "expenseCategory", "sku", "description", "quantity", "unit", "unitPrice", "netAmount", "taxRate", "grossAmount", "purchaseOrderNumber", "manufacturer", "model", "ean", "vehicleRegistration", "liters", "mileage", "confidence"]
 };
 
 const BUSINESS_DOCUMENT_SCHEMA = {
   type: "OBJECT",
   properties: {
     sourcePageStart: { type: "INTEGER" }, sourcePageEnd: { type: "INTEGER" },
-    documentType: { type: "STRING", enum: ["invoice", "WZ", "PZ", "delivery"] },
+    documentType: { type: "STRING", enum: ["invoice", "WZ", "PZ", "MM", "RW", "ZW", "delivery"] },
     documentNumber: { type: "STRING" }, ksefNumber: { type: "STRING" }, purchaseOrderNumber: { type: "STRING" },
-    direction: { type: "STRING", enum: ["purchase", "sale"] }, issueDate: { type: "STRING" }, dueDate: { type: "STRING" },
+    direction: { type: "STRING", enum: ["purchase", "sale", "internal"] }, issueDate: { type: "STRING" }, dueDate: { type: "STRING" },
     supplierName: { type: "STRING" }, supplierTaxId: { type: "STRING" }, buyerName: { type: "STRING" }, buyerTaxId: { type: "STRING" },
+    projectCode: { type: "STRING" }, projectName: { type: "STRING" }, projectAddress: { type: "STRING" },
+    recipientEmployeeName: { type: "STRING" }, recipientEmployeeNumber: { type: "STRING" },
+    sourceWarehouse: { type: "STRING" }, targetWarehouse: { type: "STRING" },
     currency: { type: "STRING" }, netAmount: { type: "NUMBER" }, taxAmount: { type: "NUMBER" }, grossAmount: { type: "NUMBER" },
     lines: { type: "ARRAY", items: LINE_SCHEMA }
   },
-  required: ["sourcePageStart", "sourcePageEnd", "documentType", "documentNumber", "ksefNumber", "purchaseOrderNumber", "direction", "issueDate", "dueDate", "supplierName", "supplierTaxId", "buyerName", "buyerTaxId", "currency", "netAmount", "taxAmount", "grossAmount", "lines"]
+  required: ["sourcePageStart", "sourcePageEnd", "documentType", "documentNumber", "ksefNumber", "purchaseOrderNumber", "direction", "issueDate", "dueDate", "supplierName", "supplierTaxId", "buyerName", "buyerTaxId", "projectCode", "projectName", "projectAddress", "recipientEmployeeName", "recipientEmployeeNumber", "sourceWarehouse", "targetWarehouse", "currency", "netAmount", "taxAmount", "grossAmount", "lines"]
 };
 
 const RESPONSE_SCHEMA = {
@@ -152,6 +166,9 @@ function normalizeLine(value: unknown): WarehouseBusinessLine | null {
     taxRate: Number(line.taxRate) || 0,
     grossAmount: Number(line.grossAmount) || 0,
     purchaseOrderNumber: String(line.purchaseOrderNumber ?? "").trim(),
+    manufacturer: String(line.manufacturer ?? "").trim(),
+    model: String(line.model ?? "").trim(),
+    ean: String(line.ean ?? "").trim(),
     vehicleRegistration: String(line.vehicleRegistration ?? "").trim(),
     liters: Number(line.liters) || 0,
     mileage: Number(line.mileage) || 0,
@@ -173,14 +190,21 @@ function normalizeBusinessDocument(value: unknown): WarehouseBusinessDocument | 
   return {
     sourcePageStart,
     sourcePageEnd: Math.max(sourcePageStart, positiveInteger(source.sourcePageEnd)),
-    documentType: ["invoice", "WZ", "PZ", "delivery"].includes(type) ? type : "invoice",
+    documentType: ["invoice", "WZ", "PZ", "MM", "RW", "ZW", "delivery"].includes(type) ? type : "invoice",
     documentNumber,
     ksefNumber: String(source.ksefNumber ?? "").trim(),
     purchaseOrderNumber: String(source.purchaseOrderNumber ?? "").trim(),
-    direction: String(source.direction ?? "purchase") === "sale" ? "sale" : "purchase",
+    direction: ["sale", "internal"].includes(String(source.direction ?? "").trim()) ? String(source.direction).trim() : "purchase",
     issueDate: String(source.issueDate ?? "").trim(), dueDate: String(source.dueDate ?? "").trim(),
     supplierName, supplierTaxId: String(source.supplierTaxId ?? "").trim(),
     buyerName: String(source.buyerName ?? "").trim(), buyerTaxId: String(source.buyerTaxId ?? "").trim(),
+    projectCode: String(source.projectCode ?? "").trim(),
+    projectName: String(source.projectName ?? "").trim(),
+    projectAddress: String(source.projectAddress ?? "").trim(),
+    recipientEmployeeName: String(source.recipientEmployeeName ?? "").trim(),
+    recipientEmployeeNumber: String(source.recipientEmployeeNumber ?? "").trim(),
+    sourceWarehouse: String(source.sourceWarehouse ?? "").trim(),
+    targetWarehouse: String(source.targetWarehouse ?? "").trim(),
     currency: String(source.currency ?? "PLN").trim() || "PLN",
     netAmount: Number(source.netAmount) || 0, taxAmount: Number(source.taxAmount) || 0, grossAmount: Number(source.grossAmount) || 0,
     lines
@@ -397,7 +421,7 @@ async function analyzeUploadedFile(input: {
   const pageInstruction = input.globalPageStart && input.globalPageEnd
     ? `Ten plik jest PORCJĄ oryginalnego PDF i odpowiada globalnym stronom ${input.globalPageStart}-${input.globalPageEnd}. sourcePageStart/sourcePageEnd MUSZĄ używać tej globalnej numeracji, nigdy numeracji lokalnej 1..N. Dokument może zaczynać się przed porcją lub kończyć po niej — zwróć wyłącznie dane widoczne w tej porcji; nie wymyślaj brakujących pozycji.`
     : "Analizujesz cały pojedynczy dokument.";
-  const prompt = `Jesteś wyspecjalizowanym analizatorem dokumentów Magazynu Project Octopus dla polskiej firmy budowlano-instalacyjnej.\n\n${pageInstruction}\n\nPDF może zawierać wiele odrębnych faktur, WZ, PZ lub dostaw. Zwróć osobny element businessDocuments dla KAŻDEGO dokumentu widocznego w analizowanej porcji. Nigdy nie łącz pozycji, numerów ani kwot różnych faktur. Dla kontynuacji wielostronicowej faktury zachowaj jej prawdziwy numer i dostawcę, gdy są widoczne w nagłówku/stopce.\n\nDla każdego dokumentu podaj sourcePageStart/sourcePageEnd, documentType, numer dokumentu/KSeF/PO, daty, dostawcę i nabywcę z NIP, walutę i kwoty oraz każdą WIDOCZNĄ pozycję dokładnie raz. lineType=material tylko dla fizycznego towaru/materiału/urządzenia/części/narzędzia; service dla robocizny, transportu, najmu i usług; other dla rabatów, korekt i pozycji niejednoznacznych. Nie wymyślaj danych.\n\nJeżeli analizowana część nie zawiera dokumentu magazynowo-finansowego, businessDocuments ma być puste. projectHint ma wskazać dokładnie jeden wiersz katalogu albo OGÓLNE. Nie zgaduj.\n\nKATALOG INWESTYCJI:\n${projectCatalog}\n\nZwróć wyłącznie JSON zgodny ze schematem.`;
+  const prompt = `Jesteś wyspecjalizowanym analizatorem dokumentów Magazynu Project Octopus dla polskiej firmy budowlano-instalacyjnej.\n\n${pageInstruction}\n\nPDF może zawierać wiele odrębnych faktur, WZ, PZ, MM, RW, ZW lub dokumentów dostawy. Zwróć osobny element businessDocuments dla KAŻDEGO dokumentu widocznego w analizowanej porcji. Nigdy nie łącz pozycji, numerów ani kwot różnych dokumentów. Dla kontynuacji wielostronicowej zachowaj prawdziwy numer i strony dokumentu.\n\nROZUMIENIE OBIEGU MATERIAŁOWEGO:\n- invoice = dokument zakupu/sprzedaży i źródło ceny. Faktura zakupowa NIE oznacza jeszcze wydania materiału na inwestycję.\n- PZ = przyjęcie materiału do magazynu. Może odnosić się do faktury, ale sam PZ nie jest fakturą.\n- MM = przesunięcie materiału. W tej firmie MM często oznacza wydanie z magazynu na konkretną inwestycję/ekipę/pracownika. Jeśli na MM występuje kod/nazwa/adres inwestycji lub odbiorca-pracownik, wyciągnij te dane. Nie przypisuj MM wartości finansowej jako nowego zakupu.\n- RW/WZ = rozchód/wydanie materiału. Traktuj je jako ruch magazynowy, nie jako fakturę.\n- ZW = zwrot materiału.\n- delivery = inny dokument dostawy, gdy nie da się wiarygodnie określić PZ/WZ/MM/RW/ZW.\n\nDla każdego dokumentu podaj sourcePageStart/sourcePageEnd, documentType, numer dokumentu/KSeF/PO, daty, dostawcę/nabywcę, a także projectCode, projectName, projectAddress, recipientEmployeeName, recipientEmployeeNumber, sourceWarehouse i targetWarehouse, jeśli są widoczne. Dla MM/RW/WZ nie wymyślaj kwot z faktury — pola finansowe mogą być 0, jeśli dokument ich nie zawiera.\n\nKażdą WIDOCZNĄ pozycję zwróć dokładnie raz. Rozpoznawaj SKU/indeks, producenta, model i EAN, bo służą do połączenia tej samej kartoteki materiałowej między fakturą, PZ i MM. lineType=material tylko dla fizycznego towaru/materiału/urządzenia/części/narzędzia; service dla robocizny, transportu, najmu i usług; other dla rabatów, korekt i pozycji niejednoznacznych. Nie wymyślaj danych.\n\nJeżeli analizowana część nie zawiera dokumentu magazynowo-finansowego, businessDocuments ma być puste. projectHint ma wskazać dokładnie jeden wiersz katalogu albo OGÓLNE. W dopasowaniu inwestycji preferuj dokładny kod, następnie nazwę/adres. Nie zgaduj.\n\nKATALOG INWESTYCJI:\n${projectCatalog}\n\nZwróć wyłącznie JSON zgodny ze schematem.`;
   const parts: Array<Record<string, unknown>> = [{ text: prompt }];
   if (input.fileUri) parts.push({ fileData: { mimeType: input.mimeType, fileUri: input.fileUri } });
   if (input.extractedText) parts.push({ text: `\nTREŚĆ WYEKSTRAHOWANA:\n${input.extractedText.slice(0, 1_500_000)}` });
