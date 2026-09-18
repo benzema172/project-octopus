@@ -12,7 +12,8 @@ export type WarehouseBusinessLine = DocumentAnalysis["businessDocument"]["lines"
   model: string;
   ean: string;
 };
-export type WarehouseBusinessDocument = DocumentAnalysis["businessDocument"] & {
+export type WarehouseBusinessDocument = Omit<DocumentAnalysis["businessDocument"], "lines"> & {
+  lines: WarehouseBusinessLine[];
   sourcePageStart: number;
   sourcePageEnd: number;
   projectCode: string;
@@ -326,13 +327,20 @@ function mergeBusinessDocument(a: WarehouseBusinessDocument, b: WarehouseBusines
     documentNumber: betterText(a.documentNumber, b.documentNumber),
     ksefNumber: betterText(a.ksefNumber, b.ksefNumber),
     purchaseOrderNumber: betterText(a.purchaseOrderNumber, b.purchaseOrderNumber),
-    direction: a.direction === "sale" || b.direction === "sale" ? "sale" : "purchase",
+    direction: a.direction === "internal" || b.direction === "internal" ? "internal" : a.direction === "sale" || b.direction === "sale" ? "sale" : "purchase",
     issueDate: betterText(a.issueDate, b.issueDate),
     dueDate: betterText(a.dueDate, b.dueDate),
     supplierName: betterText(a.supplierName, b.supplierName),
     supplierTaxId: betterText(a.supplierTaxId, b.supplierTaxId),
     buyerName: betterText(a.buyerName, b.buyerName),
     buyerTaxId: betterText(a.buyerTaxId, b.buyerTaxId),
+    projectCode: betterText(a.projectCode, b.projectCode),
+    projectName: betterText(a.projectName, b.projectName),
+    projectAddress: betterText(a.projectAddress, b.projectAddress),
+    recipientEmployeeName: betterText(a.recipientEmployeeName, b.recipientEmployeeName),
+    recipientEmployeeNumber: betterText(a.recipientEmployeeNumber, b.recipientEmployeeNumber),
+    sourceWarehouse: betterText(a.sourceWarehouse, b.sourceWarehouse),
+    targetWarehouse: betterText(a.targetWarehouse, b.targetWarehouse),
     currency: betterText(a.currency, b.currency) || "PLN",
     netAmount: betterAmount(a.netAmount, b.netAmount),
     taxAmount: betterAmount(a.taxAmount, b.taxAmount),
