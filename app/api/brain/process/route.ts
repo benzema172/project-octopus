@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { processDocumentVersion } from "@/lib/ai/process-document";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
+import { analyzeUnifiedDocumentReviewMulti } from "@/lib/ai/multi-ai-core";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
 import { processHrDocumentIntake, type HrDocumentIntakeResult } from "@/lib/hr/document-intelligence";
+import { assessDocumentInvoiceReadiness, type InvoiceIntakeAssessment } from "@/lib/finance/invoice-intake-readiness";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -14,6 +16,87 @@ type VersionRow = { document_id: string; project_id: string | null };
 type DocumentRow = { category: string | null };
 type ApprovedClassification = { category: string; confidence: number | null; rationale: string | null; status: string };
 type TemplateMaterialization = { template_id: string; template_version_id: string; template_status: string };
+type ReviewRow = { id: string };
+type FinanceAiSummary = {
+  analyzed: number;
+  failed: number;
+  maxProviders: number;
+  requiresHuman: number;
+};
+
+async function analyzeInvoiceReviews(workspaceId: string, documentId: string): Promise<FinanceAiSummary> {
+  const db = createServiceSupabaseClient();
+  const { data: inboxData, error: inboxError } = await db
+    .from("business_inbox_items")
+    .select("id,invoice_id")
+    .eq("workspace_id", workspaceId)
+    .eq("document_id", documentId)
+    .limit(50);
+  if (inboxError) throw new Error(`Nie udało się pobrać kolejki faktury: ${inboxError.message}`);
+
+  const inboxRows = (inboxData ?? []) as Array<{ id: string; invoice_id: string | null }>;
+  const inboxIds = [...new Set(inboxRows.map((row) => row.id).filter(Boolean))];
+  const invoiceIds = [...new Set(inboxRows.map((row) => row.invoice_id).filter((id): id is string => Boolean(id)))];
+
+  const reviewSets: ReviewRow[][] = [];
+  if (invoiceIds.length) {
+    const { data, error } = await db.from("finance_document_reviews")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("status", "open")
+      .in("invoice_id", invoiceIds)
+      .order("created_at", { ascending: true })
+      .limit(20);
+    if (error) throw new Error(`Nie udało się pobrać decyzji faktury: ${error.message}`);
+    reviewSets.push((data ?? []) as ReviewRow[]);
+  }
+  if (inboxIds.length) {
+    const { data, error } = await db.from("finance_document_reviews")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("status", "open")
+      .in("business_inbox_item_id", inboxIds)
+      .order("created_at", { ascending: true })
+      .limit(20);
+    if (error) throw new Error(`Nie udało się pobrać decyzji Business Inbox: ${error.message}`);
+    reviewSets.push((data ?? []) as ReviewRow[]);
+  }
+
+  const reviewIds = [...new Set(reviewSets.flat().map((row) => row.id))].slice(0, 4);
+  const results: Array<{ providers: number; requiresHuman: boolean }> = [];
+  let failed = 0;
+
+  for (let offset = 0; offset < reviewIds.length; offset += 2) {
+    const batch = await Promise.allSettled(reviewIds.slice(offset, offset + 2).map(async (reviewId) => {
+      const insight = await analyzeUnifiedDocumentReviewMulti(workspaceId, reviewId);
+      return {
+        providers: insight.multiAi.providers.length,
+        requiresHuman: insight.multiAi.requiresHuman
+      };
+    }));
+    for (const item of batch) {
+      if (item.status === "fulfilled") results.push(item.value);
+      else failed += 1;
+    }
+  }
+
+  return {
+    analyzed: results.length,
+    failed,
+    maxProviders: results.reduce((max, item) => Math.max(max, item.providers), 0),
+    requiresHuman: results.filter((item) => item.requiresHuman).length
+  };
+}
+
+async function runInvoiceIntakeChecks(input: {
+  workspaceId: string;
+  documentId: string;
+  actorId: string;
+}): Promise<{ invoiceReadiness: InvoiceIntakeAssessment[]; financeAi: FinanceAiSummary }> {
+  const invoiceReadiness = await assessDocumentInvoiceReadiness(input);
+  const financeAi = await analyzeInvoiceReviews(input.workspaceId, input.documentId);
+  return { invoiceReadiness, financeAi };
+}
 
 async function reconcileApprovedDocument(input: {
   workspaceId: string;
@@ -106,14 +189,34 @@ export async function POST(request: Request) {
         category: approved.category,
         actorId: user.id
       });
+
+      let invoiceReadiness: InvoiceIntakeAssessment[] = [];
+      let financeAi: FinanceAiSummary | null = null;
+      let invoiceCheckError: string | null = null;
+      if (approved.category === "invoice") {
+        try {
+          const checks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id });
+          invoiceReadiness = checks.invoiceReadiness;
+          financeAi = checks.financeAi;
+        } catch (error) {
+          invoiceCheckError = error instanceof Error ? error.message : "Kontrola faktury nie powiodła się.";
+          console.error("[brain/process] invoice readiness failed", error);
+        }
+      }
+
       return NextResponse.json({
         ok: true,
         alreadyAnalyzed: true,
         analysis: { effectiveCategory: approved.category, confidence: approved.confidence, summary: approved.rationale },
         materialization,
+        invoiceReadiness,
+        financeAi,
+        invoiceCheckError,
         message: approved.category === "template"
           ? "Dokument był już przeanalizowany. Document Flow potwierdził zapis w Octopus Brain → Wzory."
-          : "Dokument był już przeanalizowany. Document Flow ponownie sprawdził routing i wynik w module docelowym."
+          : approved.category === "invoice" && invoiceReadiness.length
+            ? "Faktura została ponownie sprawdzona przez kontrolę jakości i AI Council."
+            : "Dokument był już przeanalizowany. Document Flow ponownie sprawdził routing i wynik w module docelowym."
       }, { headers: { "Cache-Control": "no-store" } });
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Nie udało się dokończyć routingu dokumentu." }, { status: 422 });
@@ -131,7 +234,30 @@ export async function POST(request: Request) {
         hrIntake = { attempted: true, matched: false, reason: error instanceof Error ? error.message : "Nie udało się automatycznie przypisać dokumentu HR." };
       }
     }
-    return NextResponse.json({ ok: true, analysis, autopilot, hrIntake }, { headers: { "Cache-Control": "no-store" } });
+
+    let invoiceReadiness: InvoiceIntakeAssessment[] = [];
+    let financeAi: FinanceAiSummary | null = null;
+    let invoiceCheckError: string | null = null;
+    if (analysis.effectiveCategory === "invoice") {
+      try {
+        const checks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id });
+        invoiceReadiness = checks.invoiceReadiness;
+        financeAi = checks.financeAi;
+      } catch (error) {
+        invoiceCheckError = error instanceof Error ? error.message : "Kontrola faktury nie powiodła się.";
+        console.error("[brain/process] invoice readiness failed", error);
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      analysis,
+      autopilot,
+      hrIntake,
+      invoiceReadiness,
+      financeAi,
+      invoiceCheckError
+    }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Analiza nie powiodła się.", queued: true }, { status: 422 });
   }
