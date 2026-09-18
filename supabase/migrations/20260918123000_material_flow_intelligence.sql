@@ -17,11 +17,9 @@ create index if not exists idx_stock_movements_recipient_employee
   where recipient_employee_id is not null;
 
 create index if not exists idx_stock_movements_recipient_employee_fk
-  on public.stock_movements(recipient_employee_id)
-  where recipient_employee_id is not null;
+  on public.stock_movements(recipient_employee_id);
 create index if not exists idx_warehouse_document_reviews_recipient_employee_fk
-  on public.warehouse_document_reviews(recipient_employee_id)
-  where recipient_employee_id is not null;
+  on public.warehouse_document_reviews(recipient_employee_id);
 
 create table if not exists public.stock_cost_allocations (
   id uuid primary key default gen_random_uuid(),
@@ -43,11 +41,9 @@ create index if not exists idx_stock_cost_allocations_project
   on public.stock_cost_allocations(workspace_id, project_id, created_at desc)
   where project_id is not null;
 create index if not exists idx_stock_cost_allocations_invoice_line
-  on public.stock_cost_allocations(source_invoice_line_id)
-  where source_invoice_line_id is not null;
+  on public.stock_cost_allocations(source_invoice_line_id);
 create index if not exists idx_stock_cost_allocations_project_fk
-  on public.stock_cost_allocations(project_id)
-  where project_id is not null;
+  on public.stock_cost_allocations(project_id);
 
 alter table public.stock_cost_allocations enable row level security;
 drop policy if exists "warehouse members read stock cost allocations" on public.stock_cost_allocations;
