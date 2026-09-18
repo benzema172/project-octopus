@@ -15,6 +15,7 @@ function date(value: string | null) {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString("pl-PL");
 }
 function reviewLabel(review: UnifiedDocumentReview) {
+  if (review.kind === "invoice_quality") return "Kontrola jakości odczytu";
   if (review.type === "duplicate_candidate") return "Możliwy duplikat";
   if (review.type === "source_conflict") return "Konflikt źródeł";
   return "Do przypisania";
@@ -120,7 +121,7 @@ export function UnifiedDocumentFlow({ workspaceId, data, canWrite, canApprove }:
       <article><small>Faktury kanoniczne</small><strong>{data.stats.canonicalInvoices}</strong><span>jeden rekord źródłowy</span></article>
       <article><small>Obserwacje źródeł</small><strong>{data.stats.sourceObservations}</strong><span>Wrzutnia · KSeF · ERP</span></article>
       <article><small>Wiele źródeł jednej FV</small><strong>{data.stats.multiSourceInvoices}</strong><span>połączone bez kopii</span></article>
-      <article className={data.stats.openReviews ? "is-warning" : ""}><small>Do decyzji</small><strong>{data.stats.openReviews}</strong><span>{data.stats.projectAssignments} przypisań · {data.stats.duplicateReviews} duplikatów</span></article>
+      <article className={data.stats.openReviews ? "is-warning" : ""}><small>Do decyzji</small><strong>{data.stats.openReviews}</strong><span>{data.stats.projectAssignments} przypisań · {data.stats.duplicateReviews} duplikatów · {data.stats.qualityReviews} jakości</span></article>
     </div>
 
     {message ? <p className="udf-message is-success">{message}</p> : null}
@@ -131,12 +132,15 @@ export function UnifiedDocumentFlow({ workspaceId, data, canWrite, canApprove }:
       <div className="udf-review-list">
         {data.reviews.map((review) => <div className={`udf-review is-${review.type}${(review.aiInsight?.riskScore ?? 0) >= .6 ? " is-high-risk" : ""}`} key={review.id}>
           <div className="udf-review__main">
-            <span className="udf-review__type"><AlertTriangle size={14}/>{reviewLabel(review)}{review.confidence > 0 ? ` · reguły ${Math.round(review.confidence * 100)}%` : ""}</span>
+            <span className="udf-review__type"><AlertTriangle size={14}/>{reviewLabel(review)}{review.kind === "invoice_quality" && review.qualityScore !== null ? ` · jakość ${Math.round(review.qualityScore * 100)}%` : review.confidence > 0 ? ` · reguły ${Math.round(review.confidence * 100)}%` : ""}</span>
             <strong>{review.invoiceNumber}</strong>
             <small>{review.direction === "sale" ? "Sprzedaż" : "Zakup"} · {money(review.grossAmount)}{review.sourceChannel ? ` · ${review.sourceChannel}` : ""}</small>
             <p>{review.description}</p>
+            {review.kind === "invoice_quality" && (review.qualityIssues.length || review.qualityWarnings.length) ? <div className="udf-ai-alert">
+              {[...review.qualityIssues, ...review.qualityWarnings].slice(0, 4).join(" · ")}
+            </div> : null}
             {review.aiInsight ? <div className="udf-ai-insight">
-              <div className="udf-ai-insight__top"><span><Bot size={14}/> {review.aiInsight.mode === "gemini" ? "Gemini" : "Silnik reguł"}</span><b>{recommendationLabel(review.aiInsight.recommendation)}</b><em className={review.aiInsight.riskScore >= .6 ? "is-risk" : review.aiInsight.riskScore < .35 ? "is-good" : ""}><Gauge size={13}/> pewność {Math.round(review.aiInsight.confidence * 100)}% · ryzyko {Math.round(review.aiInsight.riskScore * 100)}%</em></div>
+              <div className="udf-ai-insight__top"><span><Bot size={14}/> {review.aiInsight.model.startsWith("octopus-consensus[") ? "AI Council 4/4" : review.aiInsight.mode === "gemini" ? "Gemini" : "Silnik reguł"}</span><b>{recommendationLabel(review.aiInsight.recommendation)}</b><em className={review.aiInsight.riskScore >= .6 ? "is-risk" : review.aiInsight.riskScore < .35 ? "is-good" : ""}><Gauge size={13}/> pewność {Math.round(review.aiInsight.confidence * 100)}% · ryzyko {Math.round(review.aiInsight.riskScore * 100)}%</em></div>
               <p>{review.aiInsight.summary}</p>
               {review.aiInsight.nextBestAction ? <small><Zap size={12}/> Następny krok: {review.aiInsight.nextBestAction}</small> : null}
               {review.aiInsight.reasons.length ? <ul>{review.aiInsight.reasons.slice(0, 3).map((reason) => <li key={reason}>{reason}</li>)}</ul> : null}
