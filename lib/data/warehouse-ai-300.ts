@@ -112,23 +112,23 @@ export async function getWarehouseAi300Data(workspaceId: string) {
       ? supabase.from("document_texts").select("document_version_id,extracted_text").in("document_version_id", versionIds).returns<Array<{ document_version_id: string; extracted_text: string | null }>>()
       : Promise.resolve({ data: [] as Array<{ document_version_id: string; extracted_text: string | null }>, error: null }),
     supabase.from("stock_items")
-      .select("id,sku,name,item_type,unit,minimum_stock,optimal_stock,serial_tracking,active,category,subcategory,manufacturer,model,barcode,warranty_months,created_at,updated_at")
+      .select("id,sku,name,item_type,unit,minimum_stock,optimal_stock,serial_tracking,active,category,subcategory,manufacturer,model,barcode,warranty_months,stock_strategy,lot_tracking,expiry_tracking,gtin,gs1_enabled,abc_class,xyz_class,lead_time_days,service_level_pct,reorder_policy,dynamic_min_stock,dynamic_max_stock,shelf_life_days,created_at,updated_at")
       .eq("workspace_id", workspaceId).eq("active", true).order("name").limit(5000),
     supabase.from("warehouse_locations")
-      .select("id,warehouse_id,parent_id,code,name,qr_token,active,created_at,updated_at")
-      .eq("workspace_id", workspaceId).eq("active", true).order("code").limit(1200),
+      .select("id,warehouse_id,parent_id,code,name,qr_token,active,zone_type,capacity_units,sequence_no,putaway_priority,allowed_item_types,created_at,updated_at")
+      .eq("workspace_id", workspaceId).eq("active", true).order("code").limit(5000),
     supabase.from("stock_item_location_assignments")
       .select("id,stock_item_id,warehouse_location_id,preferred,created_at")
       .eq("workspace_id", workspaceId).limit(5000),
     supabase.from("reservations")
       .select("id,project_id,warehouse_id,stock_item_id,quantity,required_at,status")
-      .eq("workspace_id", workspaceId).in("status", ["open", "pending", "reserved"]).order("required_at").limit(4000),
+      .eq("workspace_id", workspaceId).in("status", ["open", "pending", "reserved"]).order("required_at").limit(5000),
     supabase.from("stock_item_instances")
       .select("id,stock_item_id,serial_number,asset_tag,purchase_date,purchase_price,warranty_until,status,condition,current_warehouse_id,employee_id,project_id,vehicle_id,last_service_date,next_service_date,notes,created_at,updated_at")
       .eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(3000),
     supabase.from("price_observations")
       .select("id,project_id,stock_item_id,counterparty_id,source_type,source_id,observed_at,quantity,unit,unit_price_net,currency,price_stage,canonical_purchase,created_at")
-      .eq("workspace_id", workspaceId).order("observed_at", { ascending: false }).limit(6000),
+      .eq("workspace_id", workspaceId).order("observed_at", { ascending: false }).limit(8000),
     supabase.from("warehouse_ai_decision_events")
       .select("id,ai_line_id,before_decision,before_candidate_stock_item_id,before_match_confidence,before_reason,after_decision,after_candidate_stock_item_id,created_at,reverted_at")
       .eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(250),
