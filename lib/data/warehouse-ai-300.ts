@@ -112,10 +112,10 @@ export async function getWarehouseAi300Data(workspaceId: string) {
       ? supabase.from("document_texts").select("document_version_id,extracted_text").in("document_version_id", versionIds).returns<Array<{ document_version_id: string; extracted_text: string | null }>>()
       : Promise.resolve({ data: [] as Array<{ document_version_id: string; extracted_text: string | null }>, error: null }),
     supabase.from("stock_items")
-      .select("id,sku,name,item_type,unit,minimum_stock,optimal_stock,serial_tracking,active,category,subcategory,manufacturer,model,barcode,warranty_months,created_at,updated_at")
+      .select("id,sku,name,item_type,unit,minimum_stock,optimal_stock,serial_tracking,active,category,subcategory,manufacturer,model,barcode,warranty_months,stock_strategy,lot_tracking,expiry_tracking,gtin,gs1_enabled,abc_class,xyz_class,lead_time_days,service_level_pct,reorder_policy,dynamic_min_stock,dynamic_max_stock,shelf_life_days,created_at,updated_at")
       .eq("workspace_id", workspaceId).eq("active", true).order("name").limit(5000),
     supabase.from("warehouse_locations")
-      .select("id,warehouse_id,parent_id,code,name,qr_token,active,created_at,updated_at")
+      .select("id,warehouse_id,parent_id,code,name,qr_token,active,zone_type,capacity_units,sequence_no,putaway_priority,allowed_item_types,created_at,updated_at")
       .eq("workspace_id", workspaceId).eq("active", true).order("code").limit(1200),
     supabase.from("stock_item_location_assignments")
       .select("id,stock_item_id,warehouse_location_id,preferred,created_at")
