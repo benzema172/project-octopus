@@ -122,13 +122,13 @@ export async function getWarehouseAi300Data(workspaceId: string) {
       .eq("workspace_id", workspaceId).limit(5000),
     supabase.from("reservations")
       .select("id,project_id,warehouse_id,stock_item_id,quantity,required_at,status")
-      .eq("workspace_id", workspaceId).in("status", ["open", "pending", "reserved"]).order("required_at").limit(4000),
+      .eq("workspace_id", workspaceId).in("status", ["open", "pending", "reserved"]).order("required_at").limit(5000),
     supabase.from("stock_item_instances")
       .select("id,stock_item_id,serial_number,asset_tag,purchase_date,purchase_price,warranty_until,status,condition,current_warehouse_id,employee_id,project_id,vehicle_id,last_service_date,next_service_date,notes,created_at,updated_at")
       .eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(3000),
     supabase.from("price_observations")
       .select("id,project_id,stock_item_id,counterparty_id,source_type,source_id,observed_at,quantity,unit,unit_price_net,currency,price_stage,canonical_purchase,created_at")
-      .eq("workspace_id", workspaceId).order("observed_at", { ascending: false }).limit(6000),
+      .eq("workspace_id", workspaceId).order("observed_at", { ascending: false }).limit(8000),
     supabase.from("warehouse_ai_decision_events")
       .select("id,ai_line_id,before_decision,before_candidate_stock_item_id,before_match_confidence,before_reason,after_decision,after_candidate_stock_item_id,created_at,reverted_at")
       .eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(250),
