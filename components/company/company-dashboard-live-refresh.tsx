@@ -8,9 +8,11 @@ const MIN_REFRESH_GAP_MS = 45_000;
 
 export function CompanyDashboardLiveRefresh() {
   const router = useRouter();
-  const lastRefreshAt = useRef(Date.now());
+  const lastRefreshAt = useRef(0);
 
   useEffect(() => {
+    lastRefreshAt.current = Date.now();
+
     const refreshIfStale = () => {
       if (document.visibilityState !== "visible") return;
       const now = Date.now();
