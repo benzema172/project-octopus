@@ -209,7 +209,7 @@ export async function getWarehouseWorkspaceData(workspaceId: string, options: Co
     itemQuery,
     db.from("warehouses").select("id,name,location,warehouse_type,active").eq("workspace_id", workspaceId).order("name").limit(200),
     db.from("stock_movements").select("id,project_id,warehouse_id,target_warehouse_id,movement_type,document_number,movement_date,status,source_document_id,destination_mode,approved_at,created_at").eq("workspace_id", workspaceId).order("movement_date", { ascending: false }).limit(200),
-    db.from("projects").select("id,name").eq("workspace_id", workspaceId).order("name").limit(300),
+    db.from("projects").select("id,name,status").eq("workspace_id", workspaceId).order("name").limit(300),
     db.from("employees").select("id,employee_number,first_name,last_name,status").eq("workspace_id", workspaceId).eq("status", "active").order("last_name").limit(500),
     db.from("vehicles").select("id,registration_number,make,model,status").eq("workspace_id", workspaceId).eq("status", "active").order("registration_number").limit(300),
     db.from("counterparties").select("id,name,tax_id,role,active").eq("workspace_id", workspaceId).eq("active", true).order("name").limit(500),
