@@ -53,7 +53,7 @@ export async function getWarehouseMarket400Data(workspaceId: string, options: Co
   const today = new Date().toISOString().slice(0, 10);
   const [summary, lots, logisticUnits, logisticUnitItems, tasks, crossdock, supplierScores,
     returns, returnLines, forecasts, readiness, recommendations, integrations, deviceEvents, shipments,
-    pendingMovementsResult] = await Promise.all([
+    pendingMovementsResult, activeProjectsResult, globalReservationsResult] = await Promise.all([
     db.rpc("get_warehouse_market_summary_400", { p_workspace_id: workspaceId, p_reference_date: today }),
     db.from("stock_lots").select("id,warehouse_id,stock_item_id,lot_number,manufactured_at,expiry_date,received_at,original_quantity,remaining_quantity,unit_cost,supplier_id,source_movement_line_id,status,metadata,created_at,updated_at").eq("workspace_id", workspaceId).order("expiry_date").limit(5000),
     db.from("warehouse_logistic_units").select("id,warehouse_id,location_id,parent_id,unit_type,sscc,label_code,status,gross_weight_kg,volume_m3,metadata,created_at,updated_at").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(3000),
@@ -70,14 +70,16 @@ export async function getWarehouseMarket400Data(workspaceId: string, options: Co
     db.from("warehouse_device_events").select("id,integration_id,event_type,external_event_id,warehouse_id,location_id,stock_item_id,logistic_unit_id,occurred_at,payload,processed,created_at").eq("workspace_id", workspaceId).order("occurred_at", { ascending: false }).limit(3000),
     db.from("warehouse_shipments").select("id,warehouse_id,project_id,counterparty_id,shipment_number,direction,carrier,service_level,tracking_number,label_document_id,status,planned_at,dispatched_at,delivered_at,metadata,created_at,updated_at").eq("workspace_id", workspaceId).order("planned_at", { ascending: false }).limit(3000),
     db.from("stock_movements").select("id,warehouse_id,target_warehouse_id,movement_type,status,document_number,movement_date,project_id").eq("workspace_id", workspaceId).in("status", ["draft", "pending", "review"]).order("created_at", { ascending: false }).limit(2000),
+    db.from("projects").select("id,name,status").eq("workspace_id", workspaceId).in("status", ["active", "preparation"]).order("name").limit(500),
+    db.from("reservations").select("id,project_id,warehouse_id,stock_item_id,quantity,required_at,status").eq("workspace_id", workspaceId).order("required_at").limit(5000)
   ]);
 
   if (summary.error) throw new Error(`Nie udało się pobrać KPI Magazynu 4.0: ${summary.error.message}`);
   const planningRows = (ai.catalogItems ?? []) as Row[];
   const physicalBalances = (ai.globalBalances ?? []) as Row[];
   const globalInstances = (ai.globalStockInstances ?? []) as Row[];
-  const activeProjects = ((base.projects ?? []) as Row[]).filter((row) => ["active", "preparation"].includes(String(row.status ?? "")));
-  const globalReservations = (ai.globalReservations ?? []) as Row[];
+  const activeProjects = rows(activeProjectsResult as Result, "aktywnych i przygotowywanych inwestycji");
+  const globalReservations = rows(globalReservationsResult as Result, "globalnych rezerwacji");
   const locations400 = [...((ai.warehouseLocations ?? []) as Row[])].sort((left, right) =>
     String(left.warehouse_id ?? "").localeCompare(String(right.warehouse_id ?? ""))
     || Number(left.sequence_no ?? 0) - Number(right.sequence_no ?? 0)
