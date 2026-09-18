@@ -45,7 +45,7 @@ export async function GET(request: Request) {
   const db = createServiceSupabaseClient();
   const [movementsResult, counterpartiesResult, projectsResult, warehousesResult] = await Promise.all([
     db.from("stock_movements")
-      .select("id,project_id,counterparty_id,warehouse_id,target_warehouse_id,movement_type,document_number,movement_date,status,source_document_id,source_invoice_id,source_group_key,destination_mode,approved_at,created_at")
+      .select("id,project_id,counterparty_id,warehouse_id,target_warehouse_id,movement_type,document_number,movement_date,status,source_document_id,source_invoice_id,source_group_key,destination_mode,recipient_employee_id,recipient_employee_label,approved_at,created_at")
       .eq("workspace_id", workspace.id)
       .order("movement_date", { ascending: false })
       .order("created_at", { ascending: false })
