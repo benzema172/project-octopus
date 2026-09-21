@@ -79,7 +79,7 @@ export function WarehouseWorkspace300({ workspaceId, data, canWrite, canApprove,
   const warehouses = (data.warehouses ?? []) as Row[];
   const movements = (data.movements ?? []) as Row[];
   const movementLines = (data.lines ?? []) as Row[];
-  const projects = (data.projects ?? []) as Row[];
+  const projects = (data.projects ?? []) as Row[];\n  const assignableProjects = ((data.activeWarehouseProjects ?? projects.filter((row) => ["active", "preparation"].includes(String(row.status)))) ?? []) as Row[];
   const employees = (data.employees ?? []) as Row[];
   const vehicles = (data.vehicles ?? []) as Row[];
   const counterparties = (data.counterparties ?? []) as Row[];
@@ -284,9 +284,9 @@ export function WarehouseWorkspace300({ workspaceId, data, canWrite, canApprove,
     {tab === "dashboard" ? <Dashboard waiting={waitingReviews} lowStock={lowStock} pendingMovements={pendingMovements} catalogItems={catalogItems} movements={movements} quality={quality} fifoByItem={fifoByItem} onOpen={setTab} /> : null}
     {tab === "stock" ? <StockRegistry rows={stockRows} page={page} catalogTotal={catalogItems.length} query={search} balanceByItem={balanceByItem} reservedByItem={reservedByItem} pricesByItem={pricesByItem} fifoByItem={fifoByItem} counterpartyById={counterpartyById} onOpen={setSelectedItemId} onPage={(next) => router.push(`?page=${next}${search.trim() ? `&q=${encodeURIComponent(search.trim())}` : ""}`)} /> : null}
     {tab === "waiting" ? <WaitingRoom workspaceId={workspaceId} reviews={waitingReviews} currentReview={currentReview} currentLines={currentLines} currentPreview={currentPreview} itemById={itemById} items={catalogItems} selectedId={currentReview?.id ?? null} onSelect={setSelectedReviewId} matchChoice={matchChoice} setMatchChoice={setMatchChoice} pending={pending} canWrite={canWrite} act={aiAct} /> : null}
-    {tab === "movements" ? <MovementsPanel rows={movements} lines={movementLines} warehouses={warehouses} items={catalogItems} projects={projects} warehouseById={warehouseById} projectById={projectById} canWrite={canWrite} canApprove={canApprove} pending={pending} act={atomicAct} /> : null}
+    {tab === "movements" ? <MovementsPanel rows={movements} lines={movementLines} warehouses={warehouses} items={catalogItems} projects={assignableProjects} warehouseById={warehouseById} projectById={projectById} canWrite={canWrite} canApprove={canApprove} pending={pending} act={atomicAct} /> : null}
     {tab === "needs" ? <NeedsPanel lowStock={lowStock} reservations={openReservations} balanceByItem={balanceByItem} reservedByItem={reservedByItem} pricesByItem={pricesByItem} itemById={itemById} projectById={projectById} warehouseById={warehouseById} counterpartyById={counterpartyById} canWrite={canWrite} pending={pending} act={atomicAct} /> : null}
-    {tab === "assets" ? <AssetsPanel rows={instances} items={catalogItems} warehouses={warehouses} employees={employees} projects={projects} vehicles={vehicles} itemById={itemById} projectById={projectById} employeeById={employeeById} vehicleById={vehicleById} canWrite={canWrite} pending={pending} act={atomicAct} /> : null}
+    {tab === "assets" ? <AssetsPanel rows={instances} items={catalogItems} warehouses={warehouses} employees={employees} projects={assignableProjects} vehicles={vehicles} itemById={itemById} projectById={projectById} employeeById={employeeById} vehicleById={vehicleById} canWrite={canWrite} pending={pending} act={atomicAct} /> : null}
     {tab === "counts" ? <CountsPanel rows={counts} lines={countLines} warehouses={warehouses} itemById={itemById} warehouseById={warehouseById} canWrite={canWrite} canApprove={canApprove} pending={pending} act={atomicAct} /> : null}
     {tab === "prices" ? <PricesPanel pricesByItem={pricesByItem} items={catalogItems} counterpartyById={counterpartyById} purchaseOrders={purchaseOrders} /> : null}
     {tab === "locations" ? <LocationsPanel warehouses={warehouses} locations={locations} balances={balances} aliases={aliases} itemById={itemById} canWrite={canWrite} pending={pending} act={atomicAct} /> : null}
