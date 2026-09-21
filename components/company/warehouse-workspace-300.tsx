@@ -79,7 +79,8 @@ export function WarehouseWorkspace300({ workspaceId, data, canWrite, canApprove,
   const warehouses = (data.warehouses ?? []) as Row[];
   const movements = (data.movements ?? []) as Row[];
   const movementLines = (data.lines ?? []) as Row[];
-  const projects = (data.projects ?? []) as Row[];\n  const assignableProjects = ((data.activeWarehouseProjects ?? projects.filter((row) => ["active", "preparation"].includes(String(row.status)))) ?? []) as Row[];
+  const projects = (data.projects ?? []) as Row[];
+  const assignableProjects = ((data.activeWarehouseProjects ?? projects.filter((row) => ["active", "preparation"].includes(String(row.status)))) ?? []) as Row[];
   const employees = (data.employees ?? []) as Row[];
   const vehicles = (data.vehicles ?? []) as Row[];
   const counterparties = (data.counterparties ?? []) as Row[];
