@@ -6,7 +6,7 @@ const read = (path: string) => readFileSync(path, "utf8");
 describe("Fleet vehicles compact registry layout", () => {
   it("keeps vehicle creation compact and the registry full width", () => {
     const source = read("components/company/operations/fleet-operations.tsx");
-    expect(source).toContain('className="fleet-vehicles-polish"');
+    expect(source).toContain("fleet-vehicles-polish fleet-tab-");
     expect(source).toContain('button:nth-child(2)[class*="tabActive"]');
     expect(source).toContain('article:has(> div + details[class*="formCard"])');
     expect(source).toContain('width: max-content');
@@ -16,20 +16,22 @@ describe("Fleet vehicles compact registry layout", () => {
     expect(source).toContain('background: #222047 !important');
   });
 
-  it("keeps Fleet KPI only on dashboard and removes AI waiting/service navigation", () => {
+  it("removes retired Fleet navigation in source instead of hiding it with CSS", () => {
+    const workspace = read("components/company/fleet-workspace-300.tsx");
     const source = read("components/company/operations/fleet-operations.tsx");
-    expect(source).toContain('button:nth-child(3)');
-    expect(source).toContain('button:nth-child(5)');
-    expect(source).toContain('button:not(:first-child)[class*="tabActive"]');
-    expect(source).toContain('> div[class*="kpis"] > :nth-child(3)');
-    expect(source).toContain('> div[class*="kpis"] > :nth-child(4)');
-    expect(source).toContain('div[class*="actionRow"] > :first-child');
+    expect(workspace).not.toContain('id: "waiting", label');
+    expect(workspace).not.toContain('id: "service", label');
+    expect(workspace).not.toContain('id: "damages", label');
+    expect(source).not.toContain("button:nth-child(3)");
+    expect(source).not.toContain("button:nth-child(5)");
+    expect(source).toContain('activeTab === "equipment"');
+    expect(source).toContain('activeTab === "costs"');
   });
 
   it("uses the existing fleet search as the vehicle list filter", () => {
     const workspace = read("components/company/fleet-workspace-300.tsx");
     expect(workspace).toContain('placeholder="Szukaj po rejestracji, VIN, marce lub modelu…"');
     expect(workspace).toContain('router.push(`/workspace/companies/${workspaceId}/fleet?page=1');
-    expect(workspace).toContain('setTab("vehicles")');
+    expect(workspace).toContain('changeTab("vehicles")');
   });
 });
