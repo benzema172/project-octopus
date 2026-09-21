@@ -182,7 +182,7 @@ export function WarehouseMarket410(props: Props) {
               data-warehouse-planning-tab=""
               className={`${workspaceStyles.tab} ${planningActive ? workspaceStyles.tabActive : ""}`}
               aria-pressed={planningActive}
-              onClick={() => setPlanningActive(true)}
+              onClick={() => { setPlanningActive(true); window.dispatchEvent(new CustomEvent("octopus:warehouse-tab", { detail: { tab: "planning" } })); }}
             >
               <BrainCircuit size={15} />
               Planowanie AI
