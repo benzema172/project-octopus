@@ -85,19 +85,28 @@ revoke all on function public.run_unified_document_ai_queue_tick() from anon;
 revoke all on function public.run_unified_document_ai_queue_tick() from authenticated;
 grant execute on function public.run_unified_document_ai_queue_tick() to service_role;
 
-do $$
+do $
+declare
+  v_job_id bigint;
 begin
-  perform cron.unschedule('octopus-finance-ai-copilot-200');
-exception
-  when others then null;
-end;
-$$;
+  -- pg_cron is available in production Supabase, but the migration chain must
+  -- also stay portable to CI/test Postgres instances that do not install it.
+  if to_regnamespace('cron') is not null then
+    begin
+      execute 'select cron.unschedule($1)' using 'octopus-finance-ai-copilot-200';
+    exception
+      when others then null;
+    end;
 
-select cron.schedule(
-  'octopus-finance-ai-copilot-200',
-  '*/10 * * * *',
-  'select public.run_unified_document_ai_queue_tick();'
-);
+    execute 'select cron.schedule($1, $2, $3)'
+      into v_job_id
+      using
+        'octopus-finance-ai-copilot-200',
+        '*/10 * * * *',
+        'select public.run_unified_document_ai_queue_tick();';
+  end if;
+end;
+$;
 
 create index if not exists document_texts_search_vector_perf13_idx
   on public.document_texts
