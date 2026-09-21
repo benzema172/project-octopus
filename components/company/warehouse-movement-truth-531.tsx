@@ -261,17 +261,6 @@ export function WarehouseMovementTruth531({ workspaceId, data, canWrite, canAppr
     }
   };
 
-  const createCustomer = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const result = await post("customer_create", { name: form.get("name"), taxId: form.get("taxId") }, "Klient został dodany do kartoteki kontrahentów.");
-    const id = result?.counterparty?.id ? String(result.counterparty.id) : "";
-    if (id) {
-      setFormRoute(`customer:${id}`);
-      setCustomerForm(false);
-    }
-  };
-
   if (!host || !host.isConnected) return null;
 
   const aiDrafts = movements.filter((row) => String(row.status) === "draft" && String(row.source_label ?? "").includes("AI")).length;
