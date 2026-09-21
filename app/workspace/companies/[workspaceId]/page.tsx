@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { UploadCloud } from "lucide-react";
 import { CompanyActionCenter } from "@/components/company/company-action-center";
 import { CompanyDashboardLiveRefresh } from "@/components/company/company-dashboard-live-refresh";
@@ -28,7 +29,16 @@ export default async function CompanyDashboard({ params }: CompanyDashboardProps
     listProjectsForWorkspace(user, workspace.id),
     getCompanyActionCenter(workspace.id, 250).catch(() => [])
   ]);
-  void refreshOperationalNotifications(workspace.id).catch(() => null);
+  after(async () => {
+    try {
+      await refreshOperationalNotifications(workspace.id);
+    } catch (error) {
+      console.error("Project Octopus: operational notification refresh failed", {
+        workspaceId: workspace.id,
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
 
   const projects = allProjects.filter((project) => domainAccessPolicyAllows(accessPolicy, { domain: "investments", level: "read", projectId: project.id }));
   const visibleActions = actionItems.filter((item) => domainAccessPolicyAllows(accessPolicy, { domain: actionDomain(item.domain), level: "read", projectId: item.projectId }));
