@@ -5,7 +5,7 @@ import { hasDomainAccess } from "@/lib/authorization";
 import { getFinanceControlTower } from "@/lib/data/finance-control-tower";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 
-export async function FinanceControlTowerSection({ workspaceId }: { workspaceId: string }) {
+export async function FinanceControlTowerSection({ workspaceId, initialTab }: { workspaceId: string; initialTab?: string }) {
   const user = await requireCurrentUser();
   const workspace = await getWorkspaceForUser(user, workspaceId);
   if (!workspace) return null;
@@ -16,5 +16,5 @@ export async function FinanceControlTowerSection({ workspaceId }: { workspaceId:
   ]);
   if (!canRead) return <DomainAccessDenied workspaceId={workspace.id} area="Finanse — Finance Control Tower" />;
   const data = await getFinanceControlTower(workspace.id);
-  return <FinanceControlTower workspaceId={workspace.id} data={data} canWrite={canWrite} canApprove={canApprove} />;
+  return <FinanceControlTower workspaceId={workspace.id} data={data} canWrite={canWrite} canApprove={canApprove} initialTab={initialTab} />;
 }

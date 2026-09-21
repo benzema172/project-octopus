@@ -16,15 +16,16 @@ export default async function FinancePage({
   searchParams
 }: {
   params: Promise<{ workspaceId: string }>;
-  searchParams: Promise<{ page?: string; q?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; tab?: string }>;
 }) {
   const [{ workspaceId }, query] = await Promise.all([params, searchParams]);
+  const showSourceLayer = query.tab === "documents";
   return (
     <>
       <Suspense fallback={<section className="fct-shell"><div className="fct-panel"><p className="empty-copy">Ładowanie Finance Control Tower…</p></div></section>}>
-        <FinanceControlTowerSection workspaceId={workspaceId} />
+        <FinanceControlTowerSection workspaceId={workspaceId} initialTab={query.tab} />
       </Suspense>
-      <div className="finance-source-layer">
+      {showSourceLayer ? <div className="finance-source-layer">
         <Suspense fallback={<section className="udf-shell"><div className="udf-panel"><p className="empty-copy">Ładowanie wspólnego obiegu dokumentów…</p></div></section>}>
           <UnifiedDocumentFlowSection workspaceId={workspaceId} />
         </Suspense>
@@ -42,7 +43,7 @@ export default async function FinancePage({
         <Suspense fallback={<section className="ops-panel ops-panel--wide"><p className="empty-copy">Ładowanie spójnego obiegu finansowego…</p></section>}>
           <FinanceEnterpriseFlowSection workspaceId={workspaceId} />
         </Suspense>
-      </div>
+      </div> : null}
     </>
   );
 }
