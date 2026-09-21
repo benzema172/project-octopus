@@ -8,7 +8,8 @@ function source(path: string) {
 describe("Warehouse Project Scope Core 4", () => {
   it("keeps the full project dictionary for historical warehouse labels", () => {
     const market = source("lib/data/warehouse-market-400.ts");
-    expect(market).toContain("projects: (base.projects ?? []) as Row[]");
+    expect(market).toContain("const allProjects = (base.projects ?? []) as Row[]");
+    expect(market).toContain("projects: allProjects");
     expect(market).toContain("activeWarehouseProjects: activeProjects");
   });
 
