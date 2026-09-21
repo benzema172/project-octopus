@@ -44,9 +44,10 @@ describe("Performance & Stability Speed Core", () => {
 
   it("keeps project and reservation semantics intact", () => {
     const market = source("lib/data/warehouse-market-400.ts");
-    expect(market).toContain('db.from("projects")');
-    expect(market).toContain('.in("status", ["active", "preparation"])');
-    expect(market).toContain('db.from("reservations")');
-    expect(market).toContain('globalReservations');
+    expect(market).toContain("const allProjects = (base.projects ?? []) as Row[]");
+    expect(market).toContain('["active", "preparation"].includes(String(row.status))');
+    expect(market).toContain("const globalReservations = (ai.globalReservations ?? []) as Row[]");
+    expect(market).toContain("activeWarehouseProjects: activeProjects");
+    expect(market).toContain("globalReservations");
   });
 });
