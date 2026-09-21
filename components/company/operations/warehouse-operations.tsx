@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { WarehouseMarket410 } from "@/components/company/warehouse-market-410";
 import { WarehouseMovementTruth531 } from "@/components/company/warehouse-movement-truth-531";
 import { WarehousePriceAlertInspector490 } from "@/components/company/warehouse-price-alert-inspector-490";
@@ -18,6 +19,71 @@ function visiblePrices(rows: Row[]) {
     byItem.set(itemId, [...(byItem.get(itemId) ?? []), row]);
   });
   return [...byItem.values()].flatMap((history) => visibleWarehousePriceHistory450(history) as Row[]);
+}
+
+type WarehouseTab = "dashboard" | "stock" | "waiting" | "movements" | "needs" | "assets" | "counts" | "prices" | "locations" | "planning" | "other";
+
+function WarehouseEnhancements({
+  workspaceId,
+  data,
+  canWrite,
+  canApprove,
+  warehouses,
+  items,
+  prices,
+  counterparties,
+  purchaseOrders,
+  balances,
+  costLayers,
+  initialTab
+}: {
+  workspaceId: string;
+  data: Data;
+  canWrite: boolean;
+  canApprove: boolean;
+  warehouses: Row[];
+  items: Row[];
+  prices: Row[];
+  counterparties: Row[];
+  purchaseOrders: Row[];
+  balances: Row[];
+  costLayers: Row[];
+  initialTab: "dashboard" | "stock";
+}) {
+  const [activeTab, setActiveTab] = useState<WarehouseTab>(initialTab);
+
+  useEffect(() => {
+    const onTab = (event: Event) => {
+      const detail = (event as CustomEvent<{ tab?: WarehouseTab }>).detail;
+      if (detail?.tab) setActiveTab(detail.tab);
+    };
+    window.addEventListener("octopus:warehouse-tab", onTab);
+    return () => window.removeEventListener("octopus:warehouse-tab", onTab);
+  }, []);
+
+  return <>
+    <WarehouseUiCleanup520 />
+    <WarehouseUx440
+      workspaceId={workspaceId}
+      canWrite={canWrite}
+      warehouses={warehouses}
+      items={items}
+      prices={prices}
+      counterparties={counterparties}
+      purchaseOrders={purchaseOrders}
+      initialTab={initialTab}
+    />
+    {activeTab === "movements" ? (
+      <WarehouseMovementTruth531 workspaceId={workspaceId} data={data} canWrite={canWrite} canApprove={canApprove} />
+    ) : null}
+    {activeTab === "dashboard" ? (
+      <WarehouseStockValueOverlay480 items={items} prices={prices} balances={balances} costLayers={costLayers} />
+    ) : null}
+    {activeTab === "prices" ? <>
+      <WarehousePriceAlertInspector490 workspaceId={workspaceId} items={items} prices={prices} counterparties={counterparties} />
+      <WarehousePrices500 workspaceId={workspaceId} items={items} prices={prices} counterparties={counterparties} />
+    </> : null}
+  </>;
 }
 
 export default function WarehouseOperations({ workspaceId, data, canWrite, canApprove, query }: {
@@ -50,25 +116,6 @@ export default function WarehouseOperations({ workspaceId, data, canWrite, canAp
   };
 
   return <>
-    <WarehouseUiCleanup520 />
-    <WarehouseMovementTruth531 workspaceId={workspaceId} data={normalizedData} canWrite={canWrite} canApprove={canApprove} />
-    <WarehouseUx440
-      workspaceId={workspaceId}
-      canWrite={canWrite}
-      warehouses={warehouses}
-      items={items}
-      prices={prices}
-      counterparties={counterparties}
-      purchaseOrders={purchaseOrders}
-      initialTab={initialTab}
-    />
-    <WarehouseStockValueOverlay480
-      items={items}
-      prices={prices}
-      balances={balances}
-      costLayers={costLayers}
-    />
-    <WarehousePriceAlertInspector490 workspaceId={workspaceId} items={items} prices={prices} counterparties={counterparties} />
     <WarehouseMarket410
       workspaceId={workspaceId}
       data={normalizedData}
@@ -76,6 +123,19 @@ export default function WarehouseOperations({ workspaceId, data, canWrite, canAp
       canApprove={canApprove}
       query={query}
     />
-    <WarehousePrices500 workspaceId={workspaceId} items={items} prices={prices} counterparties={counterparties} />
+    <WarehouseEnhancements
+      workspaceId={workspaceId}
+      data={normalizedData}
+      canWrite={canWrite}
+      canApprove={canApprove}
+      warehouses={warehouses}
+      items={items}
+      prices={prices}
+      counterparties={counterparties}
+      purchaseOrders={purchaseOrders}
+      balances={balances}
+      costLayers={costLayers}
+      initialTab={initialTab}
+    />
   </>;
 }
