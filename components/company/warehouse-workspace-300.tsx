@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowRightLeft, ArrowUp, ArrowUpDown, Boxes, ChartNoAxesCombined, Check,
@@ -364,7 +365,7 @@ function StockRegistry({ rows, page, catalogTotal, query, balanceByItem, reserve
       setSortDirection(defaultDirection(key));
     }
   };
-  const sortValue = (row: Row, key: StockSortKey): string | number | null => {
+  const sortValue = useCallback((row: Row, key: StockSortKey): string | number | null => {
     const id = String(row.id);
     const history = pricesByItem.get(id) ?? [];
     const latest = history[0];
@@ -384,7 +385,7 @@ function StockRegistry({ rows, page, catalogTotal, query, balanceByItem, reserve
       return Number.isFinite(timestamp) ? timestamp : null;
     }
     return null;
-  };
+  }, [balanceByItem, counterpartyById, fifoByItem, pricesByItem, reservedByItem]);
   const sortedRows = useMemo(() => [...rows].sort((a, b) => {
     const left = sortValue(a, sortKey);
     const right = sortValue(b, sortKey);
@@ -394,7 +395,7 @@ function StockRegistry({ rows, page, catalogTotal, query, balanceByItem, reserve
     const compared = typeof left === "number" && typeof right === "number" ? left - right : collator.compare(String(left), String(right));
     if (compared === 0) return collator.compare(String(a.name ?? ""), String(b.name ?? ""));
     return sortDirection === "asc" ? compared : -compared;
-  }), [balanceByItem, collator, counterpartyById, fifoByItem, pricesByItem, reservedByItem, rows, sortDirection, sortKey]);
+  }), [collator, rows, sortDirection, sortKey, sortValue]);
   const pages = Math.max(1, Math.ceil(sortedRows.length / page.pageSize));
   const currentPage = Math.min(Math.max(1, page.page), pages);
   const visibleRows = sortedRows.slice((currentPage - 1) * page.pageSize, currentPage * page.pageSize);
@@ -484,7 +485,7 @@ function WaitingRoom({ workspaceId, reviews, currentReview, currentLines, curren
 function DocumentPreview({ workspaceId, review, preview }: { workspaceId: string; review: WarehouseReview300; preview: WarehouseDocumentPreview300 | null }) {
   const url = `/api/company/warehouse-ai/preview?workspaceId=${encodeURIComponent(workspaceId)}&versionId=${encodeURIComponent(review.document_version_id)}`;
   if (preview?.mime_type === "application/pdf") return <iframe className={styles.previewFrame} src={url} title={`Podgląd ${preview.file_name}`} />;
-  if (preview?.mime_type.startsWith("image/")) return <img className={styles.previewImage} src={url} alt={`Podgląd ${preview.file_name}`} />;
+  if (preview?.mime_type.startsWith("image/")) return <Image unoptimized className={styles.previewImage} src={url} alt={`Podgląd ${preview.file_name}`} width={1200} height={900} />;
   return <div className={styles.textPreview}><FileSearch size={28} /><h3>{preview?.file_name || review.document_name || "Dokument"}</h3><p>{preview?.excerpt || "Dla tego formatu dostępny jest podgląd danych odczytanych przez AI. Oryginał pozostaje zapisany w repozytorium dokumentów."}</p></div>;
 }
 
