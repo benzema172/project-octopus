@@ -22,7 +22,7 @@ import {
 import type { FinanceCashflowWeek, FinanceControlData, FinanceScenario } from "@/lib/types/finance-control";
 
 type Tab = "cockpit" | "cashflow" | "projects" | "settlements" | "documents" | "control" | "reports";
-type Props = { workspaceId: string; data: FinanceControlData; canWrite: boolean; canApprove: boolean };
+type Props = { workspaceId: string; data: FinanceControlData; canWrite: boolean; canApprove: boolean; initialTab?: string };
 
 const tabs: Array<[Tab, string]> = [
   ["cockpit", "Pulpit"],
@@ -85,9 +85,32 @@ function scenarioResult(weeks: FinanceCashflowWeek[], scenario: FinanceScenario 
   return weeks.reduce((sum, week) => sum + week.inflow * inflowFactor - week.outflow * outflowFactor - (includeUnknown ? week.unknown_outflow : 0), 0);
 }
 
-export function FinanceControlTower({ workspaceId, data, canWrite, canApprove }: Props) {
+function normalizedTab(value?: string): Tab {
+  return tabs.some(([id]) => id === value) ? value as Tab : "cockpit";
+}
+
+export function FinanceControlTower({ workspaceId, data, canWrite, canApprove, initialTab }: Props) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<Tab>("cockpit");
+  const [activeTab, setActiveTab] = useState<Tab>(() => normalizedTab(initialTab));
+
+  const selectTab = (nextTab: Tab) => {
+    setActiveTab(nextTab);
+
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const sourceLayerLoaded = url.searchParams.get("tab") === "documents";
+
+    if (nextTab === "documents" && !sourceLayerLoaded) {
+      url.searchParams.set("tab", "documents");
+      router.replace(`${url.pathname}${url.search}`, { scroll: false });
+      return;
+    }
+
+    if (nextTab !== "documents" && sourceLayerLoaded) {
+      url.searchParams.delete("tab");
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  };
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -178,7 +201,7 @@ export function FinanceControlTower({ workspaceId, data, canWrite, canApprove }:
     </header>
 
     <nav className="fct-tabs" aria-label="Sekcje finansów">
-      {tabs.map(([id, label]) => <button key={id} type="button" className={activeTab === id ? "is-active" : ""} onClick={() => setActiveTab(id)}>{label}</button>)}
+      {tabs.map(([id, label]) => <button key={id} type="button" className={activeTab === id ? "is-active" : ""} onClick={() => selectTab(id)}>{label}</button>)}
     </nav>
 
     {message ? <p className="fct-message is-success">{message}</p> : null}
