@@ -46,10 +46,14 @@ export default function FinanceOperations({ workspaceId, data, canWrite, canAppr
   function procurementAction(action:"procurement_refresh"|"procurement_approve",payload:Row,success:string){
     setFlowMessage(null);
     startTransition(async()=>{
-      const response=await fetch("/api/company/enterprise-flow",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({workspaceId,action,payload})});
-      const result=await response.json().catch(()=>({})) as {error?:string};
-      setFlowMessage(response.ok?success:result.error??"Nie udało się wykonać kontroli zakupowej.");
-      if(response.ok)router.refresh();
+      try {
+        const response=await fetch("/api/company/enterprise-flow",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({workspaceId,action,payload})});
+        const result=await response.json().catch(()=>({})) as {error?:string};
+        setFlowMessage(response.ok?success:result.error??"Nie udało się wykonać kontroli zakupowej.");
+        if(response.ok)router.refresh();
+      } catch (error) {
+        setFlowMessage(error instanceof Error ? error.message : "Nie udało się połączyć z kontrolą zakupową.");
+      }
     });
   }
 

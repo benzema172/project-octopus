@@ -1,7 +1,6 @@
 import "server-only";
 
 import { getHrWorkspace140Data } from "./hr-workspace-140";
-import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 type Row = Record<string, unknown>;
 type Options = { query?: string; referenceDate?: string; includePayroll?: boolean };
@@ -11,19 +10,8 @@ function hourlyRate(employment?: Row) { if (!employment) return 0; const explici
 
 export async function getHrWorkspace141Data(workspaceId: string, options: Options = {}) {
   const data = await getHrWorkspace140Data(workspaceId, options);
-  const db = createServiceSupabaseClient();
-  const [snapshots, employmentMeta] = await Promise.all([
-    db.from("timesheets").select("id,hourly_cost_snapshot,labor_cost_snapshot,cost_snapshot_at").eq("workspace_id", workspaceId).order("work_date", { ascending: false }).limit(5000),
-    options.includePayroll
-      ? db.from("employments").select("id,settlement_model,operational_net_hourly_rate").eq("workspace_id", workspaceId).limit(2000)
-      : db.from("employments").select("id,settlement_model").eq("workspace_id", workspaceId).limit(2000)
-  ]);
-  if (snapshots.error) throw new Error(`Nie udało się pobrać snapshotów kosztu czasu pracy: ${snapshots.error.message}`);
-  if (employmentMeta.error) throw new Error(`Nie udało się pobrać modelu rozliczeń pracowników: ${employmentMeta.error.message}`);
-  const snapshotById = new Map(((snapshots.data ?? []) as Row[]).map((row) => [String(row.id), row]));
-  const timesheets = (data.timesheets as Row[]).map((row) => ({ ...row, ...(snapshotById.get(String(row.id)) ?? {}) }));
-  const metaById = new Map(((employmentMeta.data ?? []) as Row[]).map((row) => [String(row.id), row]));
-  const employments = (data.employments as Row[]).map((row) => ({ ...row, ...(metaById.get(String(row.id)) ?? {}) }));
+  const timesheets = data.timesheets as Row[];
+  const employments = data.employments as Row[];
 
   const leaveBalances = (data.leaveBalances as Row[]).map((row) => {
     if (!row.entitlement_configured) return row;
