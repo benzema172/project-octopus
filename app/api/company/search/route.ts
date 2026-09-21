@@ -20,10 +20,11 @@ export async function GET(request: Request) {
   if (!workspace) return NextResponse.json({ error: "Brak dostępu do firmy." }, { status: 403 });
 
   const policy = await loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id });
+  const databaseLimit = policy.administrator ? 40 : 75;
   const { data, error } = await createServiceSupabaseClient().rpc("search_workspace_entities", {
     p_workspace_id: workspace.id,
     p_query: query.slice(0, 120),
-    p_limit: 75
+    p_limit: databaseLimit
   });
   if (error) return NextResponse.json({ error: `Wyszukiwarka nie odpowiedziała: ${error.message}` }, { status: 500 });
   const results = ((data ?? []) as SearchRow[]).filter((row) => domainAccessPolicyAllows(policy, { domain: row.domain, level: "read", projectId: row.project_id }));
