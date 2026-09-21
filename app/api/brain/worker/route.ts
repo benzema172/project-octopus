@@ -14,7 +14,8 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-const MAX_AUTOMATIC_RATE_LIMIT_WAIT_MS = 75_000;
+const MAX_AUTOMATIC_RATE_LIMIT_WAIT_MS = 20_000;
+const WORKER_CLAIM_CUTOFF_MS = 225_000;
 const BACKGROUND_TOKEN_HEADER = "x-octopus-background-token";
 
 type ClaimedJob = {
@@ -89,6 +90,23 @@ async function handleWorker(request: Request) {
   });
 
   for (let index = 0; index < limit; index += 1) {
+    const elapsedMs = performance.now() - startedAt;
+    if (elapsedMs >= WORKER_CLAIM_CUTOFF_MS) {
+      operationalLog("info", {
+        event: "worker.soft_deadline",
+        route: "/api/brain/worker",
+        method: request.method,
+        module: "documents",
+        action: "stop_claiming",
+        workspaceId: userWorkspace?.id ?? null,
+        requestId,
+        durationMs: elapsedMs,
+        status: "partial",
+        meta: { processed: results.length, limit, cutoffMs: WORKER_CLAIM_CUTOFF_MS }
+      });
+      break;
+    }
+
     const { data, error } = await supabase.rpc("claim_next_processing_job", { p_worker: workerName, p_workspace_id: userWorkspace?.id ?? null });
     if (error) {
       operationalLog("error", { event: "worker.claim_failed", route: "/api/brain/worker", method: request.method, module: "documents", workspaceId: userWorkspace?.id ?? null, requestId, status: 500, ...errorFields(error) });
