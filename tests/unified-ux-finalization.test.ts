@@ -37,17 +37,18 @@ describe("unified UX finalization", () => {
     expect(warehouse).toContain("Rezerwacje");
   });
 
-  it("makes Fleet exception-first and exposes the complete vehicle passport context", () => {
+  it("keeps the active Fleet workspace lean while preserving the vehicle passport", () => {
     const fleet = read("components/company/fleet-workspace-300.tsx");
-    for (const label of ["Aktywne pojazdy", "Dokumenty / 30 dni", "Serwis / 30 dni", "Poczekalnia AI", "Alerty krytyczne", "Koszt miesiąca"]) {
+    for (const label of ["Aktywne pojazdy", "Dokumenty / 30 dni", "Koszt miesiąca"]) {
       expect(fleet).toContain(label);
     }
     expect(fleet).toContain("Paszport pojazdu");
     expect(fleet).toContain("Dokumenty i terminy");
-    expect(fleet).toContain("Serwis");
-    expect(fleet).toContain("Szkody i bezpieczeństwo");
     expect(fleet).toContain("Wyposażenie i opony");
-    expect(fleet).toContain("TCO pojazdów");
+    expect(fleet).toContain("Koszty i wykorzystanie");
+    expect(fleet).not.toContain('id: "waiting", label');
+    expect(fleet).not.toContain('id: "service", label');
+    expect(fleet).not.toContain('id: "damages", label');
   });
 
   it("loads the drawer layer after the base simplification layer and supports mobile", () => {
