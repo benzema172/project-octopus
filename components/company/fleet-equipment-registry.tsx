@@ -10,6 +10,8 @@ type Props = { workspaceId: string; data: Data; canWrite: boolean };
 type Filter = "all" | "equipment" | "tires" | "empty";
 type AddMode = "component" | "asset" | null;
 
+const EMPTY_ROWS: Row[] = [];
+
 const raw = (value: unknown) => value === undefined || value === null ? "" : String(value);
 const text = (value: unknown, fallback = "—") => raw(value).trim() || fallback;
 const normalize = (value: unknown) => raw(value).trim().toLocaleLowerCase("pl");
@@ -31,11 +33,11 @@ export function FleetEquipmentRegistry({ workspaceId, data, canWrite }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const vehicles = ((data.allVehicles ?? data.vehicles) ?? []) as Row[];
-  const components = ((data.components ?? []) as Row[]).filter((row) => row.active !== false);
-  const vehicleStock = (data.vehicleStock ?? []) as Row[];
-  const stockItems = (data.vehicleStockItems ?? []) as Row[];
-  const availableAssets = (data.availableVehicleAssets ?? []) as Row[];
+  const vehicles = ((data.allVehicles ?? data.vehicles) ?? EMPTY_ROWS) as Row[];
+  const components = ((data.components ?? EMPTY_ROWS) as Row[]).filter((row) => row.active !== false);
+  const vehicleStock = (data.vehicleStock ?? EMPTY_ROWS) as Row[];
+  const stockItems = (data.vehicleStockItems ?? EMPTY_ROWS) as Row[];
+  const availableAssets = (data.availableVehicleAssets ?? EMPTY_ROWS) as Row[];
 
   const stockItemById = useMemo(() => new Map(stockItems.map((row) => [String(row.id), row])), [stockItems]);
   const componentsByVehicle = useMemo(() => {
