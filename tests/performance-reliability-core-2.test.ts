@@ -28,4 +28,17 @@ describe("Reliability & Speed Core 2", () => {
     expect(migration).toContain("stock_cost_allocations_source_movement_line_fk_idx");
     expect(migration).toContain("on public.stock_cost_allocations(source_movement_line_id)");
   });
+  it("does not fetch item-scoped mirror datasets when Warehouse 4.0 already loads their global equivalents", () => {
+    const operations = source("lib/data/company-operations.ts");
+    const market = source("lib/data/warehouse-market-400.ts");
+
+    expect(operations).toContain("includeMirroredWarehouseItemData?: boolean");
+    expect(operations).toContain("const includeMirroredItemData = options.includeMirroredWarehouseItemData !== false");
+    expect(operations).toContain('includeMirroredItemData && itemIds.length ? db.from("reservations")');
+    expect(operations).toContain("includeMirroredItemData ? getStockBalancesForItems(workspaceId, itemIds) : Promise.resolve([])");
+    expect(operations).toContain('includeMirroredItemData && itemIds.length ? db.from("price_observations")');
+    expect(operations).toContain('includeMirroredItemData && itemIds.length ? db.from("stock_item_instances")');
+    expect(market).toContain("includeMirroredWarehouseItemData: false");
+  });
+
 });
