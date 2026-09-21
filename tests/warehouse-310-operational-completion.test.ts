@@ -117,7 +117,7 @@ describe("Warehouse 3.1 implementation contract", () => {
     expect(equipmentBridge).toContain("issued_assets_open_stock_instance_uidx");
     expect(equipmentBridge).toContain("asset_type='stock_instance'");
     expect(marketLoader).toContain("globalStockInstances");
-    expect(marketLoader).toContain(".in(\"status\", [\"active\", \"preparation\"])");
+    expect(marketLoader).toContain('["active", "preparation"].includes(String(row.status))');
     expect(marketLoader).not.toContain("[\"active\", \"planned\"]");
     expect(hrCore).toContain("HrIssuedEquipmentStrip430");
     expect(projectLayout).toContain("ProjectEquipmentStrip430");
