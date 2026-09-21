@@ -9,6 +9,7 @@ const providerRoute = readFileSync("app/api/company/multi-ai/providers/route.ts"
 const providerPanel = readFileSync("components/settings/multi-ai-provider-settings.tsx", "utf8");
 const migration = readFileSync("supabase/migrations/20260917105500_octopus_multi_ai_core.sql", "utf8");
 const vaultMigration = readFileSync("supabase/migrations/20260917115500_multi_ai_provider_vault.sql", "utf8");
+const performanceMigration = readFileSync("supabase/migrations/20260921111500_performance_core_9_13.sql", "utf8");
 const vercel = readFileSync("vercel.json", "utf8");
 
 describe("Octopus Multi-AI Core", () => {
@@ -42,7 +43,8 @@ describe("Octopus Multi-AI Core", () => {
   it("connects interactive and background document analysis to the same consensus engine", () => {
     expect(route).toContain('analyzeUnifiedDocumentReviewMulti');
     expect(worker).toContain('analyzeUnifiedDocumentReviewMulti');
-    expect(worker).toContain('ai_consensus_events');
+    expect(worker).toContain('get_pending_finance_multi_ai_reviews');
+    expect(performanceMigration).toContain('ai_consensus_events');
     expect(worker).not.toContain('resolve_finance_document_review_atomic');
   });
 
