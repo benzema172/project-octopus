@@ -11,7 +11,6 @@ export const maxDuration = 300;
 const BACKGROUND_TOKEN_HEADER = "x-octopus-background-token";
 
 type ReviewRow = { id: string; workspace_id: string; created_at: string };
-type ConsensusRow = { review_id: string };
 type WorkerResult = { reviewId: string; workspaceId: string; status: "analyzed" | "failed"; mode?: string; agreement?: number; providers?: number; error?: string };
 
 function safeSecretEqual(expected: string | null | undefined, received: string | null | undefined) {
