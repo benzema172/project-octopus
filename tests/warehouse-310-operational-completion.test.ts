@@ -44,7 +44,8 @@ describe("Warehouse 3.1 implementation contract", () => {
 
   it("passes server search and pagination into the actual Warehouse loader", () => {
     expect(page).toContain("loader={getWarehouseMarket400Data}");
-    expect(marketLoader).toContain("getWarehouseWorkspaceData(workspaceId, options)");
+    expect(marketLoader).toContain("getWarehouseWorkspaceData(workspaceId, { ...options, includeMirroredWarehouseItemData: false })");
+    expect(marketLoader).toContain("...options");
     expect(marketLoader).not.toContain("getWarehouseWorkspaceData(workspaceId),");
   });
 
