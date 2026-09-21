@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect } from "react";
 
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
@@ -18,7 +19,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
             {error.digest ? <p style={{ margin: "0 0 18px", color: "#8793a3", fontSize: "12px" }}>Identyfikator błędu: {error.digest}</p> : null}
             <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
               <button type="button" onClick={reset} style={{ border: 0, borderRadius: "10px", padding: "11px 16px", background: "#182230", color: "#ffffff", fontWeight: 700, cursor: "pointer" }}>Uruchom ponownie</button>
-              <a href="/" style={{ border: "1px solid #c5ced9", borderRadius: "10px", padding: "10px 16px", color: "#182230", fontWeight: 700, textDecoration: "none" }}>Ekran startowy</a>
+              <Link href="/" style={{ border: "1px solid #c5ced9", borderRadius: "10px", padding: "10px 16px", color: "#182230", fontWeight: 700, textDecoration: "none" }}>Ekran startowy</Link>
             </div>
           </section>
         </main>
