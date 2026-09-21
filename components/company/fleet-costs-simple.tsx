@@ -20,6 +20,8 @@ function vehicleName(vehicle: Row) {
   return makeModel || String(vehicle.vehicle_type ?? "Pojazd");
 }
 
+const EMPTY_ROWS: Row[] = [];
+
 function isFuelCost(row: Row) {
   const type = normalize(row.cost_type);
   return type.includes("fuel") || type.includes("paliw");
@@ -27,9 +29,9 @@ function isFuelCost(row: Row) {
 
 export function FleetCostsSimple({ data }: { data: Data }) {
   const [query, setQuery] = useState("");
-  const vehicles = ((data.allVehicles ?? data.vehicles) ?? []) as Row[];
-  const costLinks = (data.costLinks ?? []) as Row[];
-  const trips = (data.trips ?? []) as Row[];
+  const vehicles = ((data.allVehicles ?? data.vehicles) ?? EMPTY_ROWS) as Row[];
+  const costLinks = (data.costLinks ?? EMPTY_ROWS) as Row[];
+  const trips = (data.trips ?? EMPTY_ROWS) as Row[];
   const referenceDate = String(data.referenceDate ?? new Date().toISOString().slice(0, 10));
   const monthKey = referenceDate.slice(0, 7);
 
