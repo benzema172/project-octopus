@@ -20,7 +20,8 @@ describe("Fleet Core 3.0", () => {
     expect(page).toContain('import { getFleetCore300Data } from "@/lib/data/fleet-core-300"');
     expect(page).toContain("getFleetCore300Data(workspaceId, options)");
     expect(page).not.toContain("getFleetConnected400Data");
-    expect(operations).toContain('import { FleetWorkspace300 } from "@/components/company/fleet-workspace-300"');
+    expect(operations).toContain('from "@/components/company/fleet-workspace-300"');
+    expect(operations).toContain("FleetWorkspace300");
     expect(operations).toContain("<FleetWorkspace300");
     expect(operations).not.toContain("FleetWorkspace400");
     expect(operations).not.toContain("CompanyModuleShell");
@@ -30,7 +31,9 @@ describe("Fleet Core 3.0", () => {
     expect(loader).not.toContain("job_title");
     expect(loader).toContain("availableVehicleAssets");
     expect(loader).toContain("vehicle_required_qualifications");
-    expect(loader).toContain("vehicle_checks");
+    for (const retiredTable of ["fleet_document_reviews", "fleet_anomalies", "service_orders", "damage_cases", "vehicle_service_plans", "vehicle_checks", "fleet_ai_decision_events", "fleet_ai_feedback"]) {
+      expect(loader).not.toContain(`.from("${retiredTable}")`);
+    }
   });
 
   it("ujednolica górę Floty ze standardem Kadr i Magazynu", () => {
@@ -45,10 +48,14 @@ describe("Fleet Core 3.0", () => {
     expect(css).toContain(".tabActive{background:#f1f0ff!important");
   });
 
-  it("udostępnia wszystkie dziewięć sekcji operacyjnych Fleet Core 3.0", () => {
+  it("udostępnia tylko sześć aktywnych sekcji Fleet Core 3.0", () => {
     const workspace = read("components/company/fleet-workspace-300.tsx");
-    for (const tab of ["dashboard", "vehicles", "waiting", "operations", "service", "documents", "equipment", "damages", "costs"]) expect(workspace).toContain(`id: "${tab}"`);
-    for (const label of ["Pulpit", "Pojazdy", "Poczekalnia AI", "Eksploatacja", "Serwis", "Dokumenty i terminy", "Wyposażenie i opony", "Szkody i bezpieczeństwo", "Koszty i wykorzystanie"]) expect(workspace).toContain(label);
+    for (const tab of ["dashboard", "vehicles", "operations", "documents", "equipment", "costs"]) {
+      expect(workspace).toContain(`id: "${tab}"`);
+    }
+    expect(workspace).not.toContain('id: "waiting", label');
+    expect(workspace).not.toContain('id: "service", label');
+    expect(workspace).not.toContain('id: "damages", label');
     expect(workspace).toContain('data-fleet-experience="3.0"');
     expect(workspace).toContain('sourceModule="fleet"');
     expect(workspace).toContain('fetch("/api/company/fleet-core"');
