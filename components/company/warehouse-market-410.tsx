@@ -81,7 +81,7 @@ export function WarehouseMarket410(props: Props) {
 
   const data = props.data as Record<string, unknown>;
   const items = ((data.warehousePlanningItems ?? data.catalogItems ?? data.items) ?? []) as Row[];
-  const projects = (data.projects ?? []) as Row[];
+  const projects = ((data.activeWarehouseProjects ?? data.projects) ?? []) as Row[];
   const forecasts = (data.warehouseForecasts400 ?? []) as Row[];
   const readiness = (data.materialReadiness400 ?? []) as Row[];
   const recommendations = (data.warehouseAiRecommendations400 ?? []) as Row[];

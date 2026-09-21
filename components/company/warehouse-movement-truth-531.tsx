@@ -84,7 +84,7 @@ export function WarehouseMovementTruth531({ workspaceId, data, canWrite, canAppr
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [counterparties, setCounterparties] = useState<Row[]>((data.counterparties ?? []) as Row[]);
-  const [projects, setProjects] = useState<Row[]>((data.projects ?? []) as Row[]);
+  const [projects, setProjects] = useState<Row[]>(((data.activeWarehouseProjects ?? data.projects) ?? []) as Row[]);
   const [warehouses, setWarehouses] = useState<Row[]>((data.warehouses ?? []) as Row[]);
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);

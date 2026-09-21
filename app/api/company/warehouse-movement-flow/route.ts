@@ -109,7 +109,7 @@ export async function GET(request: Request) {
       };
     }),
     counterparties: counterpartiesResult.data ?? [],
-    projects: projectsResult.data ?? [],
+    projects: ((projectsResult.data ?? []) as Row[]).filter((row) => ["active", "preparation"].includes(String(row.status))),
     warehouses: warehousesResult.data ?? []
   });
 }
