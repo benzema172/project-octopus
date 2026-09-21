@@ -21,6 +21,11 @@ type Act = (action: string, payload: Record<string, unknown>, success: string) =
 type Quality = { totalLines?: number; autoLines?: number; correctedLines?: number; learnedAliases?: number; automationRate?: number; correctionRate?: number; waitingDocuments?: number };
 type UndoState = { eventId: string; label: string } | null;
 
+const EMPTY_ROWS: Row[] = [];
+const EMPTY_REVIEWS: WarehouseReview300[] = [];
+const EMPTY_AI_LINES: WarehouseAiLine300[] = [];
+const EMPTY_PREVIEWS: WarehouseDocumentPreview300[] = [];
+
 const text = (value: unknown, fallback = "—") => value === null || value === undefined || value === "" ? fallback : String(value);
 const num = (value: unknown, digits = 2) => new Intl.NumberFormat("pl-PL", { maximumFractionDigits: digits }).format(Number(value ?? 0) || 0);
 const money = (value: unknown, currency = "PLN") => new Intl.NumberFormat("pl-PL", { style: "currency", currency: currency || "PLN", maximumFractionDigits: 2 }).format(Number(value ?? 0) || 0);
@@ -75,29 +80,33 @@ export function WarehouseWorkspace300({ workspaceId, data, canWrite, canApprove,
   const [undo, setUndo] = useState<UndoState>(null);
   const [pending, startTransition] = useTransition();
 
-  const catalogItems = ((data.catalogItems ?? data.items) ?? []) as Row[];
-  const warehouses = (data.warehouses ?? []) as Row[];
-  const movements = (data.movements ?? []) as Row[];
-  const movementLines = (data.lines ?? []) as Row[];
-  const projects = (data.projects ?? []) as Row[];
-  const assignableProjects = ((data.activeWarehouseProjects ?? projects.filter((row) => ["active", "preparation"].includes(String(row.status)))) ?? []) as Row[];
-  const employees = (data.employees ?? []) as Row[];
-  const vehicles = (data.vehicles ?? []) as Row[];
-  const counterparties = (data.counterparties ?? []) as Row[];
-  const reservations = ((data.globalReservations ?? data.reservations) ?? []) as Row[];
-  const balances = ((data.globalBalances ?? data.balances) ?? []) as Row[];
-  const prices = ((data.globalPriceObservations ?? data.priceObservations) ?? []) as Row[];
-  const aliases = (data.aliases ?? []) as Row[];
-  const instances = ((data.globalStockInstances ?? data.stockInstances) ?? []) as Row[];
-  const counts = (data.inventoryCounts ?? []) as Row[];
-  const countLines = (data.inventoryCountLines ?? []) as Row[];
-  const reviews = (data.warehouseReviews ?? []) as WarehouseReview300[];
-  const aiLines = (data.warehouseAiLines ?? []) as WarehouseAiLine300[];
-  const previews = (data.warehouseDocumentPreviews ?? []) as WarehouseDocumentPreview300[];
-  const locations = (data.warehouseLocations ?? []) as Row[];
-  const locationAssignments = (data.stockItemLocationAssignments ?? []) as Row[];
-  const costLayers = (data.inventoryCostLayers ?? []) as Row[];
-  const purchaseOrders = (data.warehousePurchaseOrders ?? []) as Row[];
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("octopus:warehouse-tab", { detail: { tab } }));
+  }, [tab]);
+
+  const catalogItems = ((data.catalogItems ?? data.items) ?? EMPTY_ROWS) as Row[];
+  const warehouses = (data.warehouses ?? EMPTY_ROWS) as Row[];
+  const movements = (data.movements ?? EMPTY_ROWS) as Row[];
+  const movementLines = (data.lines ?? EMPTY_ROWS) as Row[];
+  const projects = (data.projects ?? EMPTY_ROWS) as Row[];
+  const assignableProjects = (data.activeWarehouseProjects ?? projects.filter((row) => ["active", "preparation"].includes(String(row.status)))) as Row[];
+  const employees = (data.employees ?? EMPTY_ROWS) as Row[];
+  const vehicles = (data.vehicles ?? EMPTY_ROWS) as Row[];
+  const counterparties = (data.counterparties ?? EMPTY_ROWS) as Row[];
+  const reservations = ((data.globalReservations ?? data.reservations) ?? EMPTY_ROWS) as Row[];
+  const balances = ((data.globalBalances ?? data.balances) ?? EMPTY_ROWS) as Row[];
+  const prices = ((data.globalPriceObservations ?? data.priceObservations) ?? EMPTY_ROWS) as Row[];
+  const aliases = (data.aliases ?? EMPTY_ROWS) as Row[];
+  const instances = ((data.globalStockInstances ?? data.stockInstances) ?? EMPTY_ROWS) as Row[];
+  const counts = (data.inventoryCounts ?? EMPTY_ROWS) as Row[];
+  const countLines = (data.inventoryCountLines ?? EMPTY_ROWS) as Row[];
+  const reviews = (data.warehouseReviews ?? EMPTY_REVIEWS) as WarehouseReview300[];
+  const aiLines = (data.warehouseAiLines ?? EMPTY_AI_LINES) as WarehouseAiLine300[];
+  const previews = (data.warehouseDocumentPreviews ?? EMPTY_PREVIEWS) as WarehouseDocumentPreview300[];
+  const locations = (data.warehouseLocations ?? EMPTY_ROWS) as Row[];
+  const locationAssignments = (data.stockItemLocationAssignments ?? EMPTY_ROWS) as Row[];
+  const costLayers = (data.inventoryCostLayers ?? EMPTY_ROWS) as Row[];
+  const purchaseOrders = (data.warehousePurchaseOrders ?? EMPTY_ROWS) as Row[];
   const quality = (data.warehouseAiQuality ?? {}) as Quality;
 
   const itemById = useMemo(() => new Map(catalogItems.map((row) => [String(row.id), row])), [catalogItems]);
