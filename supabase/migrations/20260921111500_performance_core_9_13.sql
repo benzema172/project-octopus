@@ -85,7 +85,7 @@ revoke all on function public.run_unified_document_ai_queue_tick() from anon;
 revoke all on function public.run_unified_document_ai_queue_tick() from authenticated;
 grant execute on function public.run_unified_document_ai_queue_tick() to service_role;
 
-do $
+do $cron$
 declare
   v_job_id bigint;
 begin
@@ -106,7 +106,7 @@ begin
         'select public.run_unified_document_ai_queue_tick();';
   end if;
 end;
-$;
+$cron$;
 
 create index if not exists document_texts_search_vector_perf13_idx
   on public.document_texts
