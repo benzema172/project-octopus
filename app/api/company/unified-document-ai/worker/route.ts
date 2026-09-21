@@ -11,7 +11,6 @@ export const maxDuration = 300;
 const BACKGROUND_TOKEN_HEADER = "x-octopus-background-token";
 
 type ReviewRow = { id: string; workspace_id: string; created_at: string };
-type ConsensusRow = { review_id: string };
 type WorkerResult = { reviewId: string; workspaceId: string; status: "analyzed" | "failed"; mode?: string; agreement?: number; providers?: number; error?: string };
 
 function safeSecretEqual(expected: string | null | undefined, received: string | null | undefined) {
@@ -40,19 +39,16 @@ async function handleWorker(request: Request) {
   const limit = Math.max(1, Math.min(3, Number(url.searchParams.get("limit")) || 2));
   const refresh = url.searchParams.get("refresh") === "1";
   const db = createServiceSupabaseClient();
-  const [{ data: reviewData, error: reviewError }, { data: consensusData, error: consensusError }] = await Promise.all([
-    db.from("finance_document_reviews").select("id,workspace_id,created_at").eq("status", "open").order("created_at", { ascending: true }).limit(100),
-    db.from("ai_consensus_events").select("review_id").order("created_at", { ascending: false }).limit(5000)
-  ]);
-  if (reviewError || consensusError) {
-    const error = reviewError ?? consensusError;
-    operationalLog("error", { event: "finance_multi_ai_worker.queue_failed", route: "/api/company/unified-document-ai/worker", method: request.method, module: "finance", requestId, status: 500, ...errorFields(error) });
-    return NextResponse.json({ error: `Nie udało się pobrać kolejki Multi-AI: ${error?.message ?? "błąd bazy"}` }, { status: 500 });
+  const { data: reviewData, error: reviewError } = await db.rpc("get_pending_finance_multi_ai_reviews", {
+    p_limit: limit,
+    p_refresh: refresh
+  });
+  if (reviewError) {
+    operationalLog("error", { event: "finance_multi_ai_worker.queue_failed", route: "/api/company/unified-document-ai/worker", method: request.method, module: "finance", requestId, status: 500, ...errorFields(reviewError) });
+    return NextResponse.json({ error: `Nie udało się pobrać kolejki Multi-AI: ${reviewError.message}` }, { status: 500 });
   }
 
-  const consensusIds = new Set(((consensusData ?? []) as ConsensusRow[]).map((row) => row.review_id));
-  const reviews = (reviewData ?? []) as ReviewRow[];
-  const queue = (refresh ? reviews : reviews.filter((review) => !consensusIds.has(review.id))).slice(0, limit);
+  const queue = (reviewData ?? []) as ReviewRow[];
   const results: WorkerResult[] = [];
 
   for (const review of queue) {

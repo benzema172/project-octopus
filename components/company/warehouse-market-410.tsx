@@ -19,6 +19,7 @@ import styles from "./warehouse-market-410.module.css";
 
 type Props = ComponentProps<typeof WarehouseWorkspace300>;
 type Row = Record<string, unknown>;
+const EMPTY_ROWS: Row[] = [];
 
 type MarketResult = {
   error?: string;
@@ -80,11 +81,11 @@ export function WarehouseMarket410(props: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const data = props.data as Record<string, unknown>;
-  const items = ((data.warehousePlanningItems ?? data.catalogItems ?? data.items) ?? []) as Row[];
-  const projects = ((data.activeWarehouseProjects ?? data.projects) ?? []) as Row[];
-  const forecasts = (data.warehouseForecasts400 ?? []) as Row[];
-  const readiness = (data.materialReadiness400 ?? []) as Row[];
-  const recommendations = (data.warehouseAiRecommendations400 ?? []) as Row[];
+  const items = ((data.warehousePlanningItems ?? data.catalogItems ?? data.items) ?? EMPTY_ROWS) as Row[];
+  const projects = ((data.activeWarehouseProjects ?? data.projects) ?? EMPTY_ROWS) as Row[];
+  const forecasts = (data.warehouseForecasts400 ?? EMPTY_ROWS) as Row[];
+  const readiness = (data.materialReadiness400 ?? EMPTY_ROWS) as Row[];
+  const recommendations = (data.warehouseAiRecommendations400 ?? EMPTY_ROWS) as Row[];
 
   const projectById = useMemo(
     () => new Map(projects.map((row) => [String(row.id), row])),
@@ -181,7 +182,7 @@ export function WarehouseMarket410(props: Props) {
               data-warehouse-planning-tab=""
               className={`${workspaceStyles.tab} ${planningActive ? workspaceStyles.tabActive : ""}`}
               aria-pressed={planningActive}
-              onClick={() => setPlanningActive(true)}
+              onClick={() => { setPlanningActive(true); window.dispatchEvent(new CustomEvent("octopus:warehouse-tab", { detail: { tab: "planning" } })); }}
             >
               <BrainCircuit size={15} />
               Planowanie AI

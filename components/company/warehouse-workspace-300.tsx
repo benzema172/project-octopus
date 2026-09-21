@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowRightLeft, ArrowUp, ArrowUpDown, Boxes, ChartNoAxesCombined, Check,
@@ -20,6 +21,11 @@ type Props = { workspaceId: string; data: Data; canWrite: boolean; canApprove: b
 type Act = (action: string, payload: Record<string, unknown>, success: string) => void;
 type Quality = { totalLines?: number; autoLines?: number; correctedLines?: number; learnedAliases?: number; automationRate?: number; correctionRate?: number; waitingDocuments?: number };
 type UndoState = { eventId: string; label: string } | null;
+
+const EMPTY_ROWS: Row[] = [];
+const EMPTY_REVIEWS: WarehouseReview300[] = [];
+const EMPTY_AI_LINES: WarehouseAiLine300[] = [];
+const EMPTY_PREVIEWS: WarehouseDocumentPreview300[] = [];
 
 const text = (value: unknown, fallback = "—") => value === null || value === undefined || value === "" ? fallback : String(value);
 const num = (value: unknown, digits = 2) => new Intl.NumberFormat("pl-PL", { maximumFractionDigits: digits }).format(Number(value ?? 0) || 0);
@@ -75,29 +81,33 @@ export function WarehouseWorkspace300({ workspaceId, data, canWrite, canApprove,
   const [undo, setUndo] = useState<UndoState>(null);
   const [pending, startTransition] = useTransition();
 
-  const catalogItems = ((data.catalogItems ?? data.items) ?? []) as Row[];
-  const warehouses = (data.warehouses ?? []) as Row[];
-  const movements = (data.movements ?? []) as Row[];
-  const movementLines = (data.lines ?? []) as Row[];
-  const projects = (data.projects ?? []) as Row[];
-  const assignableProjects = ((data.activeWarehouseProjects ?? projects.filter((row) => ["active", "preparation"].includes(String(row.status)))) ?? []) as Row[];
-  const employees = (data.employees ?? []) as Row[];
-  const vehicles = (data.vehicles ?? []) as Row[];
-  const counterparties = (data.counterparties ?? []) as Row[];
-  const reservations = ((data.globalReservations ?? data.reservations) ?? []) as Row[];
-  const balances = ((data.globalBalances ?? data.balances) ?? []) as Row[];
-  const prices = ((data.globalPriceObservations ?? data.priceObservations) ?? []) as Row[];
-  const aliases = (data.aliases ?? []) as Row[];
-  const instances = ((data.globalStockInstances ?? data.stockInstances) ?? []) as Row[];
-  const counts = (data.inventoryCounts ?? []) as Row[];
-  const countLines = (data.inventoryCountLines ?? []) as Row[];
-  const reviews = (data.warehouseReviews ?? []) as WarehouseReview300[];
-  const aiLines = (data.warehouseAiLines ?? []) as WarehouseAiLine300[];
-  const previews = (data.warehouseDocumentPreviews ?? []) as WarehouseDocumentPreview300[];
-  const locations = (data.warehouseLocations ?? []) as Row[];
-  const locationAssignments = (data.stockItemLocationAssignments ?? []) as Row[];
-  const costLayers = (data.inventoryCostLayers ?? []) as Row[];
-  const purchaseOrders = (data.warehousePurchaseOrders ?? []) as Row[];
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("octopus:warehouse-tab", { detail: { tab } }));
+  }, [tab]);
+
+  const catalogItems = ((data.catalogItems ?? data.items) ?? EMPTY_ROWS) as Row[];
+  const warehouses = (data.warehouses ?? EMPTY_ROWS) as Row[];
+  const movements = (data.movements ?? EMPTY_ROWS) as Row[];
+  const movementLines = (data.lines ?? EMPTY_ROWS) as Row[];
+  const projects = (data.projects ?? EMPTY_ROWS) as Row[];
+  const assignableProjects = (data.activeWarehouseProjects ?? projects.filter((row) => ["active", "preparation"].includes(String(row.status)))) as Row[];
+  const employees = (data.employees ?? EMPTY_ROWS) as Row[];
+  const vehicles = (data.vehicles ?? EMPTY_ROWS) as Row[];
+  const counterparties = (data.counterparties ?? EMPTY_ROWS) as Row[];
+  const reservations = ((data.globalReservations ?? data.reservations) ?? EMPTY_ROWS) as Row[];
+  const balances = ((data.globalBalances ?? data.balances) ?? EMPTY_ROWS) as Row[];
+  const prices = ((data.globalPriceObservations ?? data.priceObservations) ?? EMPTY_ROWS) as Row[];
+  const aliases = (data.aliases ?? EMPTY_ROWS) as Row[];
+  const instances = ((data.globalStockInstances ?? data.stockInstances) ?? EMPTY_ROWS) as Row[];
+  const counts = (data.inventoryCounts ?? EMPTY_ROWS) as Row[];
+  const countLines = (data.inventoryCountLines ?? EMPTY_ROWS) as Row[];
+  const reviews = (data.warehouseReviews ?? EMPTY_REVIEWS) as WarehouseReview300[];
+  const aiLines = (data.warehouseAiLines ?? EMPTY_AI_LINES) as WarehouseAiLine300[];
+  const previews = (data.warehouseDocumentPreviews ?? EMPTY_PREVIEWS) as WarehouseDocumentPreview300[];
+  const locations = (data.warehouseLocations ?? EMPTY_ROWS) as Row[];
+  const locationAssignments = (data.stockItemLocationAssignments ?? EMPTY_ROWS) as Row[];
+  const costLayers = (data.inventoryCostLayers ?? EMPTY_ROWS) as Row[];
+  const purchaseOrders = (data.warehousePurchaseOrders ?? EMPTY_ROWS) as Row[];
   const quality = (data.warehouseAiQuality ?? {}) as Quality;
 
   const itemById = useMemo(() => new Map(catalogItems.map((row) => [String(row.id), row])), [catalogItems]);
@@ -355,7 +365,7 @@ function StockRegistry({ rows, page, catalogTotal, query, balanceByItem, reserve
       setSortDirection(defaultDirection(key));
     }
   };
-  const sortValue = (row: Row, key: StockSortKey): string | number | null => {
+  const sortValue = useCallback((row: Row, key: StockSortKey): string | number | null => {
     const id = String(row.id);
     const history = pricesByItem.get(id) ?? [];
     const latest = history[0];
@@ -375,7 +385,7 @@ function StockRegistry({ rows, page, catalogTotal, query, balanceByItem, reserve
       return Number.isFinite(timestamp) ? timestamp : null;
     }
     return null;
-  };
+  }, [balanceByItem, counterpartyById, fifoByItem, pricesByItem, reservedByItem]);
   const sortedRows = useMemo(() => [...rows].sort((a, b) => {
     const left = sortValue(a, sortKey);
     const right = sortValue(b, sortKey);
@@ -385,7 +395,7 @@ function StockRegistry({ rows, page, catalogTotal, query, balanceByItem, reserve
     const compared = typeof left === "number" && typeof right === "number" ? left - right : collator.compare(String(left), String(right));
     if (compared === 0) return collator.compare(String(a.name ?? ""), String(b.name ?? ""));
     return sortDirection === "asc" ? compared : -compared;
-  }), [balanceByItem, collator, counterpartyById, fifoByItem, pricesByItem, reservedByItem, rows, sortDirection, sortKey]);
+  }), [collator, rows, sortDirection, sortKey, sortValue]);
   const pages = Math.max(1, Math.ceil(sortedRows.length / page.pageSize));
   const currentPage = Math.min(Math.max(1, page.page), pages);
   const visibleRows = sortedRows.slice((currentPage - 1) * page.pageSize, currentPage * page.pageSize);
@@ -475,7 +485,7 @@ function WaitingRoom({ workspaceId, reviews, currentReview, currentLines, curren
 function DocumentPreview({ workspaceId, review, preview }: { workspaceId: string; review: WarehouseReview300; preview: WarehouseDocumentPreview300 | null }) {
   const url = `/api/company/warehouse-ai/preview?workspaceId=${encodeURIComponent(workspaceId)}&versionId=${encodeURIComponent(review.document_version_id)}`;
   if (preview?.mime_type === "application/pdf") return <iframe className={styles.previewFrame} src={url} title={`Podgląd ${preview.file_name}`} />;
-  if (preview?.mime_type.startsWith("image/")) return <img className={styles.previewImage} src={url} alt={`Podgląd ${preview.file_name}`} />;
+  if (preview?.mime_type.startsWith("image/")) return <Image unoptimized className={styles.previewImage} src={url} alt={`Podgląd ${preview.file_name}`} width={1200} height={900} />;
   return <div className={styles.textPreview}><FileSearch size={28} /><h3>{preview?.file_name || review.document_name || "Dokument"}</h3><p>{preview?.excerpt || "Dla tego formatu dostępny jest podgląd danych odczytanych przez AI. Oryginał pozostaje zapisany w repozytorium dokumentów."}</p></div>;
 }
 

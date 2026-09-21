@@ -17,6 +17,7 @@ import styles from "./warehouse-market-400.module.css";
 
 type Props = ComponentProps<typeof WarehouseWorkspace300>;
 type Row = Record<string, unknown>;
+const EMPTY_ROWS: Row[] = [];
 type Mode = "operations" | "wms" | "planning" | "suppliers" | "shipping" | "integrations";
 type Field = {
   name: string;
@@ -93,11 +94,11 @@ export function WarehouseMarket400(props: Props) {
   const [queued, setQueued] = useState(0);
   const data = props.data as Record<string, unknown>;
 
-  const items = ((data.warehousePlanningItems ?? data.catalogItems ?? data.items) ?? []) as Row[];
+  const items = ((data.warehousePlanningItems ?? data.catalogItems ?? data.items) ?? EMPTY_ROWS) as Row[];
   const warehouses = (data.warehouses ?? []) as Row[];
-  const projects = (data.projects ?? []) as Row[];
+  const projects = (data.projects ?? EMPTY_ROWS) as Row[];
   const employees = (data.employees ?? []) as Row[];
-  const counterparties = (data.counterparties ?? []) as Row[];
+  const counterparties = (data.counterparties ?? EMPTY_ROWS) as Row[];
   const movementLines = (data.lines ?? []) as Row[];
   const locations = ((data.warehouseLocations400 ?? data.warehouseLocations) ?? []) as Row[];
   const lots = (data.stockLots ?? []) as Row[];
@@ -107,7 +108,7 @@ export function WarehouseMarket400(props: Props) {
   const scores = (data.supplierScores400 ?? []) as Row[];
   const returns = (data.warehouseReturns400 ?? []) as Row[];
   const forecasts = (data.warehouseForecasts400 ?? []) as Row[];
-  const readiness = (data.materialReadiness400 ?? []) as Row[];
+  const readiness = (data.materialReadiness400 ?? EMPTY_ROWS) as Row[];
   const recommendations = (data.warehouseAiRecommendations400 ?? []) as Row[];
   const integrations = (data.warehouseIntegrations400 ?? []) as Row[];
   const events = (data.warehouseDeviceEvents400 ?? []) as Row[];

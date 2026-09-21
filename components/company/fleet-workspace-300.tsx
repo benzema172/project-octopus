@@ -3,17 +3,18 @@
 import { useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
-  AlertTriangle, CarFront, ChartNoAxesCombined, Check, ClipboardCheck, FileClock, FileText,
-  Fuel, Gauge, LayoutDashboard, PackageCheck, Plus, Save, Search, ShieldCheck, Sparkles,
-  TriangleAlert, Undo2, Wrench
+  AlertTriangle, CarFront, ChartNoAxesCombined, Check, FileText,
+  Gauge, LayoutDashboard, PackageCheck, Plus, Save, Search, ShieldCheck,
+  TriangleAlert, Undo2
 } from "lucide-react";
 import { ModuleDropzoneLink } from "@/components/documents/module-dropzone-link";
 import { ServerPagination } from "@/components/system/server-pagination";
 import type { Data, PageMeta, Row } from "@/components/company/operations/module-shell";
 import styles from "./fleet-workspace-300.module.css";
 
-type Tab = "dashboard" | "vehicles" | "waiting" | "operations" | "service" | "documents" | "equipment" | "damages" | "costs";
-type Props = { workspaceId: string; data: Data; canWrite: boolean; canApprove: boolean; query?: string };
+export type FleetCoreTab = "dashboard" | "vehicles" | "waiting" | "operations" | "service" | "documents" | "equipment" | "damages" | "costs";
+type Tab = FleetCoreTab;
+type Props = { workspaceId: string; data: Data; canWrite: boolean; canApprove: boolean; query?: string; onTabChange?: (tab: FleetCoreTab) => void };
 type Option = [string, string];
 type MiniField = {
   name: string;
@@ -30,6 +31,9 @@ type MiniField = {
 type UndoState = { eventId: string; label: string } | null;
 
 type ReviewPreview = { review_id?: unknown; document_version_id?: unknown; file_name?: unknown; mime_type?: unknown; excerpt?: unknown };
+
+const EMPTY_ROWS: Row[] = [];
+const EMPTY_PREVIEWS: ReviewPreview[] = [];
 
 const text = (value: unknown, fallback = "—") => value === undefined || value === null || value === "" ? fallback : String(value);
 const raw = (value: unknown) => value === undefined || value === null ? "" : String(value);
@@ -58,12 +62,9 @@ const counterpartyLabel = (row: Row) => text(row.name);
 const tabs: Array<{ id: Tab; label: string; icon: ReactNode }> = [
   { id: "dashboard", label: "Pulpit", icon: <LayoutDashboard size={15} /> },
   { id: "vehicles", label: "Pojazdy", icon: <CarFront size={15} /> },
-  { id: "waiting", label: "Poczekalnia AI", icon: <FileClock size={15} /> },
   { id: "operations", label: "Eksploatacja", icon: <Gauge size={15} /> },
-  { id: "service", label: "Serwis", icon: <Wrench size={15} /> },
   { id: "documents", label: "Dokumenty i terminy", icon: <FileText size={15} /> },
   { id: "equipment", label: "Wyposażenie i opony", icon: <PackageCheck size={15} /> },
-  { id: "damages", label: "Szkody i bezpieczeństwo", icon: <ShieldCheck size={15} /> },
   { id: "costs", label: "Koszty i wykorzystanie", icon: <ChartNoAxesCombined size={15} /> }
 ];
 
@@ -114,43 +115,47 @@ function MiniForm({ title, action, success, fields, pending, disabled, onSubmit 
 
 function Empty({ children }: { children: ReactNode }) { return <div className={styles.empty}>{children}</div>; }
 
-export function FleetWorkspace300({ workspaceId, data, canWrite, canApprove, query = "" }: Props) {
+export function FleetWorkspace300({ workspaceId, data, canWrite, canApprove, query = "", onTabChange }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [tab, setTab] = useState<Tab>(query ? "vehicles" : "dashboard");
+  const changeTab = (nextTab: Tab) => {
+    setTab(nextTab);
+    onTabChange?.(nextTab);
+  };
   const [search, setSearch] = useState(query);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [undo, setUndo] = useState<UndoState>(null);
 
-  const vehicles = (data.vehicles ?? []) as Row[];
-  const allVehicles = ((data.allVehicles ?? data.vehicles) ?? []) as Row[];
-  const projects = (data.projects ?? []) as Row[];
-  const employees = (data.employees ?? []) as Row[];
-  const counterparties = (data.counterparties ?? []) as Row[];
+  const vehicles = (data.vehicles ?? EMPTY_ROWS) as Row[];
+  const allVehicles = ((data.allVehicles ?? data.vehicles) ?? EMPTY_ROWS) as Row[];
+  const projects = (data.projects ?? EMPTY_ROWS) as Row[];
+  const employees = (data.employees ?? EMPTY_ROWS) as Row[];
+  const counterparties = (data.counterparties ?? EMPTY_ROWS) as Row[];
   const summary = (data.summary ?? {}) as Row;
-  const fuel = (data.fuel ?? []) as Row[];
-  const trips = (data.trips ?? []) as Row[];
-  const service = (data.service ?? []) as Row[];
-  const serviceItems = (data.serviceItems ?? []) as Row[];
-  const servicePlans = (data.servicePlans ?? []) as Row[];
-  const documents = (data.documents ?? []) as Row[];
-  const damages = (data.damages ?? []) as Row[];
-  const allocations = (data.allocations ?? []) as Row[];
-  const readings = (data.readings ?? []) as Row[];
-  const costRates = (data.costRates ?? []) as Row[];
-  const components = (data.components ?? []) as Row[];
-  const vehicleStock = (data.vehicleStock ?? []) as Row[];
-  const availableVehicleAssets = (data.availableVehicleAssets ?? []) as Row[];
-  const stockItems = (data.vehicleStockItems ?? []) as Row[];
-  const requiredQualifications = (data.requiredQualifications ?? []) as Row[];
-  const checks = (data.checks ?? []) as Row[];
-  const qualifications = (data.qualifications ?? []) as Row[];
-  const reviews = (data.reviews ?? []) as Row[];
-  const reviewPreviews = (data.reviewPreviews ?? []) as ReviewPreview[];
-  const decisionEvents = (data.decisionEvents ?? []) as Row[];
-  const anomalies = (data.anomalies ?? []) as Row[];
-  const costLinks = (data.costLinks ?? []) as Row[];
+  const fuel = (data.fuel ?? EMPTY_ROWS) as Row[];
+  const trips = (data.trips ?? EMPTY_ROWS) as Row[];
+  const service = (data.service ?? EMPTY_ROWS) as Row[];
+  const serviceItems = (data.serviceItems ?? EMPTY_ROWS) as Row[];
+  const servicePlans = (data.servicePlans ?? EMPTY_ROWS) as Row[];
+  const documents = (data.documents ?? EMPTY_ROWS) as Row[];
+  const damages = (data.damages ?? EMPTY_ROWS) as Row[];
+  const allocations = (data.allocations ?? EMPTY_ROWS) as Row[];
+  const readings = (data.readings ?? EMPTY_ROWS) as Row[];
+  const costRates = (data.costRates ?? EMPTY_ROWS) as Row[];
+  const components = (data.components ?? EMPTY_ROWS) as Row[];
+  const vehicleStock = (data.vehicleStock ?? EMPTY_ROWS) as Row[];
+  const availableVehicleAssets = (data.availableVehicleAssets ?? EMPTY_ROWS) as Row[];
+  const stockItems = (data.vehicleStockItems ?? EMPTY_ROWS) as Row[];
+  const requiredQualifications = (data.requiredQualifications ?? EMPTY_ROWS) as Row[];
+  const checks = (data.checks ?? EMPTY_ROWS) as Row[];
+  const qualifications = (data.qualifications ?? EMPTY_ROWS) as Row[];
+  const reviews = (data.reviews ?? EMPTY_ROWS) as Row[];
+  const reviewPreviews = (data.reviewPreviews ?? EMPTY_PREVIEWS) as ReviewPreview[];
+  const decisionEvents = (data.decisionEvents ?? EMPTY_ROWS) as Row[];
+  const anomalies = (data.anomalies ?? EMPTY_ROWS) as Row[];
+  const costLinks = (data.costLinks ?? EMPTY_ROWS) as Row[];
   const referenceDate = String(data.referenceDate ?? new Date().toISOString().slice(0, 10));
   const page = (data.page ?? { page: 1, pageSize: Math.max(vehicles.length, 1), total: vehicles.length }) as PageMeta;
 
@@ -256,7 +261,7 @@ export function FleetWorkspace300({ workspaceId, data, canWrite, canApprove, que
   };
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setTab("vehicles");
+    changeTab("vehicles");
     router.push(`/workspace/companies/${workspaceId}/fleet?page=1${search.trim() ? `&q=${encodeURIComponent(search.trim())}` : ""}`);
   };
 
@@ -283,7 +288,7 @@ export function FleetWorkspace300({ workspaceId, data, canWrite, canApprove, que
     </div>
 
     <div className={styles.toolbar}><nav className={styles.tabs} aria-label="Sekcje Fleet Core 3.0">
-      {tabs.map((item) => <button type="button" key={item.id} className={`${styles.tab} ${tab === item.id ? styles.tabActive : ""}`} onClick={() => setTab(item.id)}>{item.icon}{item.label}{item.id === "waiting" && openReviews.length ? <b>{openReviews.length}</b> : item.id === "damages" && criticalAnomalies.length ? <b>{criticalAnomalies.length}</b> : null}</button>)}
+      {tabs.map((item) => <button type="button" key={item.id} className={`${styles.tab} ${tab === item.id ? styles.tabActive : ""}`} onClick={() => changeTab(item.id)}>{item.icon}{item.label}{item.id === "waiting" && openReviews.length ? <b>{openReviews.length}</b> : item.id === "damages" && criticalAnomalies.length ? <b>{criticalAnomalies.length}</b> : null}</button>)}
     </nav></div>
 
     {message ? <div className={`${styles.feedback} ${styles.feedbackSuccess}`}><span><Check size={14} /> {message}</span>{undo ? <button type="button" onClick={undoLast}><Undo2 size={13} /> Cofnij</button> : null}</div> : null}
@@ -293,22 +298,18 @@ export function FleetWorkspace300({ workspaceId, data, canWrite, canApprove, que
     {tab === "dashboard" ? <div className={styles.grid}>
       <Panel title="Do decyzji" kicker="Dzisiaj">
         <div className={styles.list}>
-          <div className={styles.listItem}><span>Poczekalnia AI</span><strong>{openReviews.length}</strong></div>
-          <div className={styles.listItem}><span>Krytyczne alerty</span><strong>{criticalAnomalies.length}</strong></div>
           <div className={styles.listItem}><span>Wygasłe dokumenty</span><strong>{expiredDocuments.length}</strong></div>
-          <div className={styles.listItem}><span>Otwarte serwisy</span><strong>{openService.length}</strong></div>
-          <div className={styles.listItem}><span>Blokady po kontroli</span><strong>{text(summary.blockedChecks, "0")}</strong></div>
+          <div className={styles.listItem}><span>Dokumenty wygasające ≤30 dni</span><strong>{dueDocuments.length}</strong></div>
+          <div className={styles.listItem}><span>Blokady gotowości</span><strong>{notReadyVehicles.length}</strong></div>
         </div>
-        <div className={styles.actionRow}><button className={styles.buttonSecondary} type="button" onClick={() => setTab("waiting")}><Sparkles size={14} />Poczekalnia AI</button><button className={styles.buttonSecondary} type="button" onClick={() => setTab("damages")}><ShieldCheck size={14} />Ryzyka</button></div>
       </Panel>
       <Panel title="Gotowość floty" kicker="Kadry + pojazdy">
         {notReadyVehicles.length ? <div className={styles.cards}>{notReadyVehicles.slice(0, 6).map((vehicle) => <div className={styles.warning} key={String(vehicle.id)}><TriangleAlert size={14} /><span><strong>{vehicleLabel(vehicle)}</strong><br />Brakuje {missingQualificationCount(vehicle)} wymaganych uprawnień osobie odpowiedzialnej.</span></div>)}</div> : <div className={styles.success}><ShieldCheck size={14} /><span>Aktywne pojazdy z określonymi wymaganiami mają komplet ważnych uprawnień.</span></div>}
       </Panel>
-      <Panel title="Najbliższe terminy" kicker="Dokumenty i serwis">
+      <Panel title="Najbliższe terminy" kicker="Dokumenty">
         <div className={styles.list}>
           {[...expiredDocuments, ...dueDocuments].slice(0, 5).map((row) => <div className={styles.listItem} key={String(row.id)}><span>{text(vehicleById.get(String(row.vehicle_id))?.registration_number)} · {text(row.document_type)}</span><strong>{dateLabel(row.valid_until)}</strong></div>)}
-          {dueServicePlans.slice(0, 5).map((row) => <div className={styles.listItem} key={String(row.id)}><span>{text(vehicleById.get(String(row.vehicle_id))?.registration_number)} · {text(row.name)}</span><strong>{dateLabel(row.next_due_date)}</strong></div>)}
-          {!expiredDocuments.length && !dueDocuments.length && !dueServicePlans.length ? <Empty>Brak pilnych terminów w ciągu 30 dni.</Empty> : null}
+          {!expiredDocuments.length && !dueDocuments.length ? <Empty>Brak pilnych terminów dokumentów w ciągu 30 dni.</Empty> : null}
         </div>
       </Panel>
       <Panel title="TCO i wykorzystanie" kicker="Koszty + inwestycje">
@@ -317,7 +318,7 @@ export function FleetWorkspace300({ workspaceId, data, canWrite, canApprove, que
           const distance = distanceByVehicle.get(String(vehicle.id)) ?? 0;
           return <div className={styles.listItem} key={String(vehicle.id)}><span>{vehicleLabel(vehicle)} · {num(distance, 0)} km</span><strong>{money(cost)}{distance > 0 ? ` · ${money(cost / distance)}/km` : ""}</strong></div>;
         })}</div>
-        <div className={styles.actionRow}><button className={styles.buttonSecondary} type="button" onClick={() => setTab("costs")}><ChartNoAxesCombined size={14} />Pełna analiza TCO</button></div>
+        <div className={styles.actionRow}><button className={styles.buttonSecondary} type="button" onClick={() => changeTab("costs")}><ChartNoAxesCombined size={14} />Pełna analiza TCO</button></div>
       </Panel>
     </div> : null}
 

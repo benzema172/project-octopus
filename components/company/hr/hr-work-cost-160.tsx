@@ -145,7 +145,7 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
       setSelectedProjectId(nextAssignment);
     });
     return () => { cancelled = true; };
-  }, [fixedEmployeeId, fixedWorkDate, initialProjectId, leave?.id, leave?.leave_type, leave?.status, dayStatus]);
+  }, [fixedEmployeeId, fixedWorkDate, initialProjectId, leave, dayStatus]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -170,7 +170,6 @@ export function HrWorkCost160({ workspaceId, referenceDate, employees, projects,
   const realProjectId = isSpecialAssignment(selectedProjectId) ? "" : selectedProjectId;
   const availableWbs = useMemo(() => (data?.wbsNodes ?? []).filter((row) => realProjectId && String(row.project_id) === realProjectId), [data?.wbsNodes, realProjectId]);
   const activeEmployees = useMemo(() => employees.filter((row) => row.status === "active"), [employees]);
-  const fixedEmployee = fixedEmployeeId ? employeeById.get(fixedEmployeeId) : undefined;
   const rows = useMemo(() => (data?.rows ?? []).filter((row) => {
     if (fixedEmployeeId && String(row.employee_id) !== fixedEmployeeId) return false;
     if (fixedWorkDate && String(row.work_date ?? "").slice(0, 10) !== fixedWorkDate) return false;

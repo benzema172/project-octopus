@@ -30,7 +30,8 @@ describe("Fleet equipment registry", () => {
     const shell = read("components/company/operations/fleet-operations.tsx");
     expect(shell).toContain("FleetEquipmentRegistry");
     expect(shell).toContain("fleet-equipment-registry-host");
-    expect(shell).toContain('button:nth-child(7)[class*="tabActive"]');
+    expect(shell).toContain('activeTab === "equipment"');
+    expect(shell).toContain("fleet-tab-equipment");
     expect(shell).toContain('section[data-fleet-experience="3.0"] > div[class*="grid"]');
   });
 });

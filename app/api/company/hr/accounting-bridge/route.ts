@@ -156,6 +156,7 @@ export async function GET(request: Request) {
     laborCostSnapshot: canViewPayroll ? rows.reduce((sum, row) => sum + number(row.laborCostSnapshot), 0) : null
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   if (!download) return NextResponse.json({ ok: true, period, canViewPayroll, summary, rows: canViewPayroll ? rows : rows.map(({ net: _net, gross: _gross, employerContributions: _contrib, otherCosts: _other, totalEmployerCost: _total, laborCostSnapshot: _labor, ...row }) => row) }, { headers: { "Cache-Control": "no-store" } });
 
   const headers = ["Numer pracownika", "Pracownik", "Forma zatrudnienia", "Stanowisko", "Godziny podstawowe", "Nadgodziny", "Godziny zatwierdzone", "Wpisy czasu oczekujące", "Urlopy zatwierdzone - dni", "Netto", "Brutto", "Składki pracodawcy", "Pozostałe koszty", "Pełny koszt pracodawcy", "Koszt robocizny z kart czasu", "Inwestycje i kody kosztowe", "Status płac", "Źródło płac", "Walidacja", "Gotowe do księgowości"];
