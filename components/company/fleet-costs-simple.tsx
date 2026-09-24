@@ -128,7 +128,7 @@ export function FleetCostsSimple({ data }: { data: Data }) {
     </div>
 
     <style jsx>{`
-      .fleet-costs-simple { display: grid; gap: 12px; }
+      .fleet-costs-simple { display: grid; gap: 12px; padding-top: 14px; }
       .fleet-costs-simple__panel-head > div > span { margin: 0 0 3px; font-size: 10px; font-weight: 800; letter-spacing: .12em; color: #6f7181; }
       .fleet-costs-simple__kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
       .fleet-costs-simple__kpis article { min-width: 0; padding: 11px 12px; border: 1px solid #dde2eb; border-radius: 11px; background: #fff; }
