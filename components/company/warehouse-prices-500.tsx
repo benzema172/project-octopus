@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Building2, CalendarDays, History, Search, TrendingDown, TrendingUp, X } from "lucide-react";
 import { InvoiceQuickPreview } from "@/components/documents/invoice-quick-preview";
 import { isWarehousePriceAlert550, recentWarehousePriceComparison550 } from "@/lib/warehouse/price-alert-policy-550";
@@ -9,6 +9,7 @@ import styles from "./warehouse-prices-500.module.css";
 
 type Row = Record<string, unknown>;
 type Filter = "all" | "alerts" | "up" | "down";
+type SortDirection = "asc" | "desc";
 type Props = { workspaceId: string; items: Row[]; prices: Row[]; counterparties: Row[] };
 
 const ALERT_THRESHOLD_PCT = 10;
@@ -25,7 +26,10 @@ const invoiceLineId = (row: Row) => id(row.invoice_line_id) ?? (String(row.sourc
 export function WarehousePrices500({ workspaceId, items, prices, counterparties }: Props) {
   const [active, setActive] = useState(false);
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [filter, setFilter] = useState<Filter>("all");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [alertWindowDays, setAlertWindowDays] = useState<number>(90);
   const referenceDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -85,11 +89,14 @@ export function WarehousePrices500({ workspaceId, items, prices, counterparties 
       const haystack = normalized([
         row.item.name, row.item.sku, row.item.manufacturer, row.item.model,
         row.supplier?.name, row.latest?.invoice_number, warehouseInvoiceLabel450(row.latest ?? {}),
-        row.latest?.source_type, row.latest?.unit_price_net, row.latest?.observed_at
+        row.latest?.unit, row.item.unit, row.latest?.source_type, row.latest?.unit_price_net, row.latest?.observed_at
       ].filter(Boolean).join(" "));
       return terms.every((term) => haystack.includes(term));
-    }).sort((a, b) => String(b.latest?.observed_at ?? b.latest?.created_at ?? "").localeCompare(String(a.latest?.observed_at ?? a.latest?.created_at ?? "")));
-  }, [filter, query, rows]);
+    }).sort((a, b) => {
+      const compared = String(a.item.name ?? "").localeCompare(String(b.item.name ?? ""), "pl", { sensitivity: "base", numeric: true });
+      return sortDirection === "asc" ? compared : -compared;
+    });
+  }, [filter, query, rows, sortDirection]);
 
   useEffect(() => {
     const root = document.querySelector<HTMLElement>('section[data-warehouse-experience="3.1"]');
@@ -141,6 +148,16 @@ export function WarehousePrices500({ workspaceId, items, prices, counterparties 
     return next;
   });
 
+  const openSearch = () => {
+    setSearchOpen(true);
+    window.requestAnimationFrame(() => searchInputRef.current?.focus());
+  };
+
+  const closeSearch = () => {
+    setQuery("");
+    setSearchOpen(false);
+  };
+
   if (!active) return null;
 
   return <section className={styles.shell} data-warehouse-prices-500="">
@@ -183,7 +200,10 @@ export function WarehousePrices500({ workspaceId, items, prices, counterparties 
       <header className={styles.historyHeader}>
         <div><small>HISTORIA ZAKUPÓW</small><h2>Ceny i dostawcy</h2><p>{filteredRows.length} z {rows.length} kartotek · historia pozostaje pełna niezależnie od okna alertów.</p></div>
         <div className={styles.controls}>
-          <label className={styles.search}><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Produkt, dostawca, faktura…" aria-label="Szukaj w cenach i dostawcach" />{query ? <button type="button" onClick={() => setQuery("")} aria-label="Wyczyść"><X size={12} /></button> : null}</label>
+          <button type="button" className={styles.sortButton} onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")} aria-label={sortDirection === "asc" ? "Sortowanie A do Z. Zmień na Z do A" : "Sortowanie Z do A. Zmień na A do Z"} title="Zmień kolejność alfabetyczną">{sortDirection === "asc" ? "A–Z" : "Z–A"}</button>
+          <div className={`${styles.searchDock} ${searchOpen ? styles.searchDockOpen : ""}`}>
+            {searchOpen ? <label className={styles.search}><Search size={14} /><input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") closeSearch(); }} placeholder="Pozycja, dostawca, jednostka, źródło…" aria-label="Szukaj szybko w cenach i dostawcach" /><button type="button" onClick={closeSearch} aria-label="Zamknij wyszukiwanie"><X size={12} /></button></label> : <button type="button" className={styles.searchToggle} onClick={openSearch} aria-label="Otwórz szybkie wyszukiwanie" aria-expanded="false" title="Szukaj"><Search size={15} /></button>}
+          </div>
           <div className={styles.filters}>
             {([ ["all", "Wszystkie"], ["alerts", "Alerty ≥10%"], ["up", "Wzrosty"], ["down", "Spadki"] ] as Array<[Filter, string]>).map(([filterId, label]) => <button type="button" key={filterId} className={filter === filterId ? styles.filterActive : ""} onClick={() => setFilter(filterId)}>{label}</button>)}
           </div>
