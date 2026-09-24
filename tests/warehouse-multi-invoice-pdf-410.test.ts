@@ -63,8 +63,8 @@ describe("Warehouse 4.2 chunked multi-invoice PDF production path", () => {
     expect(finalQueueMigration).toContain("/api/brain/worker?limit=1");
   });
 
-  it("still routes warehouse uploads through the dedicated specialist", () => {
-    expect(processor).toContain('sourceModule === "warehouse"');
+  it("routes Warehouse and Finance uploads through the dedicated business-document specialist", () => {
+    expect(processor).toContain('sourceModule === "warehouse" || sourceModule === "finance"');
     expect(processor).toContain("analyzeWarehouseDocumentWithGemini");
     expect(processor).toContain("warehouseBinary ? bytes : undefined");
   });
