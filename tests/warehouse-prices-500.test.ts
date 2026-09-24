@@ -25,6 +25,12 @@ describe("Warehouse visible prices panel", () => {
     expect(css).toContain(".sectionHeader>.priceHeaderActions{display:flex;align-items:center;justify-content:flex-start;gap:7px;margin-left:10px}");
   });
 
+  it("keeps the quick search free of focus halo", () => {
+    const css = read("components/company/warehouse-workspace-310.module.css");
+    expect(css).toContain(".priceSearch:focus-within{border-color:#cbd8d2;box-shadow:none}");
+    expect(css).toContain(".priceSearch input:focus{outline:none;box-shadow:none}");
+  });
+
   it("adds a compact expanding quick search to the actual visible table", () => {
     const workspace = read("components/company/warehouse-workspace-300.tsx");
     const css = read("components/company/warehouse-workspace-310.module.css");
