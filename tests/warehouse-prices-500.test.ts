@@ -3,50 +3,36 @@ import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
-describe("Warehouse prices 5.0", () => {
-  it("uses a dedicated compact prices view without purchase-order drafts", () => {
-    const source = read("components/company/warehouse-prices-500.tsx");
-    expect(source).toContain('data-warehouse-prices-500');
-    expect(source).toContain("Największe wzrosty");
-    expect(source).toContain("Największe spadki");
-    expect(source).toContain("Pozycja, dostawca, jednostka, źródło…");
-    expect(source).toContain("Alerty ≥10%");
-    expect(source).not.toContain("Ostatnie szkice zamówień");
+describe("Warehouse visible prices panel", () => {
+  it("uses the canonical visible PricesPanel from Warehouse workspace", () => {
+    const workspace = read("components/company/warehouse-workspace-300.tsx");
+    const operations = read("components/company/operations/warehouse-operations.tsx");
+    expect(workspace).toContain("function PricesPanel(");
+    expect(workspace).toContain("<th>Ostatnia cena netto</th>");
+    expect(operations).not.toContain("WarehousePrices500");
   });
 
+  it("sorts alphabetically by default and supports A-Z / Z-A", () => {
+    const workspace = read("components/company/warehouse-workspace-300.tsx");
+    expect(workspace).toContain('useState<SortDirection>("asc")');
+    expect(workspace).toContain('localeCompare(String(right.item.name ?? ""), "pl"');
+    expect(workspace).toContain('priceSortDirection === "asc" ? "A–Z" : "Z–A"');
+  });
 
-  it("sorts price rows alphabetically by default and exposes a compact expanding search", () => {
-    const source = read("components/company/warehouse-prices-500.tsx");
-    const css = read("components/company/warehouse-prices-500.module.css");
-    expect(source).toContain('useState<SortDirection>("asc")');
-    expect(source).toContain('localeCompare(String(b.item.name ?? ""), "pl"');
-    expect(source).toContain('sortDirection === "asc" ? "A–Z" : "Z–A"');
-    expect(source).toContain('aria-label="Otwórz szybkie wyszukiwanie"');
-    expect(source).toContain("row.latest?.unit, row.item.unit");
-    expect(css).toContain(".searchDockOpen");
+  it("adds a compact expanding quick search to the actual visible table", () => {
+    const workspace = read("components/company/warehouse-workspace-300.tsx");
+    const css = read("components/company/warehouse-workspace-310.module.css");
+    expect(workspace).toContain('aria-label="Otwórz szybkie wyszukiwanie"');
+    expect(workspace).toContain("Pozycja, dostawca, jednostka, źródło…");
+    expect(workspace).toContain("latest.unit, supplier?.name, latest.source_type");
+    expect(css).toContain(".priceSearchDockOpen");
     expect(css).toContain("transition:width .18s ease");
   });
 
-  it("keeps price alerts inspectable and invoice previews available", () => {
-    const prices = read("components/company/warehouse-prices-500.tsx");
-    const inspector = read("components/company/warehouse-price-alert-inspector-490.tsx");
-    expect(prices).toContain("data-price-alert-item-id");
-    expect(prices).toContain("InvoiceQuickPreview");
-    expect(inspector).toContain('document.addEventListener("click", onClick)');
-  });
-
-  it("separates unlimited history from a configurable recent alert window", () => {
-    const source = read("components/company/warehouse-prices-500.tsx");
-    expect(source).toContain("recentWarehousePriceComparison550");
-    expect(source).toContain("Okno alertów");
-    expect(source).toContain("[30, 60, 90, 180]");
-    expect(source).toContain("Pełna historia bez limitu");
-    expect(source).toContain("octopus:warehouse-price-alert-window");
-  });
-
-  it("is wired into the active warehouse operations shell", () => {
+  it("keeps price alert inspection available", () => {
     const operations = read("components/company/operations/warehouse-operations.tsx");
-    expect(operations).toContain("WarehousePrices500");
-    expect(operations).toContain("<WarehousePrices500");
+    const inspector = read("components/company/warehouse-price-alert-inspector-490.tsx");
+    expect(operations).toContain("WarehousePriceAlertInspector490");
+    expect(inspector).toContain('document.addEventListener("click", onClick)');
   });
 });
