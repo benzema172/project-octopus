@@ -7,8 +7,6 @@ describe("Fleet equipment registry", () => {
   it("replaces the old equipment tiles with a vehicle-first table", () => {
     const source = read("components/company/fleet-equipment-registry.tsx");
     expect(source).toContain('data-fleet-equipment-registry="true"');
-    expect(source).toContain("Dodaj wyposażenie / opony");
-    expect(source).toContain("Przypisz z magazynu");
     expect(source).toContain("Wszystkie pojazdy");
     expect(source).toContain("Bez wyposażenia i komponentów");
     expect(source).not.toContain("Rejestr wyposażenia floty");
@@ -16,6 +14,9 @@ describe("Fleet equipment registry", () => {
     expect(source).not.toContain('placeholder="Szukaj po rejestracji, VIN, marce lub modelu…"');
     expect(source).toContain("Opony / komponenty");
     expect(source).toContain("Podgląd");
+    expect(source).toContain('window.addEventListener("octopus:fleet-equipment-action"');
+    expect(source).not.toContain("<Plus");
+    expect(source).not.toContain("<PackageCheck");
   });
 
   it("keeps per-vehicle equipment and tire inspection with real actions", () => {
@@ -30,7 +31,12 @@ describe("Fleet equipment registry", () => {
 
   it("switches the equipment tab from the legacy grid to the new registry", () => {
     const shell = read("components/company/operations/fleet-operations.tsx");
+    const workspace = read("components/company/fleet-workspace-300.tsx");
     expect(shell).toContain("FleetEquipmentRegistry");
+    expect(workspace).toContain('tab === "equipment" && canWrite');
+    expect(workspace).toContain("Dodaj wyposażenie / opony");
+    expect(workspace).toContain("Przypisz z magazynu");
+    expect(workspace).toContain('"octopus:fleet-equipment-action"');
     expect(shell).toContain("fleet-equipment-registry-host");
     expect(shell).toContain('activeTab === "equipment"');
     expect(shell).toContain("fleet-tab-equipment");
