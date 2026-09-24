@@ -61,6 +61,16 @@ describe("Fleet Core 3.0", () => {
     expect(workspace).toContain('fetch("/api/company/fleet-core"');
   });
 
+  it("układa cztery formularze Rejestracji eksploatacji w jednym rzędzie", () => {
+    const workspace = read("components/company/fleet-workspace-300.tsx");
+    const css = read("components/company/fleet-workspace-300.module.css");
+    expect(workspace).toContain('title="Rejestracja eksploatacji"');
+    expect(workspace).toContain('className={styles.four}');
+    expect(css).toContain(".four{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}");
+    expect(css).toContain(".three,.four{grid-template-columns:1fr 1fr}");
+    expect(css).toContain(".grid,.three,.four{grid-template-columns:1fr}");
+  });
+
   it("obsługuje komplet operacji, integracje między modułami i kontrolę zatwierdzania", () => {
     const api = read("app/api/company/fleet-core/route.ts");
     for (const action of ["vehicle_create", "vehicle_update", "meter_reading", "fuel_entry", "trip_create", "service_create", "service_close", "service_plan_create", "service_item_create", "document_create", "component_create", "component_remove", "damage_create", "damage_update", "allocation_create", "cost_rate_create", "qualification_requirement_create", "vehicle_check_create", "asset_assign", "asset_unassign", "anomaly_resolve", "ai_review_accept", "ai_review_ignore", "ai_undo"]) expect(api).toContain(`"${action}"`);
