@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { CarFront, Eye, PackageCheck, Plus, Search, X } from "lucide-react";
+import { CarFront, Eye, PackageCheck, Plus, X } from "lucide-react";
 import type { Data, Row } from "@/components/company/operations/module-shell";
 import styles from "./fleet-equipment-registry.module.css";
 
@@ -14,7 +14,6 @@ const EMPTY_ROWS: Row[] = [];
 
 const raw = (value: unknown) => value === undefined || value === null ? "" : String(value);
 const text = (value: unknown, fallback = "—") => raw(value).trim() || fallback;
-const normalize = (value: unknown) => raw(value).trim().toLocaleLowerCase("pl");
 const dateLabel = (value: unknown) => {
   if (!value) return "—";
   const date = new Date(String(value));
@@ -26,7 +25,6 @@ const vehicleLabel = (row: Row) => `${text(row.registration_number)} · ${vehicl
 export function FleetEquipmentRegistry({ workspaceId, data, canWrite }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [addMode, setAddMode] = useState<AddMode>(null);
@@ -59,8 +57,6 @@ export function FleetEquipmentRegistry({ workspaceId, data, canWrite }: Props) {
 
   const filteredVehicles = useMemo(() => vehicles.filter((vehicle) => {
     const id = String(vehicle.id);
-    const haystack = normalize(`${raw(vehicle.registration_number)} ${raw(vehicle.vin)} ${raw(vehicle.make)} ${raw(vehicle.model)} ${raw(vehicle.vehicle_type)}`);
-    if (query.trim() && !haystack.includes(normalize(query))) return false;
     const vehicleComponents = componentsByVehicle.get(id) ?? [];
     const assets = assetsByVehicle.get(id) ?? [];
     const tires = vehicleComponents.filter((row) => String(row.component_type) === "tires");
@@ -68,7 +64,7 @@ export function FleetEquipmentRegistry({ workspaceId, data, canWrite }: Props) {
     if (filter === "tires") return tires.length > 0;
     if (filter === "empty") return assets.length === 0 && vehicleComponents.length === 0;
     return true;
-  }), [vehicles, query, filter, componentsByVehicle, assetsByVehicle]);
+  }), [vehicles, filter, componentsByVehicle, assetsByVehicle]);
 
   const selectedVehicle = selectedVehicleId ? vehicles.find((row) => String(row.id) === selectedVehicleId) ?? null : null;
   const selectedComponents = selectedVehicle ? componentsByVehicle.get(String(selectedVehicle.id)) ?? [] : [];
@@ -103,12 +99,7 @@ export function FleetEquipmentRegistry({ workspaceId, data, canWrite }: Props) {
   };
 
   return <section className={styles.registry} data-fleet-equipment-registry="true">
-    <div className={styles.header}>
-      <div>
-        <small>WYPOSAŻENIE I OPONY</small>
-        <h2>Rejestr wyposażenia floty</h2>
-        <p>Jedna tabela pojazdów, a szczegóły wyposażenia, opon i komponentów dopiero po otwarciu wybranego auta.</p>
-      </div>
+    <div className={`${styles.header} ${styles.headerActionsOnly}`}>
       {canWrite ? <div className={styles.actions}>
         <button className={styles.primaryAction} type="button" onClick={() => setAddMode(addMode === "component" ? null : "component")}><Plus size={16} /> Dodaj wyposażenie / opony</button>
         <button className={styles.secondaryAction} type="button" disabled={!availableAssets.length} onClick={() => setAddMode(addMode === "asset" ? null : "asset")}><PackageCheck size={16} /> Przypisz z magazynu</button>
@@ -141,8 +132,7 @@ export function FleetEquipmentRegistry({ workspaceId, data, canWrite }: Props) {
     {message ? <div className={styles.success}>{message}</div> : null}
     {error ? <div className={styles.error}>{error}</div> : null}
 
-    <div className={styles.filters}>
-      <label className={styles.search}><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Szukaj po rejestracji, VIN, marce lub modelu…" /></label>
+    <div className={`${styles.filters} ${styles.filtersCompact}`}>
       <select value={filter} onChange={(event) => setFilter(event.target.value as Filter)}>
         <option value="all">Wszystkie pojazdy</option>
         <option value="equipment">Z wyposażeniem</option>

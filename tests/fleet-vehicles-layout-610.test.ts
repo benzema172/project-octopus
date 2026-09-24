@@ -35,6 +35,12 @@ describe("Fleet vehicles compact registry layout", () => {
     expect(workspace).toContain('</div> : null}');
   });
 
+  it("shows the global Fleet search only on Vehicles", () => {
+    const workspace = read("components/company/fleet-workspace-300.tsx");
+    expect(workspace).toContain('{tab === "vehicles" ? <form className={styles.searchbar}');
+    expect(workspace).toContain('</form> : null}');
+  });
+
   it("uses the existing fleet search as the vehicle list filter", () => {
     const workspace = read("components/company/fleet-workspace-300.tsx");
     expect(workspace).toContain('placeholder="Szukaj po rejestracji, VIN, marce lub modelu…"');

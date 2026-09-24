@@ -7,11 +7,13 @@ describe("Fleet equipment registry", () => {
   it("replaces the old equipment tiles with a vehicle-first table", () => {
     const source = read("components/company/fleet-equipment-registry.tsx");
     expect(source).toContain('data-fleet-equipment-registry="true"');
-    expect(source).toContain("Rejestr wyposażenia floty");
     expect(source).toContain("Dodaj wyposażenie / opony");
     expect(source).toContain("Przypisz z magazynu");
     expect(source).toContain("Wszystkie pojazdy");
     expect(source).toContain("Bez wyposażenia i komponentów");
+    expect(source).not.toContain("Rejestr wyposażenia floty");
+    expect(source).not.toContain("WYPOSAŻENIE I OPONY");
+    expect(source).not.toContain('placeholder="Szukaj po rejestracji, VIN, marce lub modelu…"');
     expect(source).toContain("Opony / komponenty");
     expect(source).toContain("Podgląd");
   });
