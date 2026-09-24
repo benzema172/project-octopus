@@ -419,7 +419,7 @@ export function FleetWorkspace300({ workspaceId, data, canWrite, canApprove, que
 
     {tab === "operations" ? <div className={styles.grid}>
       {canWrite ? <Panel title="Rejestracja eksploatacji" kicker="Liczniki, paliwo, przejazdy, kontrola" wide>
-        <div className={styles.three}>
+        <div className={styles.four}>
           <MiniForm title="Odczyt licznika" action="meter_reading" success="Odczyt został zapisany. Cofający się licznik trafi do alertów zamiast nadpisać prawdę." pending={pending} onSubmit={submit} fields={[
             { name: "vehicleId", label: "Pojazd", rows: vehicleRows, rowLabel: vehicleLabel, required: true }, { name: "readingDate", label: "Data", type: "date" },
             { name: "mileage", label: "Przebieg km", type: "number" }, { name: "engineHours", label: "Motogodziny", type: "number" }, { name: "source", label: "Źródło", defaultValue: "manual" }
