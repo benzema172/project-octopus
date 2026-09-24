@@ -44,7 +44,7 @@ describe("Fleet Core 3.0", () => {
     expect(css).toContain(".searchbar{display:contents}");
     expect(css).toContain(".searchbar>:not(label){grid-column:2;grid-row:1");
     expect(css).toContain(".searchbar label{grid-column:1/-1;grid-row:2");
-    expect(css).toContain(".kpis{grid-column:1/-1;grid-row:3");
+    expect(css).toContain(".kpis{grid-column:1/-1;grid-row:2");
     expect(css).toContain(".tabActive{background:#f1f0ff!important");
   });
 

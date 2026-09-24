@@ -28,6 +28,14 @@ describe("Fleet vehicles compact registry layout", () => {
     expect(source).toContain('activeTab === "costs"');
   });
 
+  it("places dashboard KPI directly below the Fleet toolbar", () => {
+    const css = read("components/company/fleet-workspace-300.module.css");
+    const costs = read("components/company/fleet-costs-simple.tsx");
+    expect(css).toContain(".kpis{grid-column:1/-1;grid-row:2;");
+    expect(css).toContain(".kpis{grid-column:1;grid-row:2;");
+    expect(costs).toContain(".fleet-costs-simple { display: grid; gap: 12px; padding-top: 14px; }");
+  });
+
   it("shows KPI cards only on Fleet dashboard", () => {
     const workspace = read("components/company/fleet-workspace-300.tsx");
     expect(workspace).toContain('{tab === "dashboard" ? <div className={styles.kpis}>');
