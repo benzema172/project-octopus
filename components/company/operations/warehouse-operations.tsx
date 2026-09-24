@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { WarehouseMarket410 } from "@/components/company/warehouse-market-410";
 import { WarehouseMovementTruth531 } from "@/components/company/warehouse-movement-truth-531";
 import { WarehousePriceAlertInspector490 } from "@/components/company/warehouse-price-alert-inspector-490";
-import { WarehousePrices500 } from "@/components/company/warehouse-prices-500";
 import { WarehouseStockValueOverlay480 } from "@/components/company/warehouse-stock-value-overlay-480";
 import { WarehouseUx440 } from "@/components/company/warehouse-ux-440";
 import type { Data, Row } from "@/components/company/operations/module-shell";
@@ -79,7 +78,6 @@ function WarehouseEnhancements({
     ) : null}
     {activeTab === "prices" ? <>
       <WarehousePriceAlertInspector490 workspaceId={workspaceId} items={items} prices={prices} counterparties={counterparties} />
-      <WarehousePrices500 workspaceId={workspaceId} items={items} prices={prices} counterparties={counterparties} />
     </> : null}
   </>;
 }
