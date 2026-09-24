@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { CarFront, Eye, PackageCheck, Plus, X } from "lucide-react";
+import { CarFront, Eye, X } from "lucide-react";
 import type { Data, Row } from "@/components/company/operations/module-shell";
 import styles from "./fleet-equipment-registry.module.css";
 
@@ -30,6 +30,15 @@ export function FleetEquipmentRegistry({ workspaceId, data, canWrite }: Props) {
   const [addMode, setAddMode] = useState<AddMode>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onEquipmentAction = (event: Event) => {
+      const mode = (event as CustomEvent<{ mode?: AddMode }>).detail?.mode;
+      if (mode === "component" || mode === "asset") setAddMode((current) => current === mode ? null : mode);
+    };
+    window.addEventListener("octopus:fleet-equipment-action", onEquipmentAction);
+    return () => window.removeEventListener("octopus:fleet-equipment-action", onEquipmentAction);
+  }, []);
 
   const vehicles = ((data.allVehicles ?? data.vehicles) ?? EMPTY_ROWS) as Row[];
   const components = ((data.components ?? EMPTY_ROWS) as Row[]).filter((row) => row.active !== false);
@@ -99,13 +108,6 @@ export function FleetEquipmentRegistry({ workspaceId, data, canWrite }: Props) {
   };
 
   return <section className={styles.registry} data-fleet-equipment-registry="true">
-    <div className={`${styles.header} ${styles.headerActionsOnly}`}>
-      {canWrite ? <div className={styles.actions}>
-        <button className={styles.primaryAction} type="button" onClick={() => setAddMode(addMode === "component" ? null : "component")}><Plus size={16} /> Dodaj wyposażenie / opony</button>
-        <button className={styles.secondaryAction} type="button" disabled={!availableAssets.length} onClick={() => setAddMode(addMode === "asset" ? null : "asset")}><PackageCheck size={16} /> Przypisz z magazynu</button>
-      </div> : null}
-    </div>
-
     {addMode ? <div className={styles.formPanel}>
       <div className={styles.formTitle}><strong>{addMode === "component" ? "Dodaj wyposażenie / opony" : "Przypisz sprzęt z magazynu"}</strong><button type="button" onClick={() => setAddMode(null)} aria-label="Zamknij"><X size={16} /></button></div>
       {addMode === "component" ? <form className={styles.form} onSubmit={(event) => submit("component_create", "Wyposażenie zostało dodane do pojazdu.", event)}>
