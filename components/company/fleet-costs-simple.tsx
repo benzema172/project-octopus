@@ -35,12 +35,6 @@ export function FleetCostsSimple({ data }: { data: Data }) {
   const referenceDate = String(data.referenceDate ?? new Date().toISOString().slice(0, 10));
   const monthKey = referenceDate.slice(0, 7);
 
-  const monthLabel = useMemo(() => {
-    const date = new Date(`${monthKey}-01T12:00:00`);
-    const label = new Intl.DateTimeFormat("pl-PL", { month: "long", year: "numeric" }).format(date);
-    return label.charAt(0).toUpperCase() + label.slice(1);
-  }, [monthKey]);
-
   const monthCosts = useMemo(
     () => costLinks.filter((row) => String(row.occurred_at ?? row.created_at ?? "").slice(0, 7) === monthKey),
     [costLinks, monthKey]
@@ -98,14 +92,6 @@ export function FleetCostsSimple({ data }: { data: Data }) {
   }, [vehicles, byVehicle, query]);
 
   return <section className="fleet-costs-simple" aria-label="Proste finanse floty">
-    <div className="fleet-costs-simple__heading">
-      <div>
-        <p>FINANSE FLOTY</p>
-        <h2>Koszty w prostym ujęciu</h2>
-        <span>{monthLabel} · tylko podstawowe informacje potrzebne do kontroli wydatków.</span>
-      </div>
-    </div>
-
     <div className="fleet-costs-simple__kpis">
       <article><span>Koszt miesiąca</span><strong>{money(monthTotal)}</strong><small>{monthCosts.length} zapisanych kosztów</small></article>
       <article><span>Paliwo</span><strong>{money(fuelTotal)}</strong><small>{monthTotal > 0 ? `${number((fuelTotal / monthTotal) * 100, 0)}% kosztów miesiąca` : "Brak kosztów paliwa"}</small></article>
@@ -143,11 +129,7 @@ export function FleetCostsSimple({ data }: { data: Data }) {
 
     <style jsx>{`
       .fleet-costs-simple { display: grid; gap: 12px; }
-      .fleet-costs-simple__heading { display: flex; justify-content: space-between; align-items: end; gap: 16px; }
-      .fleet-costs-simple__heading p,
       .fleet-costs-simple__panel-head > div > span { margin: 0 0 3px; font-size: 10px; font-weight: 800; letter-spacing: .12em; color: #6f7181; }
-      .fleet-costs-simple__heading h2 { margin: 0; font-size: 21px; line-height: 1.15; color: #151522; }
-      .fleet-costs-simple__heading > div > span { display: block; margin-top: 4px; font-size: 12px; color: #778096; }
       .fleet-costs-simple__kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
       .fleet-costs-simple__kpis article { min-width: 0; padding: 11px 12px; border: 1px solid #dde2eb; border-radius: 11px; background: #fff; }
       .fleet-costs-simple__kpis span { display: block; font-size: 10px; font-weight: 800; text-transform: uppercase; color: #6f7a91; }
