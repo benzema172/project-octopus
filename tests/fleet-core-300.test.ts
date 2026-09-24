@@ -6,7 +6,7 @@ const read = (path: string) => readFileSync(path, "utf8");
 describe("Fleet Core 3.0", () => {
   it("podłącza Wrzutnię Floty do wspólnego routingu AI i bezpiecznych facts", () => {
     const source = read("lib/documents/source-module.ts");
-    expect(source).toContain('"warehouse", "hr", "fleet"');
+    expect(source).toContain('"warehouse", "finance", "hr", "fleet"');
     expect(source).toContain('preferredCategory: preferredCategoryForSourceModule(sourceModule)');
     expect(source).toContain('preferuj category=\\"fleet\\"');
     expect(source).toContain("facts z jednoznacznym label i type");

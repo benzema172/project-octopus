@@ -1,15 +1,16 @@
-export const DOCUMENT_SOURCE_MODULES = ["warehouse", "hr", "fleet"] as const;
+export const DOCUMENT_SOURCE_MODULES = ["warehouse", "finance", "hr", "fleet"] as const;
 
 export type DocumentSourceModule = (typeof DOCUMENT_SOURCE_MODULES)[number];
-export type SourcePreferredCategory = "warehouse" | "hr" | "fleet";
+export type SourcePreferredCategory = "warehouse" | "invoice" | "hr" | "fleet";
 
 export function normalizeDocumentSourceModule(value: unknown): DocumentSourceModule | null {
   const normalized = String(value ?? "").trim().toLowerCase();
-  return normalized === "warehouse" || normalized === "hr" || normalized === "fleet" ? normalized : null;
+  return normalized === "warehouse" || normalized === "finance" || normalized === "hr" || normalized === "fleet" ? normalized : null;
 }
 
 export function preferredCategoryForSourceModule(sourceModule: DocumentSourceModule | null): SourcePreferredCategory | null {
   if (sourceModule === "warehouse") return "warehouse";
+  if (sourceModule === "finance") return "invoice";
   if (sourceModule === "hr") return "hr";
   if (sourceModule === "fleet") return "fleet";
   return null;
@@ -17,11 +18,22 @@ export function preferredCategoryForSourceModule(sourceModule: DocumentSourceMod
 
 export function sourceModuleLabel(sourceModule: DocumentSourceModule): string {
   if (sourceModule === "warehouse") return "Magazyn";
+  if (sourceModule === "finance") return "Finanse";
   if (sourceModule === "hr") return "Kadry";
   return "Flota";
 }
 
 export function sourceModulePromptHint(sourceModule: DocumentSourceModule | null): string | undefined {
+  if (sourceModule === "finance") {
+    return [
+      "Dokument został wrzucony przez Wrzutnię uruchomioną z modułu Finanse.",
+      "Traktuj ten kontekst jako silną podpowiedź obiegu dokumentów biznesowych, ale rozpoznaj rzeczywisty typ dokumentu.",
+      "Faktury i korekty klasyfikuj jako invoice. Dokumenty PZ/WZ/MM/RW/ZW oraz dostawy klasyfikuj jako warehouse.",
+      "Dla faktur oraz dokumentów magazynowych wydobądź businessDocuments z numerem dokumentu, datami, kontrahentem, pozycjami, ilościami, cenami, inwestycją oraz magazynem źródłowym/docelowym, jeśli faktycznie występują.",
+      "Nie zamieniaj MM/WZ/PZ w fakturę i nie twórz skutku finansowego z dokumentu magazynowego bez faktury."
+    ].join(" ");
+  }
+
   if (sourceModule === "warehouse") {
     return [
       "Dokument został wrzucony przez Wrzutnię uruchomioną z modułu Magazyn.",

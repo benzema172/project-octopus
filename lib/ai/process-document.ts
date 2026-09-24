@@ -190,7 +190,8 @@ export async function processDocumentVersion(input: {
       });
     }
 
-    const warehouseBinary = sourceModule === "warehouse"
+    const businessDocumentSpecialist = sourceModule === "warehouse" || sourceModule === "finance";
+    const warehouseBinary = businessDocumentSpecialist
       && (version.mime_type === "application/pdf" || version.mime_type.startsWith("image/"));
     const useFilesApi = !warehouseBinary
       && (version.mime_type === "application/pdf" || version.mime_type.startsWith("image/"))
@@ -246,7 +247,7 @@ export async function processDocumentVersion(input: {
     ];
     await supabase.from("processing_jobs").update({ stage: "analyze" }).eq("job_key", jobKey);
 
-    const analysisResult = sourceModule === "warehouse"
+    const analysisResult = businessDocumentSpecialist
       ? await analyzeWarehouseDocumentWithGemini({
           fileName: version.file_name,
           mimeType: version.mime_type,
@@ -314,7 +315,7 @@ export async function processDocumentVersion(input: {
         sourceModule ? `Kontekst Wrzutni: ${sourceModuleLabel(sourceModule)} — silna podpowiedź routingu bez blokady kategorii.` : null,
         projectMatch?.reason
       ].filter(Boolean).join(" "),
-      schema_version: sourceModule === "warehouse" ? "warehouse-analysis-v4-multi" : "document-analysis-v3",
+      schema_version: businessDocumentSpecialist ? "warehouse-analysis-v4-multi" : "document-analysis-v3",
       model_name: model,
       status: "proposed"
     });
@@ -372,7 +373,7 @@ export async function processDocumentVersion(input: {
     const searchableText = "extractedText" in prepared && typeof prepared.extractedText === "string"
       ? prepared.extractedText
       : [analysis.summary, ...analysis.searchPassages, ...analysis.workStages, ...analysis.installations, ...analysis.facts.map((fact) => `${fact.label}: ${fact.value} ${fact.unit}`)].join("\n");
-    const extractionMethod = sourceModule === "warehouse" && warehouseBinary ? "gemini_files_warehouse" : useFilesApi ? "gemini_files" : "local_or_inline";
+    const extractionMethod = businessDocumentSpecialist && warehouseBinary ? "gemini_files_business" : useFilesApi ? "gemini_files" : "local_or_inline";
     const { error: textError } = await supabase.from("document_texts").upsert({
       workspace_id: input.workspaceId,
       project_id: proposedProjectId,
@@ -487,7 +488,7 @@ export async function processDocumentVersion(input: {
       status: "succeeded",
       stage: "complete",
       model_name: model,
-      prompt_version: sourceModule === "warehouse" ? "warehouse-analysis-v4-multi" : "document-analysis-v3+module-context",
+      prompt_version: businessDocumentSpecialist ? "warehouse-analysis-v4-multi" : "document-analysis-v3+module-context",
       finished_at: new Date().toISOString(),
       error_code: null,
       error_message: null

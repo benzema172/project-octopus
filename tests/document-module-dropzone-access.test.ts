@@ -15,6 +15,7 @@ describe("module dropzone routing and access", () => {
 
   it("authorizes a module dropzone with its own domain instead of requiring Investments", () => {
     expect(page).toContain('if (sourceModule === "warehouse") return "warehouse"');
+    expect(page).toContain('if (sourceModule === "finance") return "finance"');
     expect(page).toContain('if (sourceModule === "hr") return "hr"');
     expect(page).toContain('if (sourceModule === "fleet") return "fleet"');
     expect(page).toContain("domain: pageDomain");

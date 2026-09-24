@@ -19,6 +19,7 @@ import {
   Upload,
   WalletCards
 } from "lucide-react";
+import { ModuleDropzoneLink } from "@/components/documents/module-dropzone-link";
 import type { FinanceCashflowWeek, FinanceControlData, FinanceScenario } from "@/lib/types/finance-control";
 
 type Tab = "cockpit" | "cashflow" | "projects" | "settlements" | "documents" | "control" | "reports";
@@ -200,9 +201,12 @@ export function FinanceControlTower({ workspaceId, data, canWrite, canApprove, i
       </div>
     </header>
 
-    <nav className="fct-tabs" aria-label="Sekcje finansów">
-      {tabs.map(([id, label]) => <button key={id} type="button" className={activeTab === id ? "is-active" : ""} onClick={() => selectTab(id)}>{label}</button>)}
-    </nav>
+    <div className="fct-tabs-row">
+      <nav className="fct-tabs" aria-label="Sekcje finansów">
+        {tabs.map(([id, label]) => <button key={id} type="button" className={activeTab === id ? "is-active" : ""} onClick={() => selectTab(id)}>{label}</button>)}
+      </nav>
+      {canWrite ? <ModuleDropzoneLink workspaceId={workspaceId} sourceModule="finance" variant="primary" /> : null}
+    </div>
 
     {message ? <p className="fct-message is-success">{message}</p> : null}
     {error ? <p className="fct-message is-error">{error}</p> : null}

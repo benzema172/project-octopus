@@ -42,6 +42,7 @@ async function safeWorkspaceDocuments(workspaceId: string, trashed = false) {
 
 function sourceModuleDomain(sourceModule: ReturnType<typeof normalizeDocumentSourceModule>): Domain {
   if (sourceModule === "warehouse") return "warehouse";
+  if (sourceModule === "finance") return "finance";
   if (sourceModule === "hr") return "hr";
   if (sourceModule === "fleet") return "fleet";
   return "investments";

@@ -13,8 +13,10 @@ describe("module-aware Wrzutnia", () => {
   it("maps only supported source modules to routing hints", () => {
     expect(normalizeDocumentSourceModule("warehouse")).toBe("warehouse");
     expect(normalizeDocumentSourceModule("HR")).toBe("hr");
+    expect(normalizeDocumentSourceModule("finance")).toBe("finance");
     expect(normalizeDocumentSourceModule("finances")).toBeNull();
     expect(preferredCategoryForSourceModule("warehouse")).toBe("warehouse");
+    expect(preferredCategoryForSourceModule("finance")).toBe("invoice");
     expect(preferredCategoryForSourceModule("hr")).toBe("hr");
   });
 
@@ -27,12 +29,14 @@ describe("module-aware Wrzutnia", () => {
     expect(sourceModulePromptHint("warehouse")).toContain("silną podpowiedź routingu");
     expect(sourceModulePromptHint("warehouse")).toContain("nie twardą blokadę");
     expect(sourceModulePromptHint("hr")).toContain('category="hr"');
+    expect(sourceModulePromptHint("finance")).toContain("PZ/WZ/MM/RW/ZW");
   });
 
-  it("uses the same primary Wrzutnia action pattern in Warehouse and HR", () => {
+  it("uses the same primary Wrzutnia action pattern in Warehouse, Finance and HR", () => {
     const operationalPage = read("components/company/company-operational-page.tsx");
     const moduleShell = read("components/company/operations/module-shell.tsx");
     const hrPage = read("app/workspace/companies/[workspaceId]/hr/page.tsx");
+    const financeTower = read("components/company/finance-control-tower.tsx");
     const hrCore = read("components/company/hr/hr-workspace-core-300.tsx");
     const link = read("components/documents/module-dropzone-link.tsx");
     const styles = read("components/documents/module-dropzone-link.module.css");
@@ -42,6 +46,7 @@ describe("module-aware Wrzutnia", () => {
     expect(moduleShell).toContain('<ModuleDropzoneLink workspaceId={workspaceId} sourceModule="warehouse" variant="primary" />');
     expect(hrPage).not.toContain("ModuleDropzoneLink");
     expect(hrCore).toContain('<ModuleDropzoneLink workspaceId={props.workspaceId} sourceModule="hr" variant="primary" />');
+    expect(financeTower).toContain('<ModuleDropzoneLink workspaceId={workspaceId} sourceModule="finance" variant="primary" />');
     expect(hrCore).not.toContain("Raport CSV");
     expect(link).toContain("?upload=1&sourceModule=${sourceModule}#wrzutnia");
     expect(link).toContain('variant === "primary" ? `primary-button ${styles.primary}`');
