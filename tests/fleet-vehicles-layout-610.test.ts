@@ -28,6 +28,13 @@ describe("Fleet vehicles compact registry layout", () => {
     expect(source).toContain('activeTab === "costs"');
   });
 
+  it("shows KPI cards only on Fleet dashboard", () => {
+    const workspace = read("components/company/fleet-workspace-300.tsx");
+    expect(workspace).toContain('{tab === "dashboard" ? <div className={styles.kpis}>');
+    expect(workspace).toContain('Kpi label="Aktywne pojazdy"');
+    expect(workspace).toContain('</div> : null}');
+  });
+
   it("uses the existing fleet search as the vehicle list filter", () => {
     const workspace = read("components/company/fleet-workspace-300.tsx");
     expect(workspace).toContain('placeholder="Szukaj po rejestracji, VIN, marce lub modelu…"');

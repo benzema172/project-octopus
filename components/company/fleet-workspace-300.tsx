@@ -278,14 +278,14 @@ export function FleetWorkspace300({ workspaceId, data, canWrite, canApprove, que
       {canWrite ? <ModuleDropzoneLink workspaceId={workspaceId} sourceModule="fleet" variant="primary" /> : null}
     </form>
 
-    <div className={styles.kpis}>
+    {tab === "dashboard" ? <div className={styles.kpis}>
       <Kpi label="Aktywne pojazdy" value={text(summary.activeVehicles, "0")} caption={`${text(summary.vehicles, "0")} wszystkich pojazdów i maszyn`} />
       <Kpi label="Dokumenty / 30 dni" value={text(summary.documentsDue30, String(dueDocuments.length))} caption={`${text(summary.expiredDocuments, String(expiredDocuments.length))} już wygasłych`} attention={expiredDocuments.length > 0} />
       <Kpi label="Serwis / 30 dni" value={text(summary.servicesDue30, String(dueServicePlans.length))} caption={`${text(summary.openServices, String(openService.length))} otwartych zleceń`} attention={openService.length > 0} />
       <Kpi label="Poczekalnia AI" value={openReviews.length} caption={`${text(summary.readyAi, "0")} jednoznacznych dopasowań`} attention={openReviews.length > 0} />
       <Kpi label="Alerty krytyczne" value={criticalAnomalies.length} caption={`${openAnomalies.length} otwartych alertów`} attention={criticalAnomalies.length > 0} />
       <Kpi label="Koszt miesiąca" value={money(summary.monthCost)} caption={`${notReadyVehicles.length} pojazdów z brakami uprawnień`} attention={notReadyVehicles.length > 0} />
-    </div>
+    </div> : null}
 
     <div className={styles.toolbar}><nav className={styles.tabs} aria-label="Sekcje Fleet Core 3.0">
       {tabs.map((item) => <button type="button" key={item.id} className={`${styles.tab} ${tab === item.id ? styles.tabActive : ""}`} onClick={() => changeTab(item.id)}>{item.icon}{item.label}{item.id === "waiting" && openReviews.length ? <b>{openReviews.length}</b> : item.id === "damages" && criticalAnomalies.length ? <b>{criticalAnomalies.length}</b> : null}</button>)}
