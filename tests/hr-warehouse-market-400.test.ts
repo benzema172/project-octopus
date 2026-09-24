@@ -44,7 +44,10 @@ describe("Kadry Core 3.0 + Magazyn 4.0 — retirement guard", () => {
     expect(sql).toContain("20260910_hr_market_400_retired");
   });
 
-  it("keeps Warehouse 4.0 WMS, material planning, integrations and approval gates", () => {
+  it("keeps Warehouse 4.0 data/contracts while retiring the superseded 4.0 UI component", () => {
+    expect(existsSync("components/company/warehouse-market-400.tsx")).toBe(false);
+    expect(existsSync("components/company/warehouse-market-400.module.css")).toBe(false);
+    expect(existsSync("components/company/warehouse-market-panel.module.css")).toBe(true);
     const sql = read("supabase/migrations/20260903211000_warehouse_market_400.sql");
     for (const table of ["stock_lots", "warehouse_logistic_units", "warehouse_logistic_unit_items", "warehouse_tasks", "warehouse_crossdock_links", "warehouse_supplier_scores", "warehouse_returns", "warehouse_return_lines", "warehouse_forecasts", "warehouse_material_readiness_snapshots", "warehouse_ai_recommendations", "warehouse_integrations", "warehouse_device_events", "warehouse_shipments"]) expect(sql).toContain(`public.${table}`);
     for (const fn of ["refresh_warehouse_abc_xyz_400", "refresh_warehouse_forecast_400", "refresh_project_material_readiness_400", "refresh_warehouse_supplier_scores_400", "prepare_warehouse_autonomous_replenishment_400", "warehouse_digital_worker_400", "get_warehouse_market_summary_400"]) expect(sql).toContain(fn);
@@ -55,6 +58,7 @@ describe("Kadry Core 3.0 + Magazyn 4.0 — retirement guard", () => {
     expect(page).toContain("getWarehouseMarket400Data");
     expect(page).toContain("Magazyn 4.0");
     expect(operations).toContain("WarehouseMarket410");
+    expect(ui).toContain('import panelStyles from "./warehouse-market-panel.module.css"');
     expect(ui).toContain("Autonomous Replenishment");
     expect(ui).toContain("Może utworzyć wyłącznie szkic PO");
     expect(api).toContain("requiresHumanApproval: true");
