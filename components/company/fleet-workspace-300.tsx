@@ -273,10 +273,10 @@ export function FleetWorkspace300({ workspaceId, data, canWrite, canApprove, que
   const availableAssetOptions = availableVehicleAssets.map((row) => ({ ...row, name: `${text(stockItemById.get(String(row.stock_item_id))?.name, "Sprzęt")} · ${text(row.asset_tag ?? row.serial_number, "bez oznaczenia")}` }));
 
   return <section className={styles.workspace} data-fleet-experience="3.0">
-    <form className={styles.searchbar} onSubmit={submitSearch}>
+    {tab === "vehicles" ? <form className={styles.searchbar} onSubmit={submitSearch}>
       <label><Search size={17} /><span className={styles.srOnly}>Szukaj pojazdu</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Szukaj po rejestracji, VIN, marce lub modelu…" /></label>
       {canWrite ? <ModuleDropzoneLink workspaceId={workspaceId} sourceModule="fleet" variant="primary" /> : null}
-    </form>
+    </form> : null}
 
     {tab === "dashboard" ? <div className={styles.kpis}>
       <Kpi label="Aktywne pojazdy" value={text(summary.activeVehicles, "0")} caption={`${text(summary.vehicles, "0")} wszystkich pojazdów i maszyn`} />
