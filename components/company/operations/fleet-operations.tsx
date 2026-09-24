@@ -97,9 +97,7 @@ export default function FleetOperations({ workspaceId, data, canWrite, canApprov
 
       /* Wyposażenie i koszty są montowane dopiero po wejściu do odpowiedniej zakładki. */
       .fleet-tab-equipment section[data-fleet-experience="3.0"] > div[class*="grid"],
-      .fleet-tab-equipment section[data-fleet-experience="3.0"] > form[class*="searchbar"],
-      .fleet-tab-costs section[data-fleet-experience="3.0"] > div[class*="grid"],
-      .fleet-tab-costs section[data-fleet-experience="3.0"] > form[class*="searchbar"] {
+      .fleet-tab-costs section[data-fleet-experience="3.0"] > div[class*="grid"] {
         display: none !important;
       }
 
