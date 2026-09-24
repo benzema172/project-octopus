@@ -20,27 +20,24 @@ type Props = {
 
 export function HrDocumentsCompact161({ workspaceId, referenceDate, canWrite, documentCount, data }: Props) {
   return <section className={styles.root} data-hr-documents-compact="1">
-    <header className={styles.toolbar}>
-      <div className={styles.titleBlock}>
-        <span className={styles.titleIcon}><FileText size={18} /></span>
-        <div>
-          <h2>Dokumenty pracowników</h2>
-          <span>{documentCount} {documentCount === 1 ? "plik" : "plików"} w Kadrach</span>
+    <div className={styles.documentsPanel}>
+      <header className={styles.toolbar}>
+        <div className={styles.titleBlock}>
+          <span className={styles.titleIcon}><FileText size={17} /></span>
+          <div>
+            <div className={styles.titleLine}><h2>Dokumenty pracowników</h2><b>{documentCount} {documentCount === 1 ? "plik" : "pliki"}</b></div>
+            <span>Akta, umowy, badania, BHP, uprawnienia i terminy</span>
+          </div>
         </div>
-      </div>
-      <div className={styles.actions}>
-        <Link href={`/workspace/companies/${workspaceId}/documents`}><FolderOpen size={15} /> Biblioteka</Link>
-        <Link href={`/workspace/companies/${workspaceId}/ai-center`}><Sparkles size={15} /> Wzory i Brain</Link>
-      </div>
-    </header>
+        <div className={styles.actions}>
+          <Link href={`/workspace/companies/${workspaceId}/documents`}><FolderOpen size={14} /> Biblioteka</Link>
+          <Link href={`/workspace/companies/${workspaceId}/ai-center`}><Sparkles size={14} /> Wzory i Brain</Link>
+        </div>
+      </header>
 
-    <HrDocumentUpload157 workspaceId={workspaceId} canWrite={canWrite} documentCount={documentCount} />
-
-    <div className={styles.sectionLabel}>
-      <strong>Akta i kompletność</strong>
-      <span>Umowy, badania, BHP, uprawnienia i terminy</span>
+      <HrDocumentUpload157 workspaceId={workspaceId} canWrite={canWrite} documentCount={documentCount} />
+      <HrFormalDocuments162 workspaceId={workspaceId} referenceDate={referenceDate} canWrite={canWrite} data={data} />
     </div>
-    <HrFormalDocuments162 workspaceId={workspaceId} referenceDate={referenceDate} canWrite={canWrite} data={data} />
 
     <details className={styles.accounting}>
       <summary>
