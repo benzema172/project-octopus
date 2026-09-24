@@ -9,9 +9,22 @@ describe("Warehouse prices 5.0", () => {
     expect(source).toContain('data-warehouse-prices-500');
     expect(source).toContain("Największe wzrosty");
     expect(source).toContain("Największe spadki");
-    expect(source).toContain("Produkt, dostawca, faktura…");
+    expect(source).toContain("Pozycja, dostawca, jednostka, źródło…");
     expect(source).toContain("Alerty ≥10%");
     expect(source).not.toContain("Ostatnie szkice zamówień");
+  });
+
+
+  it("sorts price rows alphabetically by default and exposes a compact expanding search", () => {
+    const source = read("components/company/warehouse-prices-500.tsx");
+    const css = read("components/company/warehouse-prices-500.module.css");
+    expect(source).toContain('useState<SortDirection>("asc")');
+    expect(source).toContain('localeCompare(String(b.item.name ?? ""), "pl"');
+    expect(source).toContain('sortDirection === "asc" ? "A–Z" : "Z–A"');
+    expect(source).toContain('aria-label="Otwórz szybkie wyszukiwanie"');
+    expect(source).toContain("row.latest?.unit, row.item.unit");
+    expect(css).toContain(".searchDockOpen");
+    expect(css).toContain("transition:width .18s ease");
   });
 
   it("keeps price alerts inspectable and invoice previews available", () => {
