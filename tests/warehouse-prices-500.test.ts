@@ -19,6 +19,12 @@ describe("Warehouse visible prices panel", () => {
     expect(workspace).toContain('priceSortDirection === "asc" ? "A–Z" : "Z–A"');
   });
 
+  it("places price controls next to the Ceny i dostawcy heading", () => {
+    const css = read("components/company/warehouse-workspace-310.module.css");
+    expect(css).toContain(".priceTable .sectionHeader{justify-content:flex-start;align-items:center;flex-wrap:wrap}");
+    expect(css).toContain(".sectionHeader>.priceHeaderActions{display:flex;align-items:center;justify-content:flex-start;gap:7px;margin-left:10px}");
+  });
+
   it("adds a compact expanding quick search to the actual visible table", () => {
     const workspace = read("components/company/warehouse-workspace-300.tsx");
     const css = read("components/company/warehouse-workspace-310.module.css");
