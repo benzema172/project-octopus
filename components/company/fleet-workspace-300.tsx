@@ -287,9 +287,15 @@ export function FleetWorkspace300({ workspaceId, data, canWrite, canApprove, que
       <Kpi label="Koszt miesiąca" value={money(summary.monthCost)} caption={`${notReadyVehicles.length} pojazdów z brakami uprawnień`} attention={notReadyVehicles.length > 0} />
     </div> : null}
 
-    <div className={styles.toolbar}><nav className={styles.tabs} aria-label="Sekcje Fleet Core 3.0">
-      {tabs.map((item) => <button type="button" key={item.id} className={`${styles.tab} ${tab === item.id ? styles.tabActive : ""}`} onClick={() => changeTab(item.id)}>{item.icon}{item.label}{item.id === "waiting" && openReviews.length ? <b>{openReviews.length}</b> : item.id === "damages" && criticalAnomalies.length ? <b>{criticalAnomalies.length}</b> : null}</button>)}
-    </nav></div>
+    <div className={styles.toolbar}>
+      <nav className={styles.tabs} aria-label="Sekcje Fleet Core 3.0">
+        {tabs.map((item) => <button type="button" key={item.id} className={`${styles.tab} ${tab === item.id ? styles.tabActive : ""}`} onClick={() => changeTab(item.id)}>{item.icon}{item.label}{item.id === "waiting" && openReviews.length ? <b>{openReviews.length}</b> : item.id === "damages" && criticalAnomalies.length ? <b>{criticalAnomalies.length}</b> : null}</button>)}
+      </nav>
+      {tab === "equipment" && canWrite ? <div className={styles.toolbarActions}>
+        <button type="button" className={styles.button} onClick={() => window.dispatchEvent(new CustomEvent("octopus:fleet-equipment-action", { detail: { mode: "component" } }))}><Plus size={14} />Dodaj wyposażenie / opony</button>
+        <button type="button" className={styles.buttonSecondary} disabled={!availableVehicleAssets.length} onClick={() => window.dispatchEvent(new CustomEvent("octopus:fleet-equipment-action", { detail: { mode: "asset" } }))}><PackageCheck size={14} />Przypisz z magazynu</button>
+      </div> : null}
+    </div>
 
     {message ? <div className={`${styles.feedback} ${styles.feedbackSuccess}`}><span><Check size={14} /> {message}</span>{undo ? <button type="button" onClick={undoLast}><Undo2 size={13} /> Cofnij</button> : null}</div> : null}
     {error ? <div className={`${styles.feedback} ${styles.feedbackError}`}><span><AlertTriangle size={14} /> {error}</span><button type="button" onClick={() => setError(null)}>Zamknij</button></div> : null}

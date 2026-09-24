@@ -13,7 +13,9 @@ describe("Fleet simple costs UI", () => {
     expect(operations).toContain('className="fleet-costs-simple-host"');
     expect(operations).toContain('activeTab === "costs"');
     expect(operations).toContain("fleet-tab-costs");
-    expect(costs).toContain("Koszty w prostym ujęciu");
+    expect(costs).not.toContain("FINANSE FLOTY");
+    expect(costs).not.toContain("Koszty w prostym ujęciu");
+    expect(costs).not.toContain("tylko podstawowe informacje potrzebne do kontroli wydatków");
     expect(costs).toContain("Koszt miesiąca");
     expect(costs).toContain("Paliwo");
     expect(costs).toContain("Pozostałe koszty");
