@@ -12,8 +12,7 @@
   "git": {
     "deploymentEnabled": {
       "**": false,
-      "main": true,
-      "release/project-octopus-1.2.0": true
+      "main": true
     }
   },
   "crons": [
