@@ -35,6 +35,14 @@ describe("Fleet vehicles compact registry layout", () => {
     expect(workspace).toContain('</div> : null}');
   });
 
+  it("renders equipment actions inside the top Fleet toolbar only on Equipment", () => {
+    const workspace = read("components/company/fleet-workspace-300.tsx");
+    expect(workspace).toContain('tab === "equipment" && canWrite');
+    expect(workspace).toContain('className={styles.toolbarActions}');
+    expect(workspace).toContain("Dodaj wyposażenie / opony");
+    expect(workspace).toContain("Przypisz z magazynu");
+  });
+
   it("shows the global Fleet search only on Vehicles", () => {
     const workspace = read("components/company/fleet-workspace-300.tsx");
     expect(workspace).toContain('{tab === "vehicles" ? <form className={styles.searchbar}');
