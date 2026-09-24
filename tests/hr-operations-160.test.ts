@@ -53,6 +53,15 @@ describe("Kadry Core 3.0 — dokumenty, czas i księgowość", () => {
     expect(documentsUi).toContain("HrFormalDocuments162");
   });
 
+  it("keeps HR documents as one compact combined panel", () => {
+    const css = readFileSync("components/company/hr/hr-documents-compact-161.module.css", "utf8");
+    expect(documentsUi).toContain("styles.documentsPanel");
+    expect(documentsUi).toContain("Akta, umowy, badania, BHP, uprawnienia i terminy");
+    expect(documentsUi).not.toContain("styles.sectionLabel");
+    expect(css).toContain(".documentsPanel{border:1px solid #e2e8f0");
+    expect(css).toContain('data-hr-formal-documents="1"]){margin:0;border:0;border-radius:0');
+  });
+
   it("prepares a validated universal accounting CSV bridge", () => {
     expect(accountingApi).toContain("CZAS_DO_ZATWIERDZENIA");
     expect(accountingApi).toContain("BRAK_ZAMKNIECIA_PLAC");
