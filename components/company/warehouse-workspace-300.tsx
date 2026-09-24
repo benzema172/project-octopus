@@ -579,6 +579,9 @@ function CountLineEditor({ line, item, canWrite, pending, act }: { line: Row; it
 
 function PricesPanel({ pricesByItem, items, counterpartyById, purchaseOrders }: { pricesByItem: Map<string, Row[]>; items: Row[]; counterpartyById: Map<string, Row>; purchaseOrders: Row[] }) {
   const [expandedItemIds, setExpandedItemIds] = useState<Set<string>>(() => new Set());
+  const [priceQuery, setPriceQuery] = useState("");
+  const [priceSearchOpen, setPriceSearchOpen] = useState(false);
+  const [priceSortDirection, setPriceSortDirection] = useState<SortDirection>("asc");
   const alerts = items.flatMap((item) => {
     const history = pricesByItem.get(String(item.id)) ?? [];
     if (history.length < 2) return [];
@@ -587,12 +590,27 @@ function PricesPanel({ pricesByItem, items, counterpartyById, purchaseOrders }: 
     const change = previous > 0 ? ((latest - previous) / previous) * 100 : 0;
     return Math.abs(change) >= 10 ? [{ item, latest: history[0], change }] : [];
   }).sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
-  const rows = items
+  const allPriceRows = items
     .map((item) => ({ item, history: pricesByItem.get(String(item.id)) ?? [] }))
-    .filter(({ history }) => history.length > 0)
-    .sort((a, b) => String(b.history[0]?.observed_at ?? b.history[0]?.created_at ?? "").localeCompare(String(a.history[0]?.observed_at ?? a.history[0]?.created_at ?? "")))
+    .filter(({ history }) => history.length > 0);
+  const priceTerms = normalize(priceQuery).split(/\s+/).filter(Boolean);
+  const rows = allPriceRows
+    .filter(({ item, history }) => {
+      if (!priceTerms.length) return true;
+      const latest = history[0] ?? {};
+      const supplier = counterpartyById.get(String(latest.counterparty_id));
+      const haystack = normalize([
+        item.name, item.sku, item.manufacturer, item.model, item.unit,
+        latest.unit, supplier?.name, latest.source_type, latest.observed_at
+      ].filter(Boolean).join(" "));
+      return priceTerms.every((term) => haystack.includes(term));
+    })
+    .sort((left, right) => {
+      const compared = String(left.item.name ?? "").localeCompare(String(right.item.name ?? ""), "pl", { sensitivity: "base", numeric: true });
+      return priceSortDirection === "asc" ? compared : -compared;
+    })
     .slice(0, 300);
-  const eventCount = rows.reduce((sum, row) => sum + row.history.length, 0);
+  const eventCount = allPriceRows.reduce((sum, row) => sum + row.history.length, 0);
   const toggleHistory = (itemId: string) => setExpandedItemIds((current) => {
     const next = new Set(current);
     if (next.has(itemId)) next.delete(itemId);
@@ -600,7 +618,7 @@ function PricesPanel({ pricesByItem, items, counterpartyById, purchaseOrders }: 
     return next;
   });
 
-  return <div className={styles.priceLayout}><Panel title="Alerty zmian cen" icon={<AlertTriangle size={16} />}>{alerts.slice(0, 12).map(({ item, latest, change }) => <div className={styles.simpleRow} key={String(item.id)}><span><strong>{text(item.name)}</strong><small>{money(latest.unit_price_net, text(latest.currency,"PLN"))} · {text(counterpartyById.get(String(latest.counterparty_id))?.name)}</small></span><b className={change > 0 ? styles.priceUp : styles.priceDown}>{pct(change)}</b></div>)}{!alerts.length ? <Empty label="Brak istotnych zmian cen (≥10%)." /> : null}</Panel><Panel title="Ostatnie szkice zamówień" icon={<Package size={16} />}>{purchaseOrders.slice(0, 12).map((row) => <div className={styles.simpleRow} key={String(row.id)}><span><strong>{text(row.order_number)}</strong><small>{text(row.status)} · {dateLabel(row.created_at)}</small></span><b>{money(row.total_amount, text(row.currency,"PLN"))}</b></div>)}{!purchaseOrders.length ? <Empty label="Szkice pojawią się po rekomendacjach uzupełnień." /> : null}</Panel><section className={`${styles.section} ${styles.priceTable}`}><header className={styles.sectionHeader}><div><small>HISTORIA</small><h2>Ceny i dostawcy</h2><p>Jedna kartoteka = jeden wiersz. Pokazywana jest ostatnia cena, a pełną historię {eventCount} zdarzeń można rozwinąć przy danym produkcie.</p></div><b>{rows.length}</b></header><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Pozycja</th><th>Ostatnia cena netto</th><th>Jednostka</th><th>Ostatni dostawca</th><th>Ostatni zakup</th><th>Źródło</th><th>Historia</th></tr></thead>{rows.map(({ item, history }) => {
+  return <div className={styles.priceLayout}><Panel title="Alerty zmian cen" icon={<AlertTriangle size={16} />}>{alerts.slice(0, 12).map(({ item, latest, change }) => <div className={styles.simpleRow} key={String(item.id)}><span><strong>{text(item.name)}</strong><small>{money(latest.unit_price_net, text(latest.currency,"PLN"))} · {text(counterpartyById.get(String(latest.counterparty_id))?.name)}</small></span><b className={change > 0 ? styles.priceUp : styles.priceDown}>{pct(change)}</b></div>)}{!alerts.length ? <Empty label="Brak istotnych zmian cen (≥10%)." /> : null}</Panel><Panel title="Ostatnie szkice zamówień" icon={<Package size={16} />}>{purchaseOrders.slice(0, 12).map((row) => <div className={styles.simpleRow} key={String(row.id)}><span><strong>{text(row.order_number)}</strong><small>{text(row.status)} · {dateLabel(row.created_at)}</small></span><b>{money(row.total_amount, text(row.currency,"PLN"))}</b></div>)}{!purchaseOrders.length ? <Empty label="Szkice pojawią się po rekomendacjach uzupełnień." /> : null}</Panel><section className={`${styles.section} ${styles.priceTable}`}><header className={styles.sectionHeader}><div><small>HISTORIA</small><h2>Ceny i dostawcy</h2><p>Jedna kartoteka = jeden wiersz. Pokazywana jest ostatnia cena, a pełną historię {eventCount} zdarzeń można rozwinąć przy danym produkcie.</p></div><div className={styles.priceHeaderActions}><button type="button" className={styles.priceSortButton} onClick={() => setPriceSortDirection((current) => current === "asc" ? "desc" : "asc")} title="Zmień kolejność alfabetyczną" aria-label={priceSortDirection === "asc" ? "Sortowanie A do Z. Zmień na Z do A" : "Sortowanie Z do A. Zmień na A do Z"}>{priceSortDirection === "asc" ? "A–Z" : "Z–A"}</button><div className={`${styles.priceSearchDock} ${priceSearchOpen ? styles.priceSearchDockOpen : ""}`}>{priceSearchOpen ? <label className={styles.priceSearch}><Search size={14} /><input autoFocus value={priceQuery} onChange={(event) => setPriceQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { setPriceQuery(""); setPriceSearchOpen(false); } }} placeholder="Pozycja, dostawca, jednostka, źródło…" aria-label="Szukaj szybko w cenach i dostawcach" /><button type="button" onClick={() => { setPriceQuery(""); setPriceSearchOpen(false); }} aria-label="Zamknij wyszukiwanie"><X size={12} /></button></label> : <button type="button" className={styles.priceSearchToggle} onClick={() => setPriceSearchOpen(true)} aria-label="Otwórz szybkie wyszukiwanie" title="Szukaj"><Search size={15} /></button>}</div><b className={styles.priceCount}>{rows.length}{priceQuery ? ` / ${allPriceRows.length}` : ""}</b></div></header><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Pozycja</th><th>Ostatnia cena netto</th><th>Jednostka</th><th>Ostatni dostawca</th><th>Ostatni zakup</th><th>Źródło</th><th>Historia</th></tr></thead>{rows.map(({ item, history }) => {
     const itemId = String(item.id);
     const latest = history[0];
     const expanded = expandedItemIds.has(itemId);
