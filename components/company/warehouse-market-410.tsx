@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { BrainCircuit, RotateCcw } from "lucide-react";
 import { WarehouseWorkspace300 } from "@/components/company/warehouse-workspace-300";
 import workspaceStyles from "./warehouse-workspace-310.module.css";
-import panelStyles from "./warehouse-market-400.module.css";
+import panelStyles from "./warehouse-market-panel.module.css";
 import styles from "./warehouse-market-410.module.css";
 
 type Props = ComponentProps<typeof WarehouseWorkspace300>;
