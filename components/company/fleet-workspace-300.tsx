@@ -14,7 +14,7 @@ import styles from "./fleet-workspace-300.module.css";
 
 export type FleetCoreTab = "dashboard" | "vehicles" | "waiting" | "operations" | "service" | "documents" | "equipment" | "damages" | "costs";
 type Tab = FleetCoreTab;
-type Props = { workspaceId: string; data: Data; canWrite: boolean; canApprove: boolean; query?: string; onTabChange?: (tab: FleetCoreTab) => void };
+type Props = { workspaceId: string; data: Data; canWrite: boolean; canApprove: boolean; query?: string; initialTab?: FleetCoreTab; onTabChange?: (tab: FleetCoreTab) => void };
 type Option = [string, string];
 type MiniField = {
   name: string;
@@ -115,13 +115,18 @@ function MiniForm({ title, action, success, fields, pending, disabled, onSubmit 
 
 function Empty({ children }: { children: ReactNode }) { return <div className={styles.empty}>{children}</div>; }
 
-export function FleetWorkspace300({ workspaceId, data, canWrite, canApprove, query = "", onTabChange }: Props) {
+export function FleetWorkspace300({ workspaceId, data, canWrite, canApprove, query = "", initialTab, onTabChange }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [tab, setTab] = useState<Tab>(query ? "vehicles" : "dashboard");
+  const [tab, setTab] = useState<Tab>(initialTab ?? (query ? "vehicles" : "dashboard"));
   const changeTab = (nextTab: Tab) => {
     setTab(nextTab);
     onTabChange?.(nextTab);
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    if (nextTab !== "dashboard") params.set("tab", nextTab);
+    const search = params.toString();
+    router.push(`/workspace/companies/${workspaceId}/fleet${search ? `?${search}` : ""}`);
   };
   const [search, setSearch] = useState(query);
   const [message, setMessage] = useState<string | null>(null);
