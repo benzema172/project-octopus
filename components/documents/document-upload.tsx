@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
@@ -233,7 +233,7 @@ export function DocumentUpload({
   );
   const visibleDocuments = isIntake ? recentDocuments : filteredDocuments;
 
-  async function refreshImportSession(sessionId?: string) {
+  const refreshImportSession = useCallback(async (sessionId?: string) => {
     if (!workspaceId) return null;
     const query = new URLSearchParams({ workspaceId });
     if (sessionId) query.set("sessionId", sessionId);
@@ -242,7 +242,7 @@ export function DocumentUpload({
     if (!response.ok) throw new Error(payload.error ?? "Nie udało się odczytać raportu sesji.");
     setBatchSummary(payload.session);
     return payload.session;
-  }
+  }, [workspaceId]);
 
   useEffect(() => {
     if (!workspaceId || !isIntake) return;
@@ -260,7 +260,7 @@ export function DocumentUpload({
     if (!workspaceId || !batchSummary || !["uploading", "processing"].includes(batchSummary.status)) return;
     const timer = window.setInterval(() => { void refreshImportSession(batchSummary.id).catch(() => undefined); }, 5000);
     return () => window.clearInterval(timer);
-  }, [batchSummary?.id, batchSummary?.status, workspaceId]);
+  }, [batchSummary?.id, batchSummary?.status, refreshImportSession, workspaceId]);
 
   async function uploadFile(
     candidate: UploadCandidate,
