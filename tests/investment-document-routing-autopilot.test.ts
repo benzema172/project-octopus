@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const route = readFileSync("app/api/brain/process-document/route.ts", "utf8");
+const route = readFileSync("app/api/brain/process/route.ts", "utf8");
 const autopilot = readFileSync("lib/ai/document-autopilot.ts", "utf8");
 
 describe("enriched proposals reach Autopilot", () => {

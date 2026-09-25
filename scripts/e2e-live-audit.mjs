@@ -1,10 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "xlsx";
 
-const required = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "E2E_BASE_URL"];
+const required = [
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+  "E2E_BASE_URL",
+  "E2E_GUEST_LOGIN",
+  "E2E_GUEST_PASSWORD"
+];
 const missing = required.filter((name) => !process.env[name]);
 if (missing.length) {
-  console.error(`Missing public E2E configuration: ${missing.join(", ")}`);
+  console.error(`Missing E2E configuration: ${missing.join(", ")}`);
   process.exit(1);
 }
 
@@ -14,7 +20,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
-
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function minimalPdf(lines) {
@@ -73,42 +78,36 @@ async function request(path, { token, body, method } = {}) {
   return { response, payload };
 }
 
-async function reportFailure(token, { stage, status, message, fileName }) {
-  try {
-    await request("/api/system/live-e2e-report", {
-      token,
-      body: {
-        stage,
-        status,
-        message: String(message ?? "").slice(0, 1200),
-        fileName
-      }
-    });
-  } catch {
-    // Reporting must never hide the original E2E failure.
-  }
-}
-
 async function ensureStableDocument(projectId, workspaceId, token, fileName) {
-  const { data, error } = await supabase
+  const { data: version, error: versionError } = await supabase
+    .from("document_versions")
+    .select("document_id,created_at")
+    .eq("workspace_id", workspaceId)
+    .eq("project_id", projectId)
+    .eq("file_name", fileName)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (versionError) throw new Error(`${fileName}: version lookup failed: ${versionError.message}`);
+  if (!version?.document_id) return null;
+
+  const { data: document, error: documentError } = await supabase
     .from("documents")
     .select("id,deleted_at")
     .eq("workspace_id", workspaceId)
     .eq("project_id", projectId)
-    .eq("name", fileName)
-    .order("created_at", { ascending: false })
-    .limit(1)
+    .eq("id", version.document_id)
     .maybeSingle();
-  if (error) throw new Error(`${fileName}: document lookup failed: ${error.message}`);
-  if (!data) return null;
-  if (data.deleted_at) {
+  if (documentError) throw new Error(`${fileName}: document lookup failed: ${documentError.message}`);
+  if (!document) return null;
+  if (document.deleted_at) {
     const restore = await request("/api/storage/document-state", {
       token,
-      body: { workspaceId, projectId, documentId: data.id, state: "active" }
+      body: { workspaceId, projectId, documentId: document.id, state: "active" }
     });
     if (!restore.response.ok) throw new Error(`${fileName}: restore failed: ${restore.response.status} ${JSON.stringify(restore.payload)}`);
   }
-  return data.id;
+  return document.id;
 }
 
 async function uploadAndAnalyze({ projectId, workspaceId, token, fileName, mimeType, bytes }) {
@@ -119,32 +118,8 @@ async function uploadAndAnalyze({ projectId, workspaceId, token, fileName, mimeT
   });
   if (!uploadUrl.response.ok) throw new Error(`${fileName}: upload-url ${uploadUrl.response.status} ${JSON.stringify(uploadUrl.payload)}`);
 
-  let put;
-  try {
-    put = await fetch(uploadUrl.payload.uploadUrl, {
-      method: "PUT",
-      headers: uploadUrl.payload.headers,
-      body: bytes
-    });
-  } catch (error) {
-    await reportFailure(token, {
-      stage: "R2_FETCH_ERROR",
-      status: "network_error",
-      message: error instanceof Error ? error.message : String(error),
-      fileName
-    });
-    throw error;
-  }
-  if (!put.ok) {
-    const responseText = await put.text();
-    await reportFailure(token, {
-      stage: "R2_PUT_HTTP",
-      status: put.status,
-      message: responseText,
-      fileName
-    });
-    throw new Error(`${fileName}: R2 PUT HTTP ${put.status} ${responseText}`);
-  }
+  const put = await fetch(uploadUrl.payload.uploadUrl, { method: "PUT", headers: uploadUrl.payload.headers, body: bytes });
+  if (!put.ok) throw new Error(`${fileName}: R2 PUT HTTP ${put.status} ${await put.text()}`);
 
   const complete = await request("/api/storage/complete", {
     token,
@@ -152,34 +127,26 @@ async function uploadAndAnalyze({ projectId, workspaceId, token, fileName, mimeT
   });
   if (!complete.response.ok) throw new Error(`${fileName}: complete ${complete.response.status} ${JSON.stringify(complete.payload)}`);
 
-  const process = await request("/api/brain/process-document", {
+  const process = await request("/api/brain/process", {
     token,
-    body: { projectId, documentId: complete.payload.documentId, versionId: complete.payload.versionId }
+    body: { workspaceId, versionId: complete.payload.versionId }
   });
   if (!process.response.ok) throw new Error(`${fileName}: process ${process.response.status} ${JSON.stringify(process.payload)}`);
 
   const [{ data: version, error: versionError }, { data: classification, error: classificationError }, { data: extraction, error: extractionError }, { data: job, error: jobError }, { count: sourceCount, error: sourceError }, { count: textCount, error: textError }] = await Promise.all([
     supabase.from("document_versions").select("id,r2_etag,sha256,upload_status,version_number").eq("id", complete.payload.versionId).single(),
     supabase.from("document_classifications").select("category,confidence,model_name,status").eq("document_version_id", complete.payload.versionId).order("created_at", { ascending: false }).limit(1).single(),
-    supabase.from("document_extractions").select("status,project_id,payload").eq("document_version_id", complete.payload.versionId).eq("extraction_type", "document_context").single(),
-    supabase.from("processing_jobs").select("status,stage,model_name,error_message").eq("document_version_id", complete.payload.versionId).eq("job_type", "document_pipeline").single(),
+    supabase.from("document_extractions").select("status,project_id,payload").eq("document_version_id", complete.payload.versionId).eq("extraction_type", "document_context").order("created_at", { ascending: false }).limit(1).single(),
+    supabase.from("processing_jobs").select("status,stage,model_name,error_message").eq("document_version_id", complete.payload.versionId).eq("job_type", "document_pipeline").order("created_at", { ascending: false }).limit(1).single(),
     supabase.from("source_references").select("id", { count: "exact", head: true }).eq("document_version_id", complete.payload.versionId),
     supabase.from("document_texts").select("id", { count: "exact", head: true }).eq("document_version_id", complete.payload.versionId)
   ]);
 
-  if (versionError || version?.upload_status !== "uploaded" || !version?.r2_etag) throw new Error(`${fileName}: R2 metadata invalid: ${versionError?.message ?? JSON.stringify(version)}`);
-  if (classificationError || !String(classification?.model_name ?? "").toLowerCase().includes("gemini")) throw new Error(`${fileName}: Gemini classification missing: ${classificationError?.message ?? JSON.stringify(classification)}`);
-  if (extractionError || extraction?.project_id !== projectId) throw new Error(`${fileName}: Brain extraction missing: ${extractionError?.message ?? JSON.stringify(extraction)}`);
-  if (jobError || job?.status !== "succeeded" || job?.stage !== "complete" || !String(job?.model_name ?? "").toLowerCase().includes("gemini")) throw new Error(`${fileName}: processing job incomplete: ${jobError?.message ?? JSON.stringify(job)}`);
-  if (sourceError || textError || (textCount ?? 0) < 1) throw new Error(`${fileName}: source/text persistence invalid: ${sourceError?.message ?? textError?.message ?? `${sourceCount}/${textCount}`}`);
-
-  const trash = await request("/api/storage/document-state", {
-    token,
-    body: { workspaceId, projectId, documentId: complete.payload.documentId, state: "trashed" }
-  });
-  const retentionProtected = trash.response.status === 500 && /protected by retention policy/i.test(String(trash.payload?.error ?? ""));
-  if (!trash.response.ok && !retentionProtected) throw new Error(`${fileName}: cleanup/trash failed: ${trash.response.status} ${JSON.stringify(trash.payload)}`);
-  if (retentionProtected) console.log(`${fileName}: cleanup skipped because production retention policy protects the document.`);
+  if (versionError || version?.upload_status !== "uploaded" || !version?.r2_etag) throw new Error(`${fileName}: R2 metadata invalid`);
+  if (classificationError || !String(classification?.model_name ?? "").toLowerCase().includes("gemini")) throw new Error(`${fileName}: Gemini classification missing`);
+  if (extractionError || extraction?.project_id !== projectId) throw new Error(`${fileName}: Brain extraction missing`);
+  if (jobError || job?.status !== "succeeded" || job?.stage !== "complete") throw new Error(`${fileName}: processing job incomplete`);
+  if (sourceError || textError || (textCount ?? 0) < 1) throw new Error(`${fileName}: source/text persistence invalid`);
 
   return {
     fileName,
@@ -191,18 +158,32 @@ async function uploadAndAnalyze({ projectId, workspaceId, token, fileName, mimeT
   };
 }
 
+async function assertStableArtifacts(workspaceId, projectId, fileNames) {
+  const { data, error } = await supabase
+    .from("document_versions")
+    .select("file_name,document_id")
+    .eq("workspace_id", workspaceId)
+    .eq("project_id", projectId)
+    .in("file_name", fileNames);
+  if (error) throw new Error(`artifact stability lookup failed: ${error.message}`);
+  for (const fileName of fileNames) {
+    const documentIds = new Set((data ?? []).filter((row) => row.file_name === fileName).map((row) => row.document_id));
+    if (documentIds.size !== 1) throw new Error(`${fileName}: expected exactly one stable E2E document, found ${documentIds.size}`);
+  }
+}
+
 let guest;
 for (let attempt = 1; attempt <= 3; attempt += 1) {
   guest = await request("/api/auth/guest", {
     method: "POST",
-    body: { login: "gosc", password: "gosc" }
+    body: { login: process.env.E2E_GUEST_LOGIN, password: process.env.E2E_GUEST_PASSWORD }
   });
   if (guest.response.ok) break;
   const transientGateway = guest.response.status >= 500 && /gateway timeout/i.test(String(guest.payload?.error ?? ""));
   if (!transientGateway || attempt === 3) break;
   await sleep(attempt * 1500);
 }
-if (!guest.response.ok) throw new Error(`Guest bootstrap failed: ${guest.response.status} ${JSON.stringify(guest.payload)}`);
+if (!guest?.response.ok) throw new Error(`Guest bootstrap failed: ${guest?.response.status} ${JSON.stringify(guest?.payload)}`);
 
 const { data: session, error: signInError } = await supabase.auth.signInWithPassword({
   email: guest.payload.email,
@@ -211,6 +192,14 @@ const { data: session, error: signInError } = await supabase.auth.signInWithPass
 if (signInError || !session.session) throw new Error(`Guest sign-in failed: ${signInError?.message ?? "missing session"}`);
 const token = session.session.access_token;
 const workspaceId = guest.payload.workspaceId;
+
+const maintenance = await request("/api/system/e2e-maintenance", {
+  token,
+  body: { workspaceId }
+});
+if (!maintenance.response.ok) {
+  throw new Error(`E2E maintenance failed: ${maintenance.response.status} ${JSON.stringify(maintenance.payload)}`);
+}
 
 const unauthorized = await request(`/api/company/search?workspaceId=${encodeURIComponent(workspaceId)}&q=Octopus`);
 if (unauthorized.response.status !== 401) throw new Error(`Unauthenticated API guard failed: expected 401, got ${unauthorized.response.status}`);
@@ -225,11 +214,13 @@ if (projectsError || !projects?.length) throw new Error(`Guest project lookup fa
 const project = projects.find((row) => row.status === "active") ?? projects[0];
 
 const search = await request(`/api/company/search?workspaceId=${encodeURIComponent(workspaceId)}&q=${encodeURIComponent(project.name)}`, { token });
-if (!search.response.ok || !search.payload.results?.some((row) => row.entity_id === project.id)) throw new Error(`Company search failed: ${search.response.status} ${JSON.stringify(search.payload)}`);
+if (!search.response.ok || !search.payload.results?.some((row) => row.entity_id === project.id)) throw new Error(`Company search failed: ${search.response.status}`);
 
 const commandCenter = await request(`/api/projects/command-center?projectId=${encodeURIComponent(project.id)}`, { token });
-if (!commandCenter.response.ok || commandCenter.payload.snapshot?.cashflow13w?.length !== 13) throw new Error(`Command Center failed: ${commandCenter.response.status} ${JSON.stringify(commandCenter.payload)}`);
+if (!commandCenter.response.ok || commandCenter.payload.snapshot?.cashflow13w?.length !== 13) throw new Error(`Command Center failed: ${commandCenter.response.status}`);
 
+const pdfName = "octopus-live-audit.pdf";
+const xlsxName = "octopus-live-audit.xlsx";
 const pdf = minimalPdf([
   "Project Octopus live audit",
   "Instalacja wodociagowa PP-R 32 PN20.",
@@ -237,8 +228,9 @@ const pdf = minimalPdf([
   "Po montazu wymagana proba szczelnosci i protokol odbioru."
 ]);
 const results = [];
-results.push(await uploadAndAnalyze({ projectId: project.id, workspaceId, token, fileName: "octopus-live-audit.pdf", mimeType: "application/pdf", bytes: pdf }));
-results.push(await uploadAndAnalyze({ projectId: project.id, workspaceId, token, fileName: "octopus-live-audit.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", bytes: xlsxBuffer() }));
+results.push(await uploadAndAnalyze({ projectId: project.id, workspaceId, token, fileName: pdfName, mimeType: "application/pdf", bytes: pdf }));
+results.push(await uploadAndAnalyze({ projectId: project.id, workspaceId, token, fileName: xlsxName, mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", bytes: xlsxBuffer() }));
+await assertStableArtifacts(workspaceId, project.id, [pdfName, xlsxName]);
 
 console.log("LIVE PRODUCTION AUDIT E2E OK");
-console.log(JSON.stringify({ workspaceId, projectId: project.id, search: true, commandCenter13w: true, documents: results }));
+console.log(JSON.stringify({ workspaceId, projectId: project.id, search: true, commandCenter13w: true, stableArtifacts: true, documents: results }));

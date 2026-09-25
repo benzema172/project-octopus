@@ -55,8 +55,8 @@ export function HrWorkspaceCore300(props: Props) {
     router.push(`/workspace/companies/${props.workspaceId}/hr${search ? `?${search}` : ""}`);
     if (target !== "employees") setEmployeeCreateOpen(false);
   };
-  const openEmployeeTime = (employeeId: string) => {
-    setTimeFocus({ employeeId, referenceDate: props.data.referenceDate });
+  const openEmployeeTime = (employeeId: string, referenceDate = props.data.referenceDate) => {
+    setTimeFocus({ employeeId, referenceDate });
     setTab("time");
     router.push(`/workspace/companies/${props.workspaceId}/hr?tab=time`);
   };
@@ -71,7 +71,7 @@ export function HrWorkspaceCore300(props: Props) {
       </div>
     </div>
 
-    {tab === "dashboard" ? <><HrDashboardCore300 data={props.data} canViewPayroll={props.canViewPayroll} onNavigate={navigate} /><HrDashboardCalendar159 workspaceId={props.workspaceId} canWrite={props.canWrite} data={props.data} onOpenEmployeeCalendar={(employeeId, referenceDate) => { setTimeFocus({ employeeId, referenceDate }); setTab("time"); }} /></> : null}
+    {tab === "dashboard" ? <><HrDashboardCore300 data={props.data} canViewPayroll={props.canViewPayroll} onNavigate={navigate} /><HrDashboardCalendar159 workspaceId={props.workspaceId} canWrite={props.canWrite} data={props.data} onOpenEmployeeCalendar={(employeeId, referenceDate) => openEmployeeTime(employeeId, referenceDate)} /></> : null}
     {tab === "employees" ? <><HrIssuedEquipmentStrip430 data={props.data} /><HrEmployeeRegistry300 workspaceId={props.workspaceId} data={props.data} canWrite={props.canWrite} canApprove={props.canApprove} canViewPayroll={props.canViewPayroll} canManagePayroll={props.canManagePayroll} onOpenTime={openEmployeeTime} /></> : null}
     {tab === "time" ? <div className={timeCompactStyles.compact}><HrTimeRecords400 key={timeFocus ? `${timeFocus.employeeId}-${timeFocus.referenceDate}` : "all"} workspaceId={props.workspaceId} referenceDate={timeFocus?.referenceDate ?? props.data.referenceDate} employees={props.data.employees} projects={props.data.projects} timesheets={props.data.timesheets} assignments={props.data.assignments} leaves={props.data.leaves} canWrite={props.canWrite} canViewPayroll={props.canViewPayroll} initialEmployeeId={timeFocus?.employeeId ?? null} onClearEmployeeFocus={() => setTimeFocus(null)} /></div> : null}
     {tab === "attendance" ? <HrAttendanceList500 workspaceId={props.workspaceId} data={props.data} /> : null}

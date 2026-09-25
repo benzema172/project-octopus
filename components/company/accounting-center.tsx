@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
-  AlertTriangle, BookOpenCheck, BrainCircuit, CheckCircle2, Download, FileSpreadsheet, LoaderCircle,
+  BookOpenCheck, BrainCircuit, CheckCircle2, Download, FileSpreadsheet, LoaderCircle,
   RefreshCw, Save, Settings2, ShieldCheck, Sparkles, Upload
 } from "lucide-react";
 import type { AccountingCenterData, AccountingEntry } from "@/lib/types/accounting";
@@ -102,6 +102,34 @@ export function AccountingCenter({workspaceId,data,canWrite,canApprove}:Props){
     const form=new FormData(event.currentTarget);
     action("profile_save",{name:form.get("name"),adapter:form.get("adapter"),delimiter:form.get("delimiter")},"Profil eksportu został zapisany.");
     event.currentTarget.reset();
+  };
+
+  const exportBatch=()=>{
+    if(!defaultProfile) return;
+    startTransition(async()=>{
+      setMessage(null);setError(null);
+      try{
+        const response=await fetch("/api/company/accounting/export",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({workspaceId,profileId:defaultProfile.id})
+        });
+        if(!response.ok){
+          const result=await response.json().catch(()=>({})) as {error?:string};
+          throw new Error(result.error??"Eksport księgowy nie powiódł się.");
+        }
+        const blob=await response.blob();
+        const disposition=response.headers.get("Content-Disposition")??"";
+        const match=disposition.match(/filename="?([^";]+)"?/i);
+        const filename=match?.[1]??"octopus-accounting-export";
+        const url=URL.createObjectURL(blob);
+        const link=document.createElement("a");
+        link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove();
+        URL.revokeObjectURL(url);
+        setMessage("Paczka księgowa została wygenerowana i oznaczona jako wyeksportowana.");
+        router.refresh();
+      }catch(caught){setError(caught instanceof Error?caught.message:"Eksport nie powiódł się.");}
+    });
   };
 
   return <section className="acc-shell" aria-label="Księgowość">
@@ -205,7 +233,7 @@ export function AccountingCenter({workspaceId,data,canWrite,canApprove}:Props){
     {view==="export"?<div className="acc-grid">
       <article className="acc-panel"><div className="acc-panel__head"><div><span>Eksport</span><h3>Paczka dla księgowości</h3></div><Download size={22}/></div>
         <p className="acc-copy">Eksport obejmuje wyłącznie zatwierdzone dekrety. Profil jest oddzielony od logiki księgowej, dzięki czemu możemy później dodać dokładne adaptery do programu używanego przez Twoją księgową bez przebudowy dekretacji.</p>
-        {defaultProfile?<a className="primary-button acc-download" href={"/api/company/accounting/export?workspaceId="+encodeURIComponent(workspaceId)+"&profileId="+encodeURIComponent(defaultProfile.id)}><Download size={14}/>Eksportuj niewysłane · {defaultProfile.name}</a>:<p className="acc-empty">Brak profilu eksportu.</p>}
+        {defaultProfile?<button type="button" className="primary-button acc-download" onClick={exportBatch} disabled={pending}><Download size={14}/>{pending?"Generowanie…":"Eksportuj niewysłane · "+defaultProfile.name}</button>:<p className="acc-empty">Brak profilu eksportu.</p>}
       </article>
       <article className="acc-panel"><div className="acc-panel__head"><div><span>Profile</span><h3>Adaptery eksportu</h3></div></div>
         <div className="acc-rule-list">{data.exportProfiles.map(profile=><div key={profile.id}><span><strong>{profile.name}</strong><small>{profile.adapter}{profile.isDefault?" · domyślny":""}</small></span>{canApprove&&!profile.isDefault?<button className="secondary-button" type="button" onClick={()=>action("profile_default",{profileId:profile.id},"Ustawiono domyślny profil eksportu.")}>Ustaw domyślny</button>:null}</div>)}</div>

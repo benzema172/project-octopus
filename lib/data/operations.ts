@@ -104,6 +104,105 @@ function normalizedStatus(status: string, aiStatus?: string): AiInboxItem["statu
   return "new";
 }
 
+export async function listDocumentAiInbox(workspaceId: string, documentIds?: string[]): Promise<AiInboxItem[]> {
+  const supabase = createServiceSupabaseClient();
+  const scopedIds = documentIds ? Array.from(new Set(documentIds.filter(Boolean))) : null;
+  if (scopedIds && !scopedIds.length) return [];
+
+  let intakesQuery = supabase
+    .from("document_intakes")
+    .select("id,document_id,proposed_project_id,status,suggested_category,requested_category,category_locked,match_metadata,confidence,channel,priority,assigned_to,review_due_at,escalation_level,created_at,documents(name,ai_status,project_id,current_version_id)")
+    .eq("workspace_id", workspaceId);
+  if (scopedIds) intakesQuery = intakesQuery.in("document_id", scopedIds);
+
+  const intakesResult = await intakesQuery
+    .order("created_at", { ascending: false })
+    .limit(scopedIds ? Math.min(500, Math.max(20, scopedIds.length * 2)) : 100)
+    .returns<IntakeRow[]>();
+  if (intakesResult.error) throw new Error(`Nie udało się pobrać kolejki dokumentów AI: ${intakesResult.error.message}`);
+
+  const proposedProjectIds = Array.from(new Set((intakesResult.data ?? []).map((row) => row.proposed_project_id).filter((value): value is string => Boolean(value))));
+  const { data: proposedProjects } = proposedProjectIds.length
+    ? await supabase.from("projects").select("id,name").in("id", proposedProjectIds).returns<Array<{ id: string; name: string }>>()
+    : { data: [] as Array<{ id: string; name: string }> };
+  const proposedProjectNames = new Map((proposedProjects ?? []).map((project) => [project.id, project.name]));
+
+  const intakeDocumentIds = Array.from(new Set((intakesResult.data ?? []).map((row) => row.document_id).filter(Boolean)));
+  const evidenceResult = intakeDocumentIds.length
+    ? await supabase.from("document_module_proposals")
+      .select("document_id,document_version_id,title,module,source_locator,source_quote,confidence,created_at")
+      .in("document_id", intakeDocumentIds)
+      .neq("status", "rejected")
+      .order("created_at", { ascending: false })
+      .limit(Math.min(1200, Math.max(40, intakeDocumentIds.length * 6)))
+      .returns<InboxEvidenceRow[]>()
+    : { data: [] as InboxEvidenceRow[], error: null };
+  if (evidenceResult.error) console.error("Project Octopus: document-only AI Inbox evidence fallback", evidenceResult.error);
+
+  const evidenceByDocument = new Map<string, NonNullable<AiInboxItem["evidence"]>>();
+  for (const proposal of evidenceResult.data ?? []) {
+    const locator = proposal.source_locator && typeof proposal.source_locator === "object" ? proposal.source_locator : {};
+    const quote = inboxEvidenceText(proposal.source_quote);
+    const label = inboxEvidenceText(locator.label);
+    if (!quote && !label) continue;
+    const current = evidenceByDocument.get(proposal.document_id) ?? [];
+    if (current.length >= 4) continue;
+    current.push({
+      title: proposal.title,
+      module: proposal.module,
+      quote,
+      label,
+      page: inboxEvidenceNumber(locator.page),
+      sheet: inboxEvidenceText(locator.sheet) || null,
+      row: inboxEvidenceNumber(locator.row),
+      confidence: proposal.confidence == null ? null : Number(proposal.confidence)
+    });
+    evidenceByDocument.set(proposal.document_id, current);
+  }
+
+  const items: AiInboxItem[] = (intakesResult.data ?? []).map((row) => {
+    const document = Array.isArray(row.documents) ? row.documents[0] : row.documents;
+    const match = row.match_metadata && typeof row.match_metadata.project_match === "object" && row.match_metadata.project_match
+      ? row.match_metadata.project_match as Record<string, unknown>
+      : null;
+    const matchReason = typeof match?.reason === "string" ? match.reason : null;
+    return {
+      id: row.document_id,
+      entityType: "document",
+      projectId: document?.project_id ?? row.proposed_project_id,
+      title: document?.name ?? "Dokument bez nazwy",
+      subtitle: "Klasyfikacja i Project DNA",
+      status: normalizedStatus(row.status, document?.ai_status),
+      confidence: row.confidence,
+      category: row.suggested_category ?? "nierozpoznana",
+      createdAt: row.created_at,
+      detail: row.status === "review" ? matchReason ?? "Sprawdź kategorię, inwestycję i fakty przed zatwierdzeniem." : "Dokument przechodzi wspólny pipeline AI.",
+      proposedProjectId: row.proposed_project_id,
+      proposedProjectName: row.proposed_project_id ? proposedProjectNames.get(row.proposed_project_id) ?? null : null,
+      requestedCategory: row.requested_category,
+      categoryLocked: row.category_locked,
+      matchStatus: typeof match?.status === "string" ? match.status : null,
+      matchReason,
+      channel: row.channel,
+      priority: row.priority,
+      assignedTo: row.assigned_to,
+      reviewDueAt: row.review_due_at,
+      escalationLevel: row.escalation_level,
+      overdue: row.status === "review" && Boolean(row.review_due_at) && Date.parse(row.review_due_at ?? "") < Date.now(),
+      documentVersionId: document?.current_version_id ?? null,
+      documentProjectId: document?.project_id ?? null,
+      evidence: evidenceByDocument.get(row.document_id) ?? []
+    };
+  });
+
+  const priorityRank = { critical: 4, high: 3, normal: 2, low: 1 } as const;
+  return items.sort((left, right) => {
+    if (Boolean(left.overdue) !== Boolean(right.overdue)) return left.overdue ? -1 : 1;
+    const priorityDifference = priorityRank[right.priority ?? "normal"] - priorityRank[left.priority ?? "normal"];
+    return priorityDifference || Date.parse(right.createdAt) - Date.parse(left.createdAt);
+  });
+}
+
 export async function listAiInbox(workspaceId: string): Promise<AiInboxItem[]> {
   const supabase = createServiceSupabaseClient();
   const [intakesResult, estimatesResult, impactsResult, siteEventsResult, templatesResult, knowledgeResult] = await Promise.all([

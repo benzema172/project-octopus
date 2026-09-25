@@ -165,41 +165,54 @@ export async function runAccountingCopilotForInvoice(
   let usedMemory = false;
   let usedRules = false;
 
+  const resolutionInput = entryLines.flatMap((line) => {
+    if (txt(line.side) !== "debit" || !line.invoice_line_id) return [];
+    const invoiceLine = invoiceLines.get(txt(line.invoice_line_id)) ?? {};
+    const allocation = allocations.get(txt(line.invoice_line_id)) ?? {};
+    return [{
+      lineId: txt(line.id),
+      description: txt(invoiceLine.description || line.description),
+      lineType: nullable(invoiceLine.line_type),
+      expenseCategory: nullable(invoiceLine.expense_category),
+      allocationScope: nullable(allocation.allocation_scope) ?? "unassigned"
+    }];
+  });
+  const resolutionResult = resolutionInput.length
+    ? await db.rpc("resolve_accounting_lines_810", {
+        p_workspace_id: workspaceId,
+        p_counterparty_id: invoice.counterparty_id ?? null,
+        p_lines: resolutionInput
+      })
+    : { data: [] as Row[], error: null };
+  if (resolutionResult.error) throw new Error("Nie udało się wsadowo rozstrzygnąć reguł księgowych: " + resolutionResult.error.message);
+  const resolutions = new Map(
+    (Array.isArray(resolutionResult.data) ? resolutionResult.data as Row[] : [])
+      .map((item) => [txt(item.lineId), item])
+  );
+  const lineUpdates: Row[] = [];
+
   for (const line of entryLines) {
     const currentAccount = accountById.get(txt(line.account_id)) ?? {};
     if (txt(line.side) !== "debit" || !line.invoice_line_id) {
       const isInputVat = txt(line.vat_code) === "INPUT";
-      await db.from("accounting_entry_lines").update({
-        tax_treatment: "neutral",
-        vat_deduction_pct: isInputVat ? num(settings.default_vat_deduction_pct, 100) : null,
-        ai_confidence: 1,
-        ai_reason: isInputVat ? "VAT naliczony z faktury." : "Pozycja bilansująca rozrachunek.",
-        ai_evidence: { source: isInputVat ? "invoice_tax" : "balancing_entry" },
-        updated_at: new Date().toISOString()
-      }).eq("workspace_id", workspaceId).eq("id", line.id);
+      lineUpdates.push({
+        lineId: line.id,
+        accountId: line.account_id,
+        taxTreatment: "neutral",
+        vatDeductionPct: isInputVat ? num(settings.default_vat_deduction_pct, 100) : null,
+        sourceRuleId: null,
+        aiConfidence: 1,
+        aiReason: isInputVat ? "VAT naliczony z faktury." : "Pozycja bilansująca rozrachunek.",
+        aiEvidence: { source: isInputVat ? "invoice_tax" : "balancing_entry" }
+      });
       continue;
     }
 
     const invoiceLine = invoiceLines.get(txt(line.invoice_line_id)) ?? {};
     const allocation = allocations.get(txt(line.invoice_line_id)) ?? {};
-    const ruleResult = await db.rpc("resolve_accounting_rule", {
-      p_workspace_id: workspaceId,
-      p_direction: "purchase",
-      p_line_type: nullable(invoiceLine.line_type),
-      p_expense_category: nullable(invoiceLine.expense_category),
-      p_allocation_scope: nullable(allocation.allocation_scope) ?? "unassigned",
-      p_counterparty_id: invoice.counterparty_id ?? null
-    });
-    const rule = obj(ruleResult.data);
-    const memoryResult = await db.rpc("accounting_memory_suggestion_700", {
-      p_workspace_id: workspaceId,
-      p_counterparty_id: invoice.counterparty_id ?? null,
-      p_description: txt(invoiceLine.description || line.description),
-      p_line_type: nullable(invoiceLine.line_type),
-      p_expense_category: nullable(invoiceLine.expense_category),
-      p_allocation_scope: nullable(allocation.allocation_scope) ?? "unassigned"
-    });
-    const memory = obj(memoryResult.data);
+    const resolved = resolutions.get(txt(line.id)) ?? {};
+    const rule = obj(resolved.rule);
+    const memory = obj(resolved.memory);
 
     const hardRule = Boolean(rule.ruleId) && (rule.accountantRule === true || rule.counterpartySpecific === true || num(rule.priority) >= 600);
     const memoryConfidence = clamp(memory.confidence, 0);
@@ -228,13 +241,18 @@ export async function runAccountingCopilotForInvoice(
       source_rule_id: useMemory ? null : rule.ruleId ?? null,
       ai_confidence: confidence,
       ai_reason: reason,
-      ai_evidence: { source: useMemory ? "human_memory" : Boolean(rule.ruleId) ? "accounting_rule" : "fallback", ruleId: rule.ruleId ?? null, memoryId: memory.memoryId ?? null },
-      updated_at: new Date().toISOString()
+      ai_evidence: { source: useMemory ? "human_memory" : Boolean(rule.ruleId) ? "accounting_rule" : "fallback", ruleId: rule.ruleId ?? null, memoryId: memory.memoryId ?? null }
     };
-    if (line.manual_override !== true) {
-      const updateResult = await db.from("accounting_entry_lines").update(lineUpdate).eq("workspace_id", workspaceId).eq("id", line.id);
-      if (updateResult.error) throw new Error(updateResult.error.message);
-    }
+    lineUpdates.push({
+      lineId: line.id,
+      accountId: lineUpdate.account_id,
+      taxTreatment: lineUpdate.tax_treatment,
+      vatDeductionPct: lineUpdate.vat_deduction_pct,
+      sourceRuleId: lineUpdate.source_rule_id,
+      aiConfidence: lineUpdate.ai_confidence,
+      aiReason: lineUpdate.ai_reason,
+      aiEvidence: lineUpdate.ai_evidence
+    });
 
     const enriched: Row = {
       ...line,
@@ -247,6 +265,14 @@ export async function runAccountingCopilotForInvoice(
       project_name: allocation.project_id ? projects.get(txt(allocation.project_id)) ?? null : null
     };
     if (confidence < threshold || taxTreatment === "review") ambiguous.push(enriched);
+  }
+
+  if (lineUpdates.length) {
+    const applied = await db.rpc("apply_accounting_line_updates_810", {
+      p_workspace_id: workspaceId,
+      p_updates: lineUpdates
+    });
+    if (applied.error) throw new Error("Nie udało się wsadowo zapisać dekretacji: " + applied.error.message);
   }
 
   let aiApplied = 0;

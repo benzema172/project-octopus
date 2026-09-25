@@ -37,7 +37,7 @@ describe("Investment Wrzutnia drag, drop and folder picker", () => {
     expect(intake).toContain("uploadedBytes");
     expect(intake).toContain("uploadedFiles");
     expect(intake).toContain("formatBytes(progress.uploadedBytes)");
-    expect(intake).toContain("/api/brain/process-document");
+    expect(intake).toContain("/api/brain/process");
     expect(intake).not.toContain("Wyślij i analizuj");
   });
 

@@ -46,7 +46,8 @@ describe("Accounting Copilot 7.0",()=>{
     expect(exportRoute).toContain("standardHeaders");
     expect(exportRoute).toContain("octopus_json");
     expect(exportRoute).toContain("custom_csv");
-    expect(exportRoute).toContain("accounting.batch_exported_700");
+    expect(exportRoute).toContain("accounting.batch_exported_810");
+    expect(exportRoute).toContain("export async function POST");
   });
 
   it("runs accounting automatically after invoice intake and exposes Księgowość in Finance",()=>{

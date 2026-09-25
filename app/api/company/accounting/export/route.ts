@@ -18,12 +18,21 @@ const standardHeaders:Record<string,string>={
   taxTreatment:"KUP/NKUP",vatDeductionPct:"Odliczenie VAT %",description:"Opis",entryId:"ID dekretu"
 };
 
-export async function GET(request:Request){
+export async function GET(){
+  return Response.json(
+    {error:"Eksport księgowy jest operacją zmieniającą stan i wymaga żądania POST."},
+    {status:405,headers:{"Allow":"POST","Cache-Control":"no-store"}}
+  );
+}
+
+export async function POST(request:Request){
   const user=await getRequestUser(request);
   if(!user) return Response.json({error:"Brak aktywnej sesji."},{status:401});
-  const url=new URL(request.url);
-  const workspaceId=url.searchParams.get("workspaceId")?.trim(), profileId=url.searchParams.get("profileId")?.trim();
-  const onlyEntryId=url.searchParams.get("entryId")?.trim();
+  let body:{workspaceId?:string;profileId?:string;entryId?:string};
+  try{body=await request.json() as {workspaceId?:string;profileId?:string;entryId?:string};}
+  catch{return Response.json({error:"Nieprawidłowe dane eksportu."},{status:400});}
+  const workspaceId=body.workspaceId?.trim(), profileId=body.profileId?.trim();
+  const onlyEntryId=body.entryId?.trim();
   if(!workspaceId) return Response.json({error:"Brak firmy."},{status:400});
   const workspace=await getWorkspaceForUser(user,workspaceId);
   if(!workspace) return Response.json({error:"Brak dostępu do firmy."},{status:403});
@@ -74,23 +83,34 @@ export async function GET(request:Request){
   });
 
   const now=new Date().toISOString();
-  await db.from("accounting_entries").update({exported_at:now,updated_at:now}).eq("workspace_id",workspaceId).in("id",entryIds).is("exported_at",null);
-  await db.from("audit_events").insert({workspace_id:workspaceId,actor_id:user.id,actor_type:"user",event_type:"accounting.batch_exported_700",entity_type:"accounting_export_profile",entity_id:text(activeProfile.id),after_value:{entries:entryIds.length,rows:rows.length,adapter:activeProfile.adapter,exportedAt:now}});
-
   const stamp=now.slice(0,10);
+  let content:string;
+  let contentType:string;
+  let filename:string;
+
   if(activeProfile.adapter==="octopus_json"){
-    return new Response(JSON.stringify({schema:"octopus-accounting-batch-v2",profile:activeProfile.name,exportedAt:now,rows},null,2),{
-      headers:{"Content-Type":"application/json; charset=utf-8","Content-Disposition":'attachment; filename="octopus-accounting-'+stamp+'.json"',"Cache-Control":"no-store"}
-    });
+    content=JSON.stringify({schema:"octopus-accounting-batch-v2",profile:activeProfile.name,exportedAt:now,rows},null,2);
+    contentType="application/json; charset=utf-8";
+    filename="octopus-accounting-"+stamp+".json";
+  }else{
+    const mapping=activeProfile.mapping&&typeof activeProfile.mapping==="object"?activeProfile.mapping as Record<string,unknown>:{};
+    const fields=Object.keys(standardHeaders);
+    const chosen=activeProfile.adapter==="custom_csv"&&Object.keys(mapping).length
+      ? fields.filter(field=>mapping[field]!==false&&mapping[field]!==null)
+      : fields;
+    const header=chosen.map(field=>csv(activeProfile.adapter==="custom_csv"&&text(mapping[field])?mapping[field]:standardHeaders[field],delimiter)).join(delimiter);
+    const bodyRows=rows.map(row=>chosen.map(field=>csv((row as Record<string,unknown>)[field]??"",delimiter)).join(delimiter));
+    content="\uFEFF"+[header,...bodyRows].join("\r\n");
+    contentType="text/csv; charset=utf-8";
+    filename="octopus-accounting-"+stamp+".csv";
   }
 
-  const mapping=activeProfile.mapping&&typeof activeProfile.mapping==="object"?activeProfile.mapping as Record<string,unknown>:{};
-  const fields=Object.keys(standardHeaders);
-  const chosen=activeProfile.adapter==="custom_csv"&&Object.keys(mapping).length
-    ? fields.filter(field=>mapping[field]!==false&&mapping[field]!==null)
-    : fields;
-  const header=chosen.map(field=>csv(activeProfile.adapter==="custom_csv"&&text(mapping[field])?mapping[field]:standardHeaders[field],delimiter)).join(delimiter);
-  const bodyRows=rows.map(row=>chosen.map(field=>csv((row as Record<string,unknown>)[field]??"",delimiter)).join(delimiter));
-  const content="\uFEFF"+[header,...bodyRows].join("\r\n");
-  return new Response(content,{headers:{"Content-Type":"text/csv; charset=utf-8","Content-Disposition":'attachment; filename="octopus-accounting-'+stamp+'.csv"',"Cache-Control":"no-store"}});
+  const repeatDownload=Boolean(onlyEntryId)&&entries.every(entry=>Boolean(entry.exported_at));
+  const mark=await db.from("accounting_entries").update({exported_at:now,updated_at:now}).eq("workspace_id",workspaceId).in("id",entryIds).is("exported_at",null);
+  if(mark.error) return Response.json({error:"Nie udało się oznaczyć paczki jako wyeksportowane: "+mark.error.message},{status:422});
+  const auditEvent=repeatDownload?"accounting.entry_export_downloaded_810":"accounting.batch_exported_810";
+  const audit=await db.from("audit_events").insert({workspace_id:workspaceId,actor_id:user.id,actor_type:"user",event_type:auditEvent,entity_type:"accounting_export_profile",entity_id:text(activeProfile.id),after_value:{entries:entryIds.length,rows:rows.length,adapter:activeProfile.adapter,exportedAt:now,transport:"explicit_post",repeatDownload}});
+  if(audit.error) console.error("Project Octopus: accounting export audit fallback",audit.error);
+
+  return new Response(content,{headers:{"Content-Type":contentType,"Content-Disposition":'attachment; filename="'+filename+'"',"Cache-Control":"no-store"}});
 }

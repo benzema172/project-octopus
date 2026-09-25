@@ -118,7 +118,8 @@ function Empty({ children }: { children: ReactNode }) { return <div className={s
 export function FleetWorkspace300({ workspaceId, data, canWrite, canApprove, query = "", initialTab, onTabChange }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [tab, setTab] = useState<Tab>(initialTab ?? (query ? "vehicles" : "dashboard"));
+  const resolvedInitialTab = initialTab ?? (query ? "vehicles" : "dashboard");
+  const [tab, setTab] = useState<Tab>(resolvedInitialTab);
   const changeTab = (nextTab: Tab) => {
     setTab(nextTab);
     onTabChange?.(nextTab);

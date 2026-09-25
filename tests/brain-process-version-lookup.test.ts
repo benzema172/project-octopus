@@ -6,7 +6,7 @@ const route = readFileSync("app/api/brain/process/route.ts", "utf8");
 describe("brain/process version lookup", () => {
   it("resolves the version and workspace document without an embedded PostgREST join", () => {
     expect(route).toMatch(/\.from\("document_versions"\)/);
-    expect(route).toMatch(/\.select\("document_id,project_id"\)/);
+    expect(route).toMatch(/\.select\("document_id,project_id,file_name"\)/);
     expect(route).toMatch(/versionError/);
 
     expect(route).toMatch(/\.from\("documents"\)/);

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const intake = readFileSync("components/projects/project-intake-pipeline.tsx", "utf8");
-const route = readFileSync("app/api/brain/process-document/route.ts", "utf8");
+const route = readFileSync("app/api/brain/process/route.ts", "utf8");
 const routing = readFileSync("lib/ai/investment-document-routing.ts", "utf8");
 const documentationPage = readFileSync("app/workspace/projects/[projectId]/documentation/page.tsx", "utf8");
 const documentLibrary = readFileSync("components/projects/project-document-library.tsx", "utf8");
@@ -26,7 +26,7 @@ describe("investment Wrzutnia autonomous routing", () => {
   it("runs investment-context routing before Autopilot publishes module data", () => {
     expect(route).toContain("enrichDocumentWithInvestmentRouting");
     expect(route).toMatch(/const analysis = await processDocumentVersion[\s\S]*routing = await enrichDocumentWithInvestmentRouting[\s\S]*const autopilot = await applyDocumentAutopilot/);
-    expect(route).toContain("fileName: activeVersion.file_name");
+    expect(route).toContain("fileName: version.file_name");
     expect(route).toContain("routing_error");
   });
 

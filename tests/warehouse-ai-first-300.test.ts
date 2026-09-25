@@ -13,7 +13,10 @@ describe("Warehouse 3.0 -> 3.1 AI-first compatibility contract", () => {
     expect(operations).not.toContain("WarehouseCommandCenter");
     expect(workspace).toContain('label: "Magazyn"');
     expect(workspace).toContain('label: "Poczekalnia"');
-    expect(workspace).toContain('useState<Tab>(initialTab ?? (query || page.page > 1 ? "stock" : "dashboard"))');
+    expect(workspace).toContain('const resolvedInitialTab = initialTab ?? (query || page.page > 1 ? "stock" : "dashboard")');
+    const companyPage = read("components/company/company-operational-page.tsx");
+    expect(companyPage).toContain('key={\`${kind}:${tab ?? "dashboard"}:${query ?? ""}:${page ?? "1"}\`}');
+    expect(workspace).toContain('onOpen={changeTab}');
     expect(workspace).toContain('data-warehouse-experience="3.1"');
   });
 

@@ -38,6 +38,7 @@ export default async function HrPage({ params, searchParams }: { params: Promise
       </div>
     </header>
     <HrWorkspace149
+      key={`hr:${query.tab ?? "dashboard"}`}
       workspaceId={workspace.id}
       data={data}
       canWrite={canWrite}

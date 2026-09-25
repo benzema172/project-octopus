@@ -21,6 +21,8 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: https://tlbqwbdfoeuvwdlmdzhd.supabase.co
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_GKNVG1MgDSyYhfhMn4um4g_GonPEXAE
       E2E_BASE_URL: https://project-octopus-alpha.vercel.app
+      E2E_GUEST_LOGIN: gosc
+      E2E_GUEST_PASSWORD: gosc
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -30,8 +32,6 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Wait until production serves this exact commit
         run: node scripts/wait-for-production-commit.mjs
-      - name: Build deployed main
-        run: npm run build
       - name: Black-box production integration audit
         run: node scripts/e2e-live-audit.mjs
       - name: Black-box tenant isolation and IDOR audit

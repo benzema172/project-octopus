@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-export function ServerPagination({ page, pageSize, total, pathname, query = {} }: { page:number; pageSize:number; total:number; pathname:string; query?:Record<string,string|number|undefined> }) {
+export function ServerPagination({ page, pageSize, total, pathname, query = {}, pageParam = "page" }: { page:number; pageSize:number; total:number; pathname:string; query?:Record<string,string|number|undefined>; pageParam?:string }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   if (pages <= 1) return null;
   const href = (target: number) => {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) if (value !== undefined) params.set(key, String(value));
-    params.set("page", String(target));
+    params.set(pageParam, String(target));
     return `${pathname}?${params.toString()}`;
   };
 

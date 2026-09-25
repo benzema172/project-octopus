@@ -284,10 +284,10 @@ export function ProjectIntake({ projectId }: { projectId: string }) {
 
       setItems((current) => current.map((row) => row.id === item.id ? { ...row, status: "analysing", message: "AI analizuje, nazywa i przypisuje…" } : row));
       setStage(`Octopus AI porządkuje: ${item.file.name}`);
-      const analysis = await fetch("/api/brain/process-document", {
+      const analysis = await fetch("/api/brain/process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, documentId: ids.documentId, versionId: ids.versionId, lockCategory: false })
+        body: JSON.stringify({ versionId: ids.versionId, lockCategory: false })
       });
       const result = await analysis.json().catch(() => null) as ProcessResponse | null;
       if (!analysis.ok) {
