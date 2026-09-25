@@ -26,11 +26,14 @@ export default async function FinancePage({
   return (
     <>
       <Suspense fallback={<section className="fct-shell"><div className="fct-panel"><p className="empty-copy">Ładowanie Finance Control Tower…</p></div></section>}>
-        <FinanceControlTowerSection workspaceId={workspaceId} initialTab={query.tab} />
+        <FinanceControlTowerSection
+          workspaceId={workspaceId}
+          initialTab={query.tab}
+          accountingContent={showAccountingLayer ? <Suspense fallback={<section className="acc-shell"><div className="acc-panel"><p className="empty-copy">Ładowanie Księgowości…</p></div></section>}>
+            <AccountingCenterSection workspaceId={workspaceId} />
+          </Suspense> : null}
+        />
       </Suspense>
-      {showAccountingLayer ? <Suspense fallback={<section className="acc-shell"><div className="acc-panel"><p className="empty-copy">Ładowanie Księgowości…</p></div></section>}>
-        <AccountingCenterSection workspaceId={workspaceId} />
-      </Suspense> : null}
       {showSourceLayer ? <div className="finance-source-layer">
         <Suspense fallback={<section className="udf-shell"><div className="udf-panel"><p className="empty-copy">Ładowanie wspólnego obiegu dokumentów…</p></div></section>}>
           <UnifiedDocumentFlowSection workspaceId={workspaceId} />

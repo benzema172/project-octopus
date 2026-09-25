@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition, type FormEvent } from "react";
+import { useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -23,7 +23,7 @@ import { ModuleDropzoneLink } from "@/components/documents/module-dropzone-link"
 import type { FinanceCashflowWeek, FinanceControlData, FinanceScenario } from "@/lib/types/finance-control";
 
 type Tab = "cockpit" | "cashflow" | "projects" | "settlements" | "documents" | "accounting" | "control" | "reports";
-type Props = { workspaceId: string; data: FinanceControlData; canWrite: boolean; canApprove: boolean; initialTab?: string };
+type Props = { workspaceId: string; data: FinanceControlData; canWrite: boolean; canApprove: boolean; initialTab?: string; accountingContent?: ReactNode };
 
 const tabs: Array<[Tab, string]> = [
   ["cockpit", "Pulpit"],
@@ -91,7 +91,7 @@ function normalizedTab(value?: string): Tab {
   return tabs.some(([id]) => id === value) ? value as Tab : "cockpit";
 }
 
-export function FinanceControlTower({ workspaceId, data, canWrite, canApprove, initialTab }: Props) {
+export function FinanceControlTower({ workspaceId, data, canWrite, canApprove, initialTab, accountingContent }: Props) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>(() => normalizedTab(initialTab));
 
@@ -213,6 +213,8 @@ export function FinanceControlTower({ workspaceId, data, canWrite, canApprove, i
 
     {message ? <p className="fct-message is-success">{message}</p> : null}
     {error ? <p className="fct-message is-error">{error}</p> : null}
+
+    {activeTab === "accounting" ? accountingContent ?? null : null}
 
     {activeTab === "cockpit" ? <>
       <div className="fct-kpis">
