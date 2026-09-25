@@ -29,6 +29,8 @@ async function walk(directory) {
 const sourceFiles = await walk(root);
 const retiredHits = [];
 for (const file of sourceFiles) {
+  const relative = path.relative(root, file);
+  if (relative === "scripts/check-repo-hygiene.mjs") continue;
   const content = await readFile(file, "utf8");
   for (const marker of retiredMarkers) {
     if (content.includes(marker)) retiredHits.push(`${path.relative(root, file)} -> ${marker}`);
