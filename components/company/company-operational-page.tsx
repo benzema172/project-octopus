@@ -14,6 +14,7 @@ type Props = {
   workspaceId: string;
   page?: string;
   query?: string;
+  tab?: string;
   domain: Domain;
   kind: Kind;
   kicker: string;
@@ -22,7 +23,7 @@ type Props = {
   loader: Loader;
 };
 
-export async function CompanyOperationalPage({ workspaceId, page, query, domain, kind, kicker, title, loader }: Props) {
+export async function CompanyOperationalPage({ workspaceId, page, query, tab, domain, kind, kicker, title, loader }: Props) {
   const user = await requireCurrentUser();
   const workspace = await getWorkspaceForUser(user, workspaceId);
   if (!workspace) notFound();
@@ -32,7 +33,7 @@ export async function CompanyOperationalPage({ workspaceId, page, query, domain,
 
   const referenceDate = new Date().toISOString().slice(0, 10);
   const [data, canWrite, canApprove] = await Promise.all([
-    loader(workspace.id, { page: Number(page ?? 1), query, referenceDate }),
+    loader(workspace.id, { page: Number(page ?? 1), query, referenceDate, tab }),
     hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain, level: "write" }),
     hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain, level: "approve" })
   ]);
@@ -55,6 +56,7 @@ export async function CompanyOperationalPage({ workspaceId, page, query, domain,
         canApprove={canApprove}
         pathname={pathname}
         query={query ?? ""}
+        tab={tab}
       />
     </main>
   );

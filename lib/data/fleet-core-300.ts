@@ -30,6 +30,16 @@ export async function getFleetCore300Data(workspaceId: string, options: CompanyP
   const from = (page - 1) * pageSize;
   const query = cleanSearch(options.query);
   const referenceDate = options.referenceDate ?? new Date().toISOString().slice(0, 10);
+  const tab = options.tab || (query ? "vehicles" : "dashboard");
+  const needFuel = tab === "dashboard" || tab === "costs";
+  const needTrips = tab === "dashboard" || tab === "operations";
+  const needDocuments = tab === "dashboard" || tab === "documents";
+  const needAllocations = tab === "dashboard" || tab === "operations";
+  const needReadings = tab === "dashboard" || tab === "vehicles" || tab === "costs";
+  const needCostRates = tab === "costs";
+  const needEquipment = tab === "equipment";
+  const needComponents = tab === "equipment" || tab === "vehicles";
+  const needQualifications = tab === "dashboard" || tab === "vehicles";
 
   let pageVehiclesQuery = db.from("vehicles")
     .select("id,registration_number,vin,vehicle_type,make,model,production_year,ownership_type,status,current_mileage,meter_type,current_engine_hours,fuel_type,tank_capacity_l,purchase_date,purchase_price,lease_end_date,responsible_employee_id,default_project_id,created_at,updated_at", { count: "exact" })
@@ -42,7 +52,7 @@ export async function getFleetCore300Data(workspaceId: string, options: CompanyP
     db.from("projects").select("id,name,status").eq("workspace_id", workspaceId).order("name").limit(1000),
     db.from("employees").select("id,employee_number,first_name,last_name,status").eq("workspace_id", workspaceId).order("last_name").order("first_name").limit(2000),
     db.rpc("get_fleet_core_summary_300", { p_workspace_id: workspaceId, p_reference_date: referenceDate }),
-    db.from("fleet_cost_links").select("id,vehicle_id,project_id,employee_id,invoice_id,invoice_line_id,service_order_id,damage_case_id,document_id,cost_type,amount,currency,occurred_at,source_type,source_id,notes,created_at").eq("workspace_id", workspaceId).order("occurred_at", { ascending: false }).limit(8000)
+    (tab === "dashboard" || tab === "costs") ? db.from("fleet_cost_links").select("id,vehicle_id,project_id,employee_id,invoice_id,invoice_line_id,service_order_id,damage_case_id,document_id,cost_type,amount,currency,occurred_at,source_type,source_id,notes,created_at").eq("workspace_id", workspaceId).order("occurred_at", { ascending: false }).limit(tab === "costs" ? 4000 : 1200) : Promise.resolve({ data: [], error: null })
   ]);
 
   const vehicles = rows(pageVehiclesResult as Result, "listy pojazdów");
@@ -55,17 +65,18 @@ export async function getFleetCore300Data(workspaceId: string, options: CompanyP
   const vehicleIds = ids(allVehicles);
   const employeeIds = employees.filter((row) => String(row.status) === "active").map((row) => String(row.id));
 
+  const emptyResult = { data: [], error: null };
   const vehicleScoped = vehicleIds.length ? await Promise.all([
-    db.from("fuel_entries").select("id,vehicle_id,employee_id,project_id,fueled_at,liters,gross_amount,mileage,invoice_id,invoice_line_id,fuel_type,station_name,source_document_id,created_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("fueled_at", { ascending: false }).limit(3000),
-    db.from("trips").select("id,vehicle_id,employee_id,project_id,started_at,finished_at,start_location,end_location,distance_km,purpose,created_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("started_at", { ascending: false }).limit(3000),
-    db.from("vehicle_documents").select("id,vehicle_id,document_type,number,valid_from,valid_until,document_id,status,provider_name,amount,currency,reminder_days,created_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("valid_until").limit(3000),
-    db.from("vehicle_allocations").select("id,vehicle_id,project_id,employee_id,date_from,date_to,allocation_method,allocation_percent,created_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("date_from", { ascending: false }).limit(3000),
-    db.from("meter_readings").select("id,vehicle_id,reading_date,mileage,reading_type,engine_hours,source,source_document_id,source_fuel_entry_id,source_service_order_id,verified,anomaly_reason,created_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("reading_date", { ascending: false }).limit(3000),
-    db.from("vehicle_cost_rates").select("id,vehicle_id,valid_from,valid_to,cost_per_km,currency,created_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("valid_from", { ascending: false }).limit(1500),
-    db.from("vehicle_components").select("id,vehicle_id,component_type,name,manufacturer,model,serial_number,dot_code,installed_at,removed_at,installed_mileage,installed_engine_hours,storage_location,condition,tread_depth_mm,notes,active,created_at,updated_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("updated_at", { ascending: false }).limit(3000),
-    db.from("stock_item_instances").select("id,stock_item_id,serial_number,asset_tag,status,condition,employee_id,project_id,vehicle_id,last_service_date,next_service_date,notes,updated_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("updated_at", { ascending: false }).limit(3000),
-    db.from("stock_item_instances").select("id,stock_item_id,serial_number,asset_tag,status,condition,employee_id,project_id,vehicle_id,last_service_date,next_service_date,notes,updated_at").eq("workspace_id", workspaceId).is("vehicle_id", null).is("employee_id", null).is("project_id", null).order("updated_at", { ascending: false }).limit(2000),
-    db.from("vehicle_required_qualifications").select("id,vehicle_id,qualification_type,notes,created_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("qualification_type").limit(2000)
+    needFuel ? db.from("fuel_entries").select("id,vehicle_id,employee_id,project_id,fueled_at,liters,gross_amount,mileage,invoice_id,invoice_line_id,fuel_type,station_name,source_document_id,created_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("fueled_at", { ascending: false }).limit(tab === "costs" ? 2500 : 800) : Promise.resolve(emptyResult),
+    needTrips ? db.from("trips").select("id,vehicle_id,employee_id,project_id,started_at,finished_at,start_location,end_location,distance_km,purpose,created_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("started_at", { ascending: false }).limit(tab === "operations" ? 2500 : 600) : Promise.resolve(emptyResult),
+    needDocuments ? db.from("vehicle_documents").select("id,vehicle_id,document_type,number,valid_from,valid_until,document_id,status,provider_name,amount,currency,reminder_days,created_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("valid_until").limit(tab === "documents" ? 2500 : 800) : Promise.resolve(emptyResult),
+    needAllocations ? db.from("vehicle_allocations").select("id,vehicle_id,project_id,employee_id,date_from,date_to,allocation_method,allocation_percent,created_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("date_from", { ascending: false }).limit(tab === "operations" ? 2000 : 600) : Promise.resolve(emptyResult),
+    needReadings ? db.from("meter_readings").select("id,vehicle_id,reading_date,mileage,reading_type,engine_hours,source,source_document_id,source_fuel_entry_id,source_service_order_id,verified,anomaly_reason,created_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("reading_date", { ascending: false }).limit(tab === "costs" ? 2000 : 1000) : Promise.resolve(emptyResult),
+    needCostRates ? db.from("vehicle_cost_rates").select("id,vehicle_id,valid_from,valid_to,cost_per_km,currency,created_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("valid_from", { ascending: false }).limit(1000) : Promise.resolve(emptyResult),
+    needComponents ? db.from("vehicle_components").select("id,vehicle_id,component_type,name,manufacturer,model,serial_number,dot_code,installed_at,removed_at,installed_mileage,installed_engine_hours,storage_location,condition,tread_depth_mm,notes,active,created_at,updated_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("updated_at", { ascending: false }).limit(2000) : Promise.resolve(emptyResult),
+    needEquipment ? db.from("stock_item_instances").select("id,stock_item_id,serial_number,asset_tag,status,condition,employee_id,project_id,vehicle_id,last_service_date,next_service_date,notes,updated_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("updated_at", { ascending: false }).limit(2000) : Promise.resolve(emptyResult),
+    needEquipment ? db.from("stock_item_instances").select("id,stock_item_id,serial_number,asset_tag,status,condition,employee_id,project_id,vehicle_id,last_service_date,next_service_date,notes,updated_at").eq("workspace_id", workspaceId).is("vehicle_id", null).is("employee_id", null).is("project_id", null).order("updated_at", { ascending: false }).limit(1500) : Promise.resolve(emptyResult),
+    needQualifications ? db.from("vehicle_required_qualifications").select("id,vehicle_id,qualification_type,notes,created_at").eq("workspace_id", workspaceId).in("vehicle_id", vehicleIds).order("qualification_type").limit(1500) : Promise.resolve(emptyResult)
   ]) : [];
 
   const fuel = vehicleScoped[0] ? rows(vehicleScoped[0], "tankowań") : [];
@@ -82,8 +93,8 @@ export async function getFleetCore300Data(workspaceId: string, options: CompanyP
 
   const stockItemIds = [...new Set([...vehicleStock, ...availableVehicleAssets].map((row) => String(row.stock_item_id ?? "")).filter(Boolean))];
   const [qualificationsResult, stockItemsResult] = await Promise.all([
-    employeeIds.length ? db.from("qualifications").select("id,employee_id,qualification_type,number,issued_at,valid_until,status").eq("workspace_id", workspaceId).in("employee_id", employeeIds).order("valid_until").limit(4000) : Promise.resolve({ data: [], error: null }),
-    stockItemIds.length ? db.from("stock_items").select("id,sku,name,item_type,manufacturer,model,unit").eq("workspace_id", workspaceId).in("id", stockItemIds).limit(3000) : Promise.resolve({ data: [], error: null })
+    needQualifications && employeeIds.length ? db.from("qualifications").select("id,employee_id,qualification_type,number,issued_at,valid_until,status").eq("workspace_id", workspaceId).in("employee_id", employeeIds).order("valid_until").limit(2000) : Promise.resolve({ data: [], error: null }),
+    needEquipment && stockItemIds.length ? db.from("stock_items").select("id,sku,name,item_type,manufacturer,model,unit").eq("workspace_id", workspaceId).in("id", stockItemIds).limit(2000) : Promise.resolve({ data: [], error: null })
   ]);
 
   return {

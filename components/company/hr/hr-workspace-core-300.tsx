@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { BriefcaseBusiness, CalendarDays, ClipboardCheck, Clock3, FileText, HardHat, Plus, ShieldCheck, UsersRound } from "lucide-react";
 import { ModuleDropzoneLink } from "@/components/documents/module-dropzone-link";
 import type { HrWorkspaceData, HrWorkspaceTab } from "@/lib/hr/types";
@@ -24,7 +25,7 @@ const HrTeamCostControl430 = dynamic(() => import("./hr-team-cost-control-430").
 const HrDocumentsCompact161 = dynamic(() => import("./hr-documents-compact-161").then((module) => module.HrDocumentsCompact161), { loading: SectionLoading });
 const HrEmployeeCreate300 = dynamic(() => import("./hr-employee-create-300").then((module) => module.HrEmployeeCreate300), { loading: SectionLoading });
 
-type Props = { workspaceId: string; data: HrWorkspaceData; canWrite: boolean; canApprove: boolean; canViewPayroll: boolean; canManagePayroll: boolean; companyCity?: string | null };
+type Props = { workspaceId: string; data: HrWorkspaceData; canWrite: boolean; canApprove: boolean; canViewPayroll: boolean; canManagePayroll: boolean; companyCity?: string | null; initialTab?: string };
 type TimeFocus = { employeeId: string; referenceDate: string } | null;
 
 const tabs: Array<{ id: HrWorkspaceTab; label: string; icon: ReactNode }> = [
@@ -39,18 +40,25 @@ const tabs: Array<{ id: HrWorkspaceTab; label: string; icon: ReactNode }> = [
 ];
 
 export function HrWorkspaceCore300(props: Props) {
-  const [tab, setTab] = useState<HrWorkspaceTab>("dashboard");
+  const router = useRouter();
+  const safeInitialTab = (["dashboard","employees","time","attendance","leaves","compliance","teams","documents"].includes(props.initialTab ?? "") ? props.initialTab : "dashboard") as HrWorkspaceTab;
+  const [tab, setTab] = useState<HrWorkspaceTab>(safeInitialTab);
   const [employeeCreateOpen, setEmployeeCreateOpen] = useState(false);
   const [timeFocus, setTimeFocus] = useState<TimeFocus>(null);
   const navigate = (target: HrWorkspaceTab, employeeId?: string) => {
     if (target === "time" && employeeId) setTimeFocus({ employeeId, referenceDate: props.data.referenceDate });
     else if (target !== "time") setTimeFocus(null);
     setTab(target);
+    const params = new URLSearchParams();
+    if (target !== "dashboard") params.set("tab", target);
+    const search = params.toString();
+    router.push(`/workspace/companies/${props.workspaceId}/hr${search ? `?${search}` : ""}`);
     if (target !== "employees") setEmployeeCreateOpen(false);
   };
   const openEmployeeTime = (employeeId: string) => {
     setTimeFocus({ employeeId, referenceDate: props.data.referenceDate });
     setTab("time");
+    router.push(`/workspace/companies/${props.workspaceId}/hr?tab=time`);
   };
 
   return <HrApprovalProvider canApprove={props.canApprove}><div className={styles.shell} data-hr-core="300" data-project-lifecycle-guard="540">

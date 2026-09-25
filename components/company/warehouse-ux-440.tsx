@@ -17,7 +17,7 @@ type Props = {
   prices: Row[];
   counterparties: Row[];
   purchaseOrders: Row[];
-  initialTab: "dashboard" | "stock";
+  initialTab: "dashboard" | "stock" | "waiting" | "movements" | "needs" | "assets" | "counts" | "prices" | "locations";
 };
 
 type EquipmentResult = {

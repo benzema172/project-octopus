@@ -19,6 +19,7 @@
     "test:migrations": "node scripts/validate-migrations-local.mjs && node scripts/validate-all-migrations-local.mjs",
     "check:schema": "node scripts/check-schema.mjs",
     "check:stability": "node scripts/check-stability-core.mjs",
+    "check:hygiene": "node scripts/check-repo-hygiene.mjs",
     "test:e2e-upload": "node scripts/e2e-upload.mjs",
     "test:e2e-core": "node scripts/e2e-core.mjs",
     "test:e2e-lifecycle": "node scripts/e2e-investment-lifecycle.mjs",
@@ -32,7 +33,7 @@
     "@supabase/ssr": "0.12.4",
     "@supabase/supabase-js": "2.112.3",
     "lucide-react": "1.33.0",
-    "next": "16.3.4",
+    "next": "16.3.6",
     "pdf-lib": "1.17.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -47,7 +48,7 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.3.4",
+    "eslint-config-next": "16.3.6",
     "typescript": "5.7.2",
     "vitest": "^4.1.11"
   }

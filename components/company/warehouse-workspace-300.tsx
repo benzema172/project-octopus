@@ -17,7 +17,7 @@ import styles from "./warehouse-workspace-310.module.css";
 type Tab = "dashboard" | "stock" | "waiting" | "movements" | "needs" | "assets" | "counts" | "prices" | "locations";
 type StockSortKey = "name" | "stock" | "available" | "reserved" | "fifo" | "price" | "change" | "supplier" | "purchase";
 type SortDirection = "asc" | "desc";
-type Props = { workspaceId: string; data: Data; canWrite: boolean; canApprove: boolean; query?: string };
+type Props = { workspaceId: string; data: Data; canWrite: boolean; canApprove: boolean; query?: string; initialTab?: Tab };
 type Act = (action: string, payload: Record<string, unknown>, success: string) => void;
 type Quality = { totalLines?: number; autoLines?: number; correctedLines?: number; learnedAliases?: number; automationRate?: number; correctionRate?: number; waitingDocuments?: number };
 type UndoState = { eventId: string; label: string } | null;
@@ -68,10 +68,18 @@ const tabDefs: Array<{ id: Tab; label: string; icon: ReactNode }> = [
   { id: "locations", label: "Lokalizacje", icon: <MapPin size={15} /> }
 ];
 
-export function WarehouseWorkspace300({ workspaceId, data, canWrite, canApprove, query = "" }: Props) {
+export function WarehouseWorkspace300({ workspaceId, data, canWrite, canApprove, query = "", initialTab }: Props) {
   const router = useRouter();
   const page = (data.page ?? { page: 1, pageSize: 40, total: 0 }) as PageMeta;
-  const [tab, setTab] = useState<Tab>(query || page.page > 1 ? "stock" : "dashboard");
+  const [tab, setTab] = useState<Tab>(initialTab ?? (query || page.page > 1 ? "stock" : "dashboard"));
+  const changeTab = useCallback((nextTab: Tab) => {
+    setTab(nextTab);
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    if (nextTab !== "dashboard") params.set("tab", nextTab);
+    const searchParams = params.toString();
+    router.push(`/workspace/companies/${workspaceId}/warehouse${searchParams ? `?${searchParams}` : ""}`);
+  }, [query, router, workspaceId]);
   const [search, setSearch] = useState(query);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
@@ -286,7 +294,7 @@ export function WarehouseWorkspace300({ workspaceId, data, canWrite, canApprove,
     </div>
 
     <div className={styles.toolbar}><nav className={styles.tabs} aria-label="Sekcje Magazynu 3.1">
-      {tabDefs.map((item) => <button type="button" key={item.id} className={`${styles.tab} ${tab === item.id ? styles.tabActive : ""}`} onClick={() => setTab(item.id)}>{item.icon}{item.label}{item.id === "waiting" && waitingReviews.length ? <b>{waitingReviews.length}</b> : null}</button>)}
+      {tabDefs.map((item) => <button type="button" key={item.id} className={`${styles.tab} ${tab === item.id ? styles.tabActive : ""}`} onClick={() => changeTab(item.id)}>{item.icon}{item.label}{item.id === "waiting" && waitingReviews.length ? <b>{waitingReviews.length}</b> : null}</button>)}
     </nav></div>
 
     {message ? <div className={styles.success}><Check size={15} />{message}{undo ? <button type="button" onClick={doUndo}><Undo2 size={13} /> Cofnij</button> : null}</div> : null}

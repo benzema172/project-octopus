@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { DocumentCentralArchive } from "@/components/documents/document-central-archive";
 import { DocumentUpload } from "@/components/documents/document-upload";
+import { ServerPagination } from "@/components/system/server-pagination";
 import { requireCurrentUser } from "@/lib/auth";
 import {
   domainAccessPolicyAllows,
@@ -13,7 +14,7 @@ import {
   type Domain
 } from "@/lib/authorization";
 import { listDocumentLibraryInsights } from "@/lib/data/document-library";
-import { isDocumentStorageSchemaReady, listDocumentsForWorkspace } from "@/lib/data/documents";
+import { isDocumentStorageSchemaReady, listDocumentsForWorkspacePage } from "@/lib/data/documents";
 import { listAiInbox, type AiInboxItem } from "@/lib/data/operations";
 import { listProjectsForWorkspace } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
@@ -24,19 +25,19 @@ export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ workspaceId: string }>;
-  searchParams: Promise<{ upload?: string; sourceModule?: string }>;
+  searchParams: Promise<{ upload?: string; sourceModule?: string; page?: string }>;
 };
 
-async function safeWorkspaceDocuments(workspaceId: string, trashed = false) {
+async function safeWorkspaceDocumentsPage(workspaceId: string, options: { trashed?: boolean; page?: number; pageSize?: number }) {
   try {
-    return await listDocumentsForWorkspace(workspaceId, trashed);
+    return await listDocumentsForWorkspacePage(workspaceId, options);
   } catch (error) {
     console.error("Project Octopus: company documents fallback", {
       workspaceId,
-      trashed,
+      trashed: options.trashed ?? false,
       message: error instanceof Error ? error.message : String(error)
     });
-    return [] as DocumentSummary[];
+    return { items: [] as DocumentSummary[], total: 0, page: Math.max(1, options.page ?? 1), pageSize: options.pageSize ?? 60 };
   }
 }
 
@@ -56,6 +57,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
   const { workspaceId } = await params;
   const query = await searchParams;
   const sourceModule = normalizeDocumentSourceModule(query.sourceModule);
+  const archivePage = Math.max(1, Math.floor(Number(query.page ?? 1) || 1));
   const user = await requireCurrentUser();
   const workspace = await getWorkspaceForUser(user, workspaceId);
 
@@ -65,13 +67,13 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
     return <DomainAccessDenied workspaceId={workspace.id} area={sourceModule ? `Wrzutnia — ${sourceModuleLabel(sourceModule)}` : "Dokumenty"} />;
   }
 
-  const [projects, allDocuments, allTrashedDocuments, storageReady, accessPolicy, allAiInboxItems] = await Promise.all([
+  const [projects, documentsPage, trashedPage, storageReady, accessPolicy, allAiInboxItems] = await Promise.all([
     listProjectsForWorkspace(user, workspace.id).catch((error) => {
       console.error("Project Octopus: project list fallback in documents", error);
       return [];
     }),
-    safeWorkspaceDocuments(workspace.id),
-    safeWorkspaceDocuments(workspace.id, true),
+    safeWorkspaceDocumentsPage(workspace.id, { page: archivePage, pageSize: 60 }),
+    safeWorkspaceDocumentsPage(workspace.id, { trashed: true, page: 1, pageSize: 40 }),
     isDocumentStorageSchemaReady().catch(() => false),
     loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id }),
     listAiInbox(workspace.id).catch((error) => {
@@ -87,8 +89,8 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
       projectId: document.project_id
     });
 
-  const documents = allDocuments.filter(canReadDocument);
-  const trashedDocuments = allTrashedDocuments.filter(canReadDocument);
+  const documents = documentsPage.items.filter(canReadDocument);
+  const trashedDocuments = trashedPage.items.filter(canReadDocument);
   const insights = await listDocumentLibraryInsights(workspace.id, documents.map((document) => document.id)).catch((error) => {
     console.error("Project Octopus: central document archive insight fallback", error);
     return [];
@@ -157,7 +159,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
           <p>Wszystkie nowe pliki zaczynają we Wrzutni. Octopus AI rozpoznaje je, odczytuje i przekazuje do właściwego modułu, a archiwum zachowuje jedno źródło dokumentu.</p>
         </div>
         <div className="co-heading-actions">
-          <strong className="co-count-badge">{documents.length} plików · {reviewCount} do weryfikacji</strong>
+          <strong className="co-count-badge">{documentsPage.total} plików · {reviewCount} do weryfikacji</strong>
           <Link href={`/workspace/companies/${workspace.id}/ai-inbox`} className="co-text-link">Pełna Skrzynka AI →</Link>
         </div>
       </header>
@@ -191,6 +193,13 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
               displayMode="intake"
             />
           )}
+        />
+        <ServerPagination
+          page={documentsPage.page}
+          pageSize={documentsPage.pageSize}
+          total={documentsPage.total}
+          pathname={`/workspace/companies/${workspace.id}/documents`}
+          query={{ sourceModule: query.sourceModule }}
         />
       </section>
     </main>

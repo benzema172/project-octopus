@@ -19,7 +19,7 @@ function visiblePrices(rows: Row[]) {
   return [...byItem.values()].flatMap((history) => visibleWarehousePriceHistory450(history) as Row[]);
 }
 
-type WarehouseTab = "dashboard" | "stock" | "waiting" | "movements" | "needs" | "assets" | "counts" | "prices" | "locations" | "planning" | "other";
+type WarehouseTab = "dashboard" | "stock" | "waiting" | "movements" | "needs" | "assets" | "counts" | "prices" | "locations";
 
 function WarehouseEnhancements({
   workspaceId,
@@ -46,7 +46,7 @@ function WarehouseEnhancements({
   purchaseOrders: Row[];
   balances: Row[];
   costLayers: Row[];
-  initialTab: "dashboard" | "stock";
+  initialTab: WarehouseTab;
 }) {
   const [activeTab, setActiveTab] = useState<WarehouseTab>(initialTab);
 
@@ -82,13 +82,14 @@ function WarehouseEnhancements({
   </>;
 }
 
-export default function WarehouseOperations({ workspaceId, data, canWrite, canApprove, query }: {
+export default function WarehouseOperations({ workspaceId, data, canWrite, canApprove, query, tab }: {
   workspaceId: string;
   data: Data;
   canWrite: boolean;
   canApprove: boolean;
   pathname: string;
   query: string;
+  tab?: string;
 }) {
   const warehouses = (data.warehouses ?? []) as Row[];
   const items = ((data.catalogItems ?? data.items) ?? []) as Row[];
@@ -99,7 +100,9 @@ export default function WarehouseOperations({ workspaceId, data, canWrite, canAp
   const balances = ((data.globalBalances ?? data.balances) ?? []) as Row[];
   const costLayers = (data.inventoryCostLayers ?? []) as Row[];
   const page = (data.page ?? {}) as Row;
-  const initialTab = query || Number(page.page ?? 1) > 1 ? "stock" : "dashboard";
+  const initialTab = (["dashboard","stock","waiting","movements","needs","assets","counts","prices","locations"].includes(tab ?? "")
+    ? tab
+    : (query || Number(page.page ?? 1) > 1 ? "stock" : "dashboard")) as WarehouseTab;
   const employees = ((data.employees ?? []) as Row[]).map((row) => ({
     ...row,
     name: `${String(row.first_name ?? "").trim()} ${String(row.last_name ?? "").trim()}`.trim() || String(row.employee_number ?? "Pracownik")
@@ -118,6 +121,7 @@ export default function WarehouseOperations({ workspaceId, data, canWrite, canAp
       canWrite={canWrite}
       canApprove={canApprove}
       query={query}
+      initialTab={initialTab}
     />
     <WarehouseEnhancements
       workspaceId={workspaceId}

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const read=(path:string)=>readFileSync(path,"utf8");
@@ -88,27 +88,21 @@ describe("Fleet 4.0 Connected Intelligence — A+B+C",()=>{
     expect(route).toContain("fleet_provider_sync_runs");
   });
 
-  it("keeps Fleet 4.0 implementation dormant while the active Flota UI exposes only Core 3.0",()=>{
-    const ui=read("components/company/fleet-workspace-400.tsx");
+  it("removes retired Fleet 4.0 UI while the active Flota UI stays on Core 3.0",()=>{
     const operations=read("components/company/operations/fleet-operations.tsx");
-    expect(ui).toContain("FleetWorkspace300");
+    expect(existsSync("components/company/fleet-workspace-400.tsx")).toBe(false);
     expect(operations).toContain("FleetWorkspace300");
     expect(operations).not.toContain("FleetWorkspace400");
-    for(const label of ["Mapa i Connected","Intelligence AI","Polska i integracje"]) expect(operations).not.toContain(label);
   });
 
-  it("keeps bounded Connected Fleet datasets available but does not load them from the active Flota page",()=>{
+  it("removes the retired Connected loader from active Flota while retaining backend contracts",()=>{
     const page=read("app/workspace/companies/[workspaceId]/fleet/page.tsx");
-    const loader=read("lib/data/fleet-connected-400.ts");
+    const migration=read("supabase/migrations/20260903203000_fleet_connected_400.sql");
     expect(page).toContain("getFleetCore300Data");
     expect(page).not.toContain("getFleetConnected400Data");
-    expect(loader).toContain("getFleetCore300Data");
-    expect(loader).toContain("Promise.all");
-    expect(loader).toContain('.gte("captured_at", since24h)');
-    expect(loader).toContain('.limit(4000)');
-    expect(loader).toContain("connectedSummary");
-    expect(loader).toContain("serviceKitShortages");
-    expect(loader).toContain("providerSyncRuns");
+    expect(existsSync("lib/data/fleet-connected-400.ts")).toBe(false);
+    expect(migration).toContain("fleet_telematics_connections");
+    expect(migration).toContain("get_fleet_connected_summary_400");
   });
 
   it("keeps deterministic Fleet Intelligence available on demand but does not schedule the retired feature",()=>{
@@ -139,9 +133,10 @@ describe("Fleet 4.0 Connected Intelligence — A+B+C",()=>{
   });
 
   it("does not pretend that vendor hardware is bundled with Project Octopus",()=>{
-    const ui=read("components/company/fleet-workspace-400.tsx");
     const adapters=read("lib/fleet/telematics-adapters.ts");
-    expect(ui).toContain("Dane live pojawiają się dopiero po podłączeniu rzeczywistego konta API, urządzenia OBD/CAN/GPS");
+    const route=read("app/api/integrations/fleet/ingest/route.ts");
     expect(adapters).toContain("uruchomienie wymaga");
+    expect(route).toContain("x-fleet-secret");
+    expect(route).toContain("normalizeFleetTelemetryPayload");
   });
 });

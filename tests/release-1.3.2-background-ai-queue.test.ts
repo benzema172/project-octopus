@@ -4,16 +4,12 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(path, "utf8");
 const worker = read("app/api/brain/worker/route.ts");
 const migration = read("supabase/migrations/20260826111000_background_ai_queue_132.sql");
-const release = read("RELEASE_1.3.2.md");
 const allMigrations = readdirSync("supabase/migrations")
   .filter((name) => name.endsWith(".sql"))
   .map((name) => read(`supabase/migrations/${name}`))
   .join("\n");
 
 describe("Project Octopus 1.3.2 — Background AI Queue", () => {
-  it("keeps the historical 1.3.2 release record", () => {
-    expect(release).toContain("Project Octopus 1.3.2");
-  });
 
   it("schedules the hosted background wake-up every five minutes", () => {
     expect(migration).toContain("create extension if not exists pg_cron");

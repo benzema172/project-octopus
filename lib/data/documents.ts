@@ -158,7 +158,7 @@ function normalizeVersion(row: FlexibleRow, projectId: string | null, fallbackNa
   };
 }
 
-function normalizeDocuments(rows: FlexibleDocumentRow[], fallbackProjectId: string | null) {
+function normalizeDocuments(rows: FlexibleDocumentRow[], fallbackProjectId: string | null): DocumentSummary[] {
   return rows.map((row) => {
     const projectId = stringValue(row, "project_id") ?? fallbackProjectId;
     const versions = [...(row.document_versions ?? [])].sort((left, right) => numberValue(right, "version_number", "version_no") - numberValue(left, "version_number", "version_no"));
@@ -320,6 +320,30 @@ export async function listDocumentsForWorkspace(workspaceId: string, trashed = f
   if (error) throw new Error(`Nie udało się pobrać dokumentów firmy: ${error.message}`);
   const documents = normalizeDocuments(data ?? [], null);
   return trashed ? documents : attachDocumentFlows(documents);
+}
+
+export async function listDocumentsForWorkspacePage(workspaceId: string, options: { trashed?: boolean; page?: number; pageSize?: number } = {}) {
+  const trashed = options.trashed ?? false;
+  const page = Math.max(1, Math.floor(options.page ?? 1));
+  const pageSize = Math.min(100, Math.max(20, Math.floor(options.pageSize ?? 60)));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  const { data, error, count } = await createServiceSupabaseClient()
+    .from("documents")
+    .select(DOCUMENT_WITH_VERSIONS_SELECT, { count: "exact" })
+    .eq("workspace_id", workspaceId)
+    .filter("deleted_at", trashed ? "not.is" : "is", null)
+    .order("updated_at", { ascending: false })
+    .range(from, to)
+    .returns<FlexibleDocumentRow[]>();
+  if (error) throw new Error(`Nie udało się pobrać strony dokumentów firmy: ${error.message}`);
+  const documents = normalizeDocuments(data ?? [], null);
+  return {
+    items: trashed ? documents : await attachDocumentFlows(documents),
+    total: count ?? 0,
+    page,
+    pageSize
+  };
 }
 
 export async function safeListDocumentsForProject(projectId: string): Promise<DocumentSummary[]> {

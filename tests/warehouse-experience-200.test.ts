@@ -3,58 +3,37 @@ import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
-describe("Warehouse 2.0 product experience", () => {
-  it("exposes the full Warehouse dashboard and operational areas", () => {
-    const component = read("components/company/warehouse-command-center.tsx");
-    expect(component).toContain('data-warehouse-experience="2.0"');
-    expect(component).toContain('"dashboard" | "stock" | "ai" | "movements"');
-    expect(component).toContain("Pulpit Magazynu");
-    expect(component).toContain("Kartoteki i stany");
-    expect(component).toContain("Dostawy AI");
-    expect(component).toContain("Ruchy magazynowe");
-    expect(component).toContain("Sprzęt i urządzenia");
-    expect(component).toContain("Ceny i dostawcy");
-    expect(component).toContain("Lokalizacje i aliasy");
+describe("Warehouse current product experience", () => {
+  const workspace = read("components/company/warehouse-workspace-300.tsx");
+  const operations = read("components/company/operations/warehouse-operations.tsx");
+
+  it("exposes the current Warehouse 3.1 operational areas", () => {
+    expect(workspace).toContain('data-warehouse-experience="3.1"');
+    expect(workspace).toContain('aria-label="Sekcje Magazynu 3.1"');
+    for (const label of ["Pulpit", "Magazyn", "Poczekalnia", "Ruchy", "Braki i rezerwacje", "Sprzęt", "Inwentaryzacje", "Ceny i dostawcy", "Lokalizacje"]) expect(workspace).toContain(label);
   });
 
-  it("keeps Warehouse area panels collapsed by default and lets the active tile collapse again", () => {
-    const component = read("components/company/warehouse-command-center.tsx");
-    expect(component).toContain("useState<Tab | null>(null)");
-    expect(component).toContain("current === item.id ? null : item.id");
-    expect(component).toContain("aria-expanded={tab === item.id}");
+  it("uses server-routed tabs so each area can load only the data it needs", () => {
+    expect(workspace).toContain("initialTab");
+    expect(workspace).toContain("URLSearchParams");
+    expect(workspace).toContain('params.set("tab", nextTab)');
+    expect(workspace).toContain("router.push");
+    expect(operations).toContain("initialTab");
   });
 
-  it("has a useful empty-state onboarding path for a new company", () => {
-    const component = read("components/company/warehouse-command-center.tsx");
-    expect(component).toContain("Magazyn jest gotowy, ale nie ma jeszcze danych operacyjnych");
-    expect(component).toContain("Otwórz Wrzutnię");
-    expect(component).toContain("AI odczyta pozycje");
-    expect(component).toContain("Potwierdź ruch");
-    expect(component).toContain('/workspace/companies/${workspaceId}/documents');
+  it("keeps the Wrzutnia as the primary document onboarding path", () => {
+    expect(workspace).toContain("ModuleDropzoneLink");
+    expect(workspace).toContain('sourceModule="warehouse"');
   });
 
-  it("keeps all operational warehouse flows wired to the atomic backend", () => {
-    const component = read("components/company/warehouse-command-center.tsx");
-    expect(component).toContain('fetch("/api/company/warehouse-atomic"');
-    for (const entity of [
-      "ai_warehouse_import",
-      "stock_instance_create",
-      "stock_instance_assign",
-      "stock_instance_return",
-      "stock_instance_service",
-      "inventory_count_create",
-      "inventory_count_line",
-      "inventory_count_approve",
-      "material_alias"
-    ]) expect(component).toContain(`"${entity}"`);
-    expect(component).toContain("WarehouseFlowIntegrityPanel");
+  it("keeps current physical warehouse operations wired to atomic endpoints", () => {
+    for (const action of ["manual_stock_movement","stock_instance_create","inventory_count_create","inventory_count_line","inventory_count_approve","replenishment_order","warehouse_location_create","warehouse_location_assign"]) expect(workspace).toContain(action);
   });
 
-  it("keeps the dashboard and sibling cards on the shared equal-height contract", () => {
-    const component = read("components/company/warehouse-command-center.tsx");
-    expect(component).toContain('data-equal-height-row="warehouse-modules"');
-    expect(component).toContain('data-equal-height-row="warehouse-attention"');
-    expect(component).toContain('data-equal-height-row="warehouse-dashboard"');
-    expect(component).toContain("data-equal-height-card");
+  it("keeps the compact six-card dashboard in the active module stylesheet", () => {
+    const styles = read("components/company/warehouse-workspace-310.module.css");
+    expect(styles).toContain("grid-template-columns:repeat(6,minmax(0,1fr))");
+    expect(workspace).toContain("Automatyzacja AI");
+    expect(workspace).toContain("Wartość FIFO");
   });
 });

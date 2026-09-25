@@ -64,20 +64,34 @@ export type WarehouseDocumentPreview300 = {
 
 type CountResult = { count: number | null; error: { message: string } | null };
 
-export async function getWarehouseAi300Data(workspaceId: string) {
+export async function getWarehouseAi300Data(workspaceId: string, activeTab = "dashboard") {
   const supabase = createServiceSupabaseClient();
-  const { data: reviews, error: reviewsError } = await supabase
-    .from("warehouse_document_reviews")
-    .select("id,workspace_id,document_id,document_version_id,project_id,source_module,document_type,document_number,document_direction,document_date,supplier_name,supplier_tax_id,document_name,ai_summary,confidence,source_line_count,total_lines,stock_lines,review_lines,non_stock_lines,draft_movement_id,status,updated_at")
-    .eq("workspace_id", workspaceId)
-    .neq("status", "ignored")
-    .order("status", { ascending: false })
-    .order("updated_at", { ascending: false })
-    .limit(120)
-    .returns<WarehouseReview300[]>();
-  if (reviewsError) throw new Error(`Nie udało się załadować Poczekalni Magazynu: ${reviewsError.message}`);
+  const tab = activeTab || "dashboard";
+  const needWaiting = tab === "waiting" || tab === "dashboard";
+  const needCatalog = ["dashboard", "stock", "waiting", "needs", "assets", "counts", "prices", "locations"].includes(tab);
+  const needLocations = tab === "locations";
+  const needReservations = ["dashboard", "stock", "needs"].includes(tab);
+  const needInstances = ["dashboard", "assets"].includes(tab);
+  const needPrices = ["dashboard", "stock", "prices"].includes(tab);
+  const needCostLayers = ["dashboard", "stock", "prices"].includes(tab);
+  const needPurchaseOrders = ["dashboard", "waiting", "needs"].includes(tab);
+  const needBalances = ["dashboard", "stock", "needs", "prices"].includes(tab);
+  const needQuality = tab === "dashboard" || tab === "waiting";
 
-  const reviewRows = reviews ?? [];
+  const reviewsResult = needWaiting
+    ? await supabase
+        .from("warehouse_document_reviews")
+        .select("id,workspace_id,document_id,document_version_id,project_id,source_module,document_type,document_number,document_direction,document_date,supplier_name,supplier_tax_id,document_name,ai_summary,confidence,source_line_count,total_lines,stock_lines,review_lines,non_stock_lines,draft_movement_id,status,updated_at")
+        .eq("workspace_id", workspaceId)
+        .neq("status", "ignored")
+        .order("status", { ascending: false })
+        .order("updated_at", { ascending: false })
+        .limit(tab === "waiting" ? 120 : 40)
+        .returns<WarehouseReview300[]>()
+    : { data: [] as WarehouseReview300[], error: null };
+
+  if (reviewsResult.error) throw new Error(`Nie udało się załadować Poczekalni Magazynu: ${reviewsResult.error.message}`);
+  const reviewRows = reviewsResult.data ?? [];
   const reviewIds = reviewRows.map((row) => row.id);
   const versionIds = reviewRows.map((row) => row.document_version_id);
 
@@ -100,49 +114,75 @@ export async function getWarehouseAi300Data(workspaceId: string) {
     correctedMetric,
     learnedMetric
   ] = await Promise.all([
-    reviewIds.length
+    needWaiting && reviewIds.length
       ? supabase.from("warehouse_ai_lines")
           .select("id,review_id,document_id,document_version_id,source_line_index,raw_description,normalized_description,line_class,quantity,unit,unit_price,normalized_unit_price,currency,supplier_sku,manufacturer,model,ean,candidate_stock_item_id,match_confidence,decision,decision_reason,ai_metadata,human_corrected")
           .in("review_id", reviewIds).order("source_line_index", { ascending: true }).returns<WarehouseAiLine300[]>()
       : Promise.resolve({ data: [] as WarehouseAiLine300[], error: null }),
-    versionIds.length
+    needWaiting && versionIds.length
       ? supabase.from("document_versions").select("id,file_name,mime_type").in("id", versionIds).returns<Array<{ id: string; file_name: string; mime_type: string }>>()
       : Promise.resolve({ data: [] as Array<{ id: string; file_name: string; mime_type: string }>, error: null }),
-    versionIds.length
+    tab === "waiting" && versionIds.length
       ? supabase.from("document_texts").select("document_version_id,extracted_text").in("document_version_id", versionIds).returns<Array<{ document_version_id: string; extracted_text: string | null }>>()
       : Promise.resolve({ data: [] as Array<{ document_version_id: string; extracted_text: string | null }>, error: null }),
-    supabase.from("stock_items")
-      .select("id,sku,name,item_type,unit,minimum_stock,optimal_stock,serial_tracking,active,category,subcategory,manufacturer,model,barcode,warranty_months,stock_strategy,lot_tracking,expiry_tracking,gtin,gs1_enabled,abc_class,xyz_class,lead_time_days,service_level_pct,reorder_policy,dynamic_min_stock,dynamic_max_stock,shelf_life_days,created_at,updated_at")
-      .eq("workspace_id", workspaceId).eq("active", true).order("name").limit(5000),
-    supabase.from("warehouse_locations")
-      .select("id,warehouse_id,parent_id,code,name,qr_token,active,zone_type,capacity_units,sequence_no,putaway_priority,allowed_item_types,created_at,updated_at")
-      .eq("workspace_id", workspaceId).eq("active", true).order("code").limit(5000),
-    supabase.from("stock_item_location_assignments")
-      .select("id,stock_item_id,warehouse_location_id,preferred,created_at")
-      .eq("workspace_id", workspaceId).limit(5000),
-    supabase.from("reservations")
-      .select("id,project_id,warehouse_id,stock_item_id,quantity,required_at,status")
-      .eq("workspace_id", workspaceId).in("status", ["open", "pending", "reserved"]).order("required_at").limit(5000),
-    supabase.from("stock_item_instances")
-      .select("id,stock_item_id,serial_number,asset_tag,purchase_date,purchase_price,warranty_until,status,condition,current_warehouse_id,employee_id,project_id,vehicle_id,last_service_date,next_service_date,notes,created_at,updated_at")
-      .eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(3000),
-    supabase.from("price_observations")
-      .select("id,project_id,stock_item_id,counterparty_id,source_type,source_id,observed_at,quantity,unit,unit_price_net,currency,price_stage,canonical_purchase,created_at")
-      .eq("workspace_id", workspaceId).order("observed_at", { ascending: false }).limit(8000),
-    supabase.from("warehouse_ai_decision_events")
-      .select("id,ai_line_id,before_decision,before_candidate_stock_item_id,before_match_confidence,before_reason,after_decision,after_candidate_stock_item_id,created_at,reverted_at")
-      .eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(250),
-    supabase.from("inventory_cost_layers")
-      .select("id,warehouse_id,stock_item_id,remaining_quantity,unit_cost,received_at,recognition_mode,owner_project_id")
-      .eq("workspace_id", workspaceId).gt("remaining_quantity", 0).order("received_at", { ascending: false }).limit(6000),
-    supabase.from("purchase_orders")
-      .select("id,project_id,counterparty_id,order_number,status,ordered_at,expected_at,currency,total_amount,notes,destination_mode,created_at")
-      .eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(250),
-    getStockBalances(workspaceId),
-    supabase.from("warehouse_ai_lines").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId) as unknown as Promise<CountResult>,
-    supabase.from("warehouse_ai_lines").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("decision", "auto_matched") as unknown as Promise<CountResult>,
-    supabase.from("warehouse_ai_lines").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("human_corrected", true) as unknown as Promise<CountResult>,
-    supabase.from("material_aliases").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("status", "approved") as unknown as Promise<CountResult>
+    needCatalog
+      ? supabase.from("stock_items")
+          .select("id,sku,name,item_type,unit,minimum_stock,optimal_stock,serial_tracking,active,category,subcategory,manufacturer,model,barcode,warranty_months,stock_strategy,lot_tracking,expiry_tracking,gtin,gs1_enabled,abc_class,xyz_class,lead_time_days,service_level_pct,reorder_policy,dynamic_min_stock,dynamic_max_stock,shelf_life_days,created_at,updated_at")
+          .eq("workspace_id", workspaceId).eq("active", true).order("name").limit(2500)
+      : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
+    needLocations
+      ? supabase.from("warehouse_locations")
+          .select("id,warehouse_id,parent_id,code,name,qr_token,active,zone_type,capacity_units,sequence_no,putaway_priority,allowed_item_types,created_at,updated_at")
+          .eq("workspace_id", workspaceId).eq("active", true).order("code").limit(2500)
+      : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
+    needLocations
+      ? supabase.from("stock_item_location_assignments")
+          .select("id,stock_item_id,warehouse_location_id,preferred,created_at")
+          .eq("workspace_id", workspaceId).limit(2500)
+      : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
+    needReservations
+      ? supabase.from("reservations")
+          .select("id,project_id,warehouse_id,stock_item_id,quantity,required_at,status")
+          .eq("workspace_id", workspaceId).in("status", ["open", "pending", "reserved"]).order("required_at").limit(2500)
+      : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
+    needInstances
+      ? supabase.from("stock_item_instances")
+          .select("id,stock_item_id,serial_number,asset_tag,purchase_date,purchase_price,warranty_until,status,condition,current_warehouse_id,employee_id,project_id,vehicle_id,last_service_date,next_service_date,notes,created_at,updated_at")
+          .eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(1500)
+      : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
+    needPrices
+      ? supabase.from("price_observations")
+          .select("id,project_id,stock_item_id,counterparty_id,source_type,source_id,observed_at,quantity,unit,unit_price_net,currency,price_stage,canonical_purchase,created_at")
+          .eq("workspace_id", workspaceId).order("observed_at", { ascending: false }).limit(tab === "prices" ? 5000 : 2500)
+      : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
+    tab === "waiting"
+      ? supabase.from("warehouse_ai_decision_events")
+          .select("id,ai_line_id,before_decision,before_candidate_stock_item_id,before_match_confidence,before_reason,after_decision,after_candidate_stock_item_id,created_at,reverted_at")
+          .eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(200)
+      : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
+    needCostLayers
+      ? supabase.from("inventory_cost_layers")
+          .select("id,warehouse_id,stock_item_id,remaining_quantity,unit_cost,received_at,recognition_mode,owner_project_id")
+          .eq("workspace_id", workspaceId).gt("remaining_quantity", 0).order("received_at", { ascending: false }).limit(3000)
+      : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
+    needPurchaseOrders
+      ? supabase.from("purchase_orders")
+          .select("id,project_id,counterparty_id,order_number,status,ordered_at,expected_at,currency,total_amount,notes,destination_mode,created_at")
+          .eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(150)
+      : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
+    needBalances ? getStockBalances(workspaceId) : Promise.resolve([]),
+    needQuality
+      ? supabase.from("warehouse_ai_lines").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId) as unknown as Promise<CountResult>
+      : Promise.resolve({ count: 0, error: null } as CountResult),
+    needQuality
+      ? supabase.from("warehouse_ai_lines").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("decision", "auto_matched") as unknown as Promise<CountResult>
+      : Promise.resolve({ count: 0, error: null } as CountResult),
+    needQuality
+      ? supabase.from("warehouse_ai_lines").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("human_corrected", true) as unknown as Promise<CountResult>
+      : Promise.resolve({ count: 0, error: null } as CountResult),
+    needQuality
+      ? supabase.from("material_aliases").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("status", "approved") as unknown as Promise<CountResult>
+      : Promise.resolve({ count: 0, error: null } as CountResult)
   ]);
 
   const linesError = "error" in linesResult ? linesResult.error : null;
