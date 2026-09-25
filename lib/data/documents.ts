@@ -355,15 +355,15 @@ export async function listDocumentsForWorkspacePage(
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
   const query = options.query?.trim() ?? "";
-  const module = options.module?.trim() ?? "";
+  const archiveModule = options.module?.trim() ?? "";
   const review = options.review ?? false;
   const db = createServiceSupabaseClient();
 
-  if (query || module || review) {
+  if (query || archiveModule || review) {
     const search = await db.rpc("search_company_documents_810", {
       p_workspace_id: workspaceId,
       p_query: query || null,
-      p_module: module || null,
+      p_module: archiveModule || null,
       p_review: review,
       p_trashed: trashed,
       p_limit: pageSize,
