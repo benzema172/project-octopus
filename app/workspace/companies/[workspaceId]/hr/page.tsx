@@ -12,8 +12,8 @@ import createModal from "./hr-employee-create-modal-151.module.css";
 
 export const dynamic = "force-dynamic";
 
-export default async function HrPage({ params }: { params: Promise<{ workspaceId: string }> }) {
-  const { workspaceId } = await params;
+export default async function HrPage({ params, searchParams }: { params: Promise<{ workspaceId: string }>; searchParams: Promise<{ tab?: string }> }) {
+  const [{ workspaceId }, query] = await Promise.all([params, searchParams]);
   const user = await requireCurrentUser();
   const workspace = await getWorkspaceForUser(user, workspaceId);
   if (!workspace) notFound();
@@ -28,7 +28,7 @@ export default async function HrPage({ params }: { params: Promise<{ workspaceId
   ]);
   const canViewPayroll = canApprove || canFinanceRead;
   const canManagePayroll = canApprove || canFinanceWrite;
-  const data = await getHrWorkspace141Data(workspace.id, { referenceDate, includePayroll: canViewPayroll });
+  const data = await getHrWorkspace141Data(workspace.id, { referenceDate, includePayroll: canViewPayroll, tab: query.tab });
 
   return <main className={`co-page ${styles.hr141} ${regression.hr1410} ${compact.profile143} ${createModal.create151}`}>
     <header className="co-page-heading">
@@ -45,6 +45,7 @@ export default async function HrPage({ params }: { params: Promise<{ workspaceId
       canViewPayroll={canViewPayroll}
       canManagePayroll={canManagePayroll}
       companyCity={workspace.city}
+      initialTab={query.tab}
     />
   </main>;
 }
