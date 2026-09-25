@@ -93,6 +93,7 @@ create table if not exists public.accounting_decision_memory (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   counterparty_id uuid not null references public.counterparties(id) on delete cascade,
   normalized_pattern text not null,
+  sample_description text,
   line_type text,
   expense_category text,
   allocation_scope text,
@@ -294,6 +295,14 @@ begin
   if exists(select 1 from public.accounting_entry_lines where entry_id=v_entry.id and workspace_id=p_workspace_id and tax_treatment='review') then
     raise exception 'Dekret zawiera pozycje z nierozstrzygniętym KUP/NKUP. Uzupełnij je przed zatwierdzeniem.';
   end if;
+  if exists(select 1 from public.accounting_settings s where s.workspace_id=p_workspace_id and s.require_jpk_markers=true)
+     and exists(
+       select 1 from public.accounting_entry_lines l
+       join public.accounting_accounts a on a.id=l.account_id
+       where l.entry_id=v_entry.id and l.workspace_id=p_workspace_id and nullif(trim(coalesce(a.jpk_s12_1,'')),'') is null
+     ) then
+    raise exception 'Polityka firmy wymaga znacznika JPK S_12_1 na każdym koncie użytym w dekrecie.';
+  end if;
 
   update public.accounting_entries set status='approved',approved_by=p_actor_id,approved_at=now(),locked_at=now(),needs_review=false,updated_at=now()
   where id=v_entry.id;
@@ -318,15 +327,16 @@ begin
       v_pattern:=public.normalize_accounting_pattern_700(coalesce(v_line.line_description,v_line.description));
       if length(v_pattern)>=4 then
         insert into public.accounting_decision_memory(
-          workspace_id,counterparty_id,normalized_pattern,line_type,expense_category,allocation_scope,account_id,tax_treatment,vat_deduction_pct,
+          workspace_id,counterparty_id,normalized_pattern,sample_description,line_type,expense_category,allocation_scope,account_id,tax_treatment,vat_deduction_pct,
           confirmations,rejections,weight,active,last_confirmed_by,updated_at
         ) values(
-          p_workspace_id,v_counterparty,v_pattern,v_line.line_type,v_line.expense_category,v_line.allocation_scope,v_line.account_id,
+          p_workspace_id,v_counterparty,v_pattern,left(coalesce(v_line.line_description,v_line.description),500),v_line.line_type,v_line.expense_category,v_line.allocation_scope,v_line.account_id,
           v_line.tax_treatment,v_line.vat_deduction_pct,case when v_line.manual_override then 2 else 1 end,0,
           case when v_line.manual_override then 0.98 else 0.90 end,true,p_actor_id,now()
         )
         on conflict(workspace_id,counterparty_id,normalized_pattern,account_id) do update set
           confirmations=public.accounting_decision_memory.confirmations + case when excluded.weight>=0.98 then 2 else 1 end,
+          sample_description=coalesce(excluded.sample_description,public.accounting_decision_memory.sample_description),
           tax_treatment=excluded.tax_treatment,vat_deduction_pct=excluded.vat_deduction_pct,
           weight=least(1.0,greatest(public.accounting_decision_memory.weight,excluded.weight)+0.01),
           active=true,last_confirmed_by=p_actor_id,updated_at=now();
