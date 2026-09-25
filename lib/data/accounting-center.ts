@@ -3,7 +3,7 @@ import "server-only";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type {
   AccountingAccount, AccountingCenterData, AccountingEntry, AccountingEntryLine,
-  AccountingExportProfile, AccountingPlanImport, AccountingRule, AccountingSettings, AccountingSuggestion
+  AccountingCounterparty, AccountingExportProfile, AccountingPlanImport, AccountingRule, AccountingSettings, AccountingSuggestion
 } from "@/lib/types/accounting";
 
 type Row = Record<string, unknown>;
@@ -62,11 +62,17 @@ export async function getAccountingCenter(workspaceId: string): Promise<Accounti
   }));
   for (const rule of ruleRows) { const cid = nullable(rule.counterparty_id); if (cid) counterpartyIds.add(cid); }
 
-  const counterpartiesResult = counterpartyIds.size
-    ? await db.from("counterparties").select("id,name,tax_id").eq("workspace_id", workspaceId).in("id", [...counterpartyIds])
-    : { data: [] as Row[], error: null };
+  const counterpartiesResult = await db.from("counterparties")
+    .select("id,name,tax_id")
+    .eq("workspace_id", workspaceId)
+    .order("name")
+    .limit(1500);
   if (counterpartiesResult.error) throw new Error(`Nie udało się pobrać kontrahentów: ${counterpartiesResult.error.message}`);
-  const counterparties = new Map(((counterpartiesResult.data ?? []) as Row[]).map((row) => [text(row.id), row]));
+  const counterpartyRows = (counterpartiesResult.data ?? []) as Row[];
+  const counterparties = new Map(counterpartyRows.map((row) => [text(row.id), row]));
+  const counterpartyCatalog: AccountingCounterparty[] = counterpartyRows.map((row) => ({
+    id: text(row.id), name: text(row.name), taxId: nullable(row.tax_id)
+  }));
   const projects = new Map(((projectsResult.data ?? []) as Row[]).map((row) => [text(row.id), text(row.name)]));
 
   const linesByEntry = new Map<string, AccountingEntryLine[]>();
@@ -162,6 +168,6 @@ export async function getAccountingCenter(workspaceId: string): Promise<Accounti
       rules:rules.filter((rule)=>rule.active).length,
       learnedPatterns:memoryCountResult.count ?? 0
     },
-    settings,entries,accounts,rules,exportProfiles,planImports
+    settings,entries,accounts,rules,exportProfiles,planImports,counterparties:counterpartyCatalog
   };
 }
