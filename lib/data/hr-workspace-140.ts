@@ -283,7 +283,7 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
   const linkedDocumentIds = new Set(employeeDocuments.map((row) => String(row.document_id ?? "")).filter(Boolean));
   const unlinkedDocuments = documents.filter((row) => !linkedDocumentIds.has(String(row.id)));
 
-  const visibleEmployments = options.includePayroll ? employments : employments.map((row) => {
+  const visibleEmployments = needPayroll ? employments : employments.map((row) => {
     const visible = { ...row };
     for (const key of ["monthly_cost", "hourly_cost", "net_monthly_pay", "gross_monthly_pay", "employer_contributions", "other_monthly_costs", "nominal_monthly_hours"]) delete visible[key];
     return visible;
@@ -295,7 +295,7 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
     employees,
     projects,
     employments: visibleEmployments,
-    payrollMonths: options.includePayroll ? payrollMonths : [],
+    payrollMonths: needPayroll ? payrollMonths : [],
     qualifications,
     exams,
     trainings,
@@ -330,16 +330,16 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
       pendingDecisions: pendingLeaves.length + pendingTimesheets.length,
       monthHours,
       monthOvertime,
-      monthlyNetPay: options.includePayroll ? monthlyNetPay : null,
-      monthlyGrossPay: options.includePayroll ? monthlyGrossPay : null,
-      monthlyEmployerContributions: options.includePayroll ? monthlyEmployerContributions : null,
-      monthlyOtherCosts: options.includePayroll ? monthlyOtherCosts : null,
-      monthlyEmploymentCost: options.includePayroll ? monthlyEmploymentCost : null,
-      approvedLaborCost: options.includePayroll ? approvedLaborCost : null,
-      unallocatedEmploymentCost: options.includePayroll ? Math.max(0, monthlyEmploymentCost - approvedLaborCost) : null,
-      payrollRecorded: options.includePayroll ? payrollRecorded : null,
-      payrollConfirmed: options.includePayroll ? payrollConfirmed : null,
-      payrollMissing: options.includePayroll ? Math.max(0, activeEmployees.length - payrollRecorded) : null,
+      monthlyNetPay: needPayroll ? monthlyNetPay : null,
+      monthlyGrossPay: needPayroll ? monthlyGrossPay : null,
+      monthlyEmployerContributions: needPayroll ? monthlyEmployerContributions : null,
+      monthlyOtherCosts: needPayroll ? monthlyOtherCosts : null,
+      monthlyEmploymentCost: needPayroll ? monthlyEmploymentCost : null,
+      approvedLaborCost: needPayroll ? approvedLaborCost : null,
+      unallocatedEmploymentCost: needPayroll ? Math.max(0, monthlyEmploymentCost - approvedLaborCost) : null,
+      payrollRecorded: needPayroll ? payrollRecorded : null,
+      payrollConfirmed: needPayroll ? payrollConfirmed : null,
+      payrollMissing: needPayroll ? Math.max(0, activeEmployees.length - payrollRecorded) : null,
       missingYesterday,
       activeTeams: teams.filter((row) => row.active !== false).length,
       issuedAssets: issuedAssets.filter((row) => !row.returned_at).length
