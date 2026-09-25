@@ -120,10 +120,11 @@ begin
     return new;
   end if;
 
-  if new.outcome in ('confirmed','accepted') then
+  if new.outcome in ('confirmed','accepted','manual_assignment') then
     v_positive_project := coalesce(new.selected_project_id,new.proposed_project_id);
-  elsif new.outcome in ('corrected','manual_assignment') then
-    v_positive_project := new.selected_project_id;
+  elsif new.outcome='corrected' then
+    -- Dodatni alias dla korekty tworzy istniejący trg_capture_project_match_feedback.
+    -- Tutaj tylko osłabiamy błędną wcześniejszą propozycję, aby nie liczyć potwierdzenia podwójnie.
     if new.proposed_project_id is distinct from new.selected_project_id then
       v_negative_project := new.proposed_project_id;
     end if;
