@@ -58,8 +58,10 @@ describe("final production audit contract", () => {
     expect(e2e).toContain("node scripts/e2e-live-audit.mjs");
     expect(e2e).not.toContain("secrets.");
     expect(liveAudit).toContain("/api/storage/upload-url");
-    expect(liveAudit).toContain("/api/brain/process-document");
+    expect(liveAudit).toContain("/api/brain/process");
+    expect(liveAudit).toContain("/api/system/e2e-maintenance");
     expect(liveAudit).toContain("octopus-live-audit.xlsx");
+    expect(e2e).not.toContain("npm run build");
   });
 
   it("keeps current and legacy workspace creation compatible with the required creator", () => {
