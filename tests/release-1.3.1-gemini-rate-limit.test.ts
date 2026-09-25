@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { geminiRateLimitInfo, geminiRateLimitMessage, millisecondsUntil } from "../lib/ai/gemini-rate-limit";
 
 const read = (path: string) => readFileSync(path, "utf8");
-const processRoute = read("app/api/brain/process-document/route.ts");
+const processRoute = read("app/api/brain/process/route.ts");
 const workerRoute = read("app/api/brain/worker/route.ts");
 const retryRoute = read("app/api/brain/retry/route.ts");
 const retryButton = read("components/projects/document-retry-button-130.tsx");
