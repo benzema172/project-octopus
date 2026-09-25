@@ -280,6 +280,7 @@ export async function POST(request: Request) {
         const checks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id });
         invoiceReadiness = checks.invoiceReadiness;
         financeAi = checks.financeAi;
+        accounting = checks.accounting;
       } catch (error) {
         invoiceCheckError = error instanceof Error ? error.message : "Kontrola faktury nie powiodła się.";
         console.error("[brain/process] invoice readiness failed", error);
