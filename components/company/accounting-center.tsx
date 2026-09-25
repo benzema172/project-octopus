@@ -78,7 +78,7 @@ export function AccountingCenter({workspaceId,data,canWrite,canApprove}:Props){
     const form=new FormData(event.currentTarget);
     action("rule_save",{
       name:form.get("name"),priority:form.get("priority"),direction:"purchase",lineType:form.get("lineType"),
-      allocationScope:form.get("allocationScope"),debitAccountCode:form.get("debitAccountCode"),
+      allocationScope:form.get("allocationScope"),counterpartyId:form.get("counterpartyId"),debitAccountCode:form.get("debitAccountCode"),
       taxTreatment:form.get("taxTreatment"),vatDeductionPct:form.get("vatDeductionPct"),
       minConfidence:Number(form.get("minConfidence")??98)/100,notes:form.get("notes"),active:true
     },"Schemat księgowy został zapisany jako reguła księgowej.");
@@ -188,6 +188,7 @@ export function AccountingCenter({workspaceId,data,canWrite,canApprove}:Props){
           <label>Priorytet<input name="priority" type="number" defaultValue="700"/></label>
           <label>Typ pozycji<select name="lineType" defaultValue=""><option value="">Dowolny</option><option value="material">Materiał</option><option value="service">Usługa</option><option value="other">Inne</option></select></label>
           <label>Zakres<select name="allocationScope" defaultValue=""><option value="">Dowolny</option><option value="project">Inwestycja</option><option value="inventory">Magazyn</option><option value="overhead">Koszt ogólny</option><option value="unassigned">Nieprzypisany</option></select></label>
+          <label>Kontrahent<select name="counterpartyId" defaultValue=""><option value="">Dowolny</option>{data.counterparties.map(counterparty=><option key={counterparty.id} value={counterparty.id}>{counterparty.name}{counterparty.taxId?" · "+counterparty.taxId:""}</option>)}</select></label>
           <label>Konto Wn<select name="debitAccountCode" required defaultValue=""><option value="" disabled>Wybierz</option>{activeAccounts.map(account=><option key={account.id} value={account.code}>{account.code} · {account.name}</option>)}</select></label>
           <label>KUP/NKUP<select name="taxTreatment" defaultValue="review">{taxOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
           <label>VAT %<input name="vatDeductionPct" type="number" min="0" max="100"/></label>
