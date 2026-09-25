@@ -226,6 +226,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
           <span>Wyszukiwanie obejmuje całe archiwum firmy: nazwy, OCR, fakty AI, inwestycje i propozycje modułowe.</span>
         </div>
         <DocumentCentralArchive
+          key={`${activeTab}:${searchQuery}:${activeTab === "trash" ? trashPage : archivePage}`}
           workspaceId={workspace.id}
           documents={documents}
           trashedDocuments={trashedDocuments}
