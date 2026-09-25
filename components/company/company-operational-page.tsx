@@ -49,6 +49,7 @@ export async function CompanyOperationalPage({ workspaceId, page, query, tab, do
         </div>
       </header>
       <CompanyOperationsLazy
+        key={`${kind}:${tab ?? "dashboard"}:${query ?? ""}:${page ?? "1"}`}
         workspaceId={workspace.id}
         kind={kind}
         data={data}
