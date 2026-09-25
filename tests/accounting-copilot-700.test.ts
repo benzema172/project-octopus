@@ -43,7 +43,7 @@ describe("Accounting Copilot 7.0",()=>{
 
   it("exports only approved accounting entries through adapter profiles",()=>{
     expect(exportRoute).toContain('.eq("status","approved")');
-    expect(exportRoute).toContain("generic_csv");
+    expect(exportRoute).toContain("standardHeaders");
     expect(exportRoute).toContain("octopus_json");
     expect(exportRoute).toContain("custom_csv");
     expect(exportRoute).toContain("accounting.batch_exported_700");
