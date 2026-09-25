@@ -10,13 +10,14 @@ async function getFleetData(workspaceId: string, options: CompanyPageOptions) {
 
 export default async function FleetPage({ params, searchParams }: {
   params: Promise<{ workspaceId: string }>;
-  searchParams: Promise<{ page?: string; q?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; tab?: string }>;
 }) {
   const [{ workspaceId }, query] = await Promise.all([params, searchParams]);
   return <CompanyOperationalPage
     workspaceId={workspaceId}
     page={query.page}
     query={query.q}
+    tab={query.tab}
     domain="fleet"
     kind="fleet"
     kicker="Flota"
