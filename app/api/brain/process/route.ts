@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { processDocumentVersion } from "@/lib/ai/process-document";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
+import { enrichDocumentWithInvestmentRouting, type InvestmentRoutingResult } from "@/lib/ai/investment-document-routing";
+import { geminiRateLimitInfo, geminiRateLimitMessage, millisecondsUntil, wait } from "@/lib/ai/gemini-rate-limit";
 import { analyzeUnifiedDocumentReviewMulti } from "@/lib/ai/multi-ai-core";
 import { runAccountingCopilotForDocument, type AccountingCopilotRun } from "@/lib/ai/accounting-copilot";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
@@ -9,11 +11,14 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
 import { processHrDocumentIntake, type HrDocumentIntakeResult } from "@/lib/hr/document-intelligence";
 import { assessDocumentInvoiceReadiness, type InvoiceIntakeAssessment } from "@/lib/finance/invoice-intake-readiness";
+import { normalizeDocumentCategory } from "@/lib/documents/classification";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-type VersionRow = { document_id: string; project_id: string | null };
+const MAX_AUTOMATIC_RATE_LIMIT_WAIT_MS = 75_000;
+
+type VersionRow = { document_id: string; project_id: string | null; file_name: string };
 type DocumentRow = { category: string | null };
 type ApprovedClassification = { category: string; confidence: number | null; rationale: string | null; status: string };
 type TemplateMaterialization = { template_id: string; template_version_id: string; template_status: string };
@@ -189,15 +194,15 @@ async function reconcileApprovedDocument(input: {
 export async function POST(request: Request) {
   const user = await getRequestUser(request);
   if (!user) return NextResponse.json({ error: "Brak aktywnej sesji." }, { status: 401 });
-  let body: { workspaceId?: string; versionId?: string };
-  try { body = await request.json() as { workspaceId?: string; versionId?: string }; }
+  let body: { workspaceId?: string; versionId?: string; lockCategory?: boolean; force?: boolean };
+  try { body = await request.json() as { workspaceId?: string; versionId?: string; lockCategory?: boolean; force?: boolean }; }
   catch { return NextResponse.json({ error: "Nieprawidłowe dane analizy." }, { status: 400 }); }
   if (!body.versionId) return NextResponse.json({ error: "Brakuje identyfikatora wersji." }, { status: 400 });
 
   const workspace = body.workspaceId ? await getWorkspaceForUser(user, body.workspaceId) : await ensureWorkspaceForUser(user);
   if (!workspace) return NextResponse.json({ error: "Brak dostępu do firmy." }, { status: 403 });
   const supabase = createServiceSupabaseClient();
-  const { data: version, error: versionError } = await supabase.from("document_versions").select("document_id,project_id").eq("id", body.versionId).maybeSingle<VersionRow>();
+  const { data: version, error: versionError } = await supabase.from("document_versions").select("document_id,project_id,file_name").eq("id", body.versionId).maybeSingle<VersionRow>();
   if (versionError) { console.error("[brain/process] version lookup failed", versionError); return NextResponse.json({ error: "Nie udało się odczytać wersji dokumentu." }, { status: 500 }); }
   if (!version) return NextResponse.json({ error: "Nie znaleziono wersji dokumentu." }, { status: 404 });
 
@@ -206,6 +211,28 @@ export async function POST(request: Request) {
   if (!sourceDocument) return NextResponse.json({ error: "Nie znaleziono wersji dokumentu w aktywnej firmie." }, { status: 404 });
   if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: domainForDocumentCategory(sourceDocument.category), level: "write", projectId: version.project_id })) {
     return NextResponse.json({ error: "Brak uprawnienia do uruchomienia analizy tego dokumentu." }, { status: 403 });
+  }
+
+  async function deferForGeminiLimit(retryAt: string, message: string) {
+    const deferred = await supabase.rpc("defer_gemini_rate_limit", {
+      p_workspace_id: workspace.id,
+      p_document_id: version.document_id,
+      p_document_version_id: body.versionId!,
+      p_retry_at: retryAt,
+      p_message: message
+    });
+    if (deferred.error) {
+      await supabase.from("processing_jobs").update({
+        status: "queued",
+        stage: "analyze",
+        error_code: "GEMINI_RATE_LIMIT",
+        error_message: message,
+        available_at: retryAt,
+        dead_letter_at: null,
+        locked_at: null,
+        locked_by: null
+      }).eq("workspace_id", workspace.id).eq("document_version_id", body.versionId!);
+    }
   }
 
   const { data: approved, error: approvedError } = await supabase.from("document_classifications")
@@ -259,45 +286,176 @@ export async function POST(request: Request) {
     }
   }
 
-  try {
-    const analysis = await processDocumentVersion({ workspaceId: workspace.id, versionId: body.versionId, userId: user.id });
-    const autopilot = await applyDocumentAutopilot({ workspaceId: workspace.id, documentId: version.document_id, versionId: body.versionId, category: analysis.effectiveCategory, projectId: version.project_id ?? analysis.proposedProjectId, actorId: user.id });
-    let hrIntake: HrDocumentIntakeResult | null = null;
-    if (analysis.effectiveCategory === "hr") {
-      try { hrIntake = await processHrDocumentIntake({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id }); }
-      catch (error) {
-        console.error("[brain/process] HR document routing failed", error);
-        hrIntake = { attempted: true, matched: false, reason: error instanceof Error ? error.message : "Nie udało się automatycznie przypisać dokumentu HR." };
-      }
+  if (!body.force) {
+    const nowIso = new Date().toISOString();
+    const { data: cooldown } = await supabase.from("processing_jobs")
+      .select("available_at,error_message")
+      .eq("workspace_id", workspace.id)
+      .eq("document_version_id", body.versionId)
+      .eq("status", "queued")
+      .eq("error_code", "GEMINI_RATE_LIMIT")
+      .gt("available_at", nowIso)
+      .order("available_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ available_at: string; error_message: string | null }>();
+    const cooldownMs = millisecondsUntil(cooldown?.available_at);
+    if (cooldownMs > 0 && cooldownMs <= MAX_AUTOMATIC_RATE_LIMIT_WAIT_MS) {
+      await wait(cooldownMs + 750);
+    } else if (cooldownMs > MAX_AUTOMATIC_RATE_LIMIT_WAIT_MS && cooldown?.available_at) {
+      const message = cooldown.error_message ?? "Limit Gemini jest chwilowo wykorzystany. Dokument pozostaje w kolejce do automatycznej analizy.";
+      await deferForGeminiLimit(cooldown.available_at, message);
+      return NextResponse.json({
+        ok: false,
+        status: "waiting_rate_limit",
+        retryAt: cooldown.available_at,
+        retryAfterSeconds: Math.ceil(cooldownMs / 1000),
+        error: message
+      }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(Math.ceil(cooldownMs / 1000)) } });
     }
+  }
 
-    let invoiceReadiness: InvoiceIntakeAssessment[] = [];
-    let financeAi: FinanceAiSummary | null = null;
-    let accounting: AccountingCopilotRun[] = [];
-    let invoiceCheckError: string | null = null;
-    if (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis)) {
-      try {
-        const checks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id });
-        invoiceReadiness = checks.invoiceReadiness;
-        financeAi = checks.financeAi;
-        accounting = checks.accounting;
-      } catch (error) {
-        invoiceCheckError = error instanceof Error ? error.message : "Kontrola faktury nie powiodła się.";
-        console.error("[brain/process] invoice readiness failed", error);
+  let automaticRateLimitRetries = 0;
+  while (true) {
+    try {
+      const analysis = await processDocumentVersion({
+        workspaceId: workspace.id,
+        versionId: body.versionId,
+        userId: user.id,
+        categoryOverride: body.lockCategory ? normalizeDocumentCategory(sourceDocument.category) : null
+      });
+
+      const routingProjectId = version.project_id ?? analysis.proposedProjectId ?? null;
+      let routing: InvestmentRoutingResult | null = null;
+      let routingError: string | null = null;
+      if (routingProjectId) {
+        try {
+          routing = await enrichDocumentWithInvestmentRouting({
+            workspaceId: workspace.id,
+            projectId: routingProjectId,
+            documentId: version.document_id,
+            versionId: body.versionId,
+            userId: user.id,
+            fileName: version.file_name,
+            analysis
+          });
+        } catch (error) {
+          routingError = error instanceof Error ? error.message : "Automatyczny routing dokumentu nie powiódł się.";
+          await supabase.from("audit_events").insert({
+            workspace_id: workspace.id,
+            project_id: routingProjectId,
+            actor_id: user.id,
+            actor_type: "ai",
+            event_type: "document.investment_routing_failed",
+            entity_type: "document",
+            entity_id: version.document_id,
+            after_value: { version_id: body.versionId, error: routingError }
+          });
+        }
       }
-    }
 
-    return NextResponse.json({
-      ok: true,
-      analysis,
-      autopilot,
-      hrIntake,
-      invoiceReadiness,
-      financeAi,
-      accounting,
-      invoiceCheckError
-    }, { headers: { "Cache-Control": "no-store" } });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Analiza nie powiodła się.", queued: true }, { status: 422 });
+      const autopilot = await applyDocumentAutopilot({
+        workspaceId: workspace.id,
+        documentId: version.document_id,
+        versionId: body.versionId,
+        category: analysis.effectiveCategory,
+        projectId: routingProjectId,
+        actorId: user.id
+      });
+
+      let hrIntake: HrDocumentIntakeResult | null = null;
+      if (analysis.effectiveCategory === "hr") {
+        try { hrIntake = await processHrDocumentIntake({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id }); }
+        catch (error) {
+          console.error("[brain/process] HR document routing failed", error);
+          hrIntake = { attempted: true, matched: false, reason: error instanceof Error ? error.message : "Nie udało się automatycznie przypisać dokumentu HR." };
+        }
+      }
+
+      let invoiceReadiness: InvoiceIntakeAssessment[] = [];
+      let financeAi: FinanceAiSummary | null = null;
+      let accounting: AccountingCopilotRun[] = [];
+      let invoiceCheckError: string | null = null;
+      if (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis)) {
+        try {
+          const checks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id });
+          invoiceReadiness = checks.invoiceReadiness;
+          financeAi = checks.financeAi;
+          accounting = checks.accounting;
+        } catch (error) {
+          invoiceCheckError = error instanceof Error ? error.message : "Kontrola faktury nie powiodła się.";
+          console.error("[brain/process] invoice readiness failed", error);
+        }
+      }
+
+      const packageStatus = "package" in analysis
+        ? {
+            packageId: analysis.package.id,
+            acceptedEntries: analysis.package.accepted,
+            skippedEntries: analysis.package.rejected,
+            queuedVersionIds: analysis.package.queuedVersionIds
+          }
+        : null;
+      const counts = {
+        facts: analysis.facts.length,
+        materials: analysis.materialRequirements.length || analysis.requiredApplications.length,
+        devices: analysis.installations.length,
+        boq_items: analysis.boqItems.length,
+        schedule_items: analysis.scheduleItems.length,
+        protocol_requirements: (analysis.protocolRequirementsDetailed.length || analysis.requiredProtocols.length) + (routing?.protocolProposals ?? 0),
+        site_events: analysis.siteEvents.length,
+        progress_items: analysis.progressItems.length,
+        tasks: analysis.tasks.length + analysis.risks.length,
+        findings: analysis.warnings.length
+      };
+
+      return NextResponse.json({
+        ok: true,
+        category: analysis.effectiveCategory,
+        confidence: analysis.confidence,
+        counts,
+        routing,
+        routing_error: routingError,
+        package: packageStatus,
+        analysis,
+        autopilot,
+        hrIntake,
+        invoiceReadiness,
+        financeAi,
+        accounting,
+        invoiceCheckError
+      }, { headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      const rateLimit = geminiRateLimitInfo(error);
+      if (!rateLimit) {
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Analiza nie powiodła się.", queued: true }, { status: 422 });
+      }
+
+      const message = geminiRateLimitMessage(rateLimit);
+      await deferForGeminiLimit(rateLimit.retryAt, message);
+      await supabase.from("audit_events").insert({
+        workspace_id: workspace.id,
+        project_id: version.project_id,
+        actor_id: user.id,
+        actor_type: "system",
+        event_type: "document.gemini_rate_limited",
+        entity_type: "document",
+        entity_id: version.document_id,
+        after_value: { version_id: body.versionId, retry_at: rateLimit.retryAt, retry_after_ms: rateLimit.retryAfterMs }
+      });
+
+      if (automaticRateLimitRetries < 1 && rateLimit.retryAfterMs <= MAX_AUTOMATIC_RATE_LIMIT_WAIT_MS) {
+        automaticRateLimitRetries += 1;
+        await wait(rateLimit.retryAfterMs + 750);
+        continue;
+      }
+
+      return NextResponse.json({
+        ok: false,
+        status: "waiting_rate_limit",
+        retryAt: rateLimit.retryAt,
+        retryAfterSeconds: Math.ceil(rateLimit.retryAfterMs / 1000),
+        error: message
+      }, { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(Math.ceil(rateLimit.retryAfterMs / 1000)) } });
+    }
   }
 }
