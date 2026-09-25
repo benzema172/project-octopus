@@ -193,6 +193,14 @@ if (signInError || !session.session) throw new Error(`Guest sign-in failed: ${si
 const token = session.session.access_token;
 const workspaceId = guest.payload.workspaceId;
 
+const maintenance = await request("/api/system/e2e-maintenance", {
+  token,
+  body: { workspaceId }
+});
+if (!maintenance.response.ok) {
+  throw new Error(`E2E maintenance failed: ${maintenance.response.status} ${JSON.stringify(maintenance.payload)}`);
+}
+
 const unauthorized = await request(`/api/company/search?workspaceId=${encodeURIComponent(workspaceId)}&q=Octopus`);
 if (unauthorized.response.status !== 401) throw new Error(`Unauthenticated API guard failed: expected 401, got ${unauthorized.response.status}`);
 
