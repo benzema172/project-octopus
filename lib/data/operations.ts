@@ -27,6 +27,18 @@ export type AiInboxItem = {
   overdue?: boolean;
   canWrite?: boolean;
   canApprove?: boolean;
+  documentVersionId?: string | null;
+  documentProjectId?: string | null;
+  evidence?: Array<{
+    title: string;
+    module: string;
+    quote: string;
+    label: string;
+    page: number | null;
+    sheet: string | null;
+    row: number | null;
+    confidence: number | null;
+  }>;
 };
 
 export type AiInboxProjectOption = { id: string; name: string };
@@ -58,8 +70,28 @@ type IntakeRow = {
   review_due_at: string | null;
   escalation_level: number;
   created_at: string;
-  documents: { name?: string; ai_status?: string; project_id?: string | null } | Array<{ name?: string; ai_status?: string; project_id?: string | null }> | null;
+  documents: { name?: string; ai_status?: string; project_id?: string | null; current_version_id?: string | null } | Array<{ name?: string; ai_status?: string; project_id?: string | null; current_version_id?: string | null }> | null;
 };
+
+type InboxEvidenceRow = {
+  document_id: string;
+  document_version_id: string;
+  title: string;
+  module: string;
+  source_locator: Record<string, unknown> | null;
+  source_quote: string | null;
+  confidence: number | string | null;
+  created_at: string;
+};
+
+function inboxEvidenceNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function inboxEvidenceText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
 
 function normalizedStatus(status: string, aiStatus?: string): AiInboxItem["status"] {
   const value = aiStatus === "error" ? "error" : status;
@@ -77,7 +109,7 @@ export async function listAiInbox(workspaceId: string): Promise<AiInboxItem[]> {
   const [intakesResult, estimatesResult, impactsResult, siteEventsResult, templatesResult, knowledgeResult] = await Promise.all([
     supabase
       .from("document_intakes")
-      .select("id,document_id,proposed_project_id,status,suggested_category,requested_category,category_locked,match_metadata,confidence,channel,priority,assigned_to,review_due_at,escalation_level,created_at,documents(name,ai_status,project_id)")
+      .select("id,document_id,proposed_project_id,status,suggested_category,requested_category,category_locked,match_metadata,confidence,channel,priority,assigned_to,review_due_at,escalation_level,created_at,documents(name,ai_status,project_id,current_version_id)")
       .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false })
       .limit(100)
@@ -125,6 +157,39 @@ export async function listAiInbox(workspaceId: string): Promise<AiInboxItem[]> {
     : { data: [] as Array<{ id: string; name: string }> };
   const proposedProjectNames = new Map((proposedProjects ?? []).map((project) => [project.id, project.name]));
 
+  const intakeDocumentIds = Array.from(new Set((intakesResult.data ?? []).map((row) => row.document_id).filter(Boolean)));
+  const evidenceResult = intakeDocumentIds.length
+    ? await supabase.from("document_module_proposals")
+      .select("document_id,document_version_id,title,module,source_locator,source_quote,confidence,created_at")
+      .in("document_id", intakeDocumentIds)
+      .neq("status", "rejected")
+      .order("created_at", { ascending: false })
+      .limit(Math.min(1200, Math.max(80, intakeDocumentIds.length * 10)))
+      .returns<InboxEvidenceRow[]>()
+    : { data: [] as InboxEvidenceRow[], error: null };
+  if (evidenceResult.error) console.error("Project Octopus: AI Inbox evidence fallback", evidenceResult.error);
+
+  const evidenceByDocument = new Map<string, NonNullable<AiInboxItem["evidence"]>>();
+  for (const proposal of evidenceResult.data ?? []) {
+    const locator = proposal.source_locator && typeof proposal.source_locator === "object" ? proposal.source_locator : {};
+    const quote = inboxEvidenceText(proposal.source_quote);
+    const label = inboxEvidenceText(locator.label);
+    if (!quote && !label) continue;
+    const current = evidenceByDocument.get(proposal.document_id) ?? [];
+    if (current.length >= 4) continue;
+    current.push({
+      title: proposal.title,
+      module: proposal.module,
+      quote,
+      label,
+      page: inboxEvidenceNumber(locator.page),
+      sheet: inboxEvidenceText(locator.sheet) || null,
+      row: inboxEvidenceNumber(locator.row),
+      confidence: proposal.confidence == null ? null : Number(proposal.confidence)
+    });
+    evidenceByDocument.set(proposal.document_id, current);
+  }
+
   const items: AiInboxItem[] = (intakesResult.data ?? []).map((row) => {
     const document = Array.isArray(row.documents) ? row.documents[0] : row.documents;
     const match = row.match_metadata && typeof row.match_metadata.project_match === "object" && row.match_metadata.project_match
@@ -155,7 +220,10 @@ export async function listAiInbox(workspaceId: string): Promise<AiInboxItem[]> {
       assignedTo: row.assigned_to,
       reviewDueAt: row.review_due_at,
       escalationLevel: row.escalation_level,
-      overdue: row.status === "review" && Boolean(row.review_due_at) && Date.parse(row.review_due_at ?? "") < Date.now()
+      overdue: row.status === "review" && Boolean(row.review_due_at) && Date.parse(row.review_due_at ?? "") < Date.now(),
+      documentVersionId: document?.current_version_id ?? null,
+      documentProjectId: document?.project_id ?? null,
+      evidence: evidenceByDocument.get(row.document_id) ?? []
     };
   });
 
