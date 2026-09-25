@@ -6,15 +6,17 @@ import { FleetEquipmentRegistry } from "@/components/company/fleet-equipment-reg
 import { FleetCostsSimple } from "@/components/company/fleet-costs-simple";
 import type { Data } from "@/components/company/operations/module-shell";
 
-export default function FleetOperations({ workspaceId, data, canWrite, canApprove, query }: {
+export default function FleetOperations({ workspaceId, data, canWrite, canApprove, query, tab }: {
   workspaceId: string;
   data: Data;
   canWrite: boolean;
   canApprove: boolean;
   pathname: string;
   query: string;
+  tab?: string;
 }) {
-  const [activeTab, setActiveTab] = useState<FleetCoreTab>(query ? "vehicles" : "dashboard");
+  const initialTab = (["dashboard","vehicles","waiting","operations","service","documents","equipment","damages","costs"].includes(tab ?? "") ? tab : (query ? "vehicles" : "dashboard")) as FleetCoreTab;
+  const [activeTab, setActiveTab] = useState<FleetCoreTab>(initialTab);
 
   return <div className={`fleet-vehicles-polish fleet-tab-${activeTab}`}>
     <FleetWorkspace300
@@ -23,6 +25,7 @@ export default function FleetOperations({ workspaceId, data, canWrite, canApprov
       canWrite={canWrite}
       canApprove={canApprove}
       query={query}
+      initialTab={initialTab}
       onTabChange={setActiveTab}
     />
     {activeTab === "equipment" ? (
