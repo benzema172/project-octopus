@@ -13,7 +13,7 @@ describe("Warehouse 3.0 -> 3.1 AI-first compatibility contract", () => {
     expect(operations).not.toContain("WarehouseCommandCenter");
     expect(workspace).toContain('label: "Magazyn"');
     expect(workspace).toContain('label: "Poczekalnia"');
-    expect(workspace).toContain('useState<Tab>(query || page.page > 1 ? "stock" : "dashboard")');
+    expect(workspace).toContain('useState<Tab>(initialTab ?? (query || page.page > 1 ? "stock" : "dashboard"))');
     expect(workspace).toContain('data-warehouse-experience="3.1"');
   });
 
@@ -76,13 +76,13 @@ describe("Warehouse 3.0 -> 3.1 AI-first compatibility contract", () => {
     expect(priceMigration).not.toContain("stock_movements");
   });
 
-  it("loads AI queue data together with the existing warehouse engine through Warehouse 4.0", () => {
+  it("loads Warehouse 4.0 data selectively for the active server-routed tab", () => {
     const page = read("app/workspace/companies/[workspaceId]/warehouse/page.tsx");
     const marketLoader = read("lib/data/warehouse-market-400.ts");
     const aiLoader = read("lib/data/warehouse-ai-300.ts");
     expect(page).toContain("getWarehouseMarket400Data");
     expect(marketLoader).toContain("getWarehouseWorkspaceData");
-    expect(marketLoader).toContain("getWarehouseAi300Data");
+    expect(marketLoader).toContain("getWarehouseAi300Data(workspaceId, options.tab)");
     expect(marketLoader).toContain("...base");
     expect(marketLoader).toContain("...ai");
     expect(aiLoader).toContain("warehouse_document_reviews");
