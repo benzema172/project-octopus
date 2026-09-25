@@ -212,12 +212,15 @@ export async function POST(request: Request) {
   if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: domainForDocumentCategory(sourceDocument.category), level: "write", projectId: version.project_id })) {
     return NextResponse.json({ error: "Brak uprawnienia do uruchomienia analizy tego dokumentu." }, { status: 403 });
   }
+  const activeWorkspaceId = workspace.id;
+  const activeDocumentId = version.document_id;
+  const activeVersionId = body.versionId;
 
   async function deferForGeminiLimit(retryAt: string, message: string) {
     const deferred = await supabase.rpc("defer_gemini_rate_limit", {
-      p_workspace_id: workspace.id,
-      p_document_id: version.document_id,
-      p_document_version_id: body.versionId!,
+      p_workspace_id: activeWorkspaceId,
+      p_document_id: activeDocumentId,
+      p_document_version_id: activeVersionId,
       p_retry_at: retryAt,
       p_message: message
     });
@@ -231,7 +234,7 @@ export async function POST(request: Request) {
         dead_letter_at: null,
         locked_at: null,
         locked_by: null
-      }).eq("workspace_id", workspace.id).eq("document_version_id", body.versionId!);
+      }).eq("workspace_id", activeWorkspaceId).eq("document_version_id", activeVersionId);
     }
   }
 
