@@ -31,10 +31,11 @@ describe("final consistency audit", () => {
   });
 
   it("treats repeat accounting downloads as downloads rather than new exports", () => {
-    const route = read("app/api/company/accounting-export/route.ts");
-    expect(route).toContain("accounting.entry_export_downloaded");
+    const route = read("app/api/company/accounting/export/route.ts");
+    expect(route).toContain("accounting.entry_export_downloaded_810");
     expect(route).toContain('.is("exported_at", null)');
-    expect(route).toContain("firstExport");
+    expect(route).toContain("repeatDownload");
+    expect(route).toContain("export async function POST");
   });
 
   it("keeps external integration retries idempotent", () => {
