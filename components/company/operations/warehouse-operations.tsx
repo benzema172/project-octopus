@@ -19,7 +19,7 @@ function visiblePrices(rows: Row[]) {
   return [...byItem.values()].flatMap((history) => visibleWarehousePriceHistory450(history) as Row[]);
 }
 
-type WarehouseTab = "dashboard" | "stock" | "waiting" | "movements" | "needs" | "assets" | "counts" | "prices" | "locations" | "planning" | "other";
+type WarehouseTab = "dashboard" | "stock" | "waiting" | "movements" | "needs" | "assets" | "counts" | "prices" | "locations";
 
 function WarehouseEnhancements({
   workspaceId,
