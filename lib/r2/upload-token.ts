@@ -20,6 +20,8 @@ export type UploadIntent = {
   sourceChannel?: string;
   sourceExternalKey?: string;
   sourceMetadata?: Record<string, unknown>;
+  importSessionId?: string;
+  importSessionItemId?: string;
   expiresAt: number;
 };
 
@@ -52,6 +54,8 @@ function isUploadIntent(value: unknown): value is UploadIntent {
     (intent.sourceChannel === undefined || typeof intent.sourceChannel === "string") &&
     (intent.sourceExternalKey === undefined || typeof intent.sourceExternalKey === "string") &&
     (intent.sourceMetadata === undefined || (typeof intent.sourceMetadata === "object" && intent.sourceMetadata !== null && !Array.isArray(intent.sourceMetadata))) &&
+    (intent.importSessionId === undefined || typeof intent.importSessionId === "string") &&
+    (intent.importSessionItemId === undefined || typeof intent.importSessionItemId === "string") &&
     typeof intent.expiresAt === "number" &&
     Number.isFinite(intent.expiresAt)
   );
