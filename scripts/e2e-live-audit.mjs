@@ -81,8 +81,8 @@ async function request(path, { token, body, method } = {}) {
 async function ensureStableDocument(projectId, workspaceId, token, fileName) {
   const { data: version, error: versionError } = await supabase
     .from("document_versions")
-    .select("document_id,created_at")
-    .eq("workspace_id", workspaceId)
+    .select("document_id,created_at,documents!document_versions_document_id_fkey!inner(workspace_id)")
+    .eq("documents.workspace_id", workspaceId)
     .eq("project_id", projectId)
     .eq("file_name", fileName)
     .order("created_at", { ascending: false })
@@ -161,8 +161,8 @@ async function uploadAndAnalyze({ projectId, workspaceId, token, fileName, mimeT
 async function assertStableArtifacts(workspaceId, projectId, fileNames) {
   const { data, error } = await supabase
     .from("document_versions")
-    .select("file_name,document_id")
-    .eq("workspace_id", workspaceId)
+    .select("file_name,document_id,documents!document_versions_document_id_fkey!inner(workspace_id)")
+    .eq("documents.workspace_id", workspaceId)
     .eq("project_id", projectId)
     .in("file_name", fileNames);
   if (error) throw new Error(`artifact stability lookup failed: ${error.message}`);
