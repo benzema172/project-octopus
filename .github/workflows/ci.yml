@@ -54,6 +54,8 @@ jobs:
           exit 0
       - name: Stability contract
         run: npm run check:stability
+      - name: Repository hygiene
+        run: npm run check:hygiene
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests
