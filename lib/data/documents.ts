@@ -370,7 +370,7 @@ export async function listDocumentsForWorkspacePage(
       p_offset: from
     }).returns<ArchiveSearchRow[]>();
     if (search.error) throw new Error(`Nie udało się przeszukać archiwum dokumentów firmy: ${search.error.message}`);
-    const searchRows = search.data ?? [];
+    const searchRows = (search.data ?? []) as ArchiveSearchRow[];
     const ids = searchRows.map((row) => row.document_id).filter(Boolean);
     const total = searchRows.length ? Number(searchRows[0].total_count ?? 0) || 0 : 0;
     if (!ids.length) return { items: [] as DocumentSummary[], total, page, pageSize };
