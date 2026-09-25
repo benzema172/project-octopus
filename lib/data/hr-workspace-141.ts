@@ -26,8 +26,9 @@ export async function getHrWorkspace141Data(workspaceId: string, options: Option
     return { severity: "warning", type: "leave_entitlement", employee_id: row.employee_id, title: `${name} przekroczył limit urlopu o ${Number(row.overused_days)} dni`, detail: "Sprawdź zatwierdzone wnioski i roczny wymiar urlopu." };
   });
 
+  const payrollTab = Boolean(options.includePayroll) && ["dashboard", "employees", "time"].includes(options.tab ?? "dashboard");
   let approvedLaborCost = data.summary.approvedLaborCost;
-  if (options.includePayroll) {
+  if (payrollTab) {
     const month = data.referenceDate.slice(0, 7);
     approvedLaborCost = timesheets.filter((row) => row.status === "approved" && dateOnly(row.work_date).startsWith(month)).reduce((sum, row) => {
       if (row.labor_cost_snapshot !== null && row.labor_cost_snapshot !== undefined) { const snapshot = Number(row.labor_cost_snapshot); if (Number.isFinite(snapshot) && snapshot >= 0) return sum + snapshot; }
@@ -40,5 +41,5 @@ export async function getHrWorkspace141Data(workspaceId: string, options: Option
   }
   const monthlyEmploymentCost = Number(data.summary.monthlyEmploymentCost ?? 0);
   const numericApprovedLaborCost = Number(approvedLaborCost ?? 0);
-  return { ...data, employments, timesheets, leaveBalances, alerts: [...overusedAlerts, ...(data.alerts as Row[])].slice(0, 30), summary: { ...data.summary, approvedLaborCost: options.includePayroll ? numericApprovedLaborCost : null, unallocatedEmploymentCost: options.includePayroll ? Math.max(0, monthlyEmploymentCost - numericApprovedLaborCost) : null } };
+  return { ...data, employments, timesheets, leaveBalances, alerts: [...overusedAlerts, ...(data.alerts as Row[])].slice(0, 30), summary: { ...data.summary, approvedLaborCost: payrollTab ? numericApprovedLaborCost : null, unallocatedEmploymentCost: payrollTab ? Math.max(0, monthlyEmploymentCost - numericApprovedLaborCost) : null } };
 }
