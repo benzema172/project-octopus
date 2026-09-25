@@ -256,11 +256,13 @@ export function DocumentUpload({
     return () => { cancelled = true; };
   }, [isIntake, workspaceId]);
 
+  const batchSummaryId = batchSummary?.id ?? null;
+  const batchSummaryStatus = batchSummary?.status ?? null;
   useEffect(() => {
-    if (!workspaceId || !batchSummary || !["uploading", "processing"].includes(batchSummary.status)) return;
-    const timer = window.setInterval(() => { void refreshImportSession(batchSummary.id).catch(() => undefined); }, 5000);
+    if (!workspaceId || !batchSummaryId || !["uploading", "processing"].includes(batchSummaryStatus ?? "")) return;
+    const timer = window.setInterval(() => { void refreshImportSession(batchSummaryId).catch(() => undefined); }, 5000);
     return () => window.clearInterval(timer);
-  }, [batchSummary?.id, batchSummary?.status, refreshImportSession, workspaceId]);
+  }, [batchSummaryId, batchSummaryStatus, refreshImportSession, workspaceId]);
 
   async function uploadFile(
     candidate: UploadCandidate,
