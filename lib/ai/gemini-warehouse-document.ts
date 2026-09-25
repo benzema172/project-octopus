@@ -54,7 +54,7 @@ type ChunkAnalysisResult = {
 };
 
 const RETRYABLE_GEMINI_STATUS = new Set([408, 429, 500, 502, 503, 504]);
-const PARSER_VERSION = "warehouse-pdf-chunks-4.3-material-flow";
+const PARSER_VERSION = "business-pdf-chunks-6.1-evidence-gate";
 const PDF_PAGES_PER_CHUNK = 4;
 const PDF_OVERLAP_PAGES = 1;
 const PDF_CHUNK_CONCURRENCY = 2;
@@ -177,27 +177,79 @@ function normalizeLine(value: unknown): WarehouseBusinessLine | null {
   };
 }
 
+const BUSINESS_DOCUMENT_TYPES = ["invoice", "WZ", "PZ", "MM", "RW", "ZW", "delivery"] as const;
+
+function normalizeBusinessDocumentType(value: unknown): WarehouseBusinessDocument["documentType"] | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (raw.toLowerCase() === "invoice") return "invoice";
+  if (raw.toLowerCase() === "delivery") return "delivery";
+  const upper = raw.toUpperCase();
+  return BUSINESS_DOCUMENT_TYPES.includes(upper as (typeof BUSINESS_DOCUMENT_TYPES)[number])
+    ? upper as WarehouseBusinessDocument["documentType"]
+    : null;
+}
+
+function meaningfulAmount(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && Math.abs(parsed) > 0.005;
+}
+
+function businessDocumentHasEvidence(document: WarehouseBusinessDocument) {
+  const hasNumber = Boolean(document.documentNumber.trim() || document.ksefNumber.trim());
+  const hasParty = Boolean(
+    document.supplierName.trim() || document.supplierTaxId.trim()
+    || document.buyerName.trim() || document.buyerTaxId.trim()
+  );
+  const hasFinancialEvidence = meaningfulAmount(document.netAmount)
+    || meaningfulAmount(document.taxAmount)
+    || meaningfulAmount(document.grossAmount)
+    || document.lines.some((line) =>
+      meaningfulAmount(line.unitPrice) || meaningfulAmount(line.netAmount) || meaningfulAmount(line.grossAmount)
+    );
+  const hasQuantityEvidence = document.lines.some((line) =>
+    Boolean(line.description.trim()) && (meaningfulAmount(line.quantity) || Boolean(line.sku.trim()))
+  );
+
+  if (document.documentType === "invoice") {
+    if (document.ksefNumber.trim()) return hasParty || hasFinancialEvidence;
+    return hasNumber && Boolean(document.issueDate.trim()) && hasParty && hasFinancialEvidence;
+  }
+
+  return hasNumber && (hasQuantityEvidence || hasParty || Boolean(
+    document.projectCode.trim() || document.projectName.trim()
+    || document.sourceWarehouse.trim() || document.targetWarehouse.trim()
+    || document.recipientEmployeeName.trim()
+  ));
+}
+
+function categoryForBusinessDocuments(
+  documents: WarehouseBusinessDocument[],
+  fallback: DocumentAnalysis["category"]
+): DocumentAnalysis["category"] {
+  if (!documents.length) return fallback;
+  return documents.every((document) => document.documentType === "invoice") ? "invoice" : "warehouse";
+}
+
 function normalizeBusinessDocument(value: unknown): WarehouseBusinessDocument | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const source = value as Record<string, unknown>;
+  const type = normalizeBusinessDocumentType(source.documentType);
+  if (!type) return null;
   const lines = Array.isArray(source.lines)
     ? source.lines.slice(0, 500).map(normalizeLine).filter((line): line is WarehouseBusinessLine => Boolean(line))
     : [];
-  const documentNumber = String(source.documentNumber ?? "").trim();
-  const supplierName = String(source.supplierName ?? "").trim();
-  if (!documentNumber && !supplierName && !lines.length && !Number(source.grossAmount) && !Number(source.netAmount)) return null;
-  const type = String(source.documentType ?? "invoice");
   const sourcePageStart = positiveInteger(source.sourcePageStart);
-  return {
+  const document: WarehouseBusinessDocument = {
     sourcePageStart,
     sourcePageEnd: Math.max(sourcePageStart, positiveInteger(source.sourcePageEnd)),
-    documentType: ["invoice", "WZ", "PZ", "MM", "RW", "ZW", "delivery"].includes(type) ? type : "invoice",
-    documentNumber,
+    documentType: type,
+    documentNumber: String(source.documentNumber ?? "").trim(),
     ksefNumber: String(source.ksefNumber ?? "").trim(),
     purchaseOrderNumber: String(source.purchaseOrderNumber ?? "").trim(),
     direction: ["sale", "internal"].includes(String(source.direction ?? "").trim()) ? String(source.direction).trim() : "purchase",
     issueDate: String(source.issueDate ?? "").trim(), dueDate: String(source.dueDate ?? "").trim(),
-    supplierName, supplierTaxId: String(source.supplierTaxId ?? "").trim(),
+    supplierName: String(source.supplierName ?? "").trim(), supplierTaxId: String(source.supplierTaxId ?? "").trim(),
     buyerName: String(source.buyerName ?? "").trim(), buyerTaxId: String(source.buyerTaxId ?? "").trim(),
     projectCode: String(source.projectCode ?? "").trim(),
     projectName: String(source.projectName ?? "").trim(),
@@ -210,6 +262,7 @@ function normalizeBusinessDocument(value: unknown): WarehouseBusinessDocument | 
     netAmount: Number(source.netAmount) || 0, taxAmount: Number(source.taxAmount) || 0, grossAmount: Number(source.grossAmount) || 0,
     lines
   };
+  return businessDocumentHasEvidence(document) ? document : null;
 }
 
 function emptyBusinessDocument(): DocumentAnalysis["businessDocument"] {
@@ -223,11 +276,13 @@ function emptyBusinessDocument(): DocumentAnalysis["businessDocument"] {
 function normalizeAnalysis(value: unknown): WarehouseDocumentAnalysis {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Gemini Warehouse zwrócił nieprawidłową analizę.");
   const source = value as Record<string, unknown>;
-  const businessDocuments = Array.isArray(source.businessDocuments)
-    ? source.businessDocuments.map(normalizeBusinessDocument).filter((doc): doc is WarehouseBusinessDocument => Boolean(doc))
-    : [];
+  const rawBusinessDocuments = Array.isArray(source.businessDocuments) ? source.businessDocuments : [];
+  const businessDocuments = rawBusinessDocuments
+    .map(normalizeBusinessDocument)
+    .filter((doc): doc is WarehouseBusinessDocument => Boolean(doc));
+  const rejectedBusinessDocuments = Math.max(0, rawBusinessDocuments.length - businessDocuments.length);
   const aiCategory = normalizeDocumentCategory(typeof source.category === "string" ? source.category : null);
-  const category: DocumentAnalysis["category"] = businessDocuments.length ? "warehouse" : (aiCategory ?? "other");
+  const category = categoryForBusinessDocuments(businessDocuments, aiCategory ?? "other");
   const confidence = bounded(source.confidence);
   const summary = String(source.summary ?? "").trim() || (businessDocuments.length
     ? `Rozpoznano ${businessDocuments.length} dokumentów finansowo-magazynowych.`
@@ -245,7 +300,12 @@ function normalizeAnalysis(value: unknown): WarehouseDocumentAnalysis {
     installations: [], workStages: [], requiredProtocols: [], requiredApplications: [], searchPassages,
     businessDocument: businessDocuments[0] ?? emptyBusinessDocument(), businessDocuments,
     boqItems: [], materialRequirements: [], protocolRequirementsDetailed: [], scheduleItems: [], siteEvents: [], progressItems: [], tasks: [], risks: [], facts: [],
-    warnings: Array.isArray(source.warnings) ? source.warnings.map(String).slice(0, 100) : []
+    warnings: [
+      ...(Array.isArray(source.warnings) ? source.warnings.map(String) : []),
+      ...(rejectedBusinessDocuments
+        ? [`Bramka 6.1 odrzuciła ${rejectedBusinessDocuments} rozpoznań bez wystarczających dowodów dokumentu finansowo-magazynowego.`]
+        : [])
+    ].slice(0, 100)
   };
 }
 
@@ -429,7 +489,12 @@ async function analyzeUploadedFile(input: {
   const pageInstruction = input.globalPageStart && input.globalPageEnd
     ? `Ten plik jest PORCJĄ oryginalnego PDF i odpowiada globalnym stronom ${input.globalPageStart}-${input.globalPageEnd}. sourcePageStart/sourcePageEnd MUSZĄ używać tej globalnej numeracji, nigdy numeracji lokalnej 1..N. Dokument może zaczynać się przed porcją lub kończyć po niej — zwróć wyłącznie dane widoczne w tej porcji; nie wymyślaj brakujących pozycji.`
     : "Analizujesz cały pojedynczy dokument.";
-  const prompt = `Jesteś wyspecjalizowanym analizatorem dokumentów Magazynu Project Octopus dla polskiej firmy budowlano-instalacyjnej.\n\n${pageInstruction}\n\nPDF może zawierać wiele odrębnych faktur, WZ, PZ, MM, RW, ZW lub dokumentów dostawy. Zwróć osobny element businessDocuments dla KAŻDEGO dokumentu widocznego w analizowanej porcji. Nigdy nie łącz pozycji, numerów ani kwot różnych dokumentów. Dla kontynuacji wielostronicowej zachowaj prawdziwy numer i strony dokumentu.\n\nROZUMIENIE OBIEGU MATERIAŁOWEGO:\n- invoice = dokument zakupu/sprzedaży i źródło ceny. Faktura zakupowa NIE oznacza jeszcze wydania materiału na inwestycję.\n- PZ = przyjęcie materiału do magazynu. Może odnosić się do faktury, ale sam PZ nie jest fakturą.\n- MM = przesunięcie materiału. W tej firmie MM często oznacza wydanie z magazynu na konkretną inwestycję/ekipę/pracownika. Jeśli na MM występuje kod/nazwa/adres inwestycji lub odbiorca-pracownik, wyciągnij te dane. Nie przypisuj MM wartości finansowej jako nowego zakupu.\n- RW/WZ = rozchód/wydanie materiału. Traktuj je jako ruch magazynowy, nie jako fakturę.\n- ZW = zwrot materiału.\n- delivery = inny dokument dostawy, gdy nie da się wiarygodnie określić PZ/WZ/MM/RW/ZW.\n\nDla każdego dokumentu podaj sourcePageStart/sourcePageEnd, documentType, numer dokumentu/KSeF/PO, daty, dostawcę/nabywcę, a także projectCode, projectName, projectAddress, recipientEmployeeName, recipientEmployeeNumber, sourceWarehouse i targetWarehouse, jeśli są widoczne. Dla MM/RW/WZ nie wymyślaj kwot z faktury — pola finansowe mogą być 0, jeśli dokument ich nie zawiera.\n\nKażdą WIDOCZNĄ pozycję zwróć dokładnie raz. Rozpoznawaj SKU/indeks, producenta, model i EAN, bo służą do połączenia tej samej kartoteki materiałowej między fakturą, PZ i MM. lineType=material tylko dla fizycznego towaru/materiału/urządzenia/części/narzędzia; service dla robocizny, transportu, najmu i usług; other dla rabatów, korekt i pozycji niejednoznacznych. Nie wymyślaj danych.\n\nJeżeli analizowana część nie zawiera dokumentu magazynowo-finansowego, businessDocuments ma być puste. projectHint ma wskazać dokładnie jeden wiersz katalogu albo OGÓLNE. W dopasowaniu inwestycji preferuj dokładny kod, następnie nazwę/adres. Nie zgaduj.\n\nKATALOG INWESTYCJI:\n${projectCatalog}\n\nZwróć wyłącznie JSON zgodny ze schematem.`;
+  const prompt = `Jesteś wyspecjalizowanym analizatorem dokumentów Magazynu Project Octopus dla polskiej firmy budowlano-instalacyjnej.\n\n${pageInstruction}\n\nPDF może zawierać wiele odrębnych faktur, WZ, PZ, MM, RW, ZW lub dokumentów dostawy. Zwróć osobny element businessDocuments dla KAŻDEGO rzeczywistego dokumentu biznesowego widocznego w analizowanej porcji. Nigdy nie łącz pozycji, numerów ani kwot różnych dokumentów. Dla kontynuacji wielostronicowej zachowaj prawdziwy numer i strony dokumentu.
+
+BRAMKA TOŻSAMOŚCI:
+- documentType="invoice" ustawiaj WYŁĄCZNIE wtedy, gdy źródło faktycznie zawiera dowody faktury: numer/KSeF, datę, strony transakcji oraz kwoty lub wycenione pozycje. Nie traktuj kosztorysu, BOQ, audytu, specyfikacji, oferty, protokołu ani opisu technicznego jako faktury tylko dlatego, że zawiera tabelę, ceny, nazwę firmy lub numer dokumentu.
+- dla WZ/PZ/MM/RW/ZW/delivery wymagaj rzeczywistego oznaczenia lub jednoznacznej treści ruchu/dostawy; nie zgaduj typu.
+- nie twórz pustego businessDocuments i nie uzupełniaj brakujących numerów, dat, kontrahentów ani kwot danymi wymyślonymi. Jeżeli dowody są niewystarczające, pomiń element z businessDocuments i ustaw kategorię zgodną z rzeczywistą treścią.\n\nROZUMIENIE OBIEGU MATERIAŁOWEGO:\n- invoice = dokument zakupu/sprzedaży i źródło ceny. Faktura zakupowa NIE oznacza jeszcze wydania materiału na inwestycję.\n- PZ = przyjęcie materiału do magazynu. Może odnosić się do faktury, ale sam PZ nie jest fakturą.\n- MM = przesunięcie materiału. W tej firmie MM często oznacza wydanie z magazynu na konkretną inwestycję/ekipę/pracownika. Jeśli na MM występuje kod/nazwa/adres inwestycji lub odbiorca-pracownik, wyciągnij te dane. Nie przypisuj MM wartości finansowej jako nowego zakupu.\n- RW/WZ = rozchód/wydanie materiału. Traktuj je jako ruch magazynowy, nie jako fakturę.\n- ZW = zwrot materiału.\n- delivery = inny dokument dostawy, gdy nie da się wiarygodnie określić PZ/WZ/MM/RW/ZW.\n\nDla każdego dokumentu podaj sourcePageStart/sourcePageEnd, documentType, numer dokumentu/KSeF/PO, daty, dostawcę/nabywcę, a także projectCode, projectName, projectAddress, recipientEmployeeName, recipientEmployeeNumber, sourceWarehouse i targetWarehouse, jeśli są widoczne. Dla MM/RW/WZ nie wymyślaj kwot z faktury — pola finansowe mogą być 0, jeśli dokument ich nie zawiera.\n\nKażdą WIDOCZNĄ pozycję zwróć dokładnie raz. Rozpoznawaj SKU/indeks, producenta, model i EAN, bo służą do połączenia tej samej kartoteki materiałowej między fakturą, PZ i MM. lineType=material tylko dla fizycznego towaru/materiału/urządzenia/części/narzędzia; service dla robocizny, transportu, najmu i usług; other dla rabatów, korekt i pozycji niejednoznacznych. Nie wymyślaj danych.\n\nJeżeli analizowana część nie zawiera dokumentu magazynowo-finansowego, businessDocuments ma być puste. projectHint ma wskazać dokładnie jeden wiersz katalogu albo OGÓLNE. W dopasowaniu inwestycji preferuj dokładny kod, następnie nazwę/adres. Nie zgaduj.\n\nKATALOG INWESTYCJI:\n${projectCatalog}\n\nZwróć wyłącznie JSON zgodny ze schematem.`;
   const parts: Array<Record<string, unknown>> = [{ text: prompt }];
   if (input.fileUri) parts.push({ fileData: { mimeType: input.mimeType, fileUri: input.fileUri } });
   if (input.extractedText) parts.push({ text: `\nTREŚĆ WYEKSTRAHOWANA:\n${input.extractedText.slice(0, 1_500_000)}` });
@@ -679,9 +744,12 @@ function aggregateChunkAnalyses(results: ChunkAnalysisResult[], pageCount: numbe
     [doc.documentNumber, doc.supplierName, doc.issueDate].filter(Boolean).join(" · "),
     ...doc.lines.map((line) => line.description)
   ]).filter(Boolean).slice(0, 250);
+  const category = categoryForBusinessDocuments(businessDocuments, "other");
   return {
-    category: businessDocuments.length ? "warehouse" : "other",
-    subcategory: businessDocuments.length > 1 ? "Pakiet dokumentów magazynowych" : "Dokument magazynowy",
+    category,
+    subcategory: businessDocuments.length > 1
+      ? "Pakiet dokumentów finansowo-magazynowych"
+      : category === "invoice" ? "Faktura" : "Dokument magazynowy",
     confidence,
     summary: businessDocuments.length
       ? `Rozpoznano ${businessDocuments.length} dokumentów finansowo-magazynowych na ${pageCount} stronach; PDF przeanalizowano porcjami i scalono.`
