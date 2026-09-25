@@ -355,7 +355,7 @@ grant execute on function public.approve_accounting_entry_700(uuid,uuid,uuid) to
 -- Po imporcie plan księgowej jest nadrzędny. Systemowe konta/reguły są wyłącznie bootstrapem
 -- i nigdy nie nadpisują istniejącego planu ani schematów użytkownika.
 create or replace function public.ensure_default_accounting_accounts(p_workspace_id uuid)
-returns void language plpgsql security definer set search_path=public,pg_temp as $
+returns void language plpgsql security definer set search_path=public,pg_temp as $$
 begin
   insert into public.accounting_accounts(workspace_id,code,name,account_type,source) values
     (p_workspace_id,'201-00','Rozrachunki z odbiorcami','receivable','system'),
@@ -370,12 +370,12 @@ begin
     (p_workspace_id,'409-01','Koszty ogólne i nierozpoznane','expense','system'),
     (p_workspace_id,'701-01','Przychody ze sprzedaży usług','revenue','system')
   on conflict(workspace_id,code) do nothing;
-end $;
+end $$;
 revoke all on function public.ensure_default_accounting_accounts(uuid) from public,anon,authenticated;
 grant execute on function public.ensure_default_accounting_accounts(uuid) to service_role;
 
 create or replace function public.ensure_default_accounting_rules(p_workspace_id uuid)
-returns void language plpgsql security definer set search_path=public,pg_temp as $
+returns void language plpgsql security definer set search_path=public,pg_temp as $$
 begin
   perform public.ensure_default_accounting_accounts(p_workspace_id);
   insert into public.accounting_rules(
@@ -391,7 +391,7 @@ begin
     (p_workspace_id,'Pozostały koszt',100,'purchase',null,null,null,'409-01',null,'UNASSIGNED'),
     (p_workspace_id,'Sprzedaż usług',300,'sale',null,null,null,null,'701-01','REVENUE')
   on conflict(workspace_id,name) do nothing;
-end $;
+end $$;
 revoke all on function public.ensure_default_accounting_rules(uuid) from public,anon,authenticated;
 grant execute on function public.ensure_default_accounting_rules(uuid) to service_role;
 
