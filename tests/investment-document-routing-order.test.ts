@@ -7,7 +7,7 @@ describe("investment AI routing order", () => {
   it("enriches document/module proposals before autonomous publication", () => {
     const analysisIndex = route.indexOf("processDocumentVersion");
     const routingIndex = route.indexOf("enrichDocumentWithInvestmentRouting({");
-    const autopilotIndex = route.indexOf("applyDocumentAutopilot({");
+    const autopilotIndex = route.indexOf("applyDocumentAutopilot({", routingIndex);
     expect(analysisIndex).toBeGreaterThanOrEqual(0);
     expect(routingIndex).toBeGreaterThan(analysisIndex);
     expect(autopilotIndex).toBeGreaterThan(routingIndex);
