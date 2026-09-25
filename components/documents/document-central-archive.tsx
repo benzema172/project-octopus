@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   BrainCircuit,
@@ -13,7 +14,9 @@ import {
   FolderKanban,
   Search,
   ShieldAlert,
-  Sparkles
+  Sparkles,
+  RotateCcw,
+  Trash2
 } from "lucide-react";
 import { AiInbox } from "@/components/brain/ai-inbox";
 import { DocumentOpenLink } from "@/components/documents/document-open-link";
@@ -24,19 +27,24 @@ import type { DocumentSummary } from "@/lib/types";
 import styles from "./document-central-archive.module.css";
 
 type ProjectOption = { id: string; name: string };
-type ArchiveTabId = "all" | "review" | "investments" | "finance" | "warehouse" | "hr" | "fleet" | "templates" | "company" | "unassigned";
+export type ArchiveTabId = "all" | "review" | "investments" | "finance" | "warehouse" | "hr" | "fleet" | "templates" | "company" | "unassigned" | "trash";
 
 type Props = {
   workspaceId: string;
   documents: DocumentSummary[];
+  trashedDocuments: DocumentSummary[];
   projects: ProjectOption[];
   insights: DocumentLibraryInsight[];
   reviewItems: AiInboxItem[];
   currentUserId: string;
   uploadContent: ReactNode;
+  activeTab: ArchiveTabId;
+  searchQuery: string;
+  facetCounts: Record<ArchiveTabId, number>;
+  total: number;
 };
 
-const MODULE_LABELS: Record<Exclude<ArchiveTabId, "all" | "review">, string> = {
+const MODULE_LABELS: Record<Exclude<ArchiveTabId, "all" | "review" | "trash">, string> = {
   investments: "Inwestycje",
   finance: "Finanse",
   warehouse: "Magazyn",
@@ -57,7 +65,8 @@ const TABS: Array<{ id: ArchiveTabId; label: string }> = [
   { id: "fleet", label: "Flota" },
   { id: "templates", label: "Wzory i Brain" },
   { id: "company", label: "Ogólne" },
-  { id: "unassigned", label: "Nieprzypisane" }
+  { id: "unassigned", label: "Nieprzypisane" },
+  { id: "trash", label: "Kosz" }
 ];
 
 function normalize(value: unknown) {
@@ -68,7 +77,7 @@ function normalize(value: unknown) {
     .toLocaleLowerCase("pl");
 }
 
-function moduleForDocument(document: DocumentSummary): Exclude<ArchiveTabId, "all" | "review"> {
+function moduleForDocument(document: DocumentSummary): Exclude<ArchiveTabId, "all" | "review" | "trash"> {
   const category = normalize(document.flow?.category ?? document.category);
   if (["invoice", "finance", "payment", "cost"].includes(category)) return "finance";
   if (["warehouse", "delivery note", "delivery_note", "stock", "material"].includes(category)) return "warehouse";
@@ -120,46 +129,58 @@ function extractionMethodLabel(method: string | null | undefined) {
   return method;
 }
 
-export function DocumentCentralArchive({ workspaceId, documents, projects, insights, reviewItems, currentUserId, uploadContent }: Props) {
-  const [tab, setTab] = useState<ArchiveTabId>("all");
-  const [query, setQuery] = useState("");
+export function DocumentCentralArchive({ workspaceId, documents, trashedDocuments, projects, insights, reviewItems, currentUserId, uploadCo  const router = useRouter();
+  const currentSearchParams = useSearchParams();
+  const [tab, setTab] = useState<ArchiveTabId>(activeTab);
+  const [query, setQuery] = useState(searchQuery);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+
+  useEffect(() => { setTab(activeTab); setSelectedId(null); }, [activeTab]);
+  useEffect(() => { setQuery(searchQuery); }, [searchQuery]);
+
+  const buildHref = useCallback((nextTab: ArchiveTabId, nextQuery: string) => {
+    const params = new URLSearchParams(currentSearchParams.toString());
+    if (nextTab === "all") params.delete("tab"); else params.set("tab", nextTab);
+    if (nextTab !== "all" && nextTab !== "trash" && nextQuery.trim()) params.set("q", nextQuery.trim());
+    else params.delete("q");
+    params.delete("page");
+    params.delete("trashPage");
+    const suffix = params.toString();
+    return suffix ? `?${suffix}` : "?";
+  }, [currentSearchParams]);
+
+  useEffect(() => {
+    if (tab === "all" || tab === "trash" || query === searchQuery) return;
+    const timer = window.setTimeout(() => router.replace(buildHref(tab, query)), 350);
+    return () => window.clearTimeout(timer);
+  }, [buildHref, query, router, searchQuery, tab]);
 
   const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
   const insightByDocument = useMemo(() => new Map(insights.map((insight) => [insight.documentId, insight])), [insights]);
   const reviewByDocument = useMemo(() => new Map(reviewItems.map((item) => [item.id, item])), [reviewItems]);
+  const filteredDocuments = documents;
 
-  const counts = useMemo(() => new Map(TABS.map((item) => [item.id, documents.filter((document) => {
-    if (item.id === "all") return false;
-    if (item.id === "review") return requiresReview(document);
-    return moduleForDocument(document) === item.id;
-  }).length])), [documents]);
-
-  const filteredDocuments = useMemo(() => {
-    const needle = normalize(query.trim());
-    return documents.filter((document) => {
-      const matchesTab = tab === "review" ? requiresReview(document) : moduleForDocument(document) === tab;
-      if (!matchesTab) return false;
-      if (!needle) return true;
-      const insight = insightByDocument.get(document.id);
-      const projectName = document.project_id ? projectNames.get(document.project_id) ?? "" : "";
-      const facts = insight?.facts.map((fact) => `${fact.label} ${fact.value} ${fact.unit ?? ""}`).join(" ") ?? "";
-      const proposals = insight?.proposals.map((proposal) => `${proposal.module} ${proposal.title}`).join(" ") ?? "";
-      const haystack = normalize([
-        document.name,
-        document.category,
-        document.flow?.category,
-        document.flow?.destination,
-        document.flow?.rationale,
-        projectName,
-        insight?.summary,
-        insight?.textPreview,
-        facts,
-        proposals
-      ].filter(Boolean).join(" "));
-      return haystack.includes(needle);
-    });
-  }, [documents, insightByDocument, projectNames, query, tab]);
+  async function restoreDocument(document: DocumentSummary) {
+    setRestoreError(null);
+    setRestoringId(document.id);
+    try {
+      const response = await fetch("/api/storage/document-state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId, projectId: document.project_id, documentId: document.id, state: "active" })
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Nie udało się przywrócić dokumentu.");
+      router.refresh();
+    } catch (error) {
+      setRestoreError(error instanceof Error ? error.message : "Przywracanie dokumentu nie powiodło się.");
+    } finally {
+      setRestoringId(null);
+    }
+  }
+}, [documents, insightByDocument, projectNames, query, tab]);
 
   const selected = selectedId ? filteredDocuments.find((document) => document.id === selectedId) ?? null : null;
   const selectedInsight = selected ? insightByDocument.get(selected.id) ?? null : null;
@@ -187,9 +208,11 @@ export function DocumentCentralArchive({ workspaceId, documents, projects, insig
             onClick={() => {
               setTab(item.id);
               setSelectedId(null);
+              if (item.id === "all" || item.id === "trash") setQuery("");
+              router.push(buildHref(item.id, item.id === "all" || item.id === "trash" ? "" : query));
             }}
           >
-            {item.label}{item.id === "all" ? null : <span>{counts.get(item.id) ?? 0}</span>}
+            {item.label}{item.id === "all" ? null : <span>{facetCounts[item.id] ?? 0}</span>}
           </button>
         ))}
       </div>
@@ -197,6 +220,24 @@ export function DocumentCentralArchive({ workspaceId, documents, projects, insig
       {tab === "all" ? (
         <div className={styles.uploadHome} data-documents-upload-home="1">
           {uploadContent}
+        </div>
+      ) : tab === "trash" ? (
+        <div className={styles.list} aria-label="Kosz dokumentów">
+          {restoreError ? <div className={styles.warningPanel}><AlertTriangle size={16} /><strong>{restoreError}</strong></div> : null}
+          {trashedDocuments.length ? trashedDocuments.map((document) => (
+            <div key={document.id} className={styles.row}>
+              <span className={styles.fileIcon}><Trash2 size={16} aria-hidden="true" /></span>
+              <span className={styles.rowBody}>
+                <strong>{document.name}</strong>
+                <small>{document.project_id ? projectNames.get(document.project_id) ?? "Inwestycja" : "Dokument firmy"} · usunięto {document.deleted_at ? new Date(document.deleted_at).toLocaleDateString("pl-PL") : "—"}</small>
+              </span>
+              <span className={styles.rowState}>
+                <button type="button" className="secondary-button" onClick={() => void restoreDocument(document)} disabled={restoringId === document.id}>
+                  <RotateCcw size={14} aria-hidden="true" />{restoringId === document.id ? "Przywracanie…" : "Przywróć"}
+                </button>
+              </span>
+            </div>
+          )) : <div className={styles.empty}><Trash2 size={24} /><strong>Kosz jest pusty.</strong><span>Usunięte dokumenty pojawią się tutaj.</span></div>}
         </div>
       ) : (
         <>
@@ -210,7 +251,7 @@ export function DocumentCentralArchive({ workspaceId, documents, projects, insig
                 aria-label="Szukaj w centralnym archiwum dokumentów"
               />
             </div>
-            <div className={styles.summary}><FileSearch size={16} /><strong>{filteredDocuments.length}</strong><span>z {documents.length} dokumentów</span></div>
+            <div className={styles.summary}><FileSearch size={16} /><strong>{filteredDocuments.length}</strong><span>z {total} dokumentów</span></div>
           </div>
 
           {filteredDocuments.length ? (
