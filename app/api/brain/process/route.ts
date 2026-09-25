@@ -3,6 +3,7 @@ import { getRequestUser } from "@/lib/auth";
 import { processDocumentVersion } from "@/lib/ai/process-document";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
 import { analyzeUnifiedDocumentReviewMulti } from "@/lib/ai/multi-ai-core";
+import { runAccountingCopilotForDocument, type AccountingCopilotRun } from "@/lib/ai/accounting-copilot";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
@@ -121,10 +122,13 @@ async function runInvoiceIntakeChecks(input: {
   workspaceId: string;
   documentId: string;
   actorId: string;
-}): Promise<{ invoiceReadiness: InvoiceIntakeAssessment[]; financeAi: FinanceAiSummary }> {
+}): Promise<{ invoiceReadiness: InvoiceIntakeAssessment[]; financeAi: FinanceAiSummary; accounting: AccountingCopilotRun[] }> {
   const invoiceReadiness = await assessDocumentInvoiceReadiness(input);
-  const financeAi = await analyzeInvoiceReviews(input.workspaceId, input.documentId);
-  return { invoiceReadiness, financeAi };
+  const [financeAi, accounting] = await Promise.all([
+    analyzeInvoiceReviews(input.workspaceId, input.documentId),
+    runAccountingCopilotForDocument(input.workspaceId, input.documentId, input.actorId)
+  ]);
+  return { invoiceReadiness, financeAi, accounting };
 }
 
 async function reconcileApprovedDocument(input: {
@@ -221,12 +225,14 @@ export async function POST(request: Request) {
 
       let invoiceReadiness: InvoiceIntakeAssessment[] = [];
       let financeAi: FinanceAiSummary | null = null;
+      let accounting: AccountingCopilotRun[] = [];
       let invoiceCheckError: string | null = null;
       try {
         if (await approvedDocumentContainsInvoice(workspace.id, body.versionId, approved.category)) {
           const checks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id });
           invoiceReadiness = checks.invoiceReadiness;
           financeAi = checks.financeAi;
+          accounting = checks.accounting;
         }
       } catch (error) {
         invoiceCheckError = error instanceof Error ? error.message : "Kontrola faktury nie powiodła się.";
@@ -240,6 +246,7 @@ export async function POST(request: Request) {
         materialization,
         invoiceReadiness,
         financeAi,
+        accounting,
         invoiceCheckError,
         message: approved.category === "template"
           ? "Dokument był już przeanalizowany. Document Flow potwierdził zapis w Octopus Brain → Wzory."
@@ -266,12 +273,14 @@ export async function POST(request: Request) {
 
     let invoiceReadiness: InvoiceIntakeAssessment[] = [];
     let financeAi: FinanceAiSummary | null = null;
+    let accounting: AccountingCopilotRun[] = [];
     let invoiceCheckError: string | null = null;
     if (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis)) {
       try {
         const checks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id });
         invoiceReadiness = checks.invoiceReadiness;
         financeAi = checks.financeAi;
+        accounting = checks.accounting;
       } catch (error) {
         invoiceCheckError = error instanceof Error ? error.message : "Kontrola faktury nie powiodła się.";
         console.error("[brain/process] invoice readiness failed", error);
@@ -285,6 +294,7 @@ export async function POST(request: Request) {
       hrIntake,
       invoiceReadiness,
       financeAi,
+      accounting,
       invoiceCheckError
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

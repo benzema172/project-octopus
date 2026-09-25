@@ -22,7 +22,7 @@ import {
 import { ModuleDropzoneLink } from "@/components/documents/module-dropzone-link";
 import type { FinanceCashflowWeek, FinanceControlData, FinanceScenario } from "@/lib/types/finance-control";
 
-type Tab = "cockpit" | "cashflow" | "projects" | "settlements" | "documents" | "control" | "reports";
+type Tab = "cockpit" | "cashflow" | "projects" | "settlements" | "documents" | "accounting" | "control" | "reports";
 type Props = { workspaceId: string; data: FinanceControlData; canWrite: boolean; canApprove: boolean; initialTab?: string };
 
 const tabs: Array<[Tab, string]> = [
@@ -31,6 +31,7 @@ const tabs: Array<[Tab, string]> = [
   ["projects", "Inwestycje"],
   ["settlements", "Rozrachunki"],
   ["documents", "Dokumenty"],
+  ["accounting", "Księgowość"],
   ["control", "Kontrola kosztów"],
   ["reports", "Raporty"]
 ];
@@ -100,6 +101,7 @@ export function FinanceControlTower({ workspaceId, data, canWrite, canApprove, i
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     const sourceLayerLoaded = url.searchParams.get("tab") === "documents";
+    const accountingLayerLoaded = url.searchParams.get("tab") === "accounting";
 
     if (nextTab === "documents" && !sourceLayerLoaded) {
       url.searchParams.set("tab", "documents");
@@ -107,7 +109,29 @@ export function FinanceControlTower({ workspaceId, data, canWrite, canApprove, i
       return;
     }
 
+    if (nextTab === "accounting" && !accountingLayerLoaded) {
+      url.searchParams.set("tab", "accounting");
+      router.replace(`${url.pathname}${url.search}`, { scroll: false });
+      return;
+    }
+
     if (nextTab !== "documents" && sourceLayerLoaded) {
+      if (nextTab === "accounting") {
+        url.searchParams.set("tab", "accounting");
+        router.replace(`${url.pathname}${url.search}`, { scroll: false });
+        return;
+      }
+      url.searchParams.delete("tab");
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+      return;
+    }
+
+    if (nextTab !== "accounting" && accountingLayerLoaded) {
+      if (nextTab === "documents") {
+        url.searchParams.set("tab", "documents");
+        router.replace(`${url.pathname}${url.search}`, { scroll: false });
+        return;
+      }
       url.searchParams.delete("tab");
       window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
     }
