@@ -22,7 +22,7 @@ describe("R2 jurisdiction resolution contract", () => {
 
     expect(live).toContain("R2 PUT HTTP");
     expect(live).toContain('/api/storage/complete');
-    expect(live).toContain('/api/brain/process-document');
+    expect(live).toContain('/api/brain/process');
     expect(live).toContain("Gemini classification missing");
     expect(live).toContain("Brain extraction missing");
     expect(live).toContain("processing job incomplete");
