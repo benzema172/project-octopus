@@ -89,6 +89,17 @@ export type ProjectProfile = {
 
 export type DocumentFlowStage = "uploaded" | "processing" | "classified" | "review" | "ready" | "error";
 
+export type DocumentAiEvidence = {
+  title: string;
+  module: string;
+  quote: string;
+  label: string;
+  page: number | null;
+  sheet: string | null;
+  row: number | null;
+  confidence: number | null;
+};
+
 export type DocumentFlowSummary = {
   stage: DocumentFlowStage;
   category: string | null;
@@ -102,6 +113,7 @@ export type DocumentFlowSummary = {
   artifactId: string | null;
   proposalCount: number;
   publishedCount: number;
+  evidence: DocumentAiEvidence[];
 };
 
 export type DocumentSummary = {
