@@ -144,6 +144,8 @@ export type AccountingSettings = {
   fiscalYearStartMonth: number;
 };
 
+export type AccountingCounterparty = { id: string; name: string; taxId: string | null };
+
 export type AccountingCenterData = {
   summary: AccountingSummary;
   settings: AccountingSettings;
@@ -152,4 +154,5 @@ export type AccountingCenterData = {
   rules: AccountingRule[];
   exportProfiles: AccountingExportProfile[];
   planImports: AccountingPlanImport[];
+  counterparties: AccountingCounterparty[];
 };
