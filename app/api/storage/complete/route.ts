@@ -106,6 +106,31 @@ export async function POST(request: Request) {
     return jsonError(`Nie udało się atomowo zapisać dokumentu: ${completeError?.message ?? "brak danych"}`, 500);
   }
 
+  if (intent.importSessionId && intent.importSessionItemId) {
+    const { data: linkedItem, error: linkedItemError } = await supabase
+      .from("document_import_session_items")
+      .update({
+        document_id: completed.document_id,
+        document_version_id: completed.version_id,
+        upload_status: "uploaded",
+        error_message: null,
+        updated_at: uploadedAt
+      })
+      .eq("id", intent.importSessionItemId)
+      .eq("session_id", intent.importSessionId)
+      .eq("workspace_id", intent.workspaceId)
+      .is("document_id", null)
+      .select("id")
+      .maybeSingle<{ id: string }>();
+    if (linkedItemError || !linkedItem) {
+      return jsonError(`Dokument zapisano, ale nie udało się powiązać go z sesją importu: ${linkedItemError?.message ?? "brak elementu sesji"}`, 500);
+    }
+    await supabase.from("document_import_sessions").update({
+      status: "processing",
+      updated_at: uploadedAt
+    }).eq("id", intent.importSessionId).eq("workspace_id", intent.workspaceId);
+  }
+
   const sourceModule = normalizeDocumentSourceModule(intent.sourceMetadata?.sourceModule);
   if (sourceModule) {
     const preferredCategory = preferredCategoryForSourceModule(sourceModule);
@@ -164,6 +189,8 @@ export async function POST(request: Request) {
     signatureVerified: true,
     category,
     categoryLocked: intent.categoryLocked,
-    sourceModule
+    sourceModule,
+    importSessionId: intent.importSessionId ?? null,
+    importSessionItemId: intent.importSessionItemId ?? null
   }, { headers: { "Cache-Control": "no-store" } });
 }
