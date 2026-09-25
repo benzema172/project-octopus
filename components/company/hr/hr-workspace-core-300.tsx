@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { BriefcaseBusiness, CalendarDays, ClipboardCheck, Clock3, FileText, HardHat, Plus, ShieldCheck, UsersRound } from "lucide-react";
 import { ModuleDropzoneLink } from "@/components/documents/module-dropzone-link";
@@ -43,7 +43,6 @@ export function HrWorkspaceCore300(props: Props) {
   const router = useRouter();
   const safeInitialTab = (["dashboard","employees","time","attendance","leaves","compliance","teams","documents"].includes(props.initialTab ?? "") ? props.initialTab : "dashboard") as HrWorkspaceTab;
   const [tab, setTab] = useState<HrWorkspaceTab>(safeInitialTab);
-  useEffect(() => { setTab(safeInitialTab); }, [safeInitialTab]);
   const [employeeCreateOpen, setEmployeeCreateOpen] = useState(false);
   const [timeFocus, setTimeFocus] = useState<TimeFocus>(null);
   const navigate = (target: HrWorkspaceTab, employeeId?: string) => {
