@@ -1,5 +1,7 @@
 import { CompanyOperationalPage } from "@/components/company/company-operational-page";
 import { getWarehouseMarket400Data } from "@/lib/data/warehouse-market-400";
+import "../../../../warehouse-kpi-compact.css";
+import "../../../../warehouse-navigation-refinement.css";
 
 export const dynamic = "force-dynamic";
 
