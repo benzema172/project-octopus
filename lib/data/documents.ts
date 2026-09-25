@@ -9,6 +9,19 @@ type FlexibleRow = Record<string, unknown>;
 type FlexibleDocumentRow = FlexibleRow & {
   document_versions?: FlexibleRow[] | null;
 };
+type ArchiveSearchRow = { document_id: string; total_count: number | string | null };
+export type DocumentArchiveFacets = {
+  all: number;
+  review: number;
+  investments: number;
+  finance: number;
+  warehouse: number;
+  hr: number;
+  fleet: number;
+  templates: number;
+  company: number;
+  unassigned: number;
+};
 type FlowRow = {
   document_id: string;
   document_category: string | null;
@@ -322,13 +335,55 @@ export async function listDocumentsForWorkspace(workspaceId: string, trashed = f
   return trashed ? documents : attachDocumentFlows(documents);
 }
 
-export async function listDocumentsForWorkspacePage(workspaceId: string, options: { trashed?: boolean; page?: number; pageSize?: number } = {}) {
+export async function listDocumentsForWorkspacePage(
+  workspaceId: string,
+  options: { trashed?: boolean; page?: number; pageSize?: number; query?: string; module?: string; review?: boolean } = {}
+) {
   const trashed = options.trashed ?? false;
   const page = Math.max(1, Math.floor(options.page ?? 1));
   const pageSize = Math.min(100, Math.max(20, Math.floor(options.pageSize ?? 60)));
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
-  const { data, error, count } = await createServiceSupabaseClient()
+  const query = options.query?.trim() ?? "";
+  const module = options.module?.trim() ?? "";
+  const review = options.review ?? false;
+  const db = createServiceSupabaseClient();
+
+  if (query || module || review) {
+    const search = await db.rpc("search_company_documents_810", {
+      p_workspace_id: workspaceId,
+      p_query: query || null,
+      p_module: module || null,
+      p_review: review,
+      p_trashed: trashed,
+      p_limit: pageSize,
+      p_offset: from
+    }).returns<ArchiveSearchRow[]>();
+    if (search.error) throw new Error(`Nie udało się przeszukać archiwum dokumentów firmy: ${search.error.message}`);
+    const searchRows = search.data ?? [];
+    const ids = searchRows.map((row) => row.document_id).filter(Boolean);
+    const total = searchRows.length ? Number(searchRows[0].total_count ?? 0) || 0 : 0;
+    if (!ids.length) return { items: [] as DocumentSummary[], total, page, pageSize };
+
+    const { data, error } = await db
+      .from("documents")
+      .select(DOCUMENT_WITH_VERSIONS_SELECT)
+      .eq("workspace_id", workspaceId)
+      .in("id", ids)
+      .returns<FlexibleDocumentRow[]>();
+    if (error) throw new Error(`Nie udało się pobrać wyników archiwum dokumentów firmy: ${error.message}`);
+    const order = new Map(ids.map((id, index) => [id, index]));
+    const documents = normalizeDocuments(data ?? [], null)
+      .sort((left, right) => (order.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (order.get(right.id) ?? Number.MAX_SAFE_INTEGER));
+    return {
+      items: trashed ? documents : await attachDocumentFlows(documents),
+      total,
+      page,
+      pageSize
+    };
+  }
+
+  const { data, error, count } = await db
     .from("documents")
     .select(DOCUMENT_WITH_VERSIONS_SELECT, { count: "exact" })
     .eq("workspace_id", workspaceId)
@@ -343,6 +398,28 @@ export async function listDocumentsForWorkspacePage(workspaceId: string, options
     total: count ?? 0,
     page,
     pageSize
+  };
+}
+
+export async function getDocumentArchiveFacets(workspaceId: string, query = ""): Promise<DocumentArchiveFacets> {
+  const { data, error } = await createServiceSupabaseClient().rpc("get_company_document_facets_810", {
+    p_workspace_id: workspaceId,
+    p_query: query.trim() || null
+  });
+  if (error) throw new Error(`Nie udało się policzyć kategorii archiwum: ${error.message}`);
+  const row = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {};
+  const value = (key: keyof DocumentArchiveFacets) => Number(row[key] ?? 0) || 0;
+  return {
+    all: value("all"),
+    review: value("review"),
+    investments: value("investments"),
+    finance: value("finance"),
+    warehouse: value("warehouse"),
+    hr: value("hr"),
+    fleet: value("fleet"),
+    templates: value("templates"),
+    company: value("company"),
+    unassigned: value("unassigned")
   };
 }
 
