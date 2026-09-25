@@ -73,7 +73,6 @@ export function WarehouseWorkspace300({ workspaceId, data, canWrite, canApprove,
   const page = (data.page ?? { page: 1, pageSize: 40, total: 0 }) as PageMeta;
   const resolvedInitialTab = initialTab ?? (query || page.page > 1 ? "stock" : "dashboard");
   const [tab, setTab] = useState<Tab>(resolvedInitialTab);
-  useEffect(() => { setTab(resolvedInitialTab); }, [resolvedInitialTab]);
   const changeTab = useCallback((nextTab: Tab) => {
     setTab(nextTab);
     const params = new URLSearchParams();
