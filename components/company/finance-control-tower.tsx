@@ -100,40 +100,19 @@ export function FinanceControlTower({ workspaceId, data, canWrite, canApprove, i
 
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
-    const sourceLayerLoaded = url.searchParams.get("tab") === "documents";
-    const accountingLayerLoaded = url.searchParams.get("tab") === "accounting";
+    const serverLayer = url.searchParams.get("tab");
 
-    if (nextTab === "documents" && !sourceLayerLoaded) {
-      url.searchParams.set("tab", "documents");
-      router.replace(`${url.pathname}${url.search}`, { scroll: false });
-      return;
-    }
-
-    if (nextTab === "accounting" && !accountingLayerLoaded) {
-      url.searchParams.set("tab", "accounting");
-      router.replace(`${url.pathname}${url.search}`, { scroll: false });
-      return;
-    }
-
-    if (nextTab !== "documents" && sourceLayerLoaded) {
-      if (nextTab === "accounting") {
-        url.searchParams.set("tab", "accounting");
+    if (nextTab === "documents" || nextTab === "accounting") {
+      if (serverLayer !== nextTab) {
+        url.searchParams.set("tab", nextTab);
         router.replace(`${url.pathname}${url.search}`, { scroll: false });
-        return;
       }
-      url.searchParams.delete("tab");
-      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
       return;
     }
 
-    if (nextTab !== "accounting" && accountingLayerLoaded) {
-      if (nextTab === "documents") {
-        url.searchParams.set("tab", "documents");
-        router.replace(`${url.pathname}${url.search}`, { scroll: false });
-        return;
-      }
+    if (serverLayer === "documents" || serverLayer === "accounting") {
       url.searchParams.delete("tab");
-      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+      router.replace(`${url.pathname}${url.search}`, { scroll: false });
     }
   };
   const [pending, startTransition] = useTransition();
