@@ -39,13 +39,17 @@ create table if not exists public.document_import_session_items (
 create index if not exists idx_document_import_sessions_workspace_created
   on public.document_import_sessions(workspace_id, created_at desc);
 create index if not exists idx_document_import_sessions_project_created
-  on public.document_import_sessions(project_id, created_at desc)
-  where project_id is not null;
+  on public.document_import_sessions(project_id, created_at desc);
+create index if not exists idx_document_import_sessions_created_by
+  on public.document_import_sessions(created_by);
 create index if not exists idx_document_import_session_items_session
   on public.document_import_session_items(session_id, ordinal);
+create index if not exists idx_document_import_session_items_workspace
+  on public.document_import_session_items(workspace_id);
 create index if not exists idx_document_import_session_items_document
-  on public.document_import_session_items(document_id)
-  where document_id is not null;
+  on public.document_import_session_items(document_id);
+create index if not exists idx_document_import_session_items_version
+  on public.document_import_session_items(document_version_id);
 
 alter table public.document_import_sessions enable row level security;
 alter table public.document_import_session_items enable row level security;
