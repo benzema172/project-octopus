@@ -34,7 +34,8 @@ export async function GET(request:Request){
   if(profileId) profileQuery=profileQuery.eq("id",profileId); else profileQuery=profileQuery.eq("is_default",true);
   const profile=await profileQuery.limit(1).maybeSingle();
   if(profile.error||!profile.data) return Response.json({error:profile.error?.message??"Brak aktywnego profilu eksportu."},{status:422});
-  const delimiter=text(profile.data.delimiter)||";";
+  const activeProfile = profile.data;
+  const delimiter=text(activeProfile.delimiter)||";";
   let entriesQuery=db.from("accounting_entries").select("id,invoice_id,entry_date,accounting_period,tax_period,description,currency,status,exported_at").eq("workspace_id",workspaceId).eq("status","approved").order("entry_date");
   if(onlyEntryId) entriesQuery=entriesQuery.eq("id",onlyEntryId); else entriesQuery=entriesQuery.is("exported_at",null);
   const entriesResult=await entriesQuery.limit(1000);
@@ -74,21 +75,21 @@ export async function GET(request:Request){
 
   const now=new Date().toISOString();
   await db.from("accounting_entries").update({exported_at:now,updated_at:now}).eq("workspace_id",workspaceId).in("id",entryIds).is("exported_at",null);
-  await db.from("audit_events").insert({workspace_id:workspaceId,actor_id:user.id,actor_type:"user",event_type:"accounting.batch_exported_700",entity_type:"accounting_export_profile",entity_id:text(profile.data.id),after_value:{entries:entryIds.length,rows:rows.length,adapter:profile.data.adapter,exportedAt:now}});
+  await db.from("audit_events").insert({workspace_id:workspaceId,actor_id:user.id,actor_type:"user",event_type:"accounting.batch_exported_700",entity_type:"accounting_export_profile",entity_id:text(activeProfile.id),after_value:{entries:entryIds.length,rows:rows.length,adapter:activeProfile.adapter,exportedAt:now}});
 
   const stamp=now.slice(0,10);
-  if(profile.data.adapter==="octopus_json"){
-    return new Response(JSON.stringify({schema:"octopus-accounting-batch-v2",profile:profile.data.name,exportedAt:now,rows},null,2),{
+  if(activeProfile.adapter==="octopus_json"){
+    return new Response(JSON.stringify({schema:"octopus-accounting-batch-v2",profile:activeProfile.name,exportedAt:now,rows},null,2),{
       headers:{"Content-Type":"application/json; charset=utf-8","Content-Disposition":'attachment; filename="octopus-accounting-'+stamp+'.json"',"Cache-Control":"no-store"}
     });
   }
 
-  const mapping=profile.data.mapping&&typeof profile.data.mapping==="object"?profile.data.mapping as Record<string,unknown>:{};
+  const mapping=activeProfile.mapping&&typeof activeProfile.mapping==="object"?activeProfile.mapping as Record<string,unknown>:{};
   const fields=Object.keys(standardHeaders);
-  const chosen=profile.data.adapter==="custom_csv"&&Object.keys(mapping).length
+  const chosen=activeProfile.adapter==="custom_csv"&&Object.keys(mapping).length
     ? fields.filter(field=>mapping[field]!==false&&mapping[field]!==null)
     : fields;
-  const header=chosen.map(field=>csv(profile.data.adapter==="custom_csv"&&text(mapping[field])?mapping[field]:standardHeaders[field],delimiter)).join(delimiter);
+  const header=chosen.map(field=>csv(activeProfile.adapter==="custom_csv"&&text(mapping[field])?mapping[field]:standardHeaders[field],delimiter)).join(delimiter);
   const bodyRows=rows.map(row=>chosen.map(field=>csv((row as Record<string,unknown>)[field]??"",delimiter)).join(delimiter));
   const content="\uFEFF"+[header,...bodyRows].join("\r\n");
   return new Response(content,{headers:{"Content-Type":"text/csv; charset=utf-8","Content-Disposition":'attachment; filename="octopus-accounting-'+stamp+'.csv"',"Cache-Control":"no-store"}});
