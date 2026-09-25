@@ -2,16 +2,13 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const autopilot = readFileSync("lib/ai/document-autopilot.ts", "utf8");
-const projectRoute = readFileSync("app/api/brain/process-document/route.ts", "utf8");
-const globalRoute = readFileSync("app/api/brain/process/route.ts", "utf8");
+const route = readFileSync("app/api/brain/process/route.ts", "utf8");
 
 describe("autonomous document ingestion", () => {
-  it("runs Autopilot automatically after AI analysis in both processing routes", () => {
-    expect(projectRoute).toContain("applyDocumentAutopilot");
-    expect(projectRoute).toMatch(/const autopilot = await applyDocumentAutopilot/);
-    expect(projectRoute).toMatch(/projectId: project\.id/);
-    expect(globalRoute).toContain("applyDocumentAutopilot");
-    expect(globalRoute).toMatch(/version\.project_id \?\? analysis\.proposedProjectId/);
+  it("runs Autopilot automatically after AI analysis in the canonical processing route", () => {
+    expect(route).toContain("applyDocumentAutopilot");
+    expect(route).toMatch(/const autopilot = await applyDocumentAutopilot/);
+    expect(route).toMatch(/version\.project_id \?\? analysis\.proposedProjectId/);
   });
 
   it("auto-approves classification and publishes module proposals instead of waiting for review", () => {
