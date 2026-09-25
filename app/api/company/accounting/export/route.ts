@@ -105,9 +105,11 @@ export async function POST(request:Request){
     filename="octopus-accounting-"+stamp+".csv";
   }
 
+  const repeatDownload=Boolean(onlyEntryId)&&entries.every(entry=>Boolean(entry.exported_at));
   const mark=await db.from("accounting_entries").update({exported_at:now,updated_at:now}).eq("workspace_id",workspaceId).in("id",entryIds).is("exported_at",null);
   if(mark.error) return Response.json({error:"Nie udało się oznaczyć paczki jako wyeksportowane: "+mark.error.message},{status:422});
-  const audit=await db.from("audit_events").insert({workspace_id:workspaceId,actor_id:user.id,actor_type:"user",event_type:"accounting.batch_exported_810",entity_type:"accounting_export_profile",entity_id:text(activeProfile.id),after_value:{entries:entryIds.length,rows:rows.length,adapter:activeProfile.adapter,exportedAt:now,transport:"explicit_post"}});
+  const auditEvent=repeatDownload?"accounting.entry_export_downloaded_810":"accounting.batch_exported_810";
+  const audit=await db.from("audit_events").insert({workspace_id:workspaceId,actor_id:user.id,actor_type:"user",event_type:auditEvent,entity_type:"accounting_export_profile",entity_id:text(activeProfile.id),after_value:{entries:entryIds.length,rows:rows.length,adapter:activeProfile.adapter,exportedAt:now,transport:"explicit_post",repeatDownload}});
   if(audit.error) console.error("Project Octopus: accounting export audit fallback",audit.error);
 
   return new Response(content,{headers:{"Content-Type":contentType,"Content-Disposition":'attachment; filename="'+filename+'"',"Cache-Control":"no-store"}});
