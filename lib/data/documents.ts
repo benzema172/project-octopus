@@ -158,7 +158,7 @@ function normalizeVersion(row: FlexibleRow, projectId: string | null, fallbackNa
   };
 }
 
-function normalizeDocuments(rows: FlexibleDocumentRow[], fallbackProjectId: string | null) {
+function normalizeDocuments(rows: FlexibleDocumentRow[], fallbackProjectId: string | null): DocumentSummary[] {
   return rows.map((row) => {
     const projectId = stringValue(row, "project_id") ?? fallbackProjectId;
     const versions = [...(row.document_versions ?? [])].sort((left, right) => numberValue(right, "version_number", "version_no") - numberValue(left, "version_number", "version_no"));
