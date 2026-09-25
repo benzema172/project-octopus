@@ -68,7 +68,7 @@
 .batchReportHeading>div{display:flex;align-items:center;gap:7px;color:#5d43c5}
 .batchReportHeading>div>span{display:grid;gap:2px}.batchReportHeading strong{font-size:.74rem;color:#38304d}.batchReportHeading small{font-size:.62rem;color:#7a728b}
 .batchReportHeading button{min-height:29px;padding:0 8px;font-size:.63rem}
-.batchMetrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.batchMetrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
 .batchMetrics span{display:grid;gap:1px;padding:7px 8px;border:1px solid #ebe7f6;border-radius:8px;background:#fff}
 .batchMetrics strong{font-size:.9rem;color:#30245f}.batchMetrics small{font-size:.58rem;color:#7e8798;text-transform:uppercase;font-weight:800}
 .batchBreakdown{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
