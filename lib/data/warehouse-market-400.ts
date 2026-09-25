@@ -47,7 +47,7 @@ function pendingStockProjection(physical: Row[], movements: Row[], lines: Row[])
 export async function getWarehouseMarket400Data(workspaceId: string, options: CompanyPageOptions = {}) {
   const [base, ai] = await Promise.all([
     getWarehouseWorkspaceData(workspaceId, { ...options, includeMirroredWarehouseItemData: false }),
-    getWarehouseAi300Data(workspaceId)
+    getWarehouseAi300Data(workspaceId, options.tab)
   ]);
 
   const db = createServiceSupabaseClient();
