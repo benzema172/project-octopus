@@ -19,6 +19,8 @@ describe("Document Central Archive 5.5.0", () => {
 
   it("provides module tabs and full-text search across AI/OCR material", () => {
     const archive = source("components/documents/document-central-archive.tsx");
+    const data = source("lib/data/documents.ts");
+    const migration = source("supabase/migrations/20260925111500_stability_performance_810.sql");
     expect(archive).toContain('data-document-central-archive="1"');
     expect(archive).toContain("Do weryfikacji");
     expect(archive).toContain("Inwestycje");
@@ -27,9 +29,11 @@ describe("Document Central Archive 5.5.0", () => {
     expect(archive).toContain("Kadry");
     expect(archive).toContain("Flota");
     expect(archive).toContain("Wzory i Brain");
-    expect(archive).toContain("insight?.textPreview");
-    expect(archive).toContain("insight?.facts");
-    expect(archive).toContain("insight?.proposals");
+    expect(archive).toContain("selectedInsight?.textPreview");
+    expect(archive).toContain("selectedInsight?.facts");
+    expect(archive).toContain("selectedInsight?.proposals");
+    expect(data).toContain("search_company_documents_810");
+    expect(migration).toContain("websearch_to_tsquery");
   });
 
   it("reads AI/OCR data from the existing canonical tables instead of creating a parallel archive", () => {
