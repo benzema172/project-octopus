@@ -2553,6 +2553,16 @@ button:disabled {
   font-size: 0.8rem;
 }
 .ai-inbox-row__routing small { grid-column: 1 / -1; }
+.ai-inbox-row__evidence { display: grid; gap: 7px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.ai-inbox-row__evidence-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ai-inbox-row__evidence-heading strong { font-size: .78rem; }
+.ai-inbox-row__evidence-heading small { color: var(--quiet); font-size: .68rem; }
+.ai-inbox-row__evidence-list { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; }
+.ai-inbox-row__evidence-list article { display: grid; align-content: start; gap: 5px; min-width: 0; padding: 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); }
+.ai-inbox-row__evidence-list article > span { color: var(--quiet); font-size: .64rem; }
+.ai-inbox-row__evidence-list article > strong { font-size: .73rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ai-inbox-row__evidence-list q { margin: 0; color: var(--muted); font-size: .7rem; line-height: 1.4; quotes: "„" "”"; }
+.ai-inbox-row__evidence-list button { justify-self: start; min-height: 30px; padding: 5px 8px; font-size: .68rem; }
 .ai-inbox-row__decision { display: grid; justify-items: end; gap: 7px; }
 .ai-inbox-row__decision > div, .review-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .approve-button, .reject-button {
@@ -2662,6 +2672,7 @@ button:disabled {
   .ai-inbox-row__decision { justify-items: start; }
   .ai-inbox-row__routing { grid-template-columns: 1fr; }
   .ai-inbox-row__routing small { grid-column: auto; }
+  .ai-inbox-row__evidence-list { grid-template-columns: 1fr; }
   .execution-flow, .control-dashboard-grid, .live-domain-grid, .form-row { grid-template-columns: 1fr; }
   .execution-stage { min-height: 150px; }
 }
