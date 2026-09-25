@@ -151,12 +151,6 @@ export function DocumentCentralArchive({
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setTab(activeTab);
-    setSelectedId(null);
-  }, [activeTab]);
-  useEffect(() => { setQuery(searchQuery); }, [searchQuery]);
-
   const buildHref = useCallback((nextTab: ArchiveTabId, nextQuery: string) => {
     const params = new URLSearchParams(currentSearchParams.toString());
     if (nextTab === "all") params.delete("tab"); else params.set("tab", nextTab);
