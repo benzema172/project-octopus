@@ -129,7 +129,21 @@ function extractionMethodLabel(method: string | null | undefined) {
   return method;
 }
 
-export function DocumentCentralArchive({ workspaceId, documents, trashedDocuments, projects, insights, reviewItems, currentUserId, uploadCo  const router = useRouter();
+export function DocumentCentralArchive({
+  workspaceId,
+  documents,
+  trashedDocuments,
+  projects,
+  insights,
+  reviewItems,
+  currentUserId,
+  uploadContent,
+  activeTab,
+  searchQuery,
+  facetCounts,
+  total
+}: Props) {
+  const router = useRouter();
   const currentSearchParams = useSearchParams();
   const [tab, setTab] = useState<ArchiveTabId>(activeTab);
   const [query, setQuery] = useState(searchQuery);
@@ -137,7 +151,10 @@ export function DocumentCentralArchive({ workspaceId, documents, trashedDocument
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
-  useEffect(() => { setTab(activeTab); setSelectedId(null); }, [activeTab]);
+  useEffect(() => {
+    setTab(activeTab);
+    setSelectedId(null);
+  }, [activeTab]);
   useEffect(() => { setQuery(searchQuery); }, [searchQuery]);
 
   const buildHref = useCallback((nextTab: ArchiveTabId, nextQuery: string) => {
@@ -180,7 +197,6 @@ export function DocumentCentralArchive({ workspaceId, documents, trashedDocument
       setRestoringId(null);
     }
   }
-}, [documents, insightByDocument, projectNames, query, tab]);
 
   const selected = selectedId ? filteredDocuments.find((document) => document.id === selectedId) ?? null : null;
   const selectedInsight = selected ? insightByDocument.get(selected.id) ?? null : null;
