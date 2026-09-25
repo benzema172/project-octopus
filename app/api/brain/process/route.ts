@@ -24,6 +24,35 @@ type FinanceAiSummary = {
   requiresHuman: number;
 };
 
+type BusinessDocumentPayload = { documentType?: unknown };
+
+function containsInvoiceBusinessDocument(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const payload = value as Record<string, unknown>;
+  const documents = Array.isArray(payload.businessDocuments)
+    ? payload.businessDocuments as BusinessDocumentPayload[]
+    : [];
+  if (documents.some((document) => String(document?.documentType ?? "").trim().toLowerCase() === "invoice")) return true;
+  const single = payload.businessDocument;
+  return Boolean(single && typeof single === "object" && !Array.isArray(single)
+    && String((single as BusinessDocumentPayload).documentType ?? "").trim().toLowerCase() === "invoice");
+}
+
+async function approvedDocumentContainsInvoice(workspaceId: string, versionId: string, category: string) {
+  if (category === "invoice") return true;
+  const db = createServiceSupabaseClient();
+  const { data, error } = await db.from("document_extractions")
+    .select("payload")
+    .eq("workspace_id", workspaceId)
+    .eq("document_version_id", versionId)
+    .eq("extraction_type", "document_context")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ payload: Record<string, unknown> | null }>();
+  if (error) throw new Error(`Nie udało się sprawdzić zawartości dokumentu biznesowego: ${error.message}`);
+  return containsInvoiceBusinessDocument(data?.payload);
+}
+
 async function analyzeInvoiceReviews(workspaceId: string, documentId: string): Promise<FinanceAiSummary> {
   const db = createServiceSupabaseClient();
   const { data: inboxData, error: inboxError } = await db
@@ -193,15 +222,15 @@ export async function POST(request: Request) {
       let invoiceReadiness: InvoiceIntakeAssessment[] = [];
       let financeAi: FinanceAiSummary | null = null;
       let invoiceCheckError: string | null = null;
-      if (approved.category === "invoice") {
-        try {
+      try {
+        if (await approvedDocumentContainsInvoice(workspace.id, body.versionId, approved.category)) {
           const checks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id });
           invoiceReadiness = checks.invoiceReadiness;
           financeAi = checks.financeAi;
-        } catch (error) {
-          invoiceCheckError = error instanceof Error ? error.message : "Kontrola faktury nie powiodła się.";
-          console.error("[brain/process] invoice readiness failed", error);
         }
+      } catch (error) {
+        invoiceCheckError = error instanceof Error ? error.message : "Kontrola faktury nie powiodła się.";
+        console.error("[brain/process] invoice readiness failed", error);
       }
 
       return NextResponse.json({
@@ -238,7 +267,7 @@ export async function POST(request: Request) {
     let invoiceReadiness: InvoiceIntakeAssessment[] = [];
     let financeAi: FinanceAiSummary | null = null;
     let invoiceCheckError: string | null = null;
-    if (analysis.effectiveCategory === "invoice") {
+    if (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis)) {
       try {
         const checks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id });
         invoiceReadiness = checks.invoiceReadiness;
