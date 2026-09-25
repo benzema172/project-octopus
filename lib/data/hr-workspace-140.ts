@@ -53,6 +53,10 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
   const referenceDate = dateOnly(options.referenceDate);
   const query = normalized(options.query).trim();
   const year = Number(referenceDate.slice(0, 4));
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
+  const historyFloor = addDays(referenceDate, -370);
+  const payrollMonth = `${monthKey(referenceDate)}-01`;
 
   const [employeesResult, projectsResult, employmentsResult, payrollResult, qualificationsResult, examsResult, trainingsResult, leavesResult, timesheetsResult, assignmentsResult, teamsResult, membersResult, documentsResult, employeeDocumentsResult, entitlementsResult, issuedAssetsResult, auditEventsResult] = await Promise.all([
     db.from("employees").select("id,employee_number,first_name,last_name,email,phone,status,hired_at,terminated_at,emergency_contact_name,emergency_contact_phone,notes,created_at,updated_at").eq("workspace_id", workspaceId).order("last_name").order("first_name").limit(500),
@@ -60,22 +64,22 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
     options.includePayroll
       ? db.from("employments").select("id,employee_id,employment_type,position,valid_from,valid_to,full_time_equivalent,monthly_cost,hourly_cost,net_monthly_pay,gross_monthly_pay,employer_contributions,other_monthly_costs,nominal_monthly_hours,settlement_model,operational_net_hourly_rate,currency,created_at").eq("workspace_id", workspaceId).order("valid_from", { ascending: false }).limit(2000)
       : db.from("employments").select("id,employee_id,employment_type,position,valid_from,valid_to,full_time_equivalent,currency,created_at").eq("workspace_id", workspaceId).order("valid_from", { ascending: false }).limit(2000),
-    options.includePayroll ? db.from("employee_payroll_months").select("id,employee_id,period_month,net_pay,gross_pay,employer_contributions,other_costs,total_employer_cost,status,paid_at,source,notes,created_at,updated_at").eq("workspace_id", workspaceId).order("period_month", { ascending: false }).limit(5000) : Promise.resolve({ data: [], error: null }),
-    db.from("qualifications").select("id,employee_id,qualification_type,number,issued_at,valid_until,status,document_id,created_at").eq("workspace_id", workspaceId).order("valid_until").limit(3000),
-    db.from("medical_exams").select("id,employee_id,exam_type,examined_at,valid_until,status,document_id,created_at").eq("workspace_id", workspaceId).order("valid_until").limit(2000),
-    db.from("safety_trainings").select("id,employee_id,training_type,provider,completed_at,valid_until,status,document_id,notes,created_at").eq("workspace_id", workspaceId).order("valid_until").limit(2000),
-    db.from("leave_requests").select("id,employee_id,leave_type,date_from,date_to,days,status,approved_by,created_at").eq("workspace_id", workspaceId).order("date_from", { ascending: false }).limit(3000),
+    options.includePayroll ? db.from("employee_payroll_months").select("id,employee_id,period_month,net_pay,gross_pay,employer_contributions,other_costs,total_employer_cost,status,paid_at,source,notes,created_at,updated_at").eq("workspace_id", workspaceId).eq("period_month", payrollMonth).order("period_month", { ascending: false }).limit(1000) : Promise.resolve({ data: [], error: null }),
+    db.from("qualifications").select("id,employee_id,qualification_type,number,issued_at,valid_until,status,document_id,created_at").eq("workspace_id", workspaceId).neq("status", "archived").or(`valid_until.is.null,valid_until.gte.${historyFloor}`).order("valid_until").limit(1500),
+    db.from("medical_exams").select("id,employee_id,exam_type,examined_at,valid_until,status,document_id,created_at").eq("workspace_id", workspaceId).neq("status", "archived").or(`valid_until.is.null,valid_until.gte.${historyFloor}`).order("valid_until").limit(1200),
+    db.from("safety_trainings").select("id,employee_id,training_type,provider,completed_at,valid_until,status,document_id,notes,created_at").eq("workspace_id", workspaceId).neq("status", "archived").or(`valid_until.is.null,valid_until.gte.${historyFloor}`).order("valid_until").limit(1200),
+    db.from("leave_requests").select("id,employee_id,leave_type,date_from,date_to,days,status,approved_by,created_at").eq("workspace_id", workspaceId).gte("date_to", yearStart).lte("date_from", yearEnd).order("date_from", { ascending: false }).limit(2000),
     options.includePayroll
-      ? db.from("timesheets").select("id,employee_id,project_id,team_id,work_date,hours,overtime_hours,status,approved_by,source,hourly_cost_snapshot,labor_cost_snapshot,cost_snapshot_at,created_at").eq("workspace_id", workspaceId).order("work_date", { ascending: false }).limit(5000)
-      : db.from("timesheets").select("id,employee_id,project_id,team_id,work_date,hours,overtime_hours,status,approved_by,source,created_at").eq("workspace_id", workspaceId).order("work_date", { ascending: false }).limit(5000),
-    db.from("assignments").select("id,employee_id,project_id,role,date_from,date_to,allocation_percent,source_team_id,created_at").eq("workspace_id", workspaceId).order("date_from", { ascending: false }).limit(3000),
+      ? db.from("timesheets").select("id,employee_id,project_id,team_id,work_date,hours,overtime_hours,status,approved_by,source,hourly_cost_snapshot,labor_cost_snapshot,cost_snapshot_at,created_at").eq("workspace_id", workspaceId).gte("work_date", yearStart).lte("work_date", yearEnd).order("work_date", { ascending: false }).limit(3500)
+      : db.from("timesheets").select("id,employee_id,project_id,team_id,work_date,hours,overtime_hours,status,approved_by,source,created_at").eq("workspace_id", workspaceId).gte("work_date", yearStart).lte("work_date", yearEnd).order("work_date", { ascending: false }).limit(3500),
+    db.from("assignments").select("id,employee_id,project_id,role,date_from,date_to,allocation_percent,source_team_id,created_at").eq("workspace_id", workspaceId).or(`date_to.is.null,date_to.gte.${historyFloor}`).order("date_from", { ascending: false }).limit(2000),
     db.from("hr_teams").select("id,name,leader_employee_id,project_id,active,notes,created_at,updated_at").eq("workspace_id", workspaceId).order("name").limit(500),
-    db.from("hr_team_members").select("id,team_id,employee_id,role,date_from,date_to,allocation_percent,created_at").eq("workspace_id", workspaceId).order("date_from", { ascending: false }).limit(3000),
+    db.from("hr_team_members").select("id,team_id,employee_id,role,date_from,date_to,allocation_percent,created_at").eq("workspace_id", workspaceId).or(`date_to.is.null,date_to.gte.${historyFloor}`).order("date_from", { ascending: false }).limit(2000),
     db.from("documents").select("id,name,category,project_id,ai_status,review_status,updated_at").eq("workspace_id", workspaceId).is("deleted_at", null).order("updated_at", { ascending: false }).limit(300),
-    db.from("employee_documents").select("id,employee_id,document_id,document_type,document_number,issued_at,valid_until,status,source,ai_confidence,ai_explanation,created_at").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(3000),
+    db.from("employee_documents").select("id,employee_id,document_id,document_type,document_number,issued_at,valid_until,status,source,ai_confidence,ai_explanation,created_at").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(1500),
     db.from("leave_entitlements").select("id,employee_id,year,annual_days,carried_over_days,extra_days,notes,updated_at").eq("workspace_id", workspaceId).eq("year", year).limit(1000),
-    db.from("issued_assets").select("id,employee_id,asset_type,asset_id,description,issued_at,returned_at,condition_out,condition_in").eq("workspace_id", workspaceId).order("issued_at", { ascending: false }).limit(3000),
-    db.from("audit_events").select("id,event_type,entity_type,entity_id,actor_type,created_at").eq("workspace_id", workspaceId).like("event_type", "hr.%").order("created_at", { ascending: false }).limit(500)
+    db.from("issued_assets").select("id,employee_id,asset_type,asset_id,description,issued_at,returned_at,condition_out,condition_in").eq("workspace_id", workspaceId).or(`returned_at.is.null,returned_at.gte.${historyFloor}`).order("issued_at", { ascending: false }).limit(1500),
+    db.from("audit_events").select("id,event_type,entity_type,entity_id,actor_type,created_at").eq("workspace_id", workspaceId).like("event_type", "hr.%").order("created_at", { ascending: false }).limit(200)
   ]);
 
   let employees = list(employeesResult, "pracowników");
@@ -148,7 +152,6 @@ export async function getHrWorkspace140Data(workspaceId: string, options: Option
   const approvedMonthTimesheets = monthTimesheets.filter((row) => row.status === "approved");
   const monthHours = approvedMonthTimesheets.reduce((sum, row) => sum + Number(row.hours ?? 0), 0);
   const monthOvertime = approvedMonthTimesheets.reduce((sum, row) => sum + Number(row.overtime_hours ?? 0), 0);
-  const payrollMonth = `${monthKey(referenceDate)}-01`;
   const payrollByEmployee = new Map<string, Row>();
   for (const row of payrollMonths) {
     if (String(row.period_month).slice(0, 10) !== payrollMonth) continue;
