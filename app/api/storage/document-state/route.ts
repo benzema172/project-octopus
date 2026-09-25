@@ -15,7 +15,15 @@ type DocumentStateBody = {
 };
 
 function jsonError(message: string, status: number) {
-  return NextResponse.json({ error: message }, { status });
+  return NextResponse.json({ error: message }, { status, headers: { "Cache-Control": "no-store" } });
+}
+
+function documentStateErrorStatus(error: { code?: string | null; message?: string | null }) {
+  const code = String(error.code ?? "");
+  const message = String(error.message ?? "").toLowerCase();
+  if (code === "42501" || message.includes("protected by retention policy") || message.includes("protected by legal hold")) return 423;
+  if (code === "55000" || message.includes("zakończona") || message.includes("zarchiwizowana") || message.includes("tylko do odczytu")) return 409;
+  return 500;
 }
 
 export async function POST(request: Request) {
@@ -69,7 +77,13 @@ export async function POST(request: Request) {
     .maybeSingle<{ id: string }>();
 
   if (error) {
-    return jsonError(`Nie udało się zmienić stanu dokumentu: ${error.message}`, 500);
+    const status = documentStateErrorStatus(error);
+    const message = status === 423
+      ? "Dokument jest chroniony polityką retencji lub legal hold i nie może zostać przeniesiony do kosza."
+      : status === 409
+        ? "Dokument należy do inwestycji historycznej albo zablokowanej do zapisu."
+        : `Nie udało się zmienić stanu dokumentu: ${error.message}`;
+    return jsonError(message, status);
   }
 
   if (!data) return jsonError("Nie udało się zmienić dokumentu.", 409);
