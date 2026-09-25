@@ -37,6 +37,8 @@ type UploadUrlBody = {
   revisionLabel?: string;
   effectiveAt?: string;
   replacesVersionId?: string;
+  importSessionId?: string;
+  importSessionItemId?: string;
 };
 
 function jsonError(message: string, status: number) {
@@ -83,6 +85,9 @@ export async function POST(request: Request) {
   const packageLabel = body.packageLabel?.trim().slice(0, 160) || undefined;
   const revisionLabel = body.revisionLabel?.trim().slice(0, 80) || undefined;
   const effectiveAt = body.effectiveAt?.trim() || undefined;
+  const importSessionId = body.importSessionId?.trim() || undefined;
+  const importSessionItemId = body.importSessionItemId?.trim() || undefined;
+  if (Boolean(importSessionId) !== Boolean(importSessionItemId)) return jsonError("Niepełny kontekst sesji importu.", 400);
   if (effectiveAt && Number.isNaN(Date.parse(effectiveAt))) return jsonError("Nieprawidłowa data obowiązywania dokumentacji.", 400);
 
   if (!fileName || !Number.isFinite(fileSize) || fileSize <= 0) {
@@ -102,6 +107,20 @@ export async function POST(request: Request) {
     : await ensureWorkspaceForUser(user);
   if (!workspace) return jsonError("Brak dostępu do firmy.", 403);
   if (project && project.workspace_id !== workspace.id) return jsonError("Inwestycja nie należy do wskazanej firmy.", 422);
+
+  if (importSessionId && importSessionItemId) {
+    const supabase = createServiceSupabaseClient();
+    const { data: importItem, error: importItemError } = await supabase
+      .from("document_import_session_items")
+      .select("id,session_id,workspace_id,document_id,document_version_id,document_import_sessions!inner(created_by)")
+      .eq("id", importSessionItemId)
+      .eq("session_id", importSessionId)
+      .eq("workspace_id", workspace.id)
+      .eq("document_import_sessions.created_by", user.id)
+      .maybeSingle<{ id: string; session_id: string; workspace_id: string; document_id: string | null; document_version_id: string | null }>();
+    if (importItemError || !importItem) return jsonError("Nie znaleziono pliku w aktywnej sesji importu.", 422);
+    if (importItem.document_id || importItem.document_version_id) return jsonError("Plik tej sesji został już powiązany z dokumentem.", 409);
+  }
 
   let documentId: string = randomUUID();
   let existingDocumentCategory: string | null = null;
@@ -173,6 +192,8 @@ export async function POST(request: Request) {
     replacesVersionId: body.replacesVersionId?.trim() || undefined,
     sourceChannel: sourceModule ? `module:${sourceModule}` : undefined,
     sourceMetadata: sourceModule ? sourceModuleMetadata(sourceModule) : undefined,
+    importSessionId,
+    importSessionItemId,
     expiresAt: Date.now() + PRESIGNED_URL_TTL_SECONDS * 1000
   };
 

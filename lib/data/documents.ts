@@ -27,6 +27,26 @@ type FlowRow = {
   template_status: string | null;
 };
 
+type EvidenceRow = {
+  document_id: string;
+  title: string;
+  module: string;
+  source_locator: Record<string, unknown> | null;
+  source_quote: string | null;
+  confidence: number | string | null;
+  status: string;
+  created_at: string;
+};
+
+function evidenceNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function evidenceText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 const DESTINATION_LABELS: Record<string, string> = {
   technical: "Inwestycja → Dokumentacja",
   specification: "Inwestycja → Dokumentacja / STWiOR",
@@ -195,16 +215,47 @@ function outcomeForFlow(stage: DocumentFlowStage, flow: FlowRow) {
 async function attachDocumentFlows(documents: DocumentSummary[]) {
   const ids = documents.map((document) => document.id).filter(Boolean);
   if (!ids.length) return documents;
-  const { data, error } = await createServiceSupabaseClient()
-    .from("document_flow_v2")
-    .select("document_id,document_category,ai_status,ai_confidence,classification_category,classification_confidence,classification_status,rationale,proposal_count,published_count,published_entity_type,published_entity_id,template_version_id,template_id,template_status")
-    .in("document_id", ids)
-    .returns<FlowRow[]>();
-  if (error) {
-    console.error("Project Octopus: Document Flow 2.0 read model fallback", error);
+  const db = createServiceSupabaseClient();
+  const [flowResult, evidenceResult] = await Promise.all([
+    db.from("document_flow_v2")
+      .select("document_id,document_category,ai_status,ai_confidence,classification_category,classification_confidence,classification_status,rationale,proposal_count,published_count,published_entity_type,published_entity_id,template_version_id,template_id,template_status")
+      .in("document_id", ids)
+      .returns<FlowRow[]>(),
+    db.from("document_module_proposals")
+      .select("document_id,title,module,source_locator,source_quote,confidence,status,created_at")
+      .in("document_id", ids)
+      .neq("status", "rejected")
+      .order("created_at", { ascending: false })
+      .limit(Math.min(1200, Math.max(60, ids.length * 10)))
+      .returns<EvidenceRow[]>()
+  ]);
+  if (flowResult.error) {
+    console.error("Project Octopus: Document Flow 2.0 read model fallback", flowResult.error);
     return documents;
   }
-  const byDocumentId = new Map((data ?? []).map((row) => [row.document_id, row]));
+  if (evidenceResult.error) console.error("Project Octopus: AI evidence read fallback", evidenceResult.error);
+
+  const byDocumentId = new Map((flowResult.data ?? []).map((row) => [row.document_id, row]));
+  const evidenceByDocument = new Map<string, NonNullable<DocumentSummary["flow"]>["evidence"]>();
+  for (const proposal of evidenceResult.data ?? []) {
+    const locator = proposal.source_locator && typeof proposal.source_locator === "object" ? proposal.source_locator : {};
+    const quote = evidenceText(proposal.source_quote);
+    const label = evidenceText(locator.label);
+    if (!quote && !label) continue;
+    const current = evidenceByDocument.get(proposal.document_id) ?? [];
+    if (current.length >= 4) continue;
+    current.push({
+      title: proposal.title,
+      module: proposal.module,
+      quote,
+      label,
+      page: evidenceNumber(locator.page),
+      sheet: evidenceText(locator.sheet) || null,
+      row: evidenceNumber(locator.row),
+      confidence: numericValue(proposal.confidence)
+    });
+    evidenceByDocument.set(proposal.document_id, current);
+  }
   return documents.map((document) => {
     const row = byDocumentId.get(document.id);
     if (!row) return document;
@@ -227,7 +278,8 @@ async function attachDocumentFlows(documents: DocumentSummary[]) {
         artifactType: artifactType ?? null,
         artifactId: artifactId ?? null,
         proposalCount: row.proposal_count ?? 0,
-        publishedCount: row.published_count ?? 0
+        publishedCount: row.published_count ?? 0,
+        evidence: evidenceByDocument.get(document.id) ?? []
       }
     } satisfies DocumentSummary;
   });

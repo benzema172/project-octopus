@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
@@ -58,6 +58,25 @@ type UploadOutcome = {
   aiProviders: number;
   aiAnalyzed: number;
 };
+type ImportSessionSummary = {
+  id: string;
+  label: string | null;
+  status: "uploading" | "processing" | "complete" | "review" | "error";
+  expectedFiles: number;
+  counts: { total: number; uploaded: number; ready: number; automatic: number; review: number; processing: number; error: number };
+  documentTypes: Record<string, number>;
+  categories: Record<string, number>;
+  items: Array<{
+    id: string;
+    fileName: string;
+    state: "pending" | "processing" | "ready" | "review" | "error";
+    category: string | null;
+    types: string[];
+    error: string | null;
+  }>;
+};
+type ImportSessionCreateResponse = { sessionId: string; items: Array<{ id: string; ordinal: number }>; error?: string };
+type ImportSessionResponse = { session: ImportSessionSummary | null; error?: string };
 type UploadCandidate = { file: File; relativePath: string };
 type BrowserFileEntry = {
   isFile: boolean;
@@ -189,6 +208,7 @@ export function DocumentUpload({
   const [isDragging, setIsDragging] = useState(false);
   const [expandedFlowId, setExpandedFlowId] = useState<string | null>(null);
   const [recentDocumentIds, setRecentDocumentIds] = useState<string[]>([]);
+  const [batchSummary, setBatchSummary] = useState<ImportSessionSummary | null>(null);
   const [isPending, startTransition] = useTransition();
   const isIntake = displayMode === "intake";
 
@@ -213,7 +233,41 @@ export function DocumentUpload({
   );
   const visibleDocuments = isIntake ? recentDocuments : filteredDocuments;
 
-  async function uploadFile(candidate: UploadCandidate, documentId: string | null, contextProjectId: string | null): Promise<UploadOutcome> {
+  const refreshImportSession = useCallback(async (sessionId?: string) => {
+    if (!workspaceId) return null;
+    const query = new URLSearchParams({ workspaceId });
+    if (sessionId) query.set("sessionId", sessionId);
+    const response = await fetch(`/api/documents/import-session?${query.toString()}`, { cache: "no-store" });
+    const payload = await response.json().catch(() => ({})) as ImportSessionResponse;
+    if (!response.ok) throw new Error(payload.error ?? "Nie udało się odczytać raportu sesji.");
+    setBatchSummary(payload.session);
+    return payload.session;
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId || !isIntake) return;
+    let cancelled = false;
+    void fetch(`/api/documents/import-session?workspaceId=${encodeURIComponent(workspaceId)}`, { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({})) as ImportSessionResponse;
+        if (!cancelled && response.ok) setBatchSummary(payload.session);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [isIntake, workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId || !batchSummary || !["uploading", "processing"].includes(batchSummary.status)) return;
+    const timer = window.setInterval(() => { void refreshImportSession(batchSummary.id).catch(() => undefined); }, 5000);
+    return () => window.clearInterval(timer);
+  }, [batchSummary?.id, batchSummary?.status, refreshImportSession, workspaceId]);
+
+  async function uploadFile(
+    candidate: UploadCandidate,
+    documentId: string | null,
+    contextProjectId: string | null,
+    importSession?: { sessionId: string; itemId: string }
+  ): Promise<UploadOutcome> {
     const { file } = candidate;
     setError(null);
     const validationError = validateUploadFile(file.name, file.type || "application/octet-stream", file.size);
@@ -233,7 +287,9 @@ export function DocumentUpload({
         fileSize: file.size,
         category: uploadCategory || undefined,
         categoryLocked: Boolean(uploadCategory),
-        packageLabel: folderPathForCandidate(candidate)
+        packageLabel: folderPathForCandidate(candidate),
+        importSessionId: importSession?.sessionId,
+        importSessionItemId: importSession?.itemId
       })
     });
     if (!prepareResponse.ok) {
@@ -276,7 +332,6 @@ export function DocumentUpload({
           body: JSON.stringify({ workspaceId, versionId })
         })));
         setStatus(`Paczka gotowa — ${packageInfo.accepted ?? 0} dokumentów ma osobne zadania AI.`);
-        startTransition(() => router.refresh());
         return { invoice: false, invoiceReady: false, invoiceReview: false, aiProviders: 0, aiAnalyzed: 0 };
       }
 
@@ -291,7 +346,6 @@ export function DocumentUpload({
         setStatus(reviewCount
           ? `Faktura odczytana · jakość ${Math.round(averageScore * 100)}% · ${reviewCount} wymaga sprawdzenia${council}`
           : `Faktura odczytana poprawnie · jakość ${Math.round(averageScore * 100)}% · ${readyCount} gotowa${council}`);
-        startTransition(() => router.refresh());
         return {
           invoice: true,
           invoiceReady: reviewCount === 0,
@@ -306,7 +360,6 @@ export function DocumentUpload({
           ? `Faktura zapisana — kontrola jakości wymaga ponowienia: ${analysisPayload.invoiceCheckError}`
           : (analysisPayload.message ?? "Analiza i routing zakończone"))
         : "Dokument zapisany — analiza pozostaje w kolejce");
-      startTransition(() => router.refresh());
       return {
         invoice: isInvoice,
         invoiceReady: false,
@@ -344,16 +397,80 @@ export function DocumentUpload({
     const outcomes: UploadOutcome[] = [];
     let completed = 0;
     const hasFolderStructure = selectedFiles.some((candidate) => candidate.relativePath.includes("/"));
+    let importSessionId: string | null = null;
+    const importItems = new Map<number, string>();
+
+    if (!targetDocumentIdRef.current && workspaceId) {
+      try {
+        const response = await fetch("/api/documents/import-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "create",
+            workspaceId,
+            projectId: targetProjectIdRef.current,
+            label: hasFolderStructure
+              ? `Folder · ${selectedFiles[0]?.relativePath.split("/")[0] ?? "dokumenty"}`
+              : `Wrzut · ${selectedFiles.length} ${selectedFiles.length === 1 ? "plik" : "plików"}`,
+            files: selectedFiles.map((candidate) => ({
+              relativePath: candidate.relativePath,
+              fileName: candidate.file.name,
+              fileSize: candidate.file.size
+            }))
+          })
+        });
+        const payload = await response.json().catch(() => ({})) as ImportSessionCreateResponse;
+        if (!response.ok || !payload.sessionId) throw new Error(payload.error ?? "Nie udało się utworzyć sesji Batch Import.");
+        importSessionId = payload.sessionId;
+        payload.items.forEach((item) => importItems.set(item.ordinal, item.id));
+        setBatchSummary(null);
+      } catch (sessionError) {
+        setIsUploading(false);
+        setError(sessionError instanceof Error ? sessionError.message : "Nie udało się utworzyć sesji Batch Import.");
+        return;
+      }
+    }
+
     for (const [index, candidate] of selectedFiles.entries()) {
       try {
         setStatus(`Plik ${index + 1} z ${selectedFiles.length}: ${candidate.relativePath}`);
-        const outcome = await uploadFile(candidate, targetDocumentIdRef.current, targetProjectIdRef.current);
+        const sessionItemId = importSessionId ? importItems.get(index + 1) : undefined;
+        const outcome = await uploadFile(
+          candidate,
+          targetDocumentIdRef.current,
+          targetProjectIdRef.current,
+          importSessionId && sessionItemId ? { sessionId: importSessionId, itemId: sessionItemId } : undefined
+        );
         outcomes.push(outcome);
         completed += 1;
       } catch (uploadError) {
-        failures.push(`${candidate.relativePath}: ${uploadError instanceof Error ? uploadError.message : "upload nie powiódł się"}`);
+        const failureMessage = uploadError instanceof Error ? uploadError.message : "upload nie powiódł się";
+        failures.push(`${candidate.relativePath}: ${failureMessage}`);
+        const sessionItemId = importSessionId ? importItems.get(index + 1) : undefined;
+        if (importSessionId && sessionItemId) {
+          await fetch("/api/documents/import-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "fail", workspaceId, sessionId: importSessionId, itemId: sessionItemId, error: failureMessage })
+          }).catch(() => undefined);
+        }
       }
     }
+
+    if (importSessionId) {
+      try {
+        const response = await fetch("/api/documents/import-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "finalize", workspaceId, sessionId: importSessionId })
+        });
+        const payload = await response.json().catch(() => ({})) as ImportSessionResponse;
+        if (response.ok) setBatchSummary(payload.session);
+      } catch {
+        void refreshImportSession(importSessionId).catch(() => undefined);
+      }
+    }
+
     if (completed) {
       const invoices = outcomes.filter((outcome) => outcome.invoice);
       if (invoices.length) {
@@ -370,7 +487,6 @@ export function DocumentUpload({
     if (failures.length) setError(failures.join(" · "));
     if (!completed) setStatus(null);
     try {
-      startTransition(() => router.refresh());
     } finally {
       setIsUploading(false);
       targetDocumentIdRef.current = null;
@@ -435,6 +551,24 @@ export function DocumentUpload({
       setError(downloadError instanceof Error ? downloadError.message : "Pobieranie nie powiodło się.");
     }
   }
+  async function previewEvidence(versionId: string, contextProjectId: string | null, page: number | null) {
+    setError(null);
+    setStatus(page ? `Otwieranie dowodu AI · strona ${page}` : "Otwieranie dowodu AI");
+    const previewWindow = window.open("about:blank", "_blank");
+    if (previewWindow) previewWindow.opener = null;
+    try {
+      const baseUrl = await getDocumentUrl(versionId, contextProjectId, "inline");
+      const url = page ? `${baseUrl}#page=${page}` : baseUrl;
+      setStatus(null);
+      if (previewWindow) previewWindow.location.replace(url);
+      else window.open(url, "_blank", "noopener,noreferrer");
+    } catch (previewError) {
+      previewWindow?.close();
+      setStatus(null);
+      setError(previewError instanceof Error ? previewError.message : "Nie udało się otworzyć dowodu AI.");
+    }
+  }
+
   async function previewVersion(versionId: string, contextProjectId: string | null) {
     setError(null);
     setStatus("Przygotowywanie podglądu");
@@ -465,7 +599,6 @@ export function DocumentUpload({
       setStatus(payload.message ?? (payload.alreadyAnalyzed
         ? "Document Flow sprawdził istniejącą analizę i dokończył routing."
         : "Analiza AI zakończona — wynik jest gotowy do użycia."));
-      startTransition(() => router.refresh());
     } catch (analysisError) {
       setStatus(null);
       setError(analysisError instanceof Error ? analysisError.message : "Analiza nie powiodła się.");
@@ -485,7 +618,6 @@ export function DocumentUpload({
         throw new Error(payload?.error ?? "Nie udało się zmienić stanu dokumentu.");
       }
       setStatus(state === "trashed" ? "Dokument przeniesiony do kosza" : "Dokument przywrócony");
-      startTransition(() => router.refresh());
     } catch (stateError) {
       setStatus(null);
       setError(stateError instanceof Error ? stateError.message : "Zmiana stanu dokumentu nie powiodła się.");
@@ -559,6 +691,29 @@ export function DocumentUpload({
           {!storageReady ? <p className={`${styles.message} ${styles.error}`}>Zaplecze Wrzutni wymaga aktualnych migracji.</p> : null}
           {status ? <p className={styles.message}>{status}</p> : null}
           {error ? <p className={`${styles.message} ${styles.error}`}>{error}</p> : null}
+          {batchSummary ? (
+            <section className={styles.batchReport} aria-label="Raport sesji Batch Import">
+              <div className={styles.batchReportHeading}>
+                <div><Sparkles size={15} aria-hidden="true" /><span><strong>Raport sesji AI</strong><small>{batchSummary.label ?? "Batch Import"} · {batchSummary.status === "complete" ? "gotowe" : batchSummary.status === "review" ? "wymaga decyzji" : batchSummary.status === "error" ? "z błędami" : "przetwarzanie"}</small></span></div>
+                <button type="button" className="secondary-button" onClick={() => void refreshImportSession(batchSummary.id).catch((refreshError) => setError(refreshError instanceof Error ? refreshError.message : "Nie udało się odświeżyć raportu."))} disabled={isUploading}>
+                  <RotateCcw size={14} aria-hidden="true" />Odśwież
+                </button>
+              </div>
+              <div className={styles.batchMetrics}>
+                <span><strong>{batchSummary.counts.total}</strong><small>plików</small></span>
+                <span><strong>{batchSummary.counts.ready}</strong><small>gotowe</small></span>
+                <span><strong>{batchSummary.counts.automatic}</strong><small>autopilot</small></span>
+                <span><strong>{batchSummary.counts.review}</strong><small>do decyzji</small></span>
+                <span><strong>{batchSummary.counts.processing}</strong><small>w toku</small></span>
+                <span><strong>{batchSummary.counts.error}</strong><small>błędy</small></span>
+              </div>
+              <div className={styles.batchBreakdown}>
+                {Object.entries(batchSummary.documentTypes).map(([type, count]) => <span key={`type-${type}`}><b>{type}</b>{count}</span>)}
+                {Object.entries(batchSummary.categories).map(([type, count]) => <span key={`category-${type}`}><b>{documentCategoryLabel(type)}</b>{count}</span>)}
+                {!Object.keys(batchSummary.documentTypes).length && !Object.keys(batchSummary.categories).length ? <small>Typy pojawią się tutaj w trakcie analizy AI.</small> : null}
+              </div>
+            </section>
+          ) : null}
         </div>
       </details>
 
@@ -678,6 +833,25 @@ export function DocumentUpload({
                     <div className={styles.detailBox}><span>Miejsce docelowe</span><strong>{destination}</strong></div>
                     <div className={styles.detailBox}><span>Stan końcowy</span><strong>{outcome}</strong></div>
                     {flow?.rationale ? <p className={styles.rationale}><strong>Dlaczego AI:</strong> {flow.rationale}</p> : null}
+                    {flow?.evidence?.length && version ? (
+                      <div className={styles.evidenceGrid}>
+                        {flow.evidence.slice(0, 4).map((evidence, index) => {
+                          const location = evidence.page
+                            ? `strona ${evidence.page}`
+                            : evidence.sheet
+                              ? `arkusz ${evidence.sheet}${evidence.row ? `, wiersz ${evidence.row}` : ""}`
+                              : evidence.label || "źródło";
+                          return <article className={styles.evidenceCard} key={`${evidence.module}-${index}`}>
+                            <span>{evidence.module} · {location}{evidence.confidence != null ? ` · ${Math.round(evidence.confidence * 100)}%` : ""}</span>
+                            <strong>{evidence.title}</strong>
+                            {evidence.quote ? <q>{evidence.quote}</q> : null}
+                            <button type="button" className="secondary-button" onClick={() => void previewEvidence(version.id, document.project_id, evidence.page)} disabled={quarantined}>
+                              <Eye size={14} aria-hidden="true" />Pokaż źródło
+                            </button>
+                          </article>;
+                        })}
+                      </div>
+                    ) : null}
                     <div className={styles.detailActions}>
                       {flow?.resultHref ? <a href={flow.resultHref}>Otwórz miejsce docelowe →</a> : null}
                       {flow?.stage === "review" && decisionHref && !flow.artifactId ? <a href={decisionHref}>Podejmij decyzję →</a> : null}

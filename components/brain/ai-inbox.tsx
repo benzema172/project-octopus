@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, Clock3, FileCheck2, LoaderCircle, RotateCcw, UserRoundCheck, X } from "lucide-react";
+import { AlertTriangle, Check, Clock3, Eye, FileCheck2, LoaderCircle, RotateCcw, UserRoundCheck, X } from "lucide-react";
 import { DOCUMENT_DESTINATIONS, documentCategoryLabel, normalizeDocumentCategory } from "@/lib/documents/classification";
 import type { AiInboxItem, AiInboxProjectOption } from "@/lib/data/operations";
 
@@ -84,6 +84,36 @@ export function AiInbox({
       setMessage(response.ok ? (action === "approve" ? "Element został zatwierdzony." : "Element został odrzucony.") : payload.error ?? "Nie udało się zapisać decyzji.");
       if (response.ok) router.refresh();
     });
+  }
+
+  async function previewEvidence(item: AiInboxItem, page: number | null) {
+    if (!workspaceId || !item.documentVersionId) {
+      setMessage("Brakuje wersji źródłowej dokumentu dla tego dowodu.");
+      return;
+    }
+    setMessage(null);
+    const previewWindow = window.open("about:blank", "_blank");
+    if (previewWindow) previewWindow.opener = null;
+    try {
+      const response = await fetch("/api/storage/download-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId,
+          projectId: item.documentProjectId ?? null,
+          versionId: item.documentVersionId,
+          disposition: "inline"
+        })
+      });
+      const payload = await response.json().catch(() => ({})) as { downloadUrl?: string; error?: string };
+      if (!response.ok || !payload.downloadUrl) throw new Error(payload.error ?? "Nie udało się otworzyć źródła.");
+      const url = page ? `${payload.downloadUrl}#page=${page}` : payload.downloadUrl;
+      if (previewWindow) previewWindow.location.replace(url);
+      else window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      previewWindow?.close();
+      setMessage(error instanceof Error ? error.message : "Nie udało się otworzyć dowodu AI.");
+    }
   }
 
   function retry(item: AiInboxItem) {
@@ -173,6 +203,26 @@ export function AiInbox({
                       <option value="low">Niski</option><option value="normal">Normalny</option><option value="high">Wysoki</option><option value="critical">Krytyczny</option>
                     </select>
                   </label>
+                </div>
+              ) : null}
+              {item.entityType === "document" && item.evidence?.length ? (
+                <div className="ai-inbox-row__evidence">
+                  <div className="ai-inbox-row__evidence-heading"><strong>Dowód AI</strong><small>fragmenty użyte do propozycji</small></div>
+                  <div className="ai-inbox-row__evidence-list">
+                    {item.evidence.slice(0, 3).map((evidence, index) => {
+                      const location = evidence.page
+                        ? `strona ${evidence.page}`
+                        : evidence.sheet
+                          ? `arkusz ${evidence.sheet}${evidence.row ? `, wiersz ${evidence.row}` : ""}`
+                          : evidence.label || "źródło";
+                      return <article key={`${evidence.module}-${index}`}>
+                        <span>{evidence.module} · {location}{evidence.confidence != null ? ` · ${Math.round(evidence.confidence * 100)}%` : ""}</span>
+                        <strong>{evidence.title}</strong>
+                        {evidence.quote ? <q>{evidence.quote}</q> : null}
+                        {item.documentVersionId ? <button type="button" className="secondary-button" onClick={() => void previewEvidence(item, evidence.page)} disabled={pending}><Eye size={14}/>Pokaż źródło</button> : null}
+                      </article>;
+                    })}
+                  </div>
                 </div>
               ) : null}
             </div>
