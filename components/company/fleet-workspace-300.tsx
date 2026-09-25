@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
+import { useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle, CarFront, ChartNoAxesCombined, Check, FileText,
@@ -120,7 +120,6 @@ export function FleetWorkspace300({ workspaceId, data, canWrite, canApprove, que
   const [pending, startTransition] = useTransition();
   const resolvedInitialTab = initialTab ?? (query ? "vehicles" : "dashboard");
   const [tab, setTab] = useState<Tab>(resolvedInitialTab);
-  useEffect(() => { setTab(resolvedInitialTab); }, [resolvedInitialTab]);
   const changeTab = (nextTab: Tab) => {
     setTab(nextTab);
     onTabChange?.(nextTab);
