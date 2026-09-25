@@ -95,7 +95,8 @@ async function askGemini(input: { invoice: Row; counterparty: Row; lines: Row[];
 export async function runAccountingCopilotForInvoice(
   workspaceId: string,
   invoiceId: string,
-  actorId?: string | null
+  actorId?: string | null,
+  options?: { allowGemini?: boolean }
 ): Promise<AccountingCopilotRun> {
   const db = createServiceSupabaseClient();
   await db.rpc("ensure_accounting_settings_700", { p_workspace_id: workspaceId });
@@ -249,7 +250,7 @@ export async function runAccountingCopilotForInvoice(
   }
 
   let aiApplied = 0;
-  if (ambiguous.length) {
+  if (ambiguous.length && options?.allowGemini !== false) {
     const suggestions = await askGemini({ invoice, counterparty, lines: ambiguous, accounts });
     await db.from("accounting_ai_suggestions").update({ status: "superseded", updated_at: new Date().toISOString() })
       .eq("workspace_id", workspaceId).eq("entry_id", entryId).eq("status", "active");
@@ -348,8 +349,8 @@ export async function runAccountingCopilotForDocument(workspaceId: string, docum
     ids = [...new Set(((inbox.data ?? []) as Row[]).map((row) => txt(row.invoice_id)).filter(Boolean))];
   }
   const results: AccountingCopilotRun[] = [];
-  for (const id of ids.slice(0, 20)) {
-    try { results.push(await runAccountingCopilotForInvoice(workspaceId, id, actorId)); }
+  for (const [index, id] of ids.slice(0, 20).entries()) {
+    try { results.push(await runAccountingCopilotForInvoice(workspaceId, id, actorId, { allowGemini: index < 4 })); }
     catch (error) {
       results.push({ invoiceId: id, entryId: null, confidence: 0, needsReview: true, aiApplied: 0, reason: error instanceof Error ? error.message : "Błąd dekretacji." });
     }
