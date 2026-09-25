@@ -71,7 +71,9 @@ const tabDefs: Array<{ id: Tab; label: string; icon: ReactNode }> = [
 export function WarehouseWorkspace300({ workspaceId, data, canWrite, canApprove, query = "", initialTab }: Props) {
   const router = useRouter();
   const page = (data.page ?? { page: 1, pageSize: 40, total: 0 }) as PageMeta;
-  const [tab, setTab] = useState<Tab>(initialTab ?? (query || page.page > 1 ? "stock" : "dashboard"));
+  const resolvedInitialTab = initialTab ?? (query || page.page > 1 ? "stock" : "dashboard");
+  const [tab, setTab] = useState<Tab>(resolvedInitialTab);
+  useEffect(() => { setTab(resolvedInitialTab); }, [resolvedInitialTab]);
   const changeTab = useCallback((nextTab: Tab) => {
     setTab(nextTab);
     const params = new URLSearchParams();
@@ -300,7 +302,7 @@ export function WarehouseWorkspace300({ workspaceId, data, canWrite, canApprove,
     {message ? <div className={styles.success}><Check size={15} />{message}{undo ? <button type="button" onClick={doUndo}><Undo2 size={13} /> Cofnij</button> : null}</div> : null}
     {error ? <div className={styles.error}><AlertTriangle size={15} />{error}</div> : null}
 
-    {tab === "dashboard" ? <Dashboard waiting={waitingReviews} lowStock={lowStock} pendingMovements={pendingMovements} catalogItems={catalogItems} movements={movements} quality={quality} fifoByItem={fifoByItem} onOpen={setTab} /> : null}
+    {tab === "dashboard" ? <Dashboard waiting={waitingReviews} lowStock={lowStock} pendingMovements={pendingMovements} catalogItems={catalogItems} movements={movements} quality={quality} fifoByItem={fifoByItem} onOpen={changeTab} /> : null}
     {tab === "stock" ? <StockRegistry rows={stockRows} page={page} catalogTotal={catalogItems.length} query={search} balanceByItem={balanceByItem} reservedByItem={reservedByItem} pricesByItem={pricesByItem} fifoByItem={fifoByItem} counterpartyById={counterpartyById} onOpen={setSelectedItemId} onPage={(next) => router.push(`?page=${next}${search.trim() ? `&q=${encodeURIComponent(search.trim())}` : ""}`)} /> : null}
     {tab === "waiting" ? <WaitingRoom workspaceId={workspaceId} reviews={waitingReviews} currentReview={currentReview} currentLines={currentLines} currentPreview={currentPreview} itemById={itemById} items={catalogItems} selectedId={currentReview?.id ?? null} onSelect={setSelectedReviewId} matchChoice={matchChoice} setMatchChoice={setMatchChoice} pending={pending} canWrite={canWrite} act={aiAct} /> : null}
     {tab === "movements" ? <MovementsPanel rows={movements} lines={movementLines} warehouses={warehouses} items={catalogItems} projects={assignableProjects} warehouseById={warehouseById} projectById={projectById} canWrite={canWrite} canApprove={canApprove} pending={pending} act={atomicAct} /> : null}
