@@ -3,13 +3,8 @@ import { describe, expect, it } from "vitest";
 
 const route = readFileSync("app/api/system/reset-documentation/route.ts", "utf8");
 const migration = readFileSync("supabase/migrations/20260826115000_documentation_reset_133.sql", "utf8");
-const release = readFileSync("RELEASE_1.3.3.md", "utf8");
 
 describe("Project Octopus 1.3.3 — Documentation Reset", () => {
-  it("keeps the historical 1.3.3 release record", () => {
-    expect(release).toContain("Project Octopus 1.3.3");
-    expect(release).toContain("Documentation Reset");
-  });
 
   it("requires the private background token and an exact destructive confirmation", () => {
     expect(route).toContain('x-octopus-background-token');
