@@ -72,6 +72,13 @@ type ClassificationRow = {
   created_at: string;
 };
 
+type ReviewActionRow = {
+  document_id: string | null;
+  note: string | null;
+  next_status: string | null;
+  created_at: string;
+};
+
 type ExtractionRow = {
   document_id: string;
   document_version_id: string;
@@ -143,7 +150,7 @@ async function buildSummary(session: SessionRow) {
   const documents = new Map((documentsResult.data ?? []).map((document) => [document.id, document]));
 
   const versionIds = Array.from(new Set((items ?? []).map((item) => item.document_version_id).filter((id): id is string => Boolean(id))));
-  const [classificationsResult, extractionsResult] = await Promise.all([
+  const [classificationsResult, extractionsResult, reviewActionsResult] = await Promise.all([
     versionIds.length
       ? db.from("document_classifications")
         .select("document_id,document_version_id,category,confidence,status,created_at")
@@ -160,17 +167,31 @@ async function buildSummary(session: SessionRow) {
         .in("document_version_id", versionIds)
         .order("created_at", { ascending: false })
         .returns<ExtractionRow[]>()
-      : Promise.resolve({ data: [] as ExtractionRow[], error: null })
+      : Promise.resolve({ data: [] as ExtractionRow[], error: null }),
+    documentIds.length
+      ? db.from("ai_review_actions")
+        .select("document_id,note,next_status,created_at")
+        .eq("workspace_id", session.workspace_id)
+        .eq("entity_type", "document")
+        .in("document_id", documentIds)
+        .order("created_at", { ascending: false })
+        .returns<ReviewActionRow[]>()
+      : Promise.resolve({ data: [] as ReviewActionRow[], error: null })
   ]);
   if (classificationsResult.error) throw new Error(`Nie udało się odczytać klasyfikacji sesji: ${classificationsResult.error.message}`);
   if (extractionsResult.error) throw new Error(`Nie udało się odczytać analiz sesji: ${extractionsResult.error.message}`);
+  if (reviewActionsResult.error) console.error("Project Octopus: Batch Import review actions fallback", reviewActionsResult.error);
 
   const classificationByVersion = new Map<string, ClassificationRow>();
   for (const row of classificationsResult.data ?? []) if (!classificationByVersion.has(row.document_version_id)) classificationByVersion.set(row.document_version_id, row);
   const extractionByVersion = new Map<string, ExtractionRow>();
   for (const row of extractionsResult.data ?? []) if (!extractionByVersion.has(row.document_version_id)) extractionByVersion.set(row.document_version_id, row);
+  const latestActionByDocument = new Map<string, ReviewActionRow>();
+  for (const row of reviewActionsResult.data ?? []) {
+    if (row.document_id && !latestActionByDocument.has(row.document_id)) latestActionByDocument.set(row.document_id, row);
+  }
 
-  const counts = { total: items?.length ?? 0, uploaded: 0, automatic: 0, review: 0, processing: 0, error: 0 };
+  const counts = { total: items?.length ?? 0, uploaded: 0, ready: 0, automatic: 0, review: 0, processing: 0, error: 0 };
   const documentTypes: Record<string, number> = {};
   const categories: Record<string, number> = {};
   const rows = (items ?? []).map((item) => {
@@ -191,9 +212,14 @@ async function buildSummary(session: SessionRow) {
     else if (document?.ai_status === "ready" || classification?.status === "approved") state = "ready";
     else state = "processing";
 
+    const latestAction = item.document_id ? latestActionByDocument.get(item.document_id) : undefined;
+    const automatic = state === "ready" && Boolean(latestAction?.note?.startsWith("Autopilot AI:"));
+
     if (item.upload_status === "uploaded") counts.uploaded += 1;
-    if (state === "ready") counts.automatic += 1;
-    else if (state === "review") counts.review += 1;
+    if (state === "ready") {
+      counts.ready += 1;
+      if (automatic) counts.automatic += 1;
+    } else if (state === "review") counts.review += 1;
     else if (state === "error") counts.error += 1;
     else counts.processing += 1;
 
@@ -208,6 +234,7 @@ async function buildSummary(session: SessionRow) {
       confidence: classification?.confidence ?? document?.ai_confidence ?? null,
       types,
       state,
+      automatic,
       error: item.error_message
     };
   });
