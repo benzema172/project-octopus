@@ -3,7 +3,7 @@ import "server-only";
 import { getHrWorkspace140Data } from "./hr-workspace-140";
 
 type Row = Record<string, unknown>;
-type Options = { query?: string; referenceDate?: string; includePayroll?: boolean };
+type Options = { query?: string; referenceDate?: string; includePayroll?: boolean; tab?: string };
 function dateOnly(value: unknown) { return String(value ?? "").slice(0, 10); }
 function employmentForDate(employments: Row[], employeeId: string, date: string) { return employments.find((row) => String(row.employee_id) === employeeId && dateOnly(row.valid_from || "0000-01-01") <= date && (!row.valid_to || dateOnly(row.valid_to) >= date)); }
 function hourlyRate(employment?: Row) { if (!employment) return 0; const explicit = Number(employment.hourly_cost ?? 0); if (Number.isFinite(explicit) && explicit > 0) return explicit; const monthly = Number(employment.monthly_cost ?? 0); const nominal = Number(employment.nominal_monthly_hours ?? 0); return Number.isFinite(monthly) && Number.isFinite(nominal) && monthly > 0 && nominal > 0 ? monthly / nominal : 0; }
