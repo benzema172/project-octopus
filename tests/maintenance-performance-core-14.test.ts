@@ -19,10 +19,13 @@ describe("Maintenance & Performance Core 14", () => {
     expect(existsSync(".github/workflows/deploy-malware-scanner-temporary.yml")).toBe(false);
   });
 
-  it("retains Fleet 4.0 as an intentional dormant capability rather than deleting future Connected Fleet work", () => {
-    expect(existsSync("components/company/fleet-workspace-400.tsx")).toBe(true);
-    expect(existsSync("lib/data/fleet-connected-400.ts")).toBe(true);
+  it("removes retired Fleet 4.0 UI/loaders while retaining the backend integration layer", () => {
+    expect(existsSync("components/company/fleet-workspace-400.tsx")).toBe(false);
+    expect(existsSync("lib/data/fleet-connected-400.ts")).toBe(false);
+    expect(existsSync("supabase/migrations/20260903203000_fleet_connected_400.sql")).toBe(true);
+    expect(existsSync("app/api/integrations/fleet/ingest/route.ts")).toBe(true);
     const operations = read("components/company/operations/fleet-operations.tsx");
+    expect(operations).toContain("FleetWorkspace300");
     expect(operations).not.toContain("FleetWorkspace400");
   });
 });
