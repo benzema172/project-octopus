@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const route = readFileSync("app/api/brain/process-document/route.ts", "utf8");
+const route = readFileSync("app/api/brain/process/route.ts", "utf8");
 
 describe("investment AI routing order", () => {
   it("enriches document/module proposals before autonomous publication", () => {
