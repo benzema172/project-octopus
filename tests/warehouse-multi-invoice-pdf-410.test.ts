@@ -12,6 +12,8 @@ describe("Warehouse 4.2 chunked multi-invoice PDF production path", () => {
   const multiInvoiceMigration = read("supabase/migrations/20260904102000_warehouse_multi_business_pdf_410.sql");
   const chunkCacheMigration = read("supabase/migrations/20260905131500_warehouse_pdf_chunk_cache_420.sql");
   const finalQueueMigration = read("supabase/migrations/20260905142500_final_ai_queue_hardening_180.sql");
+  const financeGuardMigration = read("supabase/migrations/20260925083000_finance_business_intake_guard_610.sql");
+  const brainRoute = read("app/api/brain/process/route.ts");
   const packageJson = read("package.json");
 
   it("splits a PDF into overlapping page chunks instead of one monolithic Gemini request", () => {
@@ -39,7 +41,7 @@ describe("Warehouse 4.2 chunked multi-invoice PDF production path", () => {
     expect(chunkCacheMigration).toContain("warehouse_pdf_ai_chunks");
     expect(chunkCacheMigration).toContain("unique (document_sha256, context_sha256, parser_version, page_start, page_end)");
     expect(chunkCacheMigration).toContain("revoke all on table public.warehouse_pdf_ai_chunks from anon, authenticated");
-    expect(specialist).toContain('PARSER_VERSION = "warehouse-pdf-chunks-4.3-material-flow"');
+    expect(specialist).toContain('PARSER_VERSION = "business-pdf-chunks-6.1-evidence-gate"');
     expect(specialist).toContain('status === "succeeded"');
     expect(specialist).toContain("Udane porcje są zapisane i nie będą analizowane ponownie");
   });
@@ -67,6 +69,23 @@ describe("Warehouse 4.2 chunked multi-invoice PDF production path", () => {
     expect(processor).toContain('sourceModule === "warehouse" || sourceModule === "finance"');
     expect(processor).toContain("analyzeWarehouseDocumentWithGemini");
     expect(processor).toContain("warehouseBinary ? bytes : undefined");
+  });
+
+  it("blocks pseudo-invoices before they can reach Finance", () => {
+    expect(specialist).toContain("normalizeBusinessDocumentType");
+    expect(specialist).toContain("businessDocumentHasEvidence");
+    expect(specialist).toContain('documents.every((document) => document.documentType === "invoice") ? "invoice" : "warehouse"');
+    expect(specialist).not.toContain('String(source.documentType ?? "invoice")');
+    expect(specialist).toContain("Bramka 6.1 odrzuciła");
+    expect(financeGuardMigration).toContain("'insufficient_invoice_evidence'");
+    expect(financeGuardMigration).toContain("abs(coalesce(public.octopus_numeric(v_business->>'grossAmount'),0)) > 0.005");
+    expect(financeGuardMigration).toContain("finance_610_bad_invoices");
+  });
+
+  it("runs invoice quality and AI also for mixed invoice plus WZ/PZ/MM PDFs", () => {
+    expect(brainRoute).toContain("containsInvoiceBusinessDocument");
+    expect(brainRoute).toContain("approvedDocumentContainsInvoice");
+    expect(brainRoute).toContain('analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis)');
   });
 
   it("creates finance and warehouse proposals for every detected invoice", () => {
