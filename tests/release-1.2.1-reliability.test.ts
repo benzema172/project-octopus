@@ -40,7 +40,7 @@ describe("Project Octopus 1.2.1 reliability regressions", () => {
 
   it("does not falsely mark queued ZIP children as completed AI work", () => {
     const intake = read("components/projects/project-intake-pipeline.tsx");
-    const route = read("app/api/brain/process-document/route.ts");
+    const route = read("app/api/brain/process/route.ts");
 
     expect(route).toContain("package: packageStatus");
     expect(intake).toContain("result?.package?.queuedVersionIds?.length");
