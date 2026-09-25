@@ -352,6 +352,49 @@ end $$;
 revoke all on function public.approve_accounting_entry_700(uuid,uuid,uuid) from public,anon,authenticated;
 grant execute on function public.approve_accounting_entry_700(uuid,uuid,uuid) to service_role;
 
+-- Po imporcie plan księgowej jest nadrzędny. Systemowe konta/reguły są wyłącznie bootstrapem
+-- i nigdy nie nadpisują istniejącego planu ani schematów użytkownika.
+create or replace function public.ensure_default_accounting_accounts(p_workspace_id uuid)
+returns void language plpgsql security definer set search_path=public,pg_temp as $
+begin
+  insert into public.accounting_accounts(workspace_id,code,name,account_type,source) values
+    (p_workspace_id,'201-00','Rozrachunki z odbiorcami','receivable','system'),
+    (p_workspace_id,'202-00','Rozrachunki z dostawcami','payable','system'),
+    (p_workspace_id,'221-01','VAT należny','tax','system'),
+    (p_workspace_id,'223-01','VAT naliczony','tax','system'),
+    (p_workspace_id,'310-01','Materiały i towary w magazynie','asset','system'),
+    (p_workspace_id,'401-02','Materiały bezpośrednie inwestycji','expense','system'),
+    (p_workspace_id,'402-01','Usługi obce','expense','system'),
+    (p_workspace_id,'403-01','Paliwo i koszty floty','expense','system'),
+    (p_workspace_id,'405-01','Narzędzia i wyposażenie','expense','system'),
+    (p_workspace_id,'409-01','Koszty ogólne i nierozpoznane','expense','system'),
+    (p_workspace_id,'701-01','Przychody ze sprzedaży usług','revenue','system')
+  on conflict(workspace_id,code) do nothing;
+end $;
+revoke all on function public.ensure_default_accounting_accounts(uuid) from public,anon,authenticated;
+grant execute on function public.ensure_default_accounting_accounts(uuid) to service_role;
+
+create or replace function public.ensure_default_accounting_rules(p_workspace_id uuid)
+returns void language plpgsql security definer set search_path=public,pg_temp as $
+begin
+  perform public.ensure_default_accounting_accounts(p_workspace_id);
+  insert into public.accounting_rules(
+    workspace_id,name,priority,direction,line_type,expense_category,allocation_scope,
+    debit_account_code,credit_account_code,default_cost_code
+  ) values
+    (p_workspace_id,'Paliwo i flota',500,'purchase',null,'fuel',null,'403-01',null,'FLEET'),
+    (p_workspace_id,'Zakup na magazyn centralny',450,'purchase','material',null,'inventory','310-01',null,'INVENTORY'),
+    (p_workspace_id,'Narzędzia i wyposażenie',420,'purchase',null,'equipment',null,'405-01',null,'EQUIPMENT'),
+    (p_workspace_id,'Materiał bezpośredni inwestycji',400,'purchase','material',null,'project','401-02',null,'MATERIAL'),
+    (p_workspace_id,'Koszt ogólny firmy',380,'purchase',null,null,'overhead','409-01',null,'OVERHEAD'),
+    (p_workspace_id,'Usługa obca',300,'purchase','service',null,null,'402-01',null,'SERVICE'),
+    (p_workspace_id,'Pozostały koszt',100,'purchase',null,null,null,'409-01',null,'UNASSIGNED'),
+    (p_workspace_id,'Sprzedaż usług',300,'sale',null,null,null,null,'701-01','REVENUE')
+  on conflict(workspace_id,name) do nothing;
+end $;
+revoke all on function public.ensure_default_accounting_rules(uuid) from public,anon,authenticated;
+grant execute on function public.ensure_default_accounting_rules(uuid) to service_role;
+
 insert into public.accounting_settings(workspace_id)
 select id from public.workspaces
 on conflict(workspace_id) do nothing;
