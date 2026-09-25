@@ -83,9 +83,8 @@ async function uploadAndAnalyze({ projectId, token, fileName, mimeType, bytes })
   if (!putResponse.ok) throw new Error(`R2 PUT ${fileName}: HTTP ${putResponse.status} ${await putResponse.text()}`);
   const complete = await api("/api/storage/complete", token, { token: upload.token, sha256: await sha256(bytes) });
   if (!complete.response.ok) throw new Error(`Complete ${fileName}: ${complete.response.status} ${JSON.stringify(complete.payload)}`);
-  const process = await api("/api/brain/process-document", token, {
-    projectId,
-    documentId: complete.payload.documentId,
+  const process = await api("/api/brain/process", token, {
+    workspaceId,
     versionId: complete.payload.versionId
   });
   if (!process.response.ok) throw new Error(`Gemini ${fileName}: ${process.response.status} ${JSON.stringify(process.payload)}`);
