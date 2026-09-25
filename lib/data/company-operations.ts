@@ -11,6 +11,7 @@ export type CompanyPageOptions = {
   query?: string;
   referenceDate?: string;
   includeMirroredWarehouseItemData?: boolean;
+  tab?: string;
 };
 
 export type CompanyPageMeta = {
