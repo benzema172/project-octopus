@@ -335,6 +335,16 @@ export async function listDocumentsForWorkspace(workspaceId: string, trashed = f
   return trashed ? documents : attachDocumentFlows(documents);
 }
 
+export async function countDocumentsForWorkspace(workspaceId: string, trashed = false) {
+  const { count, error } = await createServiceSupabaseClient()
+    .from("documents")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId)
+    .filter("deleted_at", trashed ? "not.is" : "is", null);
+  if (error) throw new Error(`Nie udało się policzyć dokumentów firmy: ${error.message}`);
+  return count ?? 0;
+}
+
 export async function listDocumentsForWorkspacePage(
   workspaceId: string,
   options: { trashed?: boolean; page?: number; pageSize?: number; query?: string; module?: string; review?: boolean } = {}
