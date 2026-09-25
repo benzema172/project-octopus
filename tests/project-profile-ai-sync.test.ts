@@ -22,7 +22,7 @@ describe("AI Project Profile sync", () => {
   });
 
   it("runs profile sync only after the document analysis is approved", () => {
-    const processRoute = read("app/api/brain/process-document/route.ts");
+    const processRoute = read("app/api/brain/process/route.ts");
     const route = read("app/api/brain/review/route.ts");
     expect(processRoute).not.toContain("syncProjectProfileFromAiFacts");
     expect(route).toContain("if (approved && projectId)");
