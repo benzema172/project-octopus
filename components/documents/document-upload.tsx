@@ -63,7 +63,7 @@ type ImportSessionSummary = {
   label: string | null;
   status: "uploading" | "processing" | "complete" | "review" | "error";
   expectedFiles: number;
-  counts: { total: number; uploaded: number; automatic: number; review: number; processing: number; error: number };
+  counts: { total: number; uploaded: number; ready: number; automatic: number; review: number; processing: number; error: number };
   documentTypes: Record<string, number>;
   categories: Record<string, number>;
   items: Array<{
@@ -701,7 +701,8 @@ export function DocumentUpload({
               </div>
               <div className={styles.batchMetrics}>
                 <span><strong>{batchSummary.counts.total}</strong><small>plików</small></span>
-                <span><strong>{batchSummary.counts.automatic}</strong><small>automatycznie</small></span>
+                <span><strong>{batchSummary.counts.ready}</strong><small>gotowe</small></span>
+                <span><strong>{batchSummary.counts.automatic}</strong><small>autopilot</small></span>
                 <span><strong>{batchSummary.counts.review}</strong><small>do decyzji</small></span>
                 <span><strong>{batchSummary.counts.processing}</strong><small>w toku</small></span>
                 <span><strong>{batchSummary.counts.error}</strong><small>błędy</small></span>
