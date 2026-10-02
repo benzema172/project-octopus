@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import type { DocumentFlowStage, DocumentSummary, ProjectSummary } from "@/lib/types";
 import { DOCUMENT_DESTINATIONS, documentCategoryLabel } from "@/lib/documents/classification";
+import type { DocumentSourceModule } from "@/lib/documents/source-module";
 import { MAX_SUPPORTED_UPLOAD_BYTES, SUPPORTED_UPLOAD_ACCEPT, validateUploadFile } from "@/lib/r2/sanitize";
 import styles from "./document-flow-200.module.css";
 
@@ -30,6 +31,7 @@ type DocumentUploadProps = {
   documents: DocumentSummary[];
   trashedDocuments: DocumentSummary[];
   storageReady: boolean;
+  sourceModule?: DocumentSourceModule;
   defaultCategory?: string;
   displayMode?: "library" | "intake";
 };
@@ -191,6 +193,7 @@ export function DocumentUpload({
   documents,
   trashedDocuments,
   storageReady,
+  sourceModule,
   defaultCategory = "",
   displayMode = "library"
 }: DocumentUploadProps) {
@@ -289,6 +292,7 @@ export function DocumentUpload({
         fileSize: file.size,
         category: uploadCategory || undefined,
         categoryLocked: Boolean(uploadCategory),
+        sourceModule: sourceModule ?? undefined,
         packageLabel: folderPathForCandidate(candidate),
         importSessionId: importSession?.sessionId,
         importSessionItemId: importSession?.itemId
@@ -411,6 +415,7 @@ export function DocumentUpload({
             action: "create",
             workspaceId,
             projectId: targetProjectIdRef.current,
+            sourceModule: sourceModule ?? undefined,
             label: hasFolderStructure
               ? `Folder · ${selectedFiles[0]?.relativePath.split("/")[0] ?? "dokumenty"}`
               : `Wrzut · ${selectedFiles.length} ${selectedFiles.length === 1 ? "plik" : "plików"}`,

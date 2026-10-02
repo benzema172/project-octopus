@@ -245,6 +245,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
               documents={documents}
               trashedDocuments={[]}
               storageReady={storageReady}
+              sourceModule={sourceModule ?? undefined}
               displayMode="intake"
             />
           )}
