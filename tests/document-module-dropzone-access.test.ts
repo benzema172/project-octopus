@@ -30,5 +30,9 @@ describe("module dropzone routing and access", () => {
     expect(importSessionRoute).toContain("const sourceModule = normalizeDocumentSourceModule(body.sourceModule);");
     expect(uploadRoute).toContain("normalizeDocumentSourceModule(body.sourceModule) ?? sourceModuleFromReferer(request)");
     expect(uploadRoute).toContain("sourceMetadata: sourceModule ? sourceModuleMetadata(sourceModule) : undefined");
+    const packagePipeline = read("lib/documents/package-pipeline.ts");
+    expect(packagePipeline).toContain("const parentSourceModule = normalizeDocumentSourceModule(parentIntake?.source_metadata?.sourceModule);");
+    expect(packagePipeline).toContain("preferredCategoryForSourceModule(parentSourceModule)");
+    expect(packagePipeline).toContain("channel: parentSourceModule ? \`module:\${parentSourceModule}\` : \"package\"");
   });
 });

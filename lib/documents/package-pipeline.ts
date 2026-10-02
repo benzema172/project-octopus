@@ -9,6 +9,7 @@ import { getR2Config } from "@/lib/env";
 import { createR2Client } from "@/lib/r2/client";
 import { validateFileSignature } from "@/lib/r2/file-signature";
 import { inferDocumentCategory, sanitizeFileName, validateUploadFile } from "@/lib/r2/sanitize";
+import { normalizeDocumentSourceModule, preferredCategoryForSourceModule, sourceModuleMetadata } from "@/lib/documents/source-module";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { ProjectMatchDecision } from "@/lib/ai/project-matcher";
 
@@ -126,6 +127,15 @@ export async function processDocumentPackage(input: {
   parentSha256: string;
 }): Promise<PackageDocumentAnalysis> {
   const db = createServiceSupabaseClient();
+  const { data: parentIntake, error: parentIntakeError } = await db.from("document_intakes")
+    .select("source_metadata,requested_category,category_locked")
+    .eq("document_id", input.parent.document_id)
+    .maybeSingle<{ source_metadata: Record<string, unknown> | null; requested_category: string | null; category_locked: boolean }>();
+  if (parentIntakeError) throw new Error(`Nie udało się odczytać kontekstu źródłowego paczki: ${parentIntakeError.message}`);
+  const parentSourceModule = normalizeDocumentSourceModule(parentIntake?.source_metadata?.sourceModule);
+  const inheritedSourceMetadata = parentSourceModule
+    ? { ...sourceModuleMetadata(parentSourceModule), ...(parentIntake?.source_metadata ?? {}) }
+    : { ...(parentIntake?.source_metadata ?? {}) };
   const existingResult = await db.from("document_packages")
     .select("id,status,entry_count,accepted_count,rejected_count,manifest")
     .eq("parent_version_id", input.parent.id)
@@ -243,11 +253,24 @@ export async function processDocumentPackage(input: {
       }).eq("id", versionId);
       if (scanPersistenceError) throw new Error(`Nie udało się zapisać skanu bezpieczeństwa pliku z paczki: ${scanPersistenceError.message}`);
 
-      await db.from("document_intakes").update({
-        channel: "package",
+      const childSourceMetadata = {
+        ...inheritedSourceMetadata,
+        packageId: packageRow.id,
+        parentDocumentId: input.parent.document_id,
+        parentVersionId: input.parent.id,
+        entryPath: entry.path,
+        malwareScan
+      };
+      const childIntakePatch: Record<string, unknown> = {
+        channel: parentSourceModule ? `module:${parentSourceModule}` : "package",
         source_external_key: `${input.parent.id}:${entry.path}`,
-        source_metadata: { packageId: packageRow.id, parentDocumentId: input.parent.document_id, parentVersionId: input.parent.id, entryPath: entry.path, malwareScan }
-      }).eq("document_id", documentId);
+        source_metadata: childSourceMetadata
+      };
+      if (parentSourceModule) {
+        childIntakePatch.requested_category = preferredCategoryForSourceModule(parentSourceModule);
+        childIntakePatch.category_locked = false;
+      }
+      await db.from("document_intakes").update(childIntakePatch).eq("document_id", documentId);
       await db.from("document_package_items").upsert({
         package_id: packageRow.id, workspace_id: input.workspaceId, project_id: input.parent.project_id,
         entry_path: entry.path, safe_file_name: sanitizeFileName(entry.fileName), mime_type: mimeType,
