@@ -99,7 +99,7 @@ export async function POST(request: Request) {
         }
       }
 
-      await applyDocumentAutopilot({
+      const autopilot = await applyDocumentAutopilot({
         workspaceId: workspace.id,
         documentId: document.id,
         versionId: document.current_version_id,
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
         actorId: user.id
       });
 
-      if (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis)) {
+      if (autopilot.failed === 0 && (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis))) {
         await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: document.id, actorId: user.id });
       }
       return NextResponse.json({ ok: true, status: "completed", jobId: result?.job_id ?? null });
