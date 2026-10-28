@@ -6,10 +6,8 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { AccountingCopilotRun } from "@/lib/ai/accounting-copilot";
 import type { InvoiceIntakeAssessment } from "@/lib/finance/invoice-intake-readiness";
 
-export 
-
 type ReviewRow = { id: string };
-type FinanceAiSummary = {
+export type FinanceAiSummary = {
   analyzed: number;
   failed: number;
   maxProviders: number;
@@ -115,6 +113,13 @@ export async function runInvoiceIntakeChecks(input: {
   actorId: string;
 }): Promise<{ invoiceReadiness: InvoiceIntakeAssessment[]; financeAi: FinanceAiSummary; accounting: AccountingCopilotRun[] }> {
   const invoiceReadiness = await assessDocumentInvoiceReadiness(input);
+  if (invoiceReadiness.some((item) => item.warehouseReceipt?.requiresHumanReview)) {
+    // Receipt quantities must not be posted before invoice ↔ PZ/WZ reconciliation.
+    const { error } = await createServiceSupabaseClient().from("documents")
+      .update({ ai_status: "review", review_status: "pending" })
+      .eq("workspace_id", input.workspaceId).eq("id", input.documentId);
+    if (error) throw new Error(`Nie udało się oznaczyć wymaganej kontroli magazynowej: ${error.message}`);
+  }
   const [financeAi, accounting] = await Promise.all([
     analyzeInvoiceReviews(input.workspaceId, input.documentId),
     runAccountingCopilotForDocument(input.workspaceId, input.documentId, input.actorId)
