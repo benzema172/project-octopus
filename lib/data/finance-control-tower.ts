@@ -52,7 +52,7 @@ export async function getFinanceControlTower(workspaceId: string): Promise<Finan
     db.from("finance_bank_transactions").select("id,booked_at,value_date,amount,currency,balance_after,counterparty_name,title,status,source").eq("workspace_id", workspaceId).order("booked_at", { ascending: false }).limit(60),
     db.from("finance_payment_matches").select("id,bank_transaction_id,invoice_id,match_score,status,reasons,created_at").eq("workspace_id", workspaceId).eq("status", "suggested").order("match_score", { ascending: false }).limit(50),
     db.from("finance_scenarios").select("id,name,scenario_type,horizon_weeks,assumptions,status,created_at").eq("workspace_id", workspaceId).eq("status", "active").order("created_at", { ascending: false }).limit(30),
-    db.from("business_inbox_items").select("id,status,created_at").eq("workspace_id", workspaceId).eq("source_channel", "ksef").order("created_at", { ascending: false }).limit(100),
+    db.from("business_inbox_items").select("id,status,received_at").eq("workspace_id", workspaceId).eq("source_channel", "ksef").order("received_at", { ascending: false }).limit(100),
     db.from("procurement_matches").select("id,invoice_line_id,purchase_order_line_id,receipt_line_id,boq_item_id,status,match_confidence,updated_at").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(50)
   ]);
 
@@ -230,7 +230,7 @@ export async function getFinanceControlTower(workspaceId: string): Promise<Finan
       configured: Boolean(process.env.KSEF_SYNC_WEBHOOK_URL),
       inboxCount: ksefRows.length,
       processedCount: ksefRows.filter((row) => ["processed", "completed", "approved"].includes(text(row.status))).length,
-      lastSeenAt: ksefRows[0]?.created_at ? text(ksefRows[0].created_at) : null
+      lastSeenAt: ksefRows[0]?.received_at ? text(ksefRows[0].received_at) : null
     }
   };
 }
