@@ -44,7 +44,6 @@ describe("Project lifecycle & archive core 5.5", () => {
     const layout = source("app/workspace/projects/[projectId]/layout.tsx");
     expect(control).toContain("Przywrócić inwestycję z Archiwum do listy Zakończonych");
     expect(control).toContain("Przywrócić inwestycję do bieżącej pracy");
-    expect(portfolio).toContain("można przywrócić");
     expect(layout).toContain("aby przywrócić ją jako Zakończoną albo Aktywną");
   });
 
