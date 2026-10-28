@@ -4,7 +4,7 @@ import { getProjectForUser } from "@/lib/data/projects";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
 import { normalizeDocumentSourceModule } from "@/lib/documents/source-module";
 import { matchesImportManifest, fullyUploadedImport, normalizeImportSha256 } from "@/lib/documents/import-manifest-integrity";
-import { stableSessionUuid } from "@/lib/documents/import-session-identities";
+import { stableSessionUuid, matchesPersistedImportVersion } from "@/lib/documents/import-session-identities";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -395,10 +395,7 @@ export async function POST(request: Request) {
         for (const version of saved ?? []) {
           const item = expectedByVersion.get(version.id);
           if (!item) continue;
-          if (version.document_id !== stableSessionUuid(workspace.id, item.id, "document")
-              || version.sha256 !== item.file_sha256
-              || version.file_name !== item.file_name
-              || Number(version.file_size_bytes) !== Number(item.file_size_bytes)) {
+          if (!matchesPersistedImportVersion(workspace.id, item, version)) {
             return jsonError("Zapisana wcześniej wersja nie jest zgodna z manifestem SHA-256. Wymagana kontrola, bez nadpisania.", 409);
           }
           const { error: linkError } = await db.from("document_import_session_items")
