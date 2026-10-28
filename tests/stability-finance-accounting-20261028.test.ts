@@ -196,6 +196,8 @@ describe("Octopus production stability regression", () => {
       expect(guard).toBeLessThan(route);
     }
     expect(worker).toContain("!duplicate");
+    expect(worker).toContain("sourceVersion.project_id ?? analysis.proposedProjectId ?? null");
+    expect(worker).toContain("routingProjectId && actorId && analysis.confidence >= 0.82");
     expect(direct).toContain("!exactDuplicate");
     expect(retry).toContain("!exactDuplicate");
     expect(worker).toContain('autopilot.status !== "applied"');
