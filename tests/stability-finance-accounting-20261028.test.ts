@@ -70,6 +70,8 @@ describe("Octopus production stability regression", () => {
       expect(route).toContain("runInvoiceIntakeChecks");
     }
     expect(worker).toContain('event_type: "document.invoice_finalization_failed"');
+    expect(worker).toContain("worker.document_autopilot_partial");
+    expect(immediate).toContain("autopilot.failed > 0");
     expect(common).toContain('ai_status: "review"');
   });
 
