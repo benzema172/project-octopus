@@ -100,6 +100,58 @@ describe("Octopus production stability regression", () => {
     expect(migration).not.toContain("auto_receive_purchase_invoice_unguarded_atomic(");
   });
 
+  it("checks exact cross-batch document hashes inside one workspace before automatic routing", () => {
+    const autopilot = source("lib/ai/document-autopilot.ts");
+    const sql = source("supabase/migrations/20261028121500_guard_cross_batch_duplicate_content.sql");
+    expect(autopilot).toContain("find_document_sha256_duplicate_20261028");
+    expect(autopilot).toContain('event_type: "document.duplicate_content_candidate"');
+    expect(autopilot).toContain("automaticMaterializationBlocked: true");
+    expect(autopilot).toContain('ai_status: "review"');
+    expect(sql).toContain("d.workspace_id=p_workspace_id");
+    expect(sql).toContain("dv.sha256=p_sha256");
+    expect(sql).toContain("document_id <> p_document_id");
+    expect(sql).toContain("grant execute on function public.find_document_sha256_duplicate_20261028");
+    expect(sql).toContain("to service_role");
+  });
+
+  it("prevents invoice materialization after exact-content duplicate detection", () => {
+    const worker = source("app/api/brain/worker/route.ts");
+    const direct = source("app/api/brain/process/route.ts");
+    const retry = source("app/api/brain/retry/route.ts");
+    expect(worker).toContain('autopilot.failed > 0');
+    expect(direct).toContain("autopilot.failed === 0");
+    expect(retry).toContain("autopilot.failed === 0");
+  });
+
+  it("requires at least two independent AI provider families and hard evidence to merge duplicates", () => {
+    const council = source("lib/ai/multi-ai-core.ts");
+    const policy = source("lib/ai/unified-document-ai-policy.ts");
+    const base = source("lib/ai/unified-document-copilot.ts");
+    expect(council).toContain("providerFamilies.size >= 2");
+    expect(council).toContain('vote.recommendation === "duplicate_same"');
+    expect(council).toContain("base.hardDuplicateEvidence && providerQuorum");
+    expect(council).toContain('recommendation: "manual_review"');
+    expect(policy).toContain("input.hardDuplicateEvidence");
+    expect(base).toContain("all.taxExact === true");
+    expect(base).not.toContain("(all.taxExact === true || all.nameExact === true)");
+  });
+
+  it("routes uncertain invoice identities to human review rather than blind auto-merge", () => {
+    const sql = source("supabase/migrations/20261028121500_guard_cross_batch_duplicate_content.sql");
+    expect(sql).toContain("from scored where score>=.55");
+    expect(sql).toContain("'autoMerge',v_hard and v_score>=.94");
+    expect(sql).toContain("'requiresReview',not (v_hard and v_score>=.94)");
+  });
+
+  it("flags repeated warehouse document identities and disables automatic physical-stock posting", () => {
+    const sql = source("supabase/migrations/20261028123000_warehouse_duplicate_hold_and_stock_gate.sql");
+    expect(sql).toContain("manual_reconciliation_required_20261028");
+    expect(sql).toContain("new.status:='waiting'");
+    expect(sql).toContain("duplicateCandidateReviewId");
+    expect(sql).toContain("w.workspace_id=new.workspace_id");
+    expect(sql).toContain("w.document_id<>new.document_id");
+  });
+
   it("runs the warehouse overview data reads concurrently instead of in waterfalls", () => {
     const warehouse = source("lib/data/warehouse-market-400.ts");
     expect(warehouse).toContain("const [base, ai, forecastsResult, readinessResult, recommendationsResult, pendingMovementsResult] = await Promise.all");
