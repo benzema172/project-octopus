@@ -333,6 +333,15 @@ describe("Octopus production stability regression", () => {
     expect(migration).toContain("to service_role");
   });
 
+  it("loads Finance projects alongside the first query wave and groups allocations in place", () => {
+    const finance = source("lib/data/finance-control-tower.ts");
+    expect(finance).toContain("inboxResult, procurementResult, projectResult] = await Promise.all");
+    expect(finance).toContain('db.from("projects").select("id,name").eq("workspace_id", workspaceId).limit(500)');
+    expect(finance).toContain("const [invoiceResult, txResult, lineResult, allocationResult] = await Promise.all");
+    expect(finance).toContain("if (existing) existing.push(row)");
+    expect(finance).not.toContain("allocations.set(key, [...(allocations.get(key) ?? []), row])");
+  });
+
   it("runs the warehouse overview data reads concurrently instead of in waterfalls", () => {
     const warehouse = source("lib/data/warehouse-market-400.ts");
     expect(warehouse).toContain("const [base, ai, forecastsResult, readinessResult, recommendationsResult, pendingMovementsResult] = await Promise.all");
