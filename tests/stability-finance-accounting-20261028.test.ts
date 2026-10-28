@@ -44,6 +44,12 @@ describe("Octopus production stability regression", () => {
     expect(auth).toContain("Nie udało się pobrać uprawnień modułów");
   });
 
+  it("does not replace missing warehouse AI quality counts with plausible zeros", () => {
+    const warehouseAi = source("lib/data/warehouse-ai-300.ts");
+    expect(warehouseAi).toContain("if (metric.error)");
+    expect(warehouseAi).toContain("Nie udało się odczytać ${label} Magazynu");
+  });
+
   it("runs the warehouse overview data reads concurrently instead of in waterfalls", () => {
     const warehouse = source("lib/data/warehouse-market-400.ts");
     expect(warehouse).toContain("const [base, ai, forecastsResult, readinessResult, recommendationsResult, pendingMovementsResult] = await Promise.all");
