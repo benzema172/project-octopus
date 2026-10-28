@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { processDocumentVersion } from "@/lib/ai/process-document";
+import { runInvoiceIntakeChecks, containsInvoiceBusinessDocument } from "@/lib/finance/document-invoice-finalization";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
 import { enrichDocumentWithInvestmentRouting } from "@/lib/ai/investment-document-routing";
 import { geminiRateLimitInfo, geminiRateLimitMessage } from "@/lib/ai/gemini-rate-limit";
@@ -107,6 +108,9 @@ export async function POST(request: Request) {
         actorId: user.id
       });
 
+      if (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis)) {
+        await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: document.id, actorId: user.id });
+      }
       return NextResponse.json({ ok: true, status: "completed", jobId: result?.job_id ?? null });
     } catch (processingError) {
       const rateLimit = geminiRateLimitInfo(processingError);
