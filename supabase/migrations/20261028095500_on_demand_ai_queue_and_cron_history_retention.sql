@@ -15,6 +15,11 @@ declare
   v_active boolean;
   v_has_work boolean;
 begin
+  -- Serialize concurrent activations/deactivations before reading job state.
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('octopus-document-queue-scheduler-v1', 0)
+  );
+
   select j.jobid, j.active into v_job_id, v_active
   from cron.job j
   where j.jobname = 'octopus-background-ai-queue-132';
@@ -23,11 +28,6 @@ begin
     raise warning 'Octopus document queue cron job not found';
     return new;
   end if;
-
-  -- Serialize concurrent activations/deactivations to avoid losing a wake-up.
-  perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended('octopus-document-queue-scheduler-v1', 0)
-  );
 
   select exists(
     select 1 from public.processing_jobs pj
@@ -60,6 +60,10 @@ declare
   v_active boolean;
   v_has_work boolean;
 begin
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('octopus-finance-queue-scheduler-v1', 0)
+  );
+
   select j.jobid, j.active into v_job_id, v_active
   from cron.job j
   where j.jobname = 'octopus-finance-ai-copilot-200';
@@ -68,10 +72,6 @@ begin
     raise warning 'Octopus finance AI cron job not found';
     return new;
   end if;
-
-  perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended('octopus-finance-queue-scheduler-v1', 0)
-  );
   select exists(
     select 1 from public.get_pending_finance_multi_ai_reviews(1, false)
   ) into v_has_work;
