@@ -45,14 +45,13 @@ function pendingStockProjection(physical: Row[], movements: Row[], lines: Row[])
 }
 
 export async function getWarehouseMarket400Data(workspaceId: string, options: CompanyPageOptions = {}) {
-  const [base, ai] = await Promise.all([
-    getWarehouseWorkspaceData(workspaceId, { ...options, includeMirroredWarehouseItemData: false }),
-    getWarehouseAi300Data(workspaceId, options.tab)
-  ]);
-
   const db = createServiceSupabaseClient();
   const today = new Date().toISOString().slice(0, 10);
-  const [forecastsResult, readinessResult, recommendationsResult, pendingMovementsResult] = await Promise.all([
+  // The Market 4.0 layer was serializing two independent network stages.
+  // Start the supplementary reads alongside the base/AI data for faster navigation.
+  const [base, ai, forecastsResult, readinessResult, recommendationsResult, pendingMovementsResult] = await Promise.all([
+    getWarehouseWorkspaceData(workspaceId, { ...options, includeMirroredWarehouseItemData: false }),
+    getWarehouseAi300Data(workspaceId, options.tab),
     db.from("warehouse_forecasts")
       .select("id,stock_item_id,warehouse_id,horizon_start,horizon_end,forecast_quantity,project_demand_quantity,historical_demand_quantity,safety_stock,recommended_min,recommended_max,confidence,model,evidence,calculated_at")
       .eq("workspace_id", workspaceId)
