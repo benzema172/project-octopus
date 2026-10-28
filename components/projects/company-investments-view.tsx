@@ -55,15 +55,6 @@ export function CompanyInvestmentsView({ workspaceId, projects, taskSignals, can
     });
   }, [filter, normalized, projects, taskSignals]);
 
-  const activeCount = projects.filter((project) => project.status === "active").length;
-  const archivedCount = projects.filter((project) => project.status === "archived").length;
-  const completedCount = projects.filter((project) => project.status === "completed").length;
-  const attentionCount = projects.filter((project) => {
-    if (!CURRENT_STATUSES.has(project.status)) return false;
-    const signal = taskSignals[project.id];
-    return signal && (signal.overdueCount > 0 || signal.urgentCount > 0);
-  }).length;
-
   return (
     <main className="co-page co-investments-page" data-project-lifecycle-portfolio="550">
       <header className="co-page-heading co-investments-heading">
@@ -91,13 +82,6 @@ export function CompanyInvestmentsView({ workspaceId, projects, taskSignals, can
       ) : null}
 
       <section className="co-section co-investment-portfolio" aria-labelledby="investment-list-heading">
-        <div className="co-portfolio-summary" aria-label="Stan portfela inwestycji">
-          <div><small>Aktywne</small><strong>{activeCount}</strong></div>
-          <div data-tone={attentionCount ? "warning" : "calm"}><small>Wymagają uwagi</small><strong>{attentionCount}</strong></div>
-          <div><small>Zakończone</small><strong>{completedCount}</strong></div>
-          <div><small>Archiwum</small><strong>{archivedCount}</strong><span>można przywrócić</span></div>
-        </div>
-
         <div className="co-list-toolbar">
           <div className="co-investment-filters" aria-label="Filtr portfela">
             {FILTERS.map((item) => <button type="button" key={item.value} className={filter === item.value ? "is-active" : undefined} aria-pressed={filter === item.value} onClick={() => setFilter(item.value)}>{item.value === "archived" ? <Archive size={13} /> : null}{item.label}</button>)}
