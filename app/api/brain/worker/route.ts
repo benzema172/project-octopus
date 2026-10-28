@@ -176,6 +176,22 @@ async function handleWorker(request: Request) {
         actorId
       });
 
+      // A partially routed document is never reported as fully imported.
+      if (autopilot.failed > 0 || autopilot.status === "partial") {
+        const reason = autopilot.errors.join(" | ") || "Automatyczny routing dokumentu wymaga decyzji.";
+        const update = await supabase.from("documents").update({ ai_status: "review", review_status: "pending" })
+          .eq("workspace_id", job.workspace_id).eq("id", sourceVersion.document_id);
+        if (update.error) throw new Error(update.error.message);
+        results.push({ jobId: job.id, versionId: job.document_version_id, status: "failed", error: reason });
+        operationalLog("warn", {
+          event: "worker.document_autopilot_partial", route: "/api/brain/worker",
+          method: request.method, module: "documents", workspaceId: job.workspace_id,
+          projectId: autopilot.projectId, requestId, status: "partial",
+          errorCode: "MODULE_ROUTING_PARTIAL", meta: { jobId: job.id, versionId: job.document_version_id }
+        });
+        continue;
+      }
+
       // Background jobs must complete the same invoice quality, warehouse receipt
       // and accounting proposal pipeline as the immediate /api/brain/process path.
       if (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis)) {
