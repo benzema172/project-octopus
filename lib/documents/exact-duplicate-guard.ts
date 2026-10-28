@@ -32,6 +32,10 @@ export async function findExistingExactDuplicate(input: {
     p_sha256: version.sha256
   });
   if (error) throw new Error(`Kontrola duplikatów niedostępna: ${error.message}`);
-  const rows = Array.isArray(data) ? data as ExactDuplicateCandidate[] : [];
+  if (!Array.isArray(data)) {
+    // Unknown RPC result shape is not equivalent to "no duplicate".
+    throw new Error("Nieprawidłowy wynik kontroli SHA-256. Publikacja jest wstrzymana.");
+  }
+  const rows = data as ExactDuplicateCandidate[];
   return rows[0] ?? null;
 }
