@@ -72,6 +72,20 @@ describe("Project lifecycle & archive core 5.5", () => {
     expect(portfolio).toContain('data-project-lifecycle-portfolio="550"');
   });
 
+  it("keeps the investment status on one line and gives the title usable header width", () => {
+    const status = source("components/projects/project-status-control-550.module.css");
+    const layout = source("app/wrzutnia-mascot-refinement.css");
+    const header = source("app/workspace/projects/[projectId]/layout.tsx");
+    expect(status).toContain("white-space: nowrap");
+    expect(status).toContain("min-width: max-content");
+    expect(status).toContain("flex-wrap: nowrap");
+    expect(layout).toContain("minmax(395px,1.15fr)");
+    expect(layout).toContain("grid-template-columns: minmax(0,1fr) minmax(0,1fr) 166px");
+    expect(layout).toContain("@media (min-width: 901px) and (max-width: 1460px)");
+    expect(layout).toContain("text-overflow: ellipsis");
+    expect(header).toContain('<h1 title={header.shortName}>');
+  });
+
   it("keeps closeout checklist informational instead of blocking status changes", () => {
     const closeout = source("components/projects/closeout-workspace.tsx");
     const page = source("app/workspace/projects/[projectId]/closeout/page.tsx");
