@@ -37,7 +37,7 @@ async function rpc<T>(name: string, args: Record<string, unknown>, fallback: T):
   const { data, error } = await db.rpc(name, args);
   if (error) {
     console.error(`[finance-control] ${name}:`, error.message);
-    return fallback;
+    throw new Error(`Nie udało się pobrać danych finansowych (${name}): ${error.message}`);
   }
   return (data ?? fallback) as T;
 }
@@ -56,6 +56,17 @@ export async function getFinanceControlTower(workspaceId: string): Promise<Finan
     db.from("procurement_matches").select("id,invoice_line_id,purchase_order_line_id,receipt_line_id,boq_item_id,status,match_confidence,updated_at").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(50)
   ]);
 
+  // Do not display empty/zero KPIs when a source failed to respond.
+  for (const [label, result] of [
+    ["transakcji bankowych", bankResult],
+    ["dopasowań płatności", matchesResult],
+    ["scenariuszy finansowych", scenariosResult],
+    ["dokumentów KSeF", inboxResult],
+    ["powiązań zakupowych", procurementResult]
+  ] as const) {
+    if (result.error) throw new Error(`Nie udało się pobrać ${label}: ${result.error.message}`);
+  }
+
   const paymentMatchesRaw = (matchesResult.data ?? []) as Row[];
   const invoiceIds = [...new Set(paymentMatchesRaw.map((row) => text(row.invoice_id)).filter(Boolean))];
   const txIds = [...new Set(paymentMatchesRaw.map((row) => text(row.bank_transaction_id)).filter(Boolean))];
@@ -70,14 +81,30 @@ export async function getFinanceControlTower(workspaceId: string): Promise<Finan
     db.from("projects").select("id,name").eq("workspace_id", workspaceId).limit(500)
   ]);
 
+  for (const [label, result] of [
+    ["faktur", invoiceResult],
+    ["transakcji", txResult],
+    ["pozycji faktur", lineResult],
+    ["alokacji kosztów", allocationResult],
+    ["inwestycji", projectResult]
+  ] as const) {
+    if ("error" in result && result.error) {
+      throw new Error(`Nie udało się pobrać ${label}: ${result.error.message}`);
+    }
+  }
+
   const lineRows = (lineResult.data ?? []) as Row[];
   const graphInvoiceIds = [...new Set(lineRows.map((row) => text(row.invoice_id)).filter(Boolean))];
-  const graphInvoiceResult = graphInvoiceIds.length
-    ? await db.from("invoices").select("id,invoice_number").eq("workspace_id", workspaceId).in("id", graphInvoiceIds)
-    : { data: [] as Row[] };
-  const paymentResult = graphInvoiceIds.length
-    ? await db.from("payments").select("invoice_id,status").eq("workspace_id", workspaceId).in("invoice_id", graphInvoiceIds)
-    : { data: [] as Row[] };
+  const [graphInvoiceResult, paymentResult] = await Promise.all([
+    graphInvoiceIds.length
+      ? db.from("invoices").select("id,invoice_number").eq("workspace_id", workspaceId).in("id", graphInvoiceIds)
+      : Promise.resolve({ data: [] as Row[], error: null }),
+    graphInvoiceIds.length
+      ? db.from("payments").select("invoice_id,status").eq("workspace_id", workspaceId).in("invoice_id", graphInvoiceIds)
+      : Promise.resolve({ data: [] as Row[], error: null })
+  ]);
+  if (graphInvoiceResult.error) throw new Error(`Nie udało się pobrać faktur w grafie kosztów: ${graphInvoiceResult.error.message}`);
+  if (paymentResult.error) throw new Error(`Nie udało się pobrać płatności w grafie kosztów: ${paymentResult.error.message}`);
 
   const invoices = new Map(((invoiceResult.data ?? []) as Row[]).map((row) => [text(row.id), row]));
   const txs = new Map(((txResult.data ?? []) as Row[]).map((row) => [text(row.id), row]));
