@@ -9,3 +9,16 @@ export function stableSessionUuid(workspaceId: string, itemId: string, kind: "do
   const hex = bytes.subarray(0, 16).toString("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
+
+export function matchesPersistedImportVersion(
+  workspaceId: string,
+  item: { id: string; file_sha256: string | null; file_name: string; file_size_bytes: number },
+  version: { id: string; document_id: string; sha256: string | null; file_name: string; file_size_bytes: number }
+): boolean {
+  return version.id === stableSessionUuid(workspaceId, item.id, "version")
+    && version.document_id === stableSessionUuid(workspaceId, item.id, "document")
+    && Boolean(item.file_sha256)
+    && version.sha256 === item.file_sha256
+    && version.file_name === item.file_name
+    && Number(version.file_size_bytes) === Number(item.file_size_bytes);
+}
