@@ -154,7 +154,7 @@ async function buildSummary(session: SessionRow) {
     versionIds.length
       ? db.rpc("get_import_document_type_labels_20261028", {
           p_workspace_id: session.workspace_id, p_version_ids: versionIds
-        }).returns<ExtractionRow[]>()
+        })
       : Promise.resolve({ data: [] as ExtractionRow[], error: null }),
     documentIds.length
       ? db.from("ai_review_actions")
@@ -189,8 +189,11 @@ async function buildSummary(session: SessionRow) {
 
   const classificationByVersion = new Map<string, ClassificationRow>();
   for (const row of classificationsResult.data ?? []) if (!classificationByVersion.has(row.document_version_id)) classificationByVersion.set(row.document_version_id, row);
+  if (!Array.isArray(extractionsResult.data)) throw new Error("Nieprawidłowy wynik skróconego odczytu analiz AI.");
   const extractionByVersion = new Map<string, ExtractionRow>();
-  for (const row of extractionsResult.data ?? []) if (!extractionByVersion.has(row.document_version_id)) extractionByVersion.set(row.document_version_id, row);
+  for (const row of extractionsResult.data as ExtractionRow[]) {
+    if (!extractionByVersion.has(row.document_version_id)) extractionByVersion.set(row.document_version_id, row);
+  }
   const latestActionByDocument = new Map<string, ReviewActionRow>();
   for (const row of reviewActionsResult.data ?? []) {
     if (row.document_id && !latestActionByDocument.has(row.document_id)) latestActionByDocument.set(row.document_id, row);
