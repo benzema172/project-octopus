@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { findExistingExactDuplicate } from "@/lib/documents/exact-duplicate-guard";
 
 export type DocumentAutopilotResult = {
   status: "applied" | "partial" | "skipped";
@@ -172,24 +173,9 @@ export async function applyDocumentAutopilot(input: {
   // Identical bytes inside the same company are a hard duplicate candidate.
   // This check runs after validated SHA-256 is persisted and BEFORE any routing,
   // accounting, protocol publication or stock changes. Do not auto-delete files.
-  const { data: sourceVersion, error: sourceVersionError } = await db.from("document_versions")
-    .select("sha256").eq("id", input.versionId).eq("document_id", input.documentId)
-    .maybeSingle<{ sha256: string | null }>();
-  if (sourceVersionError || !sourceVersion) {
-    throw new Error(`Nie udało się sprawdzić tożsamości pliku: ${sourceVersionError?.message ?? "brak wersji"}`);
-  }
-  if (sourceVersion.sha256) {
-    const { data: copies, error: duplicateError } = await db.rpc(
-      "find_document_sha256_duplicate_20261028", {
-        p_workspace_id: input.workspaceId,
-        p_document_id: input.documentId,
-        p_sha256: sourceVersion.sha256
-      }
-    ).returns<Array<{ candidate_document_id: string; candidate_version_id: string }>>();
-    if (duplicateError) throw new Error(`Kontrola duplikatów niedostępna: ${duplicateError.message}`);
-    const candidate = Array.isArray(copies)
-      ? (copies as Array<{ candidate_document_id: string; candidate_version_id: string }>)[0]
-      : null;
+  const candidate = await findExistingExactDuplicate({
+    workspaceId: input.workspaceId, documentId: input.documentId, versionId: input.versionId
+  });
     if (candidate) {
       const { error: updateError } = await db.from("documents")
         .update({ ai_status: "review", review_status: "pending" })
@@ -201,7 +187,7 @@ export async function applyDocumentAutopilot(input: {
         event_type: "document.duplicate_content_candidate",
         entity_type: "document", entity_id: input.documentId,
         after_value: {
-          sha256: sourceVersion.sha256,
+          sha256Checked: true,
           duplicateOfDocumentId: candidate.candidate_document_id,
           duplicateOfVersionId: candidate.candidate_version_id,
           decision: "manual_review_required",
@@ -216,7 +202,6 @@ export async function applyDocumentAutopilot(input: {
         errors: [`Identyczny plik istnieje już w firmie (dokument ${candidate.candidate_document_id}). Wymaga decyzji — bez automatycznego księgowania i zmiany magazynu.`]
       };
     }
-  }
 
   // Classification and destination are separate decisions: do not publish to
   // cost estimate, protocols, warehouse etc. when model confidence or project
