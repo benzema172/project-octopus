@@ -6,6 +6,11 @@ const sql = readFileSync(
   "utf8"
 );
 
+const concurrencyGuard = readFileSync(
+  new URL("../supabase/migrations/20261028100000_guard_concurrent_ai_queue_sleep.sql", import.meta.url),
+  "utf8"
+);
+
 describe("AI queue on-demand scheduling and technical history retention", () => {
   it("wakes the document worker when jobs are inserted and sleeps after processing", () => {
     expect(sql).toContain("after insert or update of status, available_at, attempt_count");
@@ -20,6 +25,12 @@ describe("AI queue on-demand scheduling and technical history retention", () => 
     expect(sql).toContain("on public.ai_consensus_events");
     expect(sql).toContain("get_pending_finance_multi_ai_reviews(1, false)");
     expect(sql).toContain("private.octopus_finance_active_queue_tick_20261028");
+  });
+  it("does not lose a new queue event during concurrent scheduled sleep", () => {
+    expect(concurrencyGuard).toContain("pg_advisory_xact_lock");
+    expect(concurrencyGuard).toContain("octopus-document-queue-scheduler-v1");
+    expect(concurrencyGuard).toContain("octopus-finance-queue-scheduler-v1");
+    expect(concurrencyGuard).toContain("cron.alter_job(v_job_id, active := false)");
   });
   it("keeps historical document and accounting data, only pruning pg_cron execution logs", () => {
     expect(sql).toContain("octopus-technical-cron-history-retention-14d");
