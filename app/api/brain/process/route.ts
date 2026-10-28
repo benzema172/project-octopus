@@ -251,6 +251,13 @@ export async function POST(request: Request) {
         actorId: user.id
       });
 
+      if (autopilot.failed > 0 || autopilot.status === "partial") {
+        const { error: partialError } = await supabase.from("documents")
+          .update({ ai_status: "review", review_status: "pending" })
+          .eq("workspace_id", workspace.id).eq("id", version.document_id);
+        if (partialError) throw new Error(`Nie udało się oznaczyć niepełnego routingu: ${partialError.message}`);
+      }
+
       let hrIntake: HrDocumentIntakeResult | null = null;
       if (analysis.effectiveCategory === "hr") {
         try { hrIntake = await processHrDocumentIntake({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id }); }
@@ -273,6 +280,10 @@ export async function POST(request: Request) {
         } catch (error) {
           invoiceCheckError = error instanceof Error ? error.message : "Kontrola faktury nie powiodła się.";
           console.error("[brain/process] invoice readiness failed", error);
+          const { error: reviewError } = await supabase.from("documents")
+            .update({ ai_status: "review", review_status: "pending" })
+            .eq("workspace_id", workspace.id).eq("id", version.document_id);
+          if (reviewError) console.error("[brain/process] failed to flag finance review", reviewError);
         }
       }
 
