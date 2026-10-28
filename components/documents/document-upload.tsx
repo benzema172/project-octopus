@@ -95,7 +95,7 @@ type BrowserFileEntry = {
   createReader?: () => { readEntries: (success: (entries: BrowserFileEntry[]) => void, failure?: (error: DOMException) => void) => void };
 };
 
-const MAX_BROWSER_HASH_BYTES = 32 * 1024 * 1024;
+const MAX_BROWSER_HASH_BYTES = MAX_SUPPORTED_UPLOAD_BYTES;
 const MAX_FOLDER_FILES = 1000;
 const IGNORED_FOLDER_ARTIFACTS = new Set([".DS_Store", "Thumbs.db", "desktop.ini"]);
 
@@ -278,14 +278,15 @@ export function DocumentUpload({
     documentId: string | null,
     contextProjectId: string | null,
     importSession?: { sessionId: string; itemId: string },
-    deferAnalysis = false
+    deferAnalysis = false,
+    precomputedSha256?: string
   ): Promise<UploadOutcome> {
     const { file } = candidate;
     setError(null);
     const validationError = validateUploadFile(file.name, file.type || "application/octet-stream", file.size);
     if (validationError) throw new Error(validationError);
     setStatus(file.size <= MAX_BROWSER_HASH_BYTES ? "Obliczanie sumy kontrolnej" : `Przygotowywanie pliku (limit ${MAX_SUPPORTED_UPLOAD_BYTES / 1024 / 1024} MB)`);
-    const digest = await sha256ForSmallFile(file);
+    const digest = precomputedSha256 ?? await sha256ForSmallFile(file);
     const mimeType = file.type || "application/octet-stream";
     const prepareResponse = await fetch("/api/storage/upload-url", {
       method: "POST",
@@ -297,6 +298,7 @@ export function DocumentUpload({
         fileName: file.name,
         mimeType,
         fileSize: file.size,
+        sha256: digest,
         category: uploadCategory || undefined,
         categoryLocked: Boolean(uploadCategory),
         sourceModule: sourceModule ?? undefined,
@@ -420,9 +422,20 @@ export function DocumentUpload({
     let importSessionId: string | null = null;
     const importItems = new Map<number, string>();
     const alreadyUploaded = new Set<number>();
+    const fileDigests = new Map<number, string>();
 
     if (!targetDocumentIdRef.current && workspaceId) {
       try {
+        // One file at a time, bounded memory: do not load all 100 files at once.
+        // Resume decisions must compare actual local content, not just filename.
+        for (const [index, candidate] of selectedFiles.entries()) {
+          const validationError = validateUploadFile(candidate.file.name, candidate.file.type || "application/octet-stream", candidate.file.size);
+          if (validationError) throw new Error(`${candidate.relativePath}: ${validationError}`);
+          setStatus(`Sprawdzanie SHA-256 pliku ${index + 1} z ${selectedFiles.length}: ${candidate.relativePath}`);
+          const digest = await sha256ForSmallFile(candidate.file);
+          if (!digest) throw new Error(`Nie udało się obliczyć SHA-256: ${candidate.relativePath}`);
+          fileDigests.set(index + 1, digest);
+        }
         const response = await fetch("/api/documents/import-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -434,10 +447,11 @@ export function DocumentUpload({
             label: hasFolderStructure
               ? `Folder · ${selectedFiles[0]?.relativePath.split("/")[0] ?? "dokumenty"}`
               : `Wrzut · ${selectedFiles.length} ${selectedFiles.length === 1 ? "plik" : "plików"}`,
-            files: selectedFiles.map((candidate) => ({
+            files: selectedFiles.map((candidate, index) => ({
               relativePath: candidate.relativePath,
               fileName: candidate.file.name,
-              fileSize: candidate.file.size
+              fileSize: candidate.file.size,
+              sha256: fileDigests.get(index + 1)
             }))
           })
         });
@@ -470,7 +484,8 @@ export function DocumentUpload({
           targetDocumentIdRef.current,
           targetProjectIdRef.current,
           importSessionId && sessionItemId ? { sessionId: importSessionId, itemId: sessionItemId } : undefined,
-          selectedFiles.length > 1
+          selectedFiles.length > 1,
+          fileDigests.get(index + 1)
         );
         outcomes.push(outcome);
         completed += 1;
@@ -496,7 +511,10 @@ export function DocumentUpload({
           body: JSON.stringify({ action: "finalize", workspaceId, sessionId: importSessionId })
         });
         const payload = await response.json().catch(() => ({})) as ImportSessionResponse;
-        if (response.ok) setBatchSummary(payload.session);
+        if (!response.ok) {
+          failures.push(payload.error ?? "Nie wszystkie pliki dotarły. Wybierz ponownie tę samą paczkę, aby wznowić import.");
+          void refreshImportSession(importSessionId).catch(() => undefined);
+        } else setBatchSummary(payload.session);
       } catch {
         void refreshImportSession(importSessionId).catch(() => undefined);
       }

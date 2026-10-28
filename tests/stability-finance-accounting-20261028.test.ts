@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { matchesImportManifest, fullyUploadedImport, normalizeImportSha256, type StoredImportManifestItem, type ImportManifestFile } from "../lib/documents/import-manifest-integrity";
+import { stableSessionUuid, matchesPersistedImportVersion } from "../lib/documents/import-session-identities";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = (path: string) => readFileSync(resolve(root, path), "utf8");
@@ -213,6 +215,96 @@ describe("Octopus production stability regression", () => {
     expect(pipeline).toContain("item.requiresReview || item.warehouseReceipt?.requiresHumanReview");
     expect(pipeline).toContain("financeAi.requiresHuman > 0");
     expect(pipeline).toContain("accounting.some((item) => item.needsReview)");
+  });
+
+  it("resumes a synthetic 100-file batch only when all SHA-256 digests match", () => {
+    const manifest: ImportManifestFile[] = Array.from({ length: 100 }, (_, index) => ({
+      relativePath: `Finanse/Faktury/2026/faktura-${index + 1}.pdf`,
+      fileName: `faktura-${index + 1}.pdf`,
+      fileSize: 1024 + index,
+      sha256: (index + 1).toString(16).padStart(64, "0")
+    }));
+    const stored: StoredImportManifestItem[] = manifest.map((file, index) => ({
+      ordinal: index + 1,
+      relative_path: file.relativePath,
+      file_name: file.fileName,
+      file_size_bytes: file.fileSize,
+      file_sha256: file.sha256,
+      upload_status: index < 60 ? "uploaded" : "pending",
+      document_id: index < 60 ? `doc-${index}` : null,
+      document_version_id: index < 60 ? `version-${index}` : null
+    }));
+    expect(matchesImportManifest(stored, manifest)).toBe(true);
+    expect(fullyUploadedImport(stored, 100)).toBe(false);
+    expect(stored.filter((item) => item.upload_status === "uploaded")).toHaveLength(60);
+
+    // Same name, path and length but different bytes MUST NOT resume.
+    const altered = manifest.map((file, index) => index === 57
+      ? { ...file, sha256: "f".repeat(64) } : file);
+    expect(matchesImportManifest(stored, altered)).toBe(false);
+    expect(matchesImportManifest(stored, [...manifest].reverse())).toBe(false);
+    expect(matchesImportManifest(stored.slice(0, 99), manifest)).toBe(false);
+    expect(matchesImportManifest(stored.map((file, index) => index === 7
+      ? { ...file, file_sha256: null } : file), manifest)).toBe(false);
+
+    const complete = stored.map((item) => ({
+      ...item, upload_status: "uploaded",
+      document_id: item.document_id ?? `doc-${item.ordinal}`,
+      document_version_id: item.document_version_id ?? `version-${item.ordinal}`
+    }));
+    expect(fullyUploadedImport(complete, 100)).toBe(true);
+    expect(fullyUploadedImport(complete.slice(0, 99), 100)).toBe(false);
+    expect(fullyUploadedImport(complete.map((item, index) =>
+      index === 42 ? { ...item, document_version_id: null } : item), 100)).toBe(false);
+    expect(normalizeImportSha256("A".repeat(64))).toBe("a".repeat(64));
+    expect(normalizeImportSha256("bad-hash")).toBeNull();
+  });
+
+  it("recovers persisted upload identities after losing the browser connection", () => {
+    const workspaceId = "7bed89a1-57b4-484e-aa98-71dbba72a19f";
+    for (let i = 0; i < 100; i++) {
+      const item = {
+        id: `item-${i}`,
+        file_sha256: (i + 1).toString(16).padStart(64, "0"),
+        file_name: `invoice-${i}.pdf`,
+        file_size_bytes: 2048 + i
+      };
+      const version = {
+        id: stableSessionUuid(workspaceId, item.id, "version"),
+        document_id: stableSessionUuid(workspaceId, item.id, "document"),
+        sha256: item.file_sha256,
+        file_name: item.file_name,
+        file_size_bytes: item.file_size_bytes
+      };
+      expect(matchesPersistedImportVersion(workspaceId, item, version)).toBe(true);
+      expect(stableSessionUuid(workspaceId, item.id, "version"))
+        .toBe(stableSessionUuid(workspaceId, item.id, "version"));
+      expect(matchesPersistedImportVersion(workspaceId, item, {
+        ...version, sha256: "a".repeat(64)
+      })).toBe(false);
+      expect(matchesPersistedImportVersion(workspaceId, item, {
+        ...version, document_id: stableSessionUuid(workspaceId, `other-${i}`, "document")
+      })).toBe(false);
+    }
+    const route = source("app/api/documents/import-session/route.ts");
+    expect(route).toContain("matchesPersistedImportVersion(workspace.id, item, version)");
+    expect(route).toContain(".is(\"document_version_id\", null)");
+    expect(route).toContain("if ((saved ?? []).length)");
+  });
+
+  it("enforces SHA-256 from batch creation to upload URL, completion and finalization", () => {
+    const upload = source("components/documents/document-upload.tsx");
+    const session = source("app/api/documents/import-session/route.ts");
+    const url = source("app/api/storage/upload-url/route.ts");
+    const complete = source("app/api/storage/complete/route.ts");
+    expect(upload).toContain("sha256: fileDigests.get(index + 1)");
+    expect(upload).toContain("Sprawdzanie SHA-256 pliku");
+    expect(upload).toContain("precomputedSha256");
+    expect(session).toContain("matchesImportManifest(previousItems");
+    expect(session).toContain("fullyUploadedImport(finalItems ?? [], session.expected_files)");
+    expect(url).toContain("normalizeImportSha256(body.sha256) !== importItem.file_sha256");
+    expect(complete).toContain("sessionItem.file_sha256 !== normalizeSha256(body.sha256)");
+    expect(complete).toContain("sessionItem.document_version_id");
   });
 
   it("runs the warehouse overview data reads concurrently instead of in waterfalls", () => {

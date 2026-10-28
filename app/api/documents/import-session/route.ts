@@ -3,6 +3,8 @@ import { getRequestUser } from "@/lib/auth";
 import { getProjectForUser } from "@/lib/data/projects";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
 import { normalizeDocumentSourceModule } from "@/lib/documents/source-module";
+import { matchesImportManifest, fullyUploadedImport, normalizeImportSha256 } from "@/lib/documents/import-manifest-integrity";
+import { stableSessionUuid, matchesPersistedImportVersion } from "@/lib/documents/import-session-identities";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -11,6 +13,7 @@ type ImportFile = {
   relativePath?: string;
   fileName?: string;
   fileSize?: number;
+  sha256?: string;
 };
 
 type ImportSessionBody = {
@@ -344,6 +347,7 @@ export async function POST(request: Request) {
     const files = Array.isArray(body.files) ? body.files.slice(0, 1000) : [];
     if (!files.length) return jsonError("Sesja importu wymaga co najmniej jednego pliku.", 400);
     if (body.files && body.files.length > 1000) return jsonError("Sesja importu może zawierać maksymalnie 1000 plików.", 400);
+    if (files.some((file) => !normalizeImportSha256(file.sha256))) return jsonError("Brakuje poprawnej sumy SHA-256 dla każdego pliku. Import został wstrzymany.", 422);
     const projectId = typeof body.projectId === "string" && body.projectId.trim() ? body.projectId.trim() : null;
     if (projectId) {
       const project = await getProjectForUser(user, projectId);
@@ -362,23 +366,59 @@ export async function POST(request: Request) {
     for (const previous of recentSessions ?? []) {
       if (previous.expected_files !== files.length || previous.project_id !== projectId || previous.source_module !== sourceModule) continue;
       const { data: previousItems, error: previousError } = await db.from("document_import_session_items")
-        .select("id,ordinal,relative_path,file_name,file_size_bytes,upload_status,document_id,document_version_id")
+        .select("id,ordinal,relative_path,file_name,file_size_bytes,file_sha256,upload_status,document_id,document_version_id")
         .eq("session_id", previous.id).eq("workspace_id", workspace.id).order("ordinal", { ascending: true });
       if (previousError) return jsonError(`Nie udało się sprawdzić plików importu: ${previousError.message}`, 500);
       if (previousItems?.length !== files.length) continue;
-      const sameManifest = previousItems.every((item, index) => {
-        const file = files[index];
-        const fileName = String(file.fileName ?? "").trim().slice(0, 500) || `Plik ${index + 1}`;
-        return item.ordinal === index + 1
-          && item.file_name === fileName
-          && item.relative_path === cleanPath(file.relativePath, fileName)
-          && Number(item.file_size_bytes) === Math.max(0, Math.round(Number(file.fileSize) || 0));
-      });
+      // Exact content identity is required, not just names or matching sizes.
+      const sameManifest = matchesImportManifest(previousItems, files.map((file) => ({
+        relativePath: file.relativePath ?? "",
+        fileName: file.fileName ?? "",
+        fileSize: Number(file.fileSize),
+        sha256: file.sha256 ?? ""
+      })));
       if (!sameManifest) continue;
-      if (previousItems.every((item) => item.upload_status === "uploaded" && item.document_version_id)) continue;
+      // Recover a document persisted by complete_document_upload_v2 just before
+      // the browser disconnected, before session-item linkage. Deterministic
+      // IDs allow verification WITHOUT inserting another document/version.
+      let recoveredItems = previousItems;
+      const detached = previousItems.filter((item) => !item.document_version_id);
+      if (detached.length) {
+        const expectedByVersion = new Map(detached.map((item) => [
+          stableSessionUuid(workspace.id, item.id, "version"), item
+        ]));
+        const { data: saved, error: savedError } = await db.from("document_versions")
+          .select("id,document_id,sha256,file_name,file_size_bytes")
+          .in("id", [...expectedByVersion.keys()])
+          .returns<Array<{ id: string; document_id: string; sha256: string | null; file_name: string; file_size_bytes: number }>>();
+        if (savedError) return jsonError(`Nie udało się zweryfikować wcześniejszych zapisów: ${savedError.message}`, 500);
+        for (const version of saved ?? []) {
+          const item = expectedByVersion.get(version.id);
+          if (!item) continue;
+          if (!matchesPersistedImportVersion(workspace.id, item, version)) {
+            return jsonError("Zapisana wcześniej wersja nie jest zgodna z manifestem SHA-256. Wymagana kontrola, bez nadpisania.", 409);
+          }
+          const { error: linkError } = await db.from("document_import_session_items")
+            .update({ document_id: version.document_id, document_version_id: version.id,
+              upload_status: "uploaded", error_message: null, updated_at: new Date().toISOString() })
+            .eq("id", item.id).eq("session_id", previous.id).eq("workspace_id", workspace.id)
+            .is("document_version_id", null);
+          if (linkError) return jsonError(`Nie udało się odtworzyć powiązania dokumentu: ${linkError.message}`, 500);
+        }
+        if ((saved ?? []).length) {
+          const { data: refreshedItems, error: refreshError } = await db
+            .from("document_import_session_items")
+            .select("id,ordinal,relative_path,file_name,file_size_bytes,file_sha256,upload_status,document_id,document_version_id")
+            .eq("session_id", previous.id).eq("workspace_id", workspace.id)
+            .order("ordinal", { ascending: true });
+          if (refreshError || !refreshedItems) return jsonError(`Nie udało się odświeżyć wznowienia: ${refreshError?.message ?? "brak danych"}`, 500);
+          recoveredItems = refreshedItems;
+        }
+      }
+      // Also resume fully uploaded but not finalized sessions.
       return NextResponse.json({
         sessionId: previous.id, resumed: true,
-        items: previousItems.map(({ id, ordinal, upload_status, document_version_id }) =>
+        items: recoveredItems.map(({ id, ordinal, upload_status, document_version_id }) =>
           ({ id, ordinal, uploadStatus: upload_status, uploaded: upload_status === "uploaded" && Boolean(document_version_id) }))
       }, { headers: { "Cache-Control": "no-store" } });
     }
@@ -401,7 +441,8 @@ export async function POST(request: Request) {
         ordinal: index + 1,
         relative_path: cleanPath(file.relativePath, fileName),
         file_name: fileName,
-        file_size_bytes: Math.max(0, Math.round(Number(file.fileSize) || 0))
+        file_size_bytes: Math.max(0, Math.round(Number(file.fileSize) || 0)),
+        file_sha256: normalizeImportSha256(file.sha256)
       };
     });
     const { data: insertedItems, error: itemsError } = await db.from("document_import_session_items")
@@ -430,6 +471,13 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "finalize") {
+    const { data: finalItems, error: finalItemsError } = await db.from("document_import_session_items")
+      .select("id,ordinal,relative_path,file_name,file_size_bytes,file_sha256,document_id,document_version_id,upload_status")
+      .eq("workspace_id", workspace.id).eq("session_id", session.id);
+    if (finalItemsError) return jsonError(`Nie udało się zweryfikować kompletności paczki: ${finalItemsError.message}`, 500);
+    if (!fullyUploadedImport(finalItems ?? [], session.expected_files)) {
+      return jsonError("Nie wszystkie pliki dotarły. Sesja pozostaje otwarta do wznowienia.", 409);
+    }
     const { error } = await db.from("document_import_sessions").update({
       status: "processing",
       upload_completed_at: new Date().toISOString(),

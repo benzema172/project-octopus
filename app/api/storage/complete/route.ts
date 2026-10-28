@@ -76,6 +76,23 @@ export async function POST(request: Request) {
   }
 
   const supabase = createServiceSupabaseClient();
+  if (intent.importSessionId && intent.importSessionItemId) {
+    const { data: sessionItem, error: hashCheckError } = await supabase
+      .from("document_import_session_items")
+      .select("file_sha256,file_name,file_size_bytes,document_version_id")
+      .eq("id", intent.importSessionItemId).eq("session_id", intent.importSessionId)
+      .eq("workspace_id", intent.workspaceId)
+      .maybeSingle<{ file_sha256: string | null; file_name: string; file_size_bytes: number; document_version_id: string | null }>();
+    if (hashCheckError || !sessionItem) {
+      return jsonError(`Nie można zweryfikować sumy SHA-256 sesji: ${hashCheckError?.message ?? "brak pliku"}`, 422);
+    }
+    if (sessionItem.document_version_id || !normalizeSha256(body.sha256)
+        || sessionItem.file_sha256 !== normalizeSha256(body.sha256)
+        || sessionItem.file_name !== intent.fileName
+        || Number(sessionItem.file_size_bytes) !== intent.fileSize) {
+      return jsonError("Zawartość nie zgadza się z zatwierdzoną listą sesji lub plik już zapisano.", 409);
+    }
+  }
   const category = intent.category;
   if (!await hasDomainAccess({ workspaceId: intent.workspaceId, userId: user.id, domain: domainForDocumentCategory(category), level: "write", projectId: intent.projectId })) {
     await r2.send(new DeleteObjectCommand({ Bucket: r2Config.bucketName, Key: intent.objectKey })).catch(() => undefined);
