@@ -281,7 +281,7 @@ describe("Octopus production stability regression", () => {
         .toBe(stableSessionUuid(workspaceId, item.id, "version"));
       expect(matchesPersistedImportVersion(workspaceId, item, {
         ...version, sha256: "a".repeat(64)
-      })).toBe(i === 9 ? true : false);
+      })).toBe(false);
       expect(matchesPersistedImportVersion(workspaceId, item, {
         ...version, document_id: stableSessionUuid(workspaceId, `other-${i}`, "document")
       })).toBe(false);
