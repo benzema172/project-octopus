@@ -82,6 +82,10 @@ describe("Octopus production stability regression", () => {
     expect(session).toContain("sameManifest");
     expect(session).toContain("resumed: true");
     expect(session).toContain(".is(\"document_version_id\", null)");
+    const uploadUrl = source("app/api/storage/upload-url/route.ts");
+    expect(uploadUrl).toContain("stableSessionUuid(workspace.id, importSessionItemId");
+    expect(uploadUrl).toContain("importItem.file_name !== fileName");
+    expect(uploadUrl).toContain("importItem.file_size_bytes");
   });
 
   it("holds invoice PZ receipts for reconciliation with WZ, PZ and MM evidence", () => {
