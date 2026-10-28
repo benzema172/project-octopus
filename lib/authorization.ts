@@ -13,10 +13,18 @@ export type DomainAccessPolicy = { administrator: boolean; grants: DomainGrant[]
 
 const cachedDomainAccessPolicy = cache(async (workspaceId: string, userId: string): Promise<DomainAccessPolicy> => {
   const supabase = createServiceSupabaseClient();
-  const { data: membership } = await supabase.from("workspace_members").select("role").eq("workspace_id", workspaceId).eq("user_id", userId).maybeSingle<{ role: string }>();
+  const { data: membership, error: membershipError } = await supabase.from("workspace_members")
+    .select("role").eq("workspace_id", workspaceId).eq("user_id", userId).maybeSingle<{ role: string }>();
+  if (membershipError) {
+    // A Supabase outage is not equivalent to an intentional access denial.
+    throw new Error(`Nie udało się sprawdzić uprawnień firmy: ${membershipError.message}`);
+  }
   if (["owner", "admin"].includes(membership?.role ?? "")) return { administrator: true, grants: [] };
   if (!membership) return { administrator: false, grants: [] };
-  const { data: grants } = await supabase.from("domain_role_grants").select("domain,access_level,project_id,valid_from,valid_until").eq("workspace_id", workspaceId).eq("user_id", userId).lte("valid_from", new Date().toISOString()).returns<DomainGrant[]>();
+  const { data: grants, error: grantsError } = await supabase.from("domain_role_grants")
+    .select("domain,access_level,project_id,valid_from,valid_until")
+    .eq("workspace_id", workspaceId).eq("user_id", userId).lte("valid_from", new Date().toISOString()).returns<DomainGrant[]>();
+  if (grantsError) throw new Error(`Nie udało się pobrać uprawnień modułów: ${grantsError.message}`);
   return { administrator: false, grants: grants ?? [] };
 });
 
