@@ -187,7 +187,9 @@ export async function applyDocumentAutopilot(input: {
       }
     ).returns<Array<{ candidate_document_id: string; candidate_version_id: string }>>();
     if (duplicateError) throw new Error(`Kontrola duplikatów niedostępna: ${duplicateError.message}`);
-    const candidate = copies?.[0];
+    const candidate = Array.isArray(copies)
+      ? (copies as Array<{ candidate_document_id: string; candidate_version_id: string }>)[0]
+      : null;
     if (candidate) {
       const { error: updateError } = await db.from("documents")
         .update({ ai_status: "review", review_status: "pending" })
