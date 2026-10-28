@@ -65,7 +65,7 @@ type ImportSessionSummary = {
   label: string | null;
   status: "uploading" | "processing" | "complete" | "review" | "error";
   expectedFiles: number;
-  counts: { total: number; uploaded: number; ready: number; automatic: number; review: number; processing: number; error: number };
+  counts: { total: number; uploaded: number; ready: number; automatic: number; review: number; processing: number; error: number; duplicates: number };
   documentTypes: Record<string, number>;
   categories: Record<string, number>;
   items: Array<{
@@ -74,6 +74,7 @@ type ImportSessionSummary = {
     state: "pending" | "processing" | "ready" | "review" | "error";
     category: string | null;
     types: string[];
+    duplicateOfDocumentId: string | null;
     error: string | null;
   }>;
 };
@@ -734,9 +735,19 @@ export function DocumentUpload({
                 <span><strong>{batchSummary.counts.ready}</strong><small>gotowe</small></span>
                 <span><strong>{batchSummary.counts.automatic}</strong><small>autopilot</small></span>
                 <span><strong>{batchSummary.counts.review}</strong><small>do decyzji</small></span>
+                <span><strong>{batchSummary.counts.duplicates ?? 0}</strong><small>powtórzenia plików</small></span>
                 <span><strong>{batchSummary.counts.processing}</strong><small>w toku</small></span>
                 <span><strong>{batchSummary.counts.error}</strong><small>błędy</small></span>
               </div>
+              {batchSummary.items.some((item) => item.duplicateOfDocumentId) ? (
+                <div className={styles.batchBreakdown} role="status" aria-label="Wykryte powtórzenia plików">
+                  {batchSummary.items.filter((item) => item.duplicateOfDocumentId).slice(0, 20).map((item) => (
+                    <span key={item.id} title={`Identyczna zawartość dokumentu ${item.duplicateOfDocumentId}`}>
+                      <b>Duplikat do sprawdzenia:</b> {item.fileName} — plik o identycznej zawartości istnieje już w firmie.
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               <div className={styles.batchBreakdown}>
                 {Object.entries(batchSummary.documentTypes).map(([type, count]) => <span key={`type-${type}`}><b>{type}</b>{count}</span>)}
                 {Object.entries(batchSummary.categories).map(([type, count]) => <span key={`category-${type}`}><b>{documentCategoryLabel(type)}</b>{count}</span>)}
