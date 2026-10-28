@@ -194,8 +194,10 @@ describe("Octopus production stability regression", () => {
       const route = path.indexOf("await enrichDocumentWithInvestmentRouting");
       expect(guard).toBeGreaterThanOrEqual(0);
       expect(guard).toBeLessThan(route);
-      expect(path).toContain("!exactDuplicate");
     }
+    expect(worker).toContain("!duplicate");
+    expect(direct).toContain("!exactDuplicate");
+    expect(retry).toContain("!exactDuplicate");
     expect(worker).toContain('autopilot.status !== "applied"');
     expect(retry).toContain('status: "review"');
   });
