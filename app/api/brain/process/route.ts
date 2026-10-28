@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { processDocumentVersion } from "@/lib/ai/process-document";
+import { findExistingExactDuplicate } from "@/lib/documents/exact-duplicate-guard";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
 import { enrichDocumentWithInvestmentRouting, type InvestmentRoutingResult } from "@/lib/ai/investment-document-routing";
 import { geminiRateLimitInfo, geminiRateLimitMessage, millisecondsUntil, wait } from "@/lib/ai/gemini-rate-limit";
@@ -213,10 +214,13 @@ export async function POST(request: Request) {
         categoryOverride: body.lockCategory ? normalizeDocumentCategory(sourceDocument.category) : null
       });
 
+      const exactDuplicate = await findExistingExactDuplicate({
+        workspaceId: workspace.id, documentId: version.document_id, versionId: body.versionId
+      });
       const routingProjectId = version.project_id ?? analysis.proposedProjectId ?? null;
       let routing: InvestmentRoutingResult | null = null;
       let routingError: string | null = null;
-      if (routingProjectId) {
+      if (routingProjectId && !exactDuplicate && analysis.confidence >= 0.82) {
         try {
           routing = await enrichDocumentWithInvestmentRouting({
             workspaceId: workspace.id,
@@ -251,7 +255,7 @@ export async function POST(request: Request) {
         actorId: user.id
       });
 
-      if (autopilot.failed > 0 || autopilot.status === "partial") {
+      if (autopilot.failed > 0 || autopilot.status !== "applied" || routingError) {
         const { error: partialError } = await supabase.from("documents")
           .update({ ai_status: "review", review_status: "pending" })
           .eq("workspace_id", workspace.id).eq("id", version.document_id);
@@ -271,7 +275,8 @@ export async function POST(request: Request) {
       let financeAi: FinanceAiSummary | null = null;
       let accounting: AccountingCopilotRun[] = [];
       let invoiceCheckError: string | null = null;
-      if (autopilot.failed === 0 && (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis))) {
+      if (autopilot.failed === 0 && autopilot.status === "applied" && !routingError
+        && (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis))) {
         try {
           const checks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id });
           invoiceReadiness = checks.invoiceReadiness;
