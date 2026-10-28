@@ -342,7 +342,33 @@ export async function analyzeUnifiedDocumentReviewMulti(workspaceId: string, rev
     if (cloudflare) votes.push(cloudflare);
   }
 
-  const selected = consensus(votes);
+  const candidateConsensus = consensus(votes);
+  // Models may dispute evidence, but cannot manufacture a match. For duplicate
+  // merges require hard evidence plus two independent provider families
+  // (Gemini and at least Groq or Cloudflare) with no dissenting vote.
+  const providerFamilies = new Set(votes.map((vote) =>
+    vote.provider.startsWith("gemini") ? "google" : vote.provider
+  ));
+  const isDuplicateReview = text(context.review.review_type) === "duplicate_candidate";
+  const providerQuorum = providerFamilies.size >= 2
+    && votes.every((vote) => vote.recommendation === "duplicate_same");
+  const mayMerge = base.hardDuplicateEvidence && providerQuorum;
+  const selected = isDuplicateReview
+    && candidateConsensus.recommendation === "duplicate_same"
+    && !mayMerge
+    ? {
+        ...candidateConsensus,
+        recommendation: "manual_review" as UnifiedAiRecommendation,
+        recommendedProjectId: null,
+        confidence: Math.min(0.6, candidateConsensus.confidence),
+        riskScore: Math.max(0.65, candidateConsensus.riskScore),
+        requiresHuman: true,
+        summary: "Duplikat wstrzymany: brak twardego dowodu lub niezależnego konsensusu dostawców AI.",
+        reasons: [...candidateConsensus.reasons,
+          !base.hardDuplicateEvidence ? "Brak potwierdzonej zgodności identyfikatorów faktury." : "Za mało niezależnych, zgodnych opinii dostawców AI."].slice(0, 10),
+        anomalies: [...candidateConsensus.anomalies, "Wymagana ręczna kontrola duplikatu."].slice(0, 8)
+      }
+    : candidateConsensus;
   const promptHash = createHash("sha256").update(compactJson(safeContext(context), 40000)).digest("hex");
   await Promise.all(votes.map((vote) => persistRun(workspaceId, reviewId, base.id, vote, promptHash).catch(() => undefined)));
 
@@ -361,7 +387,7 @@ export async function analyzeUnifiedDocumentReviewMulti(workspaceId: string, rev
     questions: selected.questions,
     model: modelLabel,
     mode: "gemini",
-    evidence: { multiAi: { agreement: selected.agreement, providers, requiresHuman: selected.requiresHuman, escalated: shouldEscalate } },
+    evidence: { multiAi: { agreement: selected.agreement, providers, providerFamilies: [...providerFamilies], hardDuplicateEvidence: base.hardDuplicateEvidence, requiresHuman: selected.requiresHuman, escalated: shouldEscalate } },
     updated_at: new Date().toISOString()
   }).eq("workspace_id", workspaceId).eq("id", base.id).eq("status", "active");
   if (updateError) throw new Error(`Nie udało się zapisać konsensusu Multi-AI: ${updateError.message}`);

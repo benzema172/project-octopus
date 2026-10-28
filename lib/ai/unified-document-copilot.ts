@@ -137,7 +137,7 @@ function hardDuplicateEvidence(context: ReviewContext) {
   const metadata = object(context.review.metadata);
   const nested = object(metadata.reasons);
   const all = { ...nested, ...reasons };
-  return all.ksefExact === true || (all.numberExact === true && all.grossExact === true && (all.taxExact === true || all.nameExact === true) && Number(all.issueDateDeltaDays ?? 999) === 0);
+  return all.ksefExact === true || (all.numberExact === true && all.grossExact === true && all.taxExact === true && Number(all.issueDateDeltaDays ?? 999) === 0);
 }
 
 function deterministicInsight(context: ReviewContext) {

@@ -144,7 +144,7 @@ export async function POST(request: Request) {
       let accounting: AccountingCopilotRun[] = [];
       let invoiceCheckError: string | null = null;
       try {
-        if (await approvedDocumentContainsInvoice(workspace.id, body.versionId, approved.category)) {
+        if (!(materialization && "autopilot" in materialization && materialization.autopilot?.failed) && await approvedDocumentContainsInvoice(workspace.id, body.versionId, approved.category)) {
           const checks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id });
           invoiceReadiness = checks.invoiceReadiness;
           financeAi = checks.financeAi;
@@ -271,7 +271,7 @@ export async function POST(request: Request) {
       let financeAi: FinanceAiSummary | null = null;
       let accounting: AccountingCopilotRun[] = [];
       let invoiceCheckError: string | null = null;
-      if (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis)) {
+      if (autopilot.failed === 0 && (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis))) {
         try {
           const checks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id });
           invoiceReadiness = checks.invoiceReadiness;
