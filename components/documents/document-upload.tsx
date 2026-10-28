@@ -254,10 +254,7 @@ export function DocumentUpload({
       if (!response.ok) throw new Error(payload.error ?? "Nie udało się odczytać raportu sesji.");
       // Avoid a redundant component tree render for identical snapshots.
       setBatchSummary((previous) => {
-        if (previous?.id === payload.session?.id && previous?.status === payload.session?.status
-            && JSON.stringify(previous?.counts) === JSON.stringify(payload.session?.counts)) {
-          return previous;
-        }
+        if (JSON.stringify(previous) === JSON.stringify(payload.session)) return previous;
         return payload.session;
       });
       return payload.session;
