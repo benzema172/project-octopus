@@ -146,12 +146,16 @@ async function handleWorker(request: Request) {
         versionId: job.document_version_id
       });
       let investmentRoutingError: string | null = null;
-      // A duplicate must never create even preliminary investment routing effects.
-      if (!duplicate && sourceVersion.project_id && actorId) {
+      // Use the safe AI project matcher for company-wide batch uploads, too.
+      // A worker must not skip project-specific module routing merely because
+      // the original upload was not manually assigned to an investment.
+      const routingProjectId = sourceVersion.project_id ?? analysis.proposedProjectId ?? null;
+      // A duplicate or low-confidence classification must not enrich projects.
+      if (!duplicate && routingProjectId && actorId && analysis.confidence >= 0.82) {
         try {
           await enrichDocumentWithInvestmentRouting({
             workspaceId: job.workspace_id,
-            projectId: sourceVersion.project_id,
+            projectId: routingProjectId,
             documentId: sourceVersion.document_id,
             versionId: job.document_version_id,
             userId: actorId,
@@ -180,7 +184,7 @@ async function handleWorker(request: Request) {
         documentId: sourceVersion.document_id,
         versionId: job.document_version_id,
         category: analysis.effectiveCategory,
-        projectId: sourceVersion.project_id ?? analysis.proposedProjectId,
+        projectId: routingProjectId,
         actorId
       });
 
