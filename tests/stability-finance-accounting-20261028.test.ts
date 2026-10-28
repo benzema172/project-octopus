@@ -36,6 +36,20 @@ describe("Octopus production stability regression", () => {
     expect(accounting).toContain('current.data.status==="approved"||current.data.exported_at');
   });
 
+  it("reports permission-service failures instead of silently treating them as lack of access", () => {
+    const auth = source("lib/authorization.ts");
+    expect(auth).toContain("if (membershipError)");
+    expect(auth).toContain("if (grantsError)");
+    expect(auth).toContain("Nie udało się sprawdzić uprawnień firmy");
+    expect(auth).toContain("Nie udało się pobrać uprawnień modułów");
+  });
+
+  it("does not replace missing warehouse AI quality counts with plausible zeros", () => {
+    const warehouseAi = source("lib/data/warehouse-ai-300.ts");
+    expect(warehouseAi).toContain("if (metric.error)");
+    expect(warehouseAi).toContain("Nie udało się odczytać ${label} Magazynu");
+  });
+
   it("runs the warehouse overview data reads concurrently instead of in waterfalls", () => {
     const warehouse = source("lib/data/warehouse-market-400.ts");
     expect(warehouse).toContain("const [base, ai, forecastsResult, readinessResult, recommendationsResult, pendingMovementsResult] = await Promise.all");

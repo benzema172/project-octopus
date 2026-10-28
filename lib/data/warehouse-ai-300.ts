@@ -213,6 +213,16 @@ export async function getWarehouseAi300Data(workspaceId: string, activeTab = "da
     };
   });
 
+  // A failed count query must not be presented as zero AI quality or zero corrections.
+  for (const [label, metric] of [
+    ["wszystkich pozycji AI", totalMetric],
+    ["automatycznie dopasowanych pozycji", autoMetric],
+    ["poprawionych pozycji", correctedMetric],
+    ["zatwierdzonych aliasów", learnedMetric]
+  ] as const) {
+    if (metric.error) throw new Error(`Nie udało się odczytać ${label} Magazynu: ${metric.error.message}`);
+  }
+
   const totalLines = totalMetric.count ?? 0;
   const autoLines = autoMetric.count ?? 0;
   const correctedLines = correctedMetric.count ?? 0;
