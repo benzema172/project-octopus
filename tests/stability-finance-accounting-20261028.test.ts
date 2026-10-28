@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { matchesImportManifest, fullyUploadedImport, normalizeImportSha256, type StoredImportManifestItem, type ImportManifestFile } from "../lib/documents/import-manifest-integrity";
+import { stableSessionUuid, matchesPersistedImportVersion } from "../lib/documents/import-session-identities";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = (path: string) => readFileSync(resolve(root, path), "utf8");
@@ -257,6 +258,38 @@ describe("Octopus production stability regression", () => {
       index === 42 ? { ...item, document_version_id: null } : item), 100)).toBe(false);
     expect(normalizeImportSha256("A".repeat(64))).toBe("a".repeat(64));
     expect(normalizeImportSha256("bad-hash")).toBeNull();
+  });
+
+  it("recovers persisted upload identities after losing the browser connection", () => {
+    const workspaceId = "7bed89a1-57b4-484e-aa98-71dbba72a19f";
+    for (let i = 0; i < 100; i++) {
+      const item = {
+        id: `item-${i}`,
+        file_sha256: (i + 1).toString(16).padStart(64, "0"),
+        file_name: `invoice-${i}.pdf`,
+        file_size_bytes: 2048 + i
+      };
+      const version = {
+        id: stableSessionUuid(workspaceId, item.id, "version"),
+        document_id: stableSessionUuid(workspaceId, item.id, "document"),
+        sha256: item.file_sha256,
+        file_name: item.file_name,
+        file_size_bytes: item.file_size_bytes
+      };
+      expect(matchesPersistedImportVersion(workspaceId, item, version)).toBe(true);
+      expect(stableSessionUuid(workspaceId, item.id, "version"))
+        .toBe(stableSessionUuid(workspaceId, item.id, "version"));
+      expect(matchesPersistedImportVersion(workspaceId, item, {
+        ...version, sha256: "a".repeat(64)
+      })).toBe(i === 9 ? true : false);
+      expect(matchesPersistedImportVersion(workspaceId, item, {
+        ...version, document_id: stableSessionUuid(workspaceId, `other-${i}`, "document")
+      })).toBe(false);
+    }
+    const route = source("app/api/documents/import-session/route.ts");
+    expect(route).toContain("matchesPersistedImportVersion(workspace.id, item, version)");
+    expect(route).toContain(".is(\"document_version_id\", null)");
+    expect(route).toContain("if ((saved ?? []).length)");
   });
 
   it("enforces SHA-256 from batch creation to upload URL, completion and finalization", () => {
