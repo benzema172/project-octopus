@@ -307,6 +307,41 @@ describe("Octopus production stability regression", () => {
     expect(complete).toContain("sessionItem.document_version_id");
   });
 
+  it("polls batch progress only in visible, non-uploading tabs without overlapping requests", () => {
+    const upload = source("components/documents/document-upload.tsx");
+    expect(upload).toContain("document.visibilityState !== \"visible\"");
+    expect(upload).toContain("window.setInterval(refreshVisible, 12000)");
+    expect(upload).toContain("reportRefreshInFlightRef.current");
+    expect(upload).toContain("if (!workspaceId || !batchSummaryId || isUploading");
+    expect(upload).toContain('document.addEventListener("visibilitychange", refreshVisible)');
+    expect(upload).toContain('document.removeEventListener("visibilitychange", refreshVisible)');
+    expect(upload).toContain("const byId = new Map(documents.map");
+    expect(upload).not.toContain("setInterval(() => { void refreshImportSession(batchSummaryId).catch(() => undefined); }, 5000)");
+  });
+
+  it("fetches compact AI document types rather than full extraction payloads for batch reports", () => {
+    const api = source("app/api/documents/import-session/route.ts");
+    const migration = source("supabase/migrations/20261028144500_import_report_slim_read_model.sql");
+    expect(api).toContain('get_import_document_type_labels_20261028');
+    expect(api).toContain("extraction?.document_types ?? []");
+    expect(api).toContain("documentsResult, classificationsResult, extractionsResult");
+    expect(api).not.toContain('.select("document_id,document_version_id,payload,created_at")');
+    expect(migration).toContain("distinct on (de.document_version_id)");
+    expect(migration).toContain("document_extractions_import_report_idx_20261028");
+    expect(migration).toContain("de.workspace_id = p_workspace_id");
+    expect(migration).toContain("grant execute on function public.get_import_document_type_labels_20261028");
+    expect(migration).toContain("to service_role");
+  });
+
+  it("loads Finance projects alongside the first query wave and groups allocations in place", () => {
+    const finance = source("lib/data/finance-control-tower.ts");
+    expect(finance).toContain("inboxResult, procurementResult, projectResult] = await Promise.all");
+    expect(finance).toContain('db.from("projects").select("id,name").eq("workspace_id", workspaceId).limit(500)');
+    expect(finance).toContain("const [invoiceResult, txResult, lineResult, allocationResult] = await Promise.all");
+    expect(finance).toContain("if (existing) existing.push(row)");
+    expect(finance).not.toContain("allocations.set(key, [...(allocations.get(key) ?? []), row])");
+  });
+
   it("runs the warehouse overview data reads concurrently instead of in waterfalls", () => {
     const warehouse = source("lib/data/warehouse-market-400.ts");
     expect(warehouse).toContain("const [base, ai, forecastsResult, readinessResult, recommendationsResult, pendingMovementsResult] = await Promise.all");
