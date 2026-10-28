@@ -42,10 +42,11 @@ export async function POST(request:Request) {
     if(body.action==="entry_reject"){
       await requireLevel("approve");
       const entryId=text(payload.entryId); if(!entryId) throw new Error("Brak dekretu.");
-      const current=await db.from("accounting_entries").select("id,project_id,exported_at").eq("workspace_id",workspace.id).eq("id",entryId).maybeSingle();
+      const current=await db.from("accounting_entries").select("id,project_id,status,exported_at").eq("workspace_id",workspace.id).eq("id",entryId).maybeSingle();
       if(current.error||!current.data) throw new Error(current.error?.message??"Nie znaleziono dekretu.");
-      if(current.data.exported_at) throw new Error("Wyeksportowanego dekretu nie można odrzucić.");
-      await db.from("accounting_entries").update({status:"rejected",needs_review:true,approved_by:null,approved_at:null,locked_at:null,updated_at:new Date().toISOString()}).eq("id",entryId).eq("workspace_id",workspace.id);
+      if(current.data.status==="approved"||current.data.exported_at) throw new Error("Zatwierdzony lub wyeksportowany dekret wymaga korekty albo storna.");
+      const rejected=await db.from("accounting_entries").update({status:"rejected",needs_review:true,approved_by:null,approved_at:null,locked_at:null,updated_at:new Date().toISOString()}).eq("id",entryId).eq("workspace_id",workspace.id);
+      if(rejected.error) throw new Error(rejected.error.message);
       await db.from("audit_events").insert({workspace_id:workspace.id,project_id:current.data.project_id,actor_id:user.id,actor_type:"user",event_type:"accounting.entry_rejected_700",entity_type:"accounting_entry",entity_id:entryId,after_value:{reason:text(payload.reason)||null}});
       return NextResponse.json({ok:true});
     }
@@ -68,21 +69,54 @@ export async function POST(request:Request) {
       }).eq("workspace_id",workspace.id).eq("id",lineId);
       if(update.error) throw new Error(update.error.message);
       const unresolved=await db.from("accounting_entry_lines").select("id").eq("workspace_id",workspace.id).eq("entry_id",line.data.entry_id).eq("tax_treatment","review").limit(1);
-      await db.from("accounting_entries").update({needs_review:Boolean(unresolved.data?.length),updated_at:new Date().toISOString()}).eq("id",line.data.entry_id).eq("workspace_id",workspace.id);
+      if(unresolved.error) throw new Error(unresolved.error.message);
+      const reviewState=await db.from("accounting_entries").update({needs_review:Boolean(unresolved.data?.length),updated_at:new Date().toISOString()}).eq("id",line.data.entry_id).eq("workspace_id",workspace.id);
+      if(reviewState.error) throw new Error(reviewState.error.message);
       return NextResponse.json({ok:true});
     }
     if(body.action==="suggestion_apply"){
       await requireLevel("approve");
-      const suggestionId=text(payload.suggestionId); if(!suggestionId) throw new Error("Brak sugestii AI.");
-      const suggestion=await db.from("accounting_ai_suggestions").select("id,line_id,suggested_account_id,suggested_tax_treatment,suggested_vat_deduction_pct,summary,reasons,status").eq("workspace_id",workspace.id).eq("id",suggestionId).maybeSingle();
-      if(suggestion.error||!suggestion.data||!suggestion.data.line_id||!suggestion.data.suggested_account_id) throw new Error("Sugestia AI jest niekompletna.");
+      const suggestionId=text(payload.suggestionId);
+      if(!suggestionId) throw new Error("Brak sugestii AI.");
+      const {data:suggestion,error:suggestionError}=await db.from("accounting_ai_suggestions")
+        .select("id,line_id,suggested_account_id,suggested_tax_treatment,suggested_vat_deduction_pct,summary,reasons,status")
+        .eq("workspace_id",workspace.id).eq("id",suggestionId).maybeSingle();
+      if(suggestionError||!suggestion||!suggestion.line_id||!suggestion.suggested_account_id) throw new Error(suggestionError?.message??"Sugestia AI jest niekompletna.");
+      if(suggestion.status!=="active") throw new Error("Tę sugestię AI już rozpatrzono.");
+      const tax=suggestion.suggested_tax_treatment??"review";
+      if(!["KUP","NKUP","neutral","review"].includes(tax)) throw new Error("Sugestia AI ma nieprawidłową klasyfikację podatkową.");
+
+      // Validate the whole chain: suggestion -> line -> entry -> account, all in the same company.
+      const [line,account]=await Promise.all([
+        db.from("accounting_entry_lines").select("id,entry_id").eq("workspace_id",workspace.id).eq("id",suggestion.line_id).maybeSingle(),
+        db.from("accounting_accounts").select("id").eq("workspace_id",workspace.id).eq("id",suggestion.suggested_account_id).eq("active",true).maybeSingle()
+      ]);
+      if(line.error||!line.data) throw new Error(line.error?.message??"Nie znaleziono pozycji dekretu.");
+      if(account.error||!account.data) throw new Error(account.error?.message??"Wskazane konto nie należy do aktywnego planu kont.");
+      const entry=await db.from("accounting_entries").select("id,status,exported_at")
+        .eq("workspace_id",workspace.id).eq("id",line.data.entry_id).maybeSingle();
+      if(entry.error||!entry.data) throw new Error(entry.error?.message??"Nie znaleziono dekretu.");
+      if(!["proposed","rejected"].includes(entry.data.status)||entry.data.exported_at) {
+        throw new Error("Zatwierdzonego lub wyeksportowanego dekretu nie można zmieniać sugestią AI.");
+      }
+
+      const vat=suggestion.suggested_vat_deduction_pct==null?null:Math.max(0,Math.min(100,num(suggestion.suggested_vat_deduction_pct)));
       const update=await db.from("accounting_entry_lines").update({
-        account_id:suggestion.data.suggested_account_id,tax_treatment:suggestion.data.suggested_tax_treatment??"review",vat_deduction_pct:suggestion.data.suggested_vat_deduction_pct,
-        manual_override:true,source_rule_id:null,ai_confidence:1,ai_reason:"Sugestia AI zatwierdzona przez użytkownika: "+text(suggestion.data.summary),
-        ai_evidence:{source:"ai_suggestion_human_approved",suggestionId,reasons:suggestion.data.reasons??[]},updated_at:new Date().toISOString()
-      }).eq("workspace_id",workspace.id).eq("id",suggestion.data.line_id);
+        account_id:suggestion.suggested_account_id,tax_treatment:tax,vat_deduction_pct:vat,
+        manual_override:true,source_rule_id:null,ai_confidence:1,ai_reason:"Sugestia AI zatwierdzona przez użytkownika: "+text(suggestion.summary),
+        ai_evidence:{source:"ai_suggestion_human_approved",suggestionId,reasons:suggestion.reasons??[]},updated_at:new Date().toISOString()
+      }).eq("workspace_id",workspace.id).eq("id",suggestion.line_id).eq("entry_id",entry.data.id);
       if(update.error) throw new Error(update.error.message);
-      await db.from("accounting_ai_suggestions").update({status:"applied",updated_at:new Date().toISOString()}).eq("id",suggestionId);
+      const unresolved=await db.from("accounting_entry_lines").select("id").eq("workspace_id",workspace.id)
+        .eq("entry_id",entry.data.id).eq("tax_treatment","review").limit(1);
+      if(unresolved.error) throw new Error(unresolved.error.message);
+      const reviewState=await db.from("accounting_entries").update({
+        needs_review:Boolean(unresolved.data?.length),updated_at:new Date().toISOString()
+      }).eq("workspace_id",workspace.id).eq("id",entry.data.id);
+      if(reviewState.error) throw new Error(reviewState.error.message);
+      const applied=await db.from("accounting_ai_suggestions").update({status:"applied",updated_at:new Date().toISOString()})
+        .eq("workspace_id",workspace.id).eq("id",suggestionId).eq("status","active");
+      if(applied.error) throw new Error(applied.error.message);
       return NextResponse.json({ok:true});
     }
     if(body.action==="rule_save"){
