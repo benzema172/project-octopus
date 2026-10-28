@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { processDocumentVersion } from "@/lib/ai/process-document";
+import { runInvoiceIntakeChecks, containsInvoiceBusinessDocument } from "@/lib/finance/document-invoice-finalization";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
 import { enrichDocumentWithInvestmentRouting } from "@/lib/ai/investment-document-routing";
 import { geminiRateLimitInfo, geminiRateLimitMessage, wait } from "@/lib/ai/gemini-rate-limit";
@@ -174,6 +175,39 @@ async function handleWorker(request: Request) {
         projectId: sourceVersion.project_id ?? analysis.proposedProjectId,
         actorId
       });
+
+      // Background jobs must complete the same invoice quality, warehouse receipt
+      // and accounting proposal pipeline as the immediate /api/brain/process path.
+      if (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis)) {
+        try {
+          if (!actorId) throw new Error("Brak użytkownika do kontroli faktury i dekretacji.");
+          await runInvoiceIntakeChecks({ workspaceId: job.workspace_id, documentId: sourceVersion.document_id, actorId });
+        } catch (finalizationError) {
+          const message = finalizationError instanceof Error ? finalizationError.message : "Kontrola faktury nie powiodła się.";
+          const review = await supabase.from("documents").update({ ai_status: "review", review_status: "pending" })
+            .eq("id", sourceVersion.document_id).eq("workspace_id", job.workspace_id);
+          if (review.error) throw new Error(`Nie udało się oznaczyć wymaganej kontroli faktury: ${review.error.message}`);
+          await supabase.from("audit_events").insert({
+            workspace_id: job.workspace_id,
+            project_id: autopilot.projectId,
+            actor_id: actorId,
+            actor_type: "ai",
+            event_type: "document.invoice_finalization_failed",
+            entity_type: "document",
+            entity_id: sourceVersion.document_id,
+            after_value: { versionId: job.document_version_id, reason: message, retryVia: "/api/brain/process" }
+          });
+          results.push({ jobId: job.id, versionId: job.document_version_id, status: "failed", error: message });
+          operationalLog("warn", {
+            event: "worker.invoice_finalization_review",
+            route: "/api/brain/worker", method: request.method, module: "finance",
+            workspaceId: job.workspace_id, projectId: autopilot.projectId, requestId,
+            status: "partial", errorCode: "FINANCE_FINALIZATION_FAILED",
+            meta: { jobId: job.id, versionId: job.document_version_id }
+          });
+          continue;
+        }
+      }
 
       results.push({ jobId: job.id, versionId: job.document_version_id, status: "succeeded" });
       operationalLog("info", {
