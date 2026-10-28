@@ -6,12 +6,7 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { AccountingCopilotRun } from "@/lib/ai/accounting-copilot";
 import type { InvoiceIntakeAssessment } from "@/lib/finance/invoice-intake-readiness";
 
-export type FinanceAiSummary = {
-  analyzed: number;
-  failed: number;
-  maxProviders: number;
-  requiresHuman: number;
-};
+export 
 
 type ReviewRow = { id: string };
 type FinanceAiSummary = {
