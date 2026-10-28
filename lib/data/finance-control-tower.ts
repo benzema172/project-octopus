@@ -114,7 +114,9 @@ export async function getFinanceControlTower(workspaceId: string): Promise<Finan
   const allocations = new Map<string, Row[]>();
   for (const row of (allocationResult.data ?? []) as Row[]) {
     const key = text(row.source_line_id);
-    allocations.set(key, [...(allocations.get(key) ?? []), row]);
+    const existing = allocations.get(key);
+    if (existing) existing.push(row);
+    else allocations.set(key, [row]);
   }
   const paidInvoices = new Set(((paymentResult.data ?? []) as Row[]).filter((row) => !["cancelled", "void", "rejected"].includes(text(row.status))).map((row) => text(row.invoice_id)));
 
