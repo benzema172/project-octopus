@@ -89,10 +89,8 @@ type ReviewActionRow = {
 };
 
 type ExtractionRow = {
-  document_id: string;
   document_version_id: string;
-  payload: Record<string, unknown> | null;
-  created_at: string;
+  document_types: string[];
 };
 
 function jsonError(message: string, status: number) {
@@ -106,20 +104,6 @@ function cleanPath(value: unknown, fallback: string) {
 function increment(target: Record<string, number>, key: string) {
   const normalized = key.trim() || "nierozpoznany";
   target[normalized] = (target[normalized] ?? 0) + 1;
-}
-
-function businessDocumentTypes(payload: Record<string, unknown> | null) {
-  if (!payload) return [] as string[];
-  const documents = Array.isArray(payload.businessDocuments)
-    ? payload.businessDocuments
-    : payload.businessDocument && typeof payload.businessDocument === "object" && !Array.isArray(payload.businessDocument)
-      ? [payload.businessDocument]
-      : [];
-  return documents.flatMap((value) => {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-    const type = String((value as Record<string, unknown>).documentType ?? "").trim();
-    return type ? [type] : [];
-  });
 }
 
 async function resolveWorkspace(user: { id: string }, workspaceId?: string) {
@@ -151,15 +135,14 @@ async function buildSummary(session: SessionRow) {
   if (itemsError) throw new Error(`Nie udało się odczytać plików sesji: ${itemsError.message}`);
 
   const documentIds = Array.from(new Set((items ?? []).map((item) => item.document_id).filter((id): id is string => Boolean(id))));
-  const documentsResult = documentIds.length
-    ? await db.from("documents").select("id,category,ai_status,ai_confidence,current_version_id,project_id")
-      .eq("workspace_id", session.workspace_id).in("id", documentIds).returns<DocumentRow[]>()
-    : { data: [] as DocumentRow[], error: null };
-  if (documentsResult.error) throw new Error(`Nie udało się odczytać wyników dokumentów: ${documentsResult.error.message}`);
-  const documents = new Map((documentsResult.data ?? []).map((document) => [document.id, document]));
-
   const versionIds = Array.from(new Set((items ?? []).map((item) => item.document_version_id).filter((id): id is string => Boolean(id))));
-  const [classificationsResult, extractionsResult, reviewActionsResult, duplicatesResult] = await Promise.all([
+  // All independent report reads run together: one network roundtrip wave
+  // instead of waiting for the documents query before starting the others.
+  const [documentsResult, classificationsResult, extractionsResult, reviewActionsResult, duplicatesResult] = await Promise.all([
+    documentIds.length
+      ? db.from("documents").select("id,category,ai_status,ai_confidence,current_version_id,project_id")
+        .eq("workspace_id", session.workspace_id).in("id", documentIds).returns<DocumentRow[]>()
+      : Promise.resolve({ data: [] as DocumentRow[], error: null }),
     versionIds.length
       ? db.from("document_classifications")
         .select("document_id,document_version_id,category,confidence,status,created_at")
@@ -169,13 +152,9 @@ async function buildSummary(session: SessionRow) {
         .returns<ClassificationRow[]>()
       : Promise.resolve({ data: [] as ClassificationRow[], error: null }),
     versionIds.length
-      ? db.from("document_extractions")
-        .select("document_id,document_version_id,payload,created_at")
-        .eq("workspace_id", session.workspace_id)
-        .eq("extraction_type", "document_context")
-        .in("document_version_id", versionIds)
-        .order("created_at", { ascending: false })
-        .returns<ExtractionRow[]>()
+      ? db.rpc("get_import_document_type_labels_20261028", {
+          p_workspace_id: session.workspace_id, p_version_ids: versionIds
+        }).returns<ExtractionRow[]>()
       : Promise.resolve({ data: [] as ExtractionRow[], error: null }),
     documentIds.length
       ? db.from("ai_review_actions")
@@ -197,6 +176,8 @@ async function buildSummary(session: SessionRow) {
         .returns<DuplicateAuditRow[]>()
       : Promise.resolve({ data: [] as DuplicateAuditRow[], error: null })
   ]);
+  if (documentsResult.error) throw new Error(`Nie udało się odczytać wyników dokumentów: ${documentsResult.error.message}`);
+  const documents = new Map((documentsResult.data ?? []).map((document) => [document.id, document]));
   if (classificationsResult.error) throw new Error(`Nie udało się odczytać klasyfikacji sesji: ${classificationsResult.error.message}`);
   if (extractionsResult.error) throw new Error(`Nie udało się odczytać analiz sesji: ${extractionsResult.error.message}`);
   if (reviewActionsResult.error) console.error("Project Octopus: Batch Import review actions fallback", reviewActionsResult.error);
@@ -227,7 +208,7 @@ async function buildSummary(session: SessionRow) {
     const classification = versionId ? classificationByVersion.get(versionId) : undefined;
     const extraction = versionId ? extractionByVersion.get(versionId) : undefined;
     const category = classification?.category ?? document?.category ?? null;
-    const types = businessDocumentTypes(extraction?.payload ?? null);
+    const types = extraction?.document_types ?? [];
     if (types.length) types.forEach((type) => increment(documentTypes, type));
     else if (category) increment(categories, category);
 
