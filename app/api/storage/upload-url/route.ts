@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NextResponse } from "next/server";
@@ -40,6 +40,16 @@ type UploadUrlBody = {
   importSessionId?: string;
   importSessionItemId?: string;
 };
+
+// An import-session item owns a stable document/version identity. Re-selecting
+// the same batch after a browser disconnect therefore cannot create duplicates.
+function stableSessionUuid(workspaceId: string, itemId: string, kind: "document" | "version") {
+  const bytes = createHash("sha256").update(`octopus-import-v1:${workspaceId}:${itemId}:${kind}`).digest();
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.subarray(0, 16).toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
 
 function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
@@ -112,17 +122,20 @@ export async function POST(request: Request) {
     const supabase = createServiceSupabaseClient();
     const { data: importItem, error: importItemError } = await supabase
       .from("document_import_session_items")
-      .select("id,session_id,workspace_id,document_id,document_version_id,document_import_sessions!inner(created_by)")
+      .select("id,session_id,workspace_id,document_id,document_version_id,file_name,file_size_bytes,document_import_sessions!inner(created_by)")
       .eq("id", importSessionItemId)
       .eq("session_id", importSessionId)
       .eq("workspace_id", workspace.id)
       .eq("document_import_sessions.created_by", user.id)
-      .maybeSingle<{ id: string; session_id: string; workspace_id: string; document_id: string | null; document_version_id: string | null }>();
+      .maybeSingle<{ id: string; session_id: string; workspace_id: string; document_id: string | null; document_version_id: string | null; file_name: string; file_size_bytes: number }>();
     if (importItemError || !importItem) return jsonError("Nie znaleziono pliku w aktywnej sesji importu.", 422);
     if (importItem.document_id || importItem.document_version_id) return jsonError("Plik tej sesji został już powiązany z dokumentem.", 409);
+    if (importItem.file_name !== fileName || Number(importItem.file_size_bytes) !== fileSize) {
+      return jsonError("Plik nie odpowiada zapisanej liście sesji importu.", 422);
+    }
   }
 
-  let documentId: string = randomUUID();
+  let documentId: string = importSessionItemId ? stableSessionUuid(workspace.id, importSessionItemId, "document") : randomUUID();
   let existingDocumentCategory: string | null = null;
 
   if (requestedDocumentId) {
@@ -157,7 +170,8 @@ export async function POST(request: Request) {
     return jsonError("Brak uprawnienia do dodawania dokumentów w tej domenie.", 403);
   }
 
-  const versionId = randomUUID();
+  const versionId = importSessionItemId && !requestedDocumentId
+    ? stableSessionUuid(workspace.id, importSessionItemId, "version") : randomUUID();
   const safeFileName = sanitizeFileName(fileName);
   const contextPath = projectId ? `projects/${projectId}` : "company";
   const objectKey = `workspaces/${workspace.id}/${contextPath}/documents/${documentId}/versions/${versionId}/${safeFileName}`;
