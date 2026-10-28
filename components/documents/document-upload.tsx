@@ -205,6 +205,7 @@ export function DocumentUpload({
 }: DocumentUploadProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const reportRefreshInFlightRef = useRef(false);
   const targetDocumentIdRef = useRef<string | null>(null);
   const targetProjectIdRef = useRef<string | null>(projectId ?? null);
   const [selectedProjectId, setSelectedProjectId] = useState(projectId ?? "");
@@ -236,21 +237,33 @@ export function DocumentUpload({
       return matchesText && (category === "all" || flowCategory === category);
     });
   }, [category, documents, query]);
-  const recentDocuments = useMemo(
-    () => recentDocumentIds.map((id) => documents.find((document) => document.id === id)).filter((document): document is DocumentSummary => Boolean(document)),
-    [documents, recentDocumentIds]
-  );
+  const recentDocuments = useMemo(() => {
+    const byId = new Map(documents.map((document) => [document.id, document]));
+    return recentDocumentIds.map((id) => byId.get(id)).filter((document): document is DocumentSummary => Boolean(document));
+  }, [documents, recentDocumentIds]);
   const visibleDocuments = isIntake ? recentDocuments : filteredDocuments;
 
   const refreshImportSession = useCallback(async (sessionId?: string) => {
-    if (!workspaceId) return null;
-    const query = new URLSearchParams({ workspaceId });
-    if (sessionId) query.set("sessionId", sessionId);
-    const response = await fetch(`/api/documents/import-session?${query.toString()}`, { cache: "no-store" });
-    const payload = await response.json().catch(() => ({})) as ImportSessionResponse;
-    if (!response.ok) throw new Error(payload.error ?? "Nie udało się odczytać raportu sesji.");
-    setBatchSummary(payload.session);
-    return payload.session;
+    if (!workspaceId || reportRefreshInFlightRef.current) return null;
+    reportRefreshInFlightRef.current = true;
+    try {
+      const query = new URLSearchParams({ workspaceId });
+      if (sessionId) query.set("sessionId", sessionId);
+      const response = await fetch(`/api/documents/import-session?${query.toString()}`, { cache: "no-store" });
+      const payload = await response.json().catch(() => ({})) as ImportSessionResponse;
+      if (!response.ok) throw new Error(payload.error ?? "Nie udało się odczytać raportu sesji.");
+      // Avoid a redundant component tree render for identical snapshots.
+      setBatchSummary((previous) => {
+        if (previous?.id === payload.session?.id && previous?.status === payload.session?.status
+            && JSON.stringify(previous?.counts) === JSON.stringify(payload.session?.counts)) {
+          return previous;
+        }
+        return payload.session;
+      });
+      return payload.session;
+    } finally {
+      reportRefreshInFlightRef.current = false;
+    }
   }, [workspaceId]);
 
   useEffect(() => {
@@ -268,10 +281,21 @@ export function DocumentUpload({
   const batchSummaryId = batchSummary?.id ?? null;
   const batchSummaryStatus = batchSummary?.status ?? null;
   useEffect(() => {
-    if (!workspaceId || !batchSummaryId || !["uploading", "processing"].includes(batchSummaryStatus ?? "")) return;
-    const timer = window.setInterval(() => { void refreshImportSession(batchSummaryId).catch(() => undefined); }, 5000);
-    return () => window.clearInterval(timer);
-  }, [batchSummaryId, batchSummaryStatus, refreshImportSession, workspaceId]);
+    if (!workspaceId || !batchSummaryId || isUploading
+        || !["uploading", "processing"].includes(batchSummaryStatus ?? "")) return;
+    const refreshVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void refreshImportSession(batchSummaryId).catch(() => undefined);
+    };
+    // Only poll active, visible sessions. Avoid high-cost database reads in
+    // background tabs and overlapping responses while a request is still active.
+    const timer = window.setInterval(refreshVisible, 12000);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
+  }, [batchSummaryId, batchSummaryStatus, isUploading, refreshImportSession, workspaceId]);
 
   async function uploadFile(
     candidate: UploadCandidate,
