@@ -114,6 +114,16 @@ describe("Octopus production stability regression", () => {
     expect(sql).toContain("to service_role");
   });
 
+  it("shows duplicate evidence with the batch report instead of silently accepting repeated files", () => {
+    const api = source("app/api/documents/import-session/route.ts");
+    const ui = source("components/documents/document-upload.tsx");
+    expect(api).toContain('event_type","document.duplicate_content_candidate"');
+    expect(api).toContain("duplicateOfDocumentId");
+    expect(api).toContain("counts.duplicates");
+    expect(ui).toContain("batchSummary.counts.duplicates");
+    expect(ui).toContain("Duplikat do sprawdzenia:");
+  });
+
   it("prevents invoice materialization after exact-content duplicate detection", () => {
     const worker = source("app/api/brain/worker/route.ts");
     const direct = source("app/api/brain/process/route.ts");
