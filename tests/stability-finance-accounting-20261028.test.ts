@@ -58,6 +58,42 @@ describe("Octopus production stability regression", () => {
     expect(warehouseAi).toContain("Nie udało się odczytać ${label} Magazynu");
   });
 
+  it("runs the same invoice quality, finance AI and accounting checks on all AI paths", () => {
+    const common = source("lib/finance/document-invoice-finalization.ts");
+    const immediate = source("app/api/brain/process/route.ts");
+    const worker = source("app/api/brain/worker/route.ts");
+    const retry = source("app/api/brain/retry/route.ts");
+    expect(common).toContain("export async function runInvoiceIntakeChecks");
+    expect(common).toContain("assessDocumentInvoiceReadiness(input)");
+    expect(common).toContain("runAccountingCopilotForDocument");
+    for (const route of [immediate, worker, retry]) {
+      expect(route).toContain("runInvoiceIntakeChecks");
+    }
+    expect(worker).toContain('event: "document.invoice_finalization_failed"');
+    expect(common).toContain('ai_status: "review"');
+  });
+
+  it("keeps a 100-document import resumable without delaying each upload on Gemini", () => {
+    const upload = source("components/documents/document-upload.tsx");
+    const session = source("app/api/documents/import-session/route.ts");
+    expect(upload).toContain("selectedFiles.length > 1");
+    expect(upload).toContain("if (deferAnalysis)");
+    expect(upload).toContain("alreadyUploaded.has(index + 1)");
+    expect(session).toContain("sameManifest");
+    expect(session).toContain("resumed: true");
+    expect(session).toContain(".is(\"document_version_id\", null)");
+  });
+
+  it("holds invoice PZ receipts for reconciliation with WZ, PZ and MM evidence", () => {
+    const migration = source("supabase/migrations/20261028114000_invoice_stock_reconciliation_gate.sql");
+    expect(migration).toContain("create or replace function public.auto_receive_purchase_invoice_atomic");
+    expect(migration).toContain("invoice_warehouse_reconciliation_required");
+    expect(migration).toContain("'PZ','WZ','MM'");
+    expect(migration).toContain("'stockChanged',false");
+    expect(migration).not.toContain("approve_stock_movement_atomic(");
+    expect(migration).not.toContain("auto_receive_purchase_invoice_unguarded_atomic(");
+  });
+
   it("runs the warehouse overview data reads concurrently instead of in waterfalls", () => {
     const warehouse = source("lib/data/warehouse-market-400.ts");
     expect(warehouse).toContain("const [base, ai, forecastsResult, readinessResult, recommendationsResult, pendingMovementsResult] = await Promise.all");
