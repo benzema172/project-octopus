@@ -69,7 +69,7 @@ describe("Octopus production stability regression", () => {
     for (const route of [immediate, worker, retry]) {
       expect(route).toContain("runInvoiceIntakeChecks");
     }
-    expect(worker).toContain('event: "document.invoice_finalization_failed"');
+    expect(worker).toContain('event_type: "document.invoice_finalization_failed"');
     expect(common).toContain('ai_status: "review"');
   });
 
