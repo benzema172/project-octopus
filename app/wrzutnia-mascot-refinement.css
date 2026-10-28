@@ -128,7 +128,7 @@
 
 /* On narrower desktop workspaces, distribute the header across two
    deliberate rows rather than compressing the investment name or Wrzutnia. */
-@media (min-width: 901px) and (max-width: 1380px) {
+@media (min-width: 901px) and (max-width: 1460px) {
   .pw-project-header.pw-project-header--contract.pw-project-header--compact.pw-project-header--with-intake {
     grid-template-columns: minmax(0,1fr) minmax(0,1fr) 166px !important;
     grid-template-rows: auto auto;
