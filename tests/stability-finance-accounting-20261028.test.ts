@@ -24,6 +24,14 @@ describe("Octopus production stability regression", () => {
     expect(finance).toContain("const [graphInvoiceResult, paymentResult] = await Promise.all");
   });
 
+  it("reads KSeF inbox timestamps using the live database received_at column", () => {
+    const finance = source("lib/data/finance-control-tower.ts");
+    expect(finance).toContain('.from("business_inbox_items").select("id,status,received_at")');
+    expect(finance).toContain('.order("received_at", { ascending: false })');
+    expect(finance).toContain("ksefRows[0]?.received_at");
+    expect(finance).not.toContain('.from("business_inbox_items").select("id,status,created_at")');
+  });
+
   it("prevents applying stale AI suggestions to approved/exported entries and cross-company accounts", () => {
     const accounting = source("app/api/company/accounting/route.ts");
     const suggestion = accounting.split('if(body.action==="suggestion_apply"){')[1]?.split('if(body.action==="rule_save"){')[0] ?? "";
