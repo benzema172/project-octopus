@@ -80,7 +80,7 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
           <header className="pw-project-header pw-project-header--contract pw-project-header--compact pw-project-header--with-intake">
             <div className="pw-project-header__identity">
               <Link href={`/workspace/companies/${workspace.id}/investments`} className="pw-project-header__back" aria-label="Wszystkie inwestycje" title="Wszystkie inwestycje"><ArrowLeft size={15} aria-hidden="true" /></Link>
-              <div><ProjectStatusControl550 projectId={project.id} status={String(project.status)} canManage={canManageStatus} variant="header" /><h1>„{header.shortName}”</h1></div>
+              <div><ProjectStatusControl550 projectId={project.id} status={String(project.status)} canManage={canManageStatus} variant="header" /><h1 title={header.shortName}>„{header.shortName}”</h1></div>
             </div>
 
             <div className="pw-project-contract" aria-label="Dane kontraktowe inwestycji">
