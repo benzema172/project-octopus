@@ -169,6 +169,53 @@ export async function applyDocumentAutopilot(input: {
     };
   }
 
+  // Identical bytes inside the same company are a hard duplicate candidate.
+  // This check runs after validated SHA-256 is persisted and BEFORE any routing,
+  // accounting, protocol publication or stock changes. Do not auto-delete files.
+  const { data: sourceVersion, error: sourceVersionError } = await db.from("document_versions")
+    .select("sha256").eq("id", input.versionId).eq("document_id", input.documentId)
+    .maybeSingle<{ sha256: string | null }>();
+  if (sourceVersionError || !sourceVersion) {
+    throw new Error(`Nie udało się sprawdzić tożsamości pliku: ${sourceVersionError?.message ?? "brak wersji"}`);
+  }
+  if (sourceVersion.sha256) {
+    const { data: copies, error: duplicateError } = await db.rpc(
+      "find_document_sha256_duplicate_20261028", {
+        p_workspace_id: input.workspaceId,
+        p_document_id: input.documentId,
+        p_sha256: sourceVersion.sha256
+      }
+    ).returns<Array<{ candidate_document_id: string; candidate_version_id: string }>>();
+    if (duplicateError) throw new Error(`Kontrola duplikatów niedostępna: ${duplicateError.message}`);
+    const candidate = copies?.[0];
+    if (candidate) {
+      const { error: updateError } = await db.from("documents")
+        .update({ ai_status: "review", review_status: "pending" })
+        .eq("id", input.documentId).eq("workspace_id", input.workspaceId);
+      if (updateError) throw new Error(`Nie udało się zablokować duplikatu: ${updateError.message}`);
+      const { error: auditError } = await db.from("audit_events").insert({
+        workspace_id: input.workspaceId, project_id: input.projectId,
+        actor_id: input.actorId, actor_type: "ai",
+        event_type: "document.duplicate_content_candidate",
+        entity_type: "document", entity_id: input.documentId,
+        after_value: {
+          sha256: sourceVersion.sha256,
+          duplicateOfDocumentId: candidate.candidate_document_id,
+          duplicateOfVersionId: candidate.candidate_version_id,
+          decision: "manual_review_required",
+          automaticMaterializationBlocked: true
+        }
+      });
+      if (auditError) throw new Error(`Nie udało się zapisać kontroli duplikatu: ${auditError.message}`);
+      return {
+        status: "partial", projectId: input.projectId, published: 0, failed: 1,
+        protocolDrafts: 0, boqImported: false,
+        businessDocumentProcessed: false,
+        errors: [`Identyczny plik istnieje już w firmie (dokument ${candidate.candidate_document_id}). Wymaga decyzji — bez automatycznego księgowania i zmiany magazynu.`]
+      };
+    }
+  }
+
   const { data: reviewed, error: reviewError } = await db.rpc("review_document_with_proposals_atomic", {
     p_workspace_id: input.workspaceId,
     p_document_id: input.documentId,
