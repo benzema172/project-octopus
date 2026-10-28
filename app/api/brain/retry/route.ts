@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { processDocumentVersion } from "@/lib/ai/process-document";
+import { findExistingExactDuplicate } from "@/lib/documents/exact-duplicate-guard";
 import { runInvoiceIntakeChecks, containsInvoiceBusinessDocument } from "@/lib/finance/document-invoice-finalization";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
 import { enrichDocumentWithInvestmentRouting } from "@/lib/ai/investment-document-routing";
@@ -74,11 +75,17 @@ export async function POST(request: Request) {
         userId: user.id
       });
 
-      if (document.project_id) {
+      const exactDuplicate = await findExistingExactDuplicate({
+        workspaceId: workspace.id, documentId: document.id,
+        versionId: document.current_version_id
+      });
+      const routingProjectId = document.project_id ?? analysis.proposedProjectId ?? null;
+      let routingErrorMessage: string | null = null;
+      if (routingProjectId && !exactDuplicate && analysis.confidence >= 0.82) {
         try {
           await enrichDocumentWithInvestmentRouting({
             workspaceId: workspace.id,
-            projectId: document.project_id,
+            projectId: routingProjectId,
             documentId: document.id,
             versionId: document.current_version_id,
             userId: user.id,
@@ -86,6 +93,7 @@ export async function POST(request: Request) {
             analysis
           });
         } catch (routingError) {
+          routingErrorMessage = routingError instanceof Error ? routingError.message : "Nie udało się przypisać inwestycji.";
           operationalLog("warn", {
             event: "document.force_retry_routing_failed",
             route: "/api/brain/retry",
@@ -104,12 +112,24 @@ export async function POST(request: Request) {
         documentId: document.id,
         versionId: document.current_version_id,
         category: analysis.effectiveCategory,
-        projectId: document.project_id ?? analysis.proposedProjectId,
+        projectId: routingProjectId,
         actorId: user.id
       });
 
-      if (autopilot.failed === 0 && (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis))) {
+      if (autopilot.failed === 0 && autopilot.status === "applied" && !routingErrorMessage
+        && (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis))) {
         await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: document.id, actorId: user.id });
+      }
+      if (autopilot.failed > 0 || autopilot.status !== "applied" || routingErrorMessage) {
+        const { error: reviewError } = await supabase.from("documents")
+          .update({ ai_status: "review", review_status: "pending" })
+          .eq("workspace_id",workspace.id).eq("id",document.id);
+        if (reviewError) throw new Error(`Nie udało się zachować wyniku do weryfikacji: ${reviewError.message}`);
+        return NextResponse.json({
+          ok: true, status: "review", jobId: result?.job_id ?? null,
+          message: [routingErrorMessage, ...autopilot.errors].filter(Boolean).join(" | ")
+            || "Wymagana weryfikacja dokumentu przed jego publikacją."
+        });
       }
       return NextResponse.json({ ok: true, status: "completed", jobId: result?.job_id ?? null });
     } catch (processingError) {

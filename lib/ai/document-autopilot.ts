@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { findExistingExactDuplicate } from "@/lib/documents/exact-duplicate-guard";
 
 export type DocumentAutopilotResult = {
   status: "applied" | "partial" | "skipped";
@@ -172,24 +173,9 @@ export async function applyDocumentAutopilot(input: {
   // Identical bytes inside the same company are a hard duplicate candidate.
   // This check runs after validated SHA-256 is persisted and BEFORE any routing,
   // accounting, protocol publication or stock changes. Do not auto-delete files.
-  const { data: sourceVersion, error: sourceVersionError } = await db.from("document_versions")
-    .select("sha256").eq("id", input.versionId).eq("document_id", input.documentId)
-    .maybeSingle<{ sha256: string | null }>();
-  if (sourceVersionError || !sourceVersion) {
-    throw new Error(`Nie udało się sprawdzić tożsamości pliku: ${sourceVersionError?.message ?? "brak wersji"}`);
-  }
-  if (sourceVersion.sha256) {
-    const { data: copies, error: duplicateError } = await db.rpc(
-      "find_document_sha256_duplicate_20261028", {
-        p_workspace_id: input.workspaceId,
-        p_document_id: input.documentId,
-        p_sha256: sourceVersion.sha256
-      }
-    ).returns<Array<{ candidate_document_id: string; candidate_version_id: string }>>();
-    if (duplicateError) throw new Error(`Kontrola duplikatów niedostępna: ${duplicateError.message}`);
-    const candidate = Array.isArray(copies)
-      ? (copies as Array<{ candidate_document_id: string; candidate_version_id: string }>)[0]
-      : null;
+  const candidate = await findExistingExactDuplicate({
+    workspaceId: input.workspaceId, documentId: input.documentId, versionId: input.versionId
+  });
     if (candidate) {
       const { error: updateError } = await db.from("documents")
         .update({ ai_status: "review", review_status: "pending" })
@@ -201,7 +187,7 @@ export async function applyDocumentAutopilot(input: {
         event_type: "document.duplicate_content_candidate",
         entity_type: "document", entity_id: input.documentId,
         after_value: {
-          sha256: sourceVersion.sha256,
+          sha256Checked: true,
           duplicateOfDocumentId: candidate.candidate_document_id,
           duplicateOfVersionId: candidate.candidate_version_id,
           decision: "manual_review_required",
@@ -216,6 +202,55 @@ export async function applyDocumentAutopilot(input: {
         errors: [`Identyczny plik istnieje już w firmie (dokument ${candidate.candidate_document_id}). Wymaga decyzji — bez automatycznego księgowania i zmiany magazynu.`]
       };
     }
+
+  // Classification and destination are separate decisions: do not publish to
+  // cost estimate, protocols, warehouse etc. when model confidence or project
+  // identity does not meet the unattended-processing gate.
+  const [classificationResult, intakeResult] = await Promise.all([
+    db.from("document_classifications").select("confidence")
+      .eq("workspace_id", input.workspaceId).eq("document_version_id", input.versionId)
+      .eq("status", "proposed").order("created_at", { ascending: false })
+      .limit(1).maybeSingle<{ confidence: number | null }>(),
+    db.from("document_intakes").select("category_locked")
+      .eq("document_id", input.documentId)
+      .maybeSingle<{ category_locked: boolean | null }>()
+  ]);
+  if (classificationResult.error || intakeResult.error) {
+    throw new Error(`Kontrola klasyfikacji przed routingiem nie powiodła się: ${classificationResult.error?.message ?? intakeResult.error?.message}`);
+  }
+  const classificationConfidence = classificationResult.data?.confidence;
+  const belowAutomaticThreshold = classificationConfidence != null
+    && Number(classificationConfidence) < 0.82 && !intakeResult.data?.category_locked;
+  let unassignedProjectProposals = false;
+  if (!input.projectId && !["invoice", "warehouse", "template", "hr"].includes(input.category)) {
+    const { data: needsProject, error: needsProjectError } = await db
+      .from("document_module_proposals").select("id")
+      .eq("workspace_id", input.workspaceId).eq("document_version_id", input.versionId)
+      .in("module", ["schedule", "protocols", "cost_estimate", "site", "requests"])
+      .in("status", ["proposed", "approved", "failed"])
+      .limit(1);
+    if (needsProjectError) throw new Error(`Nie udało się sprawdzić celu dokumentu: ${needsProjectError.message}`);
+    unassignedProjectProposals = Boolean(needsProject?.length);
+  }
+  if (belowAutomaticThreshold || unassignedProjectProposals) {
+    const reason = belowAutomaticThreshold
+      ? `AI rozpoznało kategorię z pewnością ${Math.round(Number(classificationConfidence) * 100)}%. Dokument wymaga potwierdzenia przed publikacją.`
+      : "Dokument zawiera propozycje do modułów inwestycji, ale nie ma pewnie wskazanej inwestycji.";
+    const { error: heldError } = await db.from("documents")
+      .update({ ai_status: "review", review_status: "pending" })
+      .eq("workspace_id", input.workspaceId).eq("id", input.documentId);
+    if (heldError) throw new Error(`Nie udało się wstrzymać niepewnego routingu: ${heldError.message}`);
+    const { error: auditError } = await db.from("audit_events").insert({
+      workspace_id: input.workspaceId, project_id: input.projectId,
+      actor_id: input.actorId, actor_type: "ai",
+      event_type: "document.autopilot_routing_review_required",
+      entity_type: "document", entity_id: input.documentId,
+      after_value: { versionId: input.versionId, classificationConfidence,
+        reason, noUncertainAutomaticPublication: true }
+    });
+    if (auditError) throw new Error(`Nie udało się zapisać kontroli routingu: ${auditError.message}`);
+    return { status: "partial", projectId: input.projectId, published: 0, failed: 1,
+      protocolDrafts: 0, boqImported: false, businessDocumentProcessed: false, errors: [reason] };
   }
 
   const { data: reviewed, error: reviewError } = await db.rpc("review_document_with_proposals_atomic", {
@@ -250,6 +285,10 @@ export async function applyDocumentAutopilot(input: {
       const result = businessResult as Record<string, unknown> | null;
       businessDocumentCount = Number(result?.count ?? 0) || 0;
       businessDocumentProcessed = result?.skipped !== true && businessDocumentCount > 0;
+      if (!businessDocumentProcessed) {
+        failed += 1;
+        errors.push("AI rozpoznało dokument finansowo-magazynowy, ale nie utworzyło żadnej zweryfikowanej pozycji. Wymagana kontrola przed uznaniem go za gotowy.");
+      }
     }
   }
 

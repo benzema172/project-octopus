@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
 import { processDocumentVersion } from "@/lib/ai/process-document";
+import { findExistingExactDuplicate } from "@/lib/documents/exact-duplicate-guard";
 import { runInvoiceIntakeChecks, containsInvoiceBusinessDocument } from "@/lib/finance/document-invoice-finalization";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
 import { enrichDocumentWithInvestmentRouting } from "@/lib/ai/investment-document-routing";
@@ -140,11 +141,21 @@ async function handleWorker(request: Request) {
         alreadyClaimed: true
       });
 
-      if (sourceVersion.project_id && actorId) {
+      const duplicate = await findExistingExactDuplicate({
+        workspaceId: job.workspace_id, documentId: sourceVersion.document_id,
+        versionId: job.document_version_id
+      });
+      let investmentRoutingError: string | null = null;
+      // Use the safe AI project matcher for company-wide batch uploads, too.
+      // A worker must not skip project-specific module routing merely because
+      // the original upload was not manually assigned to an investment.
+      const routingProjectId = sourceVersion.project_id ?? analysis.proposedProjectId ?? null;
+      // A duplicate or low-confidence classification must not enrich projects.
+      if (!duplicate && routingProjectId && actorId && analysis.confidence >= 0.82) {
         try {
           await enrichDocumentWithInvestmentRouting({
             workspaceId: job.workspace_id,
-            projectId: sourceVersion.project_id,
+            projectId: routingProjectId,
             documentId: sourceVersion.document_id,
             versionId: job.document_version_id,
             userId: actorId,
@@ -152,6 +163,7 @@ async function handleWorker(request: Request) {
             analysis
           });
         } catch (routingError) {
+          investmentRoutingError = routingError instanceof Error ? routingError.message : "Nie można przypisać dokumentu do inwestycji.";
           operationalLog("warn", {
             event: "worker.investment_routing_failed",
             route: "/api/brain/worker",
@@ -172,13 +184,14 @@ async function handleWorker(request: Request) {
         documentId: sourceVersion.document_id,
         versionId: job.document_version_id,
         category: analysis.effectiveCategory,
-        projectId: sourceVersion.project_id ?? analysis.proposedProjectId,
+        projectId: routingProjectId,
         actorId
       });
 
-      // A partially routed document is never reported as fully imported.
-      if (autopilot.failed > 0 || autopilot.status === "partial") {
-        const reason = autopilot.errors.join(" | ") || "Automatyczny routing dokumentu wymaga decyzji.";
+      // Never mark an unhandled, duplicate or partially routed document ready.
+      if (autopilot.failed > 0 || autopilot.status !== "applied" || investmentRoutingError) {
+        const reason = [investmentRoutingError, ...autopilot.errors].filter(Boolean).join(" | ")
+          || "Automatyczny routing dokumentu wymaga decyzji.";
         const update = await supabase.from("documents").update({ ai_status: "review", review_status: "pending" })
           .eq("workspace_id", job.workspace_id).eq("id", sourceVersion.document_id);
         if (update.error) throw new Error(update.error.message);

@@ -103,7 +103,9 @@ describe("Octopus production stability regression", () => {
   it("checks exact cross-batch document hashes inside one workspace before automatic routing", () => {
     const autopilot = source("lib/ai/document-autopilot.ts");
     const sql = source("supabase/migrations/20261028121500_guard_cross_batch_duplicate_content.sql");
-    expect(autopilot).toContain("find_document_sha256_duplicate_20261028");
+    const gate = source("lib/documents/exact-duplicate-guard.ts");
+    expect(autopilot).toContain("findExistingExactDuplicate");
+    expect(gate).toContain('find_document_sha256_duplicate_20261028');
     expect(autopilot).toContain('event_type: "document.duplicate_content_candidate"');
     expect(autopilot).toContain("automaticMaterializationBlocked: true");
     expect(autopilot).toContain('ai_status: "review"');
@@ -160,6 +162,57 @@ describe("Octopus production stability regression", () => {
     expect(sql).toContain("duplicateCandidateReviewId");
     expect(sql).toContain("w.workspace_id=new.workspace_id");
     expect(sql).toContain("w.document_id<>new.document_id");
+  });
+
+  it("queries for duplicate files before choosing the first matching version", () => {
+    const migration = source("supabase/migrations/20261028132000_cross_import_sha256_lookup_correctness.sql");
+    const query = migration.split("as $body$")[1]?.split("$body$")[0] ?? "";
+    const exclusion = query.indexOf("dv.document_id is distinct from p_document_id");
+    const ordering = query.indexOf("order by coalesce");
+    expect(exclusion).toBeGreaterThanOrEqual(0);
+    expect(exclusion).toBeLessThan(ordering);
+    expect(migration).toContain("document_versions_sha256_cross_import_idx");
+    expect(migration).toContain("to service_role");
+  });
+
+  it("holds low-confidence or unassigned investment documents rather than silently publishing proposals", () => {
+    const pilot = source("lib/ai/document-autopilot.ts");
+    expect(pilot).toContain("classificationConfidence");
+    expect(pilot).toContain("Number(classificationConfidence) < 0.82");
+    expect(pilot).toContain("unassignedProjectProposals");
+    expect(pilot).toContain("noUncertainAutomaticPublication: true");
+    expect(pilot).toContain("businessDocumentProcessed = result?.skipped !== true && businessDocumentCount > 0");
+    expect(pilot).toContain('errors.push("AI rozpoznało dokument finansowo-magazynowy');
+  });
+
+  it("applies exact duplicate guards before investment enrichment on every processing entry point", () => {
+    const worker = source("app/api/brain/worker/route.ts");
+    const direct = source("app/api/brain/process/route.ts");
+    const retry = source("app/api/brain/retry/route.ts");
+    for (const path of [worker, direct, retry]) {
+      const guard = path.indexOf("await findExistingExactDuplicate");
+      const route = path.indexOf("await enrichDocumentWithInvestmentRouting");
+      expect(guard).toBeGreaterThanOrEqual(0);
+      expect(guard).toBeLessThan(route);
+    }
+    expect(worker).toContain("!duplicate");
+    expect(worker).toContain("sourceVersion.project_id ?? analysis.proposedProjectId ?? null");
+    expect(worker).toContain("routingProjectId && actorId && analysis.confidence >= 0.82");
+    expect(direct).toContain("!exactDuplicate");
+    expect(retry).toContain("!exactDuplicate");
+    expect(worker).toContain('autopilot.status !== "applied"');
+    expect(retry).toContain('status: "review"');
+  });
+
+  it("does not hide finance AI failures and waits for review before final accounting readiness", () => {
+    const pipeline = source("lib/finance/document-invoice-finalization.ts");
+    expect(pipeline).toContain("if (financeAi.failed > 0)");
+    expect(pipeline).toContain("runAccountingCopilotForDocument");
+    expect(pipeline.indexOf("const financeAi = await analyzeInvoiceReviews"))
+      .toBeLessThan(pipeline.indexOf("const accounting = await runAccountingCopilotForDocument"));
+    expect(pipeline).toContain("item.requiresReview || item.warehouseReceipt?.requiresHumanReview");
+    expect(pipeline).toContain("financeAi.requiresHuman > 0");
+    expect(pipeline).toContain("accounting.some((item) => item.needsReview)");
   });
 
   it("runs the warehouse overview data reads concurrently instead of in waterfalls", () => {

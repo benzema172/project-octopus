@@ -113,17 +113,25 @@ export async function runInvoiceIntakeChecks(input: {
   actorId: string;
 }): Promise<{ invoiceReadiness: InvoiceIntakeAssessment[]; financeAi: FinanceAiSummary; accounting: AccountingCopilotRun[] }> {
   const invoiceReadiness = await assessDocumentInvoiceReadiness(input);
-  if (invoiceReadiness.some((item) => item.warehouseReceipt?.requiresHumanReview)) {
-    // Receipt quantities must not be posted before invoice ↔ PZ/WZ reconciliation.
+  // Check reconciliation and independent AI opinions before preparing
+  // accounting proposals. A failed provider check is not a clean result.
+  const financeAi = await analyzeInvoiceReviews(input.workspaceId, input.documentId);
+  if (financeAi.failed > 0) {
     const { error } = await createServiceSupabaseClient().from("documents")
       .update({ ai_status: "review", review_status: "pending" })
       .eq("workspace_id", input.workspaceId).eq("id", input.documentId);
-    if (error) throw new Error(`Nie udało się oznaczyć wymaganej kontroli magazynowej: ${error.message}`);
+    if (error) throw new Error(`Nie udało się zapisać błędu kontroli Multi-AI: ${error.message}`);
+    throw new Error(`Niekompletna kontrola Multi-AI (${financeAi.failed} nieudanych analiz). Dokument wymaga ponowienia lub decyzji człowieka.`);
   }
-  const [financeAi, accounting] = await Promise.all([
-    analyzeInvoiceReviews(input.workspaceId, input.documentId),
-    runAccountingCopilotForDocument(input.workspaceId, input.documentId, input.actorId)
-  ]);
+  const accounting = await runAccountingCopilotForDocument(input.workspaceId, input.documentId, input.actorId);
+  if (invoiceReadiness.some((item) => item.requiresReview || item.warehouseReceipt?.requiresHumanReview)
+    || financeAi.requiresHuman > 0
+    || accounting.some((item) => item.needsReview)) {
+    const { error } = await createServiceSupabaseClient().from("documents")
+      .update({ ai_status: "review", review_status: "pending" })
+      .eq("workspace_id", input.workspaceId).eq("id", input.documentId);
+    if (error) throw new Error(`Nie udało się oznaczyć decyzji finansowo-magazynowej: ${error.message}`);
+  }
   return { invoiceReadiness, financeAi, accounting };
 }
 
