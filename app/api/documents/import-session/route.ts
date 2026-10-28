@@ -241,7 +241,8 @@ async function buildSummary(session: SessionRow) {
 
   const terminal = counts.processing === 0 && counts.total > 0;
   const nextStatus: SessionRow["status"] = !terminal
-    ? "processing"
+    ? (!session.upload_completed_at && (items ?? []).some((item) => item.upload_status === "pending" || item.upload_status === "failed")
+        ? "uploading" : "processing")
     : counts.error > 0 ? "error"
       : counts.review > 0 ? "review"
         : "complete";
@@ -323,6 +324,38 @@ export async function POST(request: Request) {
       if (!project || project.workspace_id !== workspace.id) return jsonError("Inwestycja nie należy do aktywnej firmy.", 422);
     }
     const sourceModule = normalizeDocumentSourceModule(body.sourceModule);
+    // If the browser stopped during a large upload, reuse its persisted manifest.
+    // The user can reselect the same files; already uploaded documents are never duplicated.
+    const { data: recentSessions, error: recentError } = await db.from("document_import_sessions")
+      .select("id,workspace_id,project_id,source_module,status,expected_files,created_by,upload_completed_at")
+      .eq("workspace_id", workspace.id).eq("created_by", user.id)
+      .in("status", ["uploading", "processing", "error"])
+      .is("upload_completed_at", null)
+      .order("created_at", { ascending: false }).limit(5);
+    if (recentError) return jsonError(`Nie udało się sprawdzić wznowienia importu: ${recentError.message}`, 500);
+    for (const previous of recentSessions ?? []) {
+      if (previous.expected_files !== files.length || previous.project_id !== projectId || previous.source_module !== sourceModule) continue;
+      const { data: previousItems, error: previousError } = await db.from("document_import_session_items")
+        .select("id,ordinal,relative_path,file_name,file_size_bytes,upload_status,document_id,document_version_id")
+        .eq("session_id", previous.id).eq("workspace_id", workspace.id).order("ordinal", { ascending: true });
+      if (previousError) return jsonError(`Nie udało się sprawdzić plików importu: ${previousError.message}`, 500);
+      if (previousItems?.length !== files.length) continue;
+      const sameManifest = previousItems.every((item, index) => {
+        const file = files[index];
+        const fileName = String(file.fileName ?? "").trim().slice(0, 500) || `Plik ${index + 1}`;
+        return item.ordinal === index + 1
+          && item.file_name === fileName
+          && item.relative_path === cleanPath(file.relativePath, fileName)
+          && Number(item.file_size_bytes) === Math.max(0, Math.round(Number(file.fileSize) || 0));
+      });
+      if (!sameManifest) continue;
+      if (previousItems.every((item) => item.upload_status === "uploaded" && item.document_version_id)) continue;
+      return NextResponse.json({
+        sessionId: previous.id, resumed: true,
+        items: previousItems.map(({ id, ordinal, upload_status, document_version_id }) =>
+          ({ id, ordinal, uploadStatus: upload_status, uploaded: upload_status === "uploaded" && Boolean(document_version_id) }))
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
     const { data: session, error: sessionError } = await db.from("document_import_sessions").insert({
       workspace_id: workspace.id,
       project_id: projectId,
@@ -351,7 +384,7 @@ export async function POST(request: Request) {
       await db.from("document_import_sessions").delete().eq("id", session.id);
       return jsonError(`Nie udało się utworzyć listy plików sesji: ${itemsError.message}`, 500);
     }
-    return NextResponse.json({ sessionId: session.id, items: insertedItems ?? [] }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ sessionId: session.id, resumed: false, items: insertedItems ?? [] }, { headers: { "Cache-Control": "no-store" } });
   }
 
   if (!body.sessionId) return jsonError("Brakuje identyfikatora sesji.", 400);
@@ -364,7 +397,8 @@ export async function POST(request: Request) {
       upload_status: "failed",
       error_message: String(body.error ?? "Upload nie powiódł się.").slice(0, 1800),
       updated_at: new Date().toISOString()
-    }).eq("id", body.itemId).eq("session_id", session.id).eq("workspace_id", workspace.id);
+    }).eq("id", body.itemId).eq("session_id", session.id).eq("workspace_id", workspace.id)
+      .is("document_version_id", null);
     if (error) return jsonError(`Nie udało się zapisać błędu pliku: ${error.message}`, 500);
     return NextResponse.json({ ok: true });
   }

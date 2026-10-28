@@ -77,7 +77,12 @@ type ImportSessionSummary = {
     error: string | null;
   }>;
 };
-type ImportSessionCreateResponse = { sessionId: string; items: Array<{ id: string; ordinal: number }>; error?: string };
+type ImportSessionCreateResponse = {
+  sessionId: string;
+  resumed?: boolean;
+  items: Array<{ id: string; ordinal: number; uploaded?: boolean; uploadStatus?: "pending" | "uploaded" | "failed" }>;
+  error?: string;
+};
 type ImportSessionResponse = { session: ImportSessionSummary | null; error?: string };
 type UploadCandidate = { file: File; relativePath: string };
 type BrowserFileEntry = {
@@ -271,7 +276,8 @@ export function DocumentUpload({
     candidate: UploadCandidate,
     documentId: string | null,
     contextProjectId: string | null,
-    importSession?: { sessionId: string; itemId: string }
+    importSession?: { sessionId: string; itemId: string },
+    deferAnalysis = false
   ): Promise<UploadOutcome> {
     const { file } = candidate;
     setError(null);
@@ -319,6 +325,13 @@ export function DocumentUpload({
     }
     const completed = await completeResponse.json() as CompleteResponse;
     setRecentDocumentIds((current) => current.includes(completed.documentId) ? current : [completed.documentId, ...current].slice(0, 20));
+
+    // Batch files are already durably queued by complete_document_upload_v2.
+    // Do not block the next upload on up to five minutes of synchronous Gemini work.
+    if (deferAnalysis) {
+      setStatus("Plik zapisany — analiza finansowa i magazynowa działa w kolejce AI");
+      return { invoice: false, invoiceReady: false, invoiceReview: false, aiProviders: 0, aiAnalyzed: 0 };
+    }
 
     if (file.size <= 32 * 1024 * 1024) {
       setStatus("Dokument zapisany — Octopus Brain analizuje i wybiera miejsce docelowe");
@@ -405,6 +418,7 @@ export function DocumentUpload({
     const hasFolderStructure = selectedFiles.some((candidate) => candidate.relativePath.includes("/"));
     let importSessionId: string | null = null;
     const importItems = new Map<number, string>();
+    const alreadyUploaded = new Set<number>();
 
     if (!targetDocumentIdRef.current && workspaceId) {
       try {
@@ -429,7 +443,11 @@ export function DocumentUpload({
         const payload = await response.json().catch(() => ({})) as ImportSessionCreateResponse;
         if (!response.ok || !payload.sessionId) throw new Error(payload.error ?? "Nie udało się utworzyć sesji Batch Import.");
         importSessionId = payload.sessionId;
-        payload.items.forEach((item) => importItems.set(item.ordinal, item.id));
+        payload.items.forEach((item) => {
+          importItems.set(item.ordinal, item.id);
+          if (item.uploaded) alreadyUploaded.add(item.ordinal);
+        });
+        if (payload.resumed) setStatus(`Wznowiono import. ${alreadyUploaded.size} plików jest już zapisanych; pozostałe wyślę bez duplikatów.`);
         setBatchSummary(null);
       } catch (sessionError) {
         setIsUploading(false);
@@ -439,6 +457,10 @@ export function DocumentUpload({
     }
 
     for (const [index, candidate] of selectedFiles.entries()) {
+      if (alreadyUploaded.has(index + 1)) {
+        completed += 1;
+        continue;
+      }
       try {
         setStatus(`Plik ${index + 1} z ${selectedFiles.length}: ${candidate.relativePath}`);
         const sessionItemId = importSessionId ? importItems.get(index + 1) : undefined;
@@ -446,7 +468,8 @@ export function DocumentUpload({
           candidate,
           targetDocumentIdRef.current,
           targetProjectIdRef.current,
-          importSessionId && sessionItemId ? { sessionId: importSessionId, itemId: sessionItemId } : undefined
+          importSessionId && sessionItemId ? { sessionId: importSessionId, itemId: sessionItemId } : undefined,
+          selectedFiles.length > 1
         );
         outcomes.push(outcome);
         completed += 1;

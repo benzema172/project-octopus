@@ -4,14 +4,14 @@ import { processDocumentVersion } from "@/lib/ai/process-document";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
 import { enrichDocumentWithInvestmentRouting, type InvestmentRoutingResult } from "@/lib/ai/investment-document-routing";
 import { geminiRateLimitInfo, geminiRateLimitMessage, millisecondsUntil, wait } from "@/lib/ai/gemini-rate-limit";
-import { analyzeUnifiedDocumentReviewMulti } from "@/lib/ai/multi-ai-core";
-import { runAccountingCopilotForDocument, type AccountingCopilotRun } from "@/lib/ai/accounting-copilot";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { domainForDocumentCategory, hasDomainAccess } from "@/lib/authorization";
 import { processHrDocumentIntake, type HrDocumentIntakeResult } from "@/lib/hr/document-intelligence";
-import { assessDocumentInvoiceReadiness, type InvoiceIntakeAssessment } from "@/lib/finance/invoice-intake-readiness";
 import { normalizeDocumentCategory } from "@/lib/documents/classification";
+import { runInvoiceIntakeChecks, containsInvoiceBusinessDocument, approvedDocumentContainsInvoice, type FinanceAiSummary } from "@/lib/finance/document-invoice-finalization";
+import type { AccountingCopilotRun } from "@/lib/ai/accounting-copilot";
+import type { InvoiceIntakeAssessment } from "@/lib/finance/invoice-intake-readiness";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -22,120 +22,6 @@ type VersionRow = { document_id: string; project_id: string | null; file_name: s
 type DocumentRow = { category: string | null };
 type ApprovedClassification = { category: string; confidence: number | null; rationale: string | null; status: string };
 type TemplateMaterialization = { template_id: string; template_version_id: string; template_status: string };
-type ReviewRow = { id: string };
-type FinanceAiSummary = {
-  analyzed: number;
-  failed: number;
-  maxProviders: number;
-  requiresHuman: number;
-};
-
-type BusinessDocumentPayload = { documentType?: unknown };
-
-function containsInvoiceBusinessDocument(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const payload = value as Record<string, unknown>;
-  const documents = Array.isArray(payload.businessDocuments)
-    ? payload.businessDocuments as BusinessDocumentPayload[]
-    : [];
-  if (documents.some((document) => String(document?.documentType ?? "").trim().toLowerCase() === "invoice")) return true;
-  const single = payload.businessDocument;
-  return Boolean(single && typeof single === "object" && !Array.isArray(single)
-    && String((single as BusinessDocumentPayload).documentType ?? "").trim().toLowerCase() === "invoice");
-}
-
-async function approvedDocumentContainsInvoice(workspaceId: string, versionId: string, category: string) {
-  if (category === "invoice") return true;
-  const db = createServiceSupabaseClient();
-  const { data, error } = await db.from("document_extractions")
-    .select("payload")
-    .eq("workspace_id", workspaceId)
-    .eq("document_version_id", versionId)
-    .eq("extraction_type", "document_context")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<{ payload: Record<string, unknown> | null }>();
-  if (error) throw new Error(`Nie udało się sprawdzić zawartości dokumentu biznesowego: ${error.message}`);
-  return containsInvoiceBusinessDocument(data?.payload);
-}
-
-async function analyzeInvoiceReviews(workspaceId: string, documentId: string): Promise<FinanceAiSummary> {
-  const db = createServiceSupabaseClient();
-  const { data: inboxData, error: inboxError } = await db
-    .from("business_inbox_items")
-    .select("id,invoice_id")
-    .eq("workspace_id", workspaceId)
-    .eq("document_id", documentId)
-    .limit(50);
-  if (inboxError) throw new Error(`Nie udało się pobrać kolejki faktury: ${inboxError.message}`);
-
-  const inboxRows = (inboxData ?? []) as Array<{ id: string; invoice_id: string | null }>;
-  const inboxIds = [...new Set(inboxRows.map((row) => row.id).filter(Boolean))];
-  const invoiceIds = [...new Set(inboxRows.map((row) => row.invoice_id).filter((id): id is string => Boolean(id)))];
-
-  const reviewSets: ReviewRow[][] = [];
-  if (invoiceIds.length) {
-    const { data, error } = await db.from("finance_document_reviews")
-      .select("id")
-      .eq("workspace_id", workspaceId)
-      .eq("status", "open")
-      .in("invoice_id", invoiceIds)
-      .order("created_at", { ascending: true })
-      .limit(20);
-    if (error) throw new Error(`Nie udało się pobrać decyzji faktury: ${error.message}`);
-    reviewSets.push((data ?? []) as ReviewRow[]);
-  }
-  if (inboxIds.length) {
-    const { data, error } = await db.from("finance_document_reviews")
-      .select("id")
-      .eq("workspace_id", workspaceId)
-      .eq("status", "open")
-      .in("business_inbox_item_id", inboxIds)
-      .order("created_at", { ascending: true })
-      .limit(20);
-    if (error) throw new Error(`Nie udało się pobrać decyzji Business Inbox: ${error.message}`);
-    reviewSets.push((data ?? []) as ReviewRow[]);
-  }
-
-  const reviewIds = [...new Set(reviewSets.flat().map((row) => row.id))].slice(0, 4);
-  const results: Array<{ providers: number; requiresHuman: boolean }> = [];
-  let failed = 0;
-
-  for (let offset = 0; offset < reviewIds.length; offset += 2) {
-    const batch = await Promise.allSettled(reviewIds.slice(offset, offset + 2).map(async (reviewId) => {
-      const insight = await analyzeUnifiedDocumentReviewMulti(workspaceId, reviewId);
-      return {
-        providers: insight.multiAi.providers.length,
-        requiresHuman: insight.multiAi.requiresHuman
-      };
-    }));
-    for (const item of batch) {
-      if (item.status === "fulfilled") results.push(item.value);
-      else failed += 1;
-    }
-  }
-
-  return {
-    analyzed: results.length,
-    failed,
-    maxProviders: results.reduce((max, item) => Math.max(max, item.providers), 0),
-    requiresHuman: results.filter((item) => item.requiresHuman).length
-  };
-}
-
-async function runInvoiceIntakeChecks(input: {
-  workspaceId: string;
-  documentId: string;
-  actorId: string;
-}): Promise<{ invoiceReadiness: InvoiceIntakeAssessment[]; financeAi: FinanceAiSummary; accounting: AccountingCopilotRun[] }> {
-  const invoiceReadiness = await assessDocumentInvoiceReadiness(input);
-  const [financeAi, accounting] = await Promise.all([
-    analyzeInvoiceReviews(input.workspaceId, input.documentId),
-    runAccountingCopilotForDocument(input.workspaceId, input.documentId, input.actorId)
-  ]);
-  return { invoiceReadiness, financeAi, accounting };
-}
-
 async function reconcileApprovedDocument(input: {
   workspaceId: string;
   versionId: string;
@@ -365,6 +251,13 @@ export async function POST(request: Request) {
         actorId: user.id
       });
 
+      if (autopilot.failed > 0 || autopilot.status === "partial") {
+        const { error: partialError } = await supabase.from("documents")
+          .update({ ai_status: "review", review_status: "pending" })
+          .eq("workspace_id", workspace.id).eq("id", version.document_id);
+        if (partialError) throw new Error(`Nie udało się oznaczyć niepełnego routingu: ${partialError.message}`);
+      }
+
       let hrIntake: HrDocumentIntakeResult | null = null;
       if (analysis.effectiveCategory === "hr") {
         try { hrIntake = await processHrDocumentIntake({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id }); }
@@ -387,6 +280,10 @@ export async function POST(request: Request) {
         } catch (error) {
           invoiceCheckError = error instanceof Error ? error.message : "Kontrola faktury nie powiodła się.";
           console.error("[brain/process] invoice readiness failed", error);
+          const { error: reviewError } = await supabase.from("documents")
+            .update({ ai_status: "review", review_status: "pending" })
+            .eq("workspace_id", workspace.id).eq("id", version.document_id);
+          if (reviewError) console.error("[brain/process] failed to flag finance review", reviewError);
         }
       }
 
