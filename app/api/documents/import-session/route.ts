@@ -4,6 +4,7 @@ import { getProjectForUser } from "@/lib/data/projects";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
 import { normalizeDocumentSourceModule } from "@/lib/documents/source-module";
 import { matchesImportManifest, fullyUploadedImport, normalizeImportSha256 } from "@/lib/documents/import-manifest-integrity";
+import { stableSessionUuid } from "@/lib/documents/import-session-identities";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -377,11 +378,50 @@ export async function POST(request: Request) {
         sha256: file.sha256 ?? ""
       })));
       if (!sameManifest) continue;
-      // Even if all objects were uploaded, the tab may have closed before
-      // "finalize". Resume this session and finalize without re-uploading.
+      // Recover a document persisted by complete_document_upload_v2 just before
+      // the browser disconnected, before session-item linkage. Deterministic
+      // IDs allow verification WITHOUT inserting another document/version.
+      let recoveredItems = previousItems;
+      const detached = previousItems.filter((item) => !item.document_version_id);
+      if (detached.length) {
+        const expectedByVersion = new Map(detached.map((item) => [
+          stableSessionUuid(workspace.id, item.id, "version"), item
+        ]));
+        const { data: saved, error: savedError } = await db.from("document_versions")
+          .select("id,document_id,sha256,file_name,file_size_bytes")
+          .in("id", [...expectedByVersion.keys()])
+          .returns<Array<{ id: string; document_id: string; sha256: string | null; file_name: string; file_size_bytes: number }>>();
+        if (savedError) return jsonError(`Nie udało się zweryfikować wcześniejszych zapisów: ${savedError.message}`, 500);
+        for (const version of saved ?? []) {
+          const item = expectedByVersion.get(version.id);
+          if (!item) continue;
+          if (version.document_id !== stableSessionUuid(workspace.id, item.id, "document")
+              || version.sha256 !== item.file_sha256
+              || version.file_name !== item.file_name
+              || Number(version.file_size_bytes) !== Number(item.file_size_bytes)) {
+            return jsonError("Zapisana wcześniej wersja nie jest zgodna z manifestem SHA-256. Wymagana kontrola, bez nadpisania.", 409);
+          }
+          const { error: linkError } = await db.from("document_import_session_items")
+            .update({ document_id: version.document_id, document_version_id: version.id,
+              upload_status: "uploaded", error_message: null, updated_at: new Date().toISOString() })
+            .eq("id", item.id).eq("session_id", previous.id).eq("workspace_id", workspace.id)
+            .is("document_version_id", null);
+          if (linkError) return jsonError(`Nie udało się odtworzyć powiązania dokumentu: ${linkError.message}`, 500);
+        }
+        if ((saved ?? []).length) {
+          const { data: refreshedItems, error: refreshError } = await db
+            .from("document_import_session_items")
+            .select("id,ordinal,relative_path,file_name,file_size_bytes,file_sha256,upload_status,document_id,document_version_id")
+            .eq("session_id", previous.id).eq("workspace_id", workspace.id)
+            .order("ordinal", { ascending: true });
+          if (refreshError || !refreshedItems) return jsonError(`Nie udało się odświeżyć wznowienia: ${refreshError?.message ?? "brak danych"}`, 500);
+          recoveredItems = refreshedItems;
+        }
+      }
+      // Also resume fully uploaded but not finalized sessions.
       return NextResponse.json({
         sessionId: previous.id, resumed: true,
-        items: previousItems.map(({ id, ordinal, upload_status, document_version_id }) =>
+        items: recoveredItems.map(({ id, ordinal, upload_status, document_version_id }) =>
           ({ id, ordinal, uploadStatus: upload_status, uploaded: upload_status === "uploaded" && Boolean(document_version_id) }))
       }, { headers: { "Cache-Control": "no-store" } });
     }
