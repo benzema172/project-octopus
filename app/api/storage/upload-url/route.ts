@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { normalizeImportSha256 } from "@/lib/documents/import-manifest-integrity";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NextResponse } from "next/server";
@@ -29,6 +30,7 @@ type UploadUrlBody = {
   fileName?: string;
   mimeType?: string;
   fileSize?: number;
+  sha256?: string;
   category?: string;
   categoryLocked?: boolean;
   sourceModule?: string;
@@ -122,16 +124,19 @@ export async function POST(request: Request) {
     const supabase = createServiceSupabaseClient();
     const { data: importItem, error: importItemError } = await supabase
       .from("document_import_session_items")
-      .select("id,session_id,workspace_id,document_id,document_version_id,file_name,file_size_bytes,document_import_sessions!inner(created_by)")
+      .select("id,session_id,workspace_id,document_id,document_version_id,file_name,file_size_bytes,file_sha256,document_import_sessions!inner(created_by)")
       .eq("id", importSessionItemId)
       .eq("session_id", importSessionId)
       .eq("workspace_id", workspace.id)
       .eq("document_import_sessions.created_by", user.id)
-      .maybeSingle<{ id: string; session_id: string; workspace_id: string; document_id: string | null; document_version_id: string | null; file_name: string; file_size_bytes: number }>();
+      .maybeSingle<{ id: string; session_id: string; workspace_id: string; document_id: string | null; document_version_id: string | null; file_name: string; file_size_bytes: number; file_sha256: string | null }>();
     if (importItemError || !importItem) return jsonError("Nie znaleziono pliku w aktywnej sesji importu.", 422);
     if (importItem.document_id || importItem.document_version_id) return jsonError("Plik tej sesji został już powiązany z dokumentem.", 409);
     if (importItem.file_name !== fileName || Number(importItem.file_size_bytes) !== fileSize) {
       return jsonError("Plik nie odpowiada zapisanej liście sesji importu.", 422);
+    }
+    if (!normalizeImportSha256(body.sha256) || normalizeImportSha256(body.sha256) !== importItem.file_sha256) {
+      return jsonError("Suma SHA-256 pliku nie zgadza się z zapisaną sesją. Odmowa nadpisania lub powielenia.", 409);
     }
   }
 
