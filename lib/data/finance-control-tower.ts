@@ -44,7 +44,7 @@ async function rpc<T>(name: string, args: Record<string, unknown>, fallback: T):
 
 export async function getFinanceControlTower(workspaceId: string): Promise<FinanceControlData> {
   const db = createServiceSupabaseClient();
-  const [summaryRaw, cashflowRaw, projectsRaw, actionsRaw, bankResult, matchesResult, scenariosResult, inboxResult, procurementResult] = await Promise.all([
+  const [summaryRaw, cashflowRaw, projectsRaw, actionsRaw, bankResult, matchesResult, scenariosResult, inboxResult, procurementResult, projectResult] = await Promise.all([
     rpc<Row>("get_finance_control_tower", { p_workspace_id: workspaceId }, {}),
     rpc<Row[]>("get_finance_cashflow_13w", { p_workspace_id: workspaceId }, []),
     rpc<Row[]>("get_project_financial_health", { p_workspace_id: workspaceId }, []),
@@ -53,7 +53,8 @@ export async function getFinanceControlTower(workspaceId: string): Promise<Finan
     db.from("finance_payment_matches").select("id,bank_transaction_id,invoice_id,match_score,status,reasons,created_at").eq("workspace_id", workspaceId).eq("status", "suggested").order("match_score", { ascending: false }).limit(50),
     db.from("finance_scenarios").select("id,name,scenario_type,horizon_weeks,assumptions,status,created_at").eq("workspace_id", workspaceId).eq("status", "active").order("created_at", { ascending: false }).limit(30),
     db.from("business_inbox_items").select("id,status,received_at").eq("workspace_id", workspaceId).eq("source_channel", "ksef").order("received_at", { ascending: false }).limit(100),
-    db.from("procurement_matches").select("id,invoice_line_id,purchase_order_line_id,receipt_line_id,boq_item_id,status,match_confidence,updated_at").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(50)
+    db.from("procurement_matches").select("id,invoice_line_id,purchase_order_line_id,receipt_line_id,boq_item_id,status,match_confidence,updated_at").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(50),
+    db.from("projects").select("id,name").eq("workspace_id", workspaceId).limit(500)
   ]);
 
   // Do not display empty/zero KPIs when a source failed to respond.
@@ -62,7 +63,8 @@ export async function getFinanceControlTower(workspaceId: string): Promise<Finan
     ["dopasowań płatności", matchesResult],
     ["scenariuszy finansowych", scenariosResult],
     ["dokumentów KSeF", inboxResult],
-    ["powiązań zakupowych", procurementResult]
+    ["powiązań zakupowych", procurementResult],
+    ["inwestycji", projectResult]
   ] as const) {
     if (result.error) throw new Error(`Nie udało się pobrać ${label}: ${result.error.message}`);
   }
@@ -73,20 +75,18 @@ export async function getFinanceControlTower(workspaceId: string): Promise<Finan
   const procurementRows = (procurementResult.data ?? []) as Row[];
   const invoiceLineIds = [...new Set(procurementRows.map((row) => text(row.invoice_line_id)).filter(Boolean))];
 
-  const [invoiceResult, txResult, lineResult, allocationResult, projectResult] = await Promise.all([
+  const [invoiceResult, txResult, lineResult, allocationResult] = await Promise.all([
     invoiceIds.length ? db.from("invoices").select("id,invoice_number,gross_amount").eq("workspace_id", workspaceId).in("id", invoiceIds) : Promise.resolve({ data: [] as Row[] }),
     txIds.length ? db.from("finance_bank_transactions").select("id,amount,title").eq("workspace_id", workspaceId).in("id", txIds) : Promise.resolve({ data: [] as Row[] }),
     invoiceLineIds.length ? db.from("invoice_lines").select("id,invoice_id,description").eq("workspace_id", workspaceId).in("id", invoiceLineIds) : Promise.resolve({ data: [] as Row[] }),
-    invoiceLineIds.length ? db.from("financial_allocations").select("source_line_id,project_id,status").eq("workspace_id", workspaceId).eq("source_type", "invoice").in("source_line_id", invoiceLineIds) : Promise.resolve({ data: [] as Row[] }),
-    db.from("projects").select("id,name").eq("workspace_id", workspaceId).limit(500)
+    invoiceLineIds.length ? db.from("financial_allocations").select("source_line_id,project_id,status").eq("workspace_id", workspaceId).eq("source_type", "invoice").in("source_line_id", invoiceLineIds) : Promise.resolve({ data: [] as Row[] })
   ]);
 
   for (const [label, result] of [
     ["faktur", invoiceResult],
     ["transakcji", txResult],
     ["pozycji faktur", lineResult],
-    ["alokacji kosztów", allocationResult],
-    ["inwestycji", projectResult]
+    ["alokacji kosztów", allocationResult]
   ] as const) {
     if ("error" in result && result.error) {
       throw new Error(`Nie udało się pobrać ${label}: ${result.error.message}`);
