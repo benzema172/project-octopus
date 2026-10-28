@@ -298,6 +298,7 @@ export function DocumentUpload({
         fileName: file.name,
         mimeType,
         fileSize: file.size,
+        sha256: digest,
         category: uploadCategory || undefined,
         categoryLocked: Boolean(uploadCategory),
         sourceModule: sourceModule ?? undefined,
