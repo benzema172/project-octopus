@@ -118,8 +118,7 @@ begin
     return 'blocked:'||sqlerrm;
   end;
 end;
-$function$
-
+$function$;
 
 -- Mark exact same-type document identity as a candidate without discarding
 -- either source file. The review remains on hold until a human resolves it.
