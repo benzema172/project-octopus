@@ -377,7 +377,8 @@ export async function POST(request: Request) {
         sha256: file.sha256 ?? ""
       })));
       if (!sameManifest) continue;
-      if (fullyUploadedImport(previousItems, files.length)) continue;
+      // Even if all objects were uploaded, the tab may have closed before
+      // "finalize". Resume this session and finalize without re-uploading.
       return NextResponse.json({
         sessionId: previous.id, resumed: true,
         items: previousItems.map(({ id, ordinal, upload_status, document_version_id }) =>
