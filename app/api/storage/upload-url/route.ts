@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { stableSessionUuid } from "@/lib/documents/import-session-identities";
 import { normalizeImportSha256 } from "@/lib/documents/import-manifest-integrity";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -43,15 +44,6 @@ type UploadUrlBody = {
   importSessionItemId?: string;
 };
 
-// An import-session item owns a stable document/version identity. Re-selecting
-// the same batch after a browser disconnect therefore cannot create duplicates.
-function stableSessionUuid(workspaceId: string, itemId: string, kind: "document" | "version") {
-  const bytes = createHash("sha256").update(`octopus-import-v1:${workspaceId}:${itemId}:${kind}`).digest();
-  bytes[6] = (bytes[6] & 0x0f) | 0x50;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = bytes.subarray(0, 16).toString("hex");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
-}
 
 function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
