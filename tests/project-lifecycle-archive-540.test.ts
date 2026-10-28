@@ -30,6 +30,21 @@ describe("Project lifecycle & archive core 5.5", () => {
     expect(control).toContain('label: "Archiwum"');
   });
 
+  it("opens status selection in a modal rather than a dropdown overlapping the dashboard", () => {
+    const control = source("components/projects/project-status-control-550.tsx");
+    const css = source("components/projects/project-status-control-550.module.css");
+    expect(control).toContain('aria-haspopup="dialog"');
+    expect(control).toContain("dialogRef.current?.showModal()");
+    expect(control).toContain("<dialog");
+    expect(control).toContain('aria-label="Zmień status inwestycji"');
+    expect(control).toContain("dialogRef.current?.close()");
+    expect(control).not.toContain("<details");
+    expect(css).toContain(".dialog::backdrop");
+    expect(css).toContain("position: fixed");
+    expect(css).toContain("max-height: min(540px, calc(100dvh - 32px))");
+    expect(css).toContain("@media (max-width: 600px)");
+  });
+
   it("closes current HR allocations when a project becomes completed or archived", () => {
     const migration = source("supabase/migrations/20260909134000_project_status_direct_control_550.sql");
     expect(migration).toContain("update public.assignments");

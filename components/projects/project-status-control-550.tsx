@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, Check, ChevronDown, CirclePause, CirclePlay, LoaderCircle, RotateCcw } from "lucide-react";
+import { Archive, Check, ChevronDown, CirclePause, CirclePlay, LoaderCircle, RotateCcw, X } from "lucide-react";
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./project-status-control-550.module.css";
@@ -61,7 +61,7 @@ function confirmation(current: string, next: string) {
 
 export function ProjectStatusControl550({ projectId, status, canManage, variant = "header" }: Props) {
   const router = useRouter();
-  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const label = LABELS[status] ?? status;
@@ -85,7 +85,7 @@ export function ProjectStatusControl550({ projectId, status, canManage, variant 
         });
         const result = await response.json().catch(() => ({})) as { error?: string };
         if (!response.ok) throw new Error(result.error ?? "Nie udało się zmienić statusu inwestycji.");
-        if (detailsRef.current) detailsRef.current.open = false;
+        dialogRef.current?.close();
         router.refresh();
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Nie udało się zmienić statusu inwestycji.");
@@ -94,28 +94,58 @@ export function ProjectStatusControl550({ projectId, status, canManage, variant 
   };
 
   return <div className={`${styles.root} ${variant === "portfolio" ? styles.portfolio : styles.header}`} data-project-status-control="550">
-    <details ref={detailsRef}>
-      <summary className={`${styles.trigger} ${globalClass}`} title="Kliknij, aby zmienić status inwestycji">
-        {pending ? <LoaderCircle className={styles.spin} size={13} aria-hidden="true" /> : iconFor(status)}
-        <span>{label}</span>
-        <ChevronDown size={12} aria-hidden="true" />
-      </summary>
-      <div className={styles.menu} role="menu" aria-label="Zmień status inwestycji">
-        <div className={styles.menuTitle}>Zmień status inwestycji</div>
-        {OPTIONS.map((option) => <button
-          type="button"
-          key={option.value}
-          role="menuitem"
-          className={option.value === status ? styles.activeOption : undefined}
-          disabled={pending || option.value === status}
-          onClick={() => changeStatus(option.value)}
-        >
-          <span className={styles.optionIcon}>{option.value === status ? <Check size={14} /> : option.value === "archived" ? <Archive size={14} /> : option.value === "paused" ? <CirclePause size={14} /> : option.value === "completed" ? <Check size={14} /> : <CirclePlay size={14} />}</span>
-          <span><strong>{option.label}</strong><small>{option.description}</small></span>
-          {status === "archived" && option.value === "completed" ? <RotateCcw size={13} aria-label="Przywróć" /> : null}
-        </button>)}
+    <button
+      type="button"
+      className={`${styles.trigger} ${globalClass}`}
+      title="Kliknij, aby zmienić status inwestycji"
+      aria-haspopup="dialog"
+      aria-label={`Status inwestycji: ${label}. Zmień status.`}
+      disabled={pending}
+      onClick={() => {
+        setError(null);
+        dialogRef.current?.showModal();
+      }}
+    >
+      {pending ? <LoaderCircle className={styles.spin} size={13} aria-hidden="true" /> : iconFor(status)}
+      <span>{label}</span>
+      <ChevronDown size={12} aria-hidden="true" />
+    </button>
+    <dialog
+      ref={dialogRef}
+      className={styles.dialog}
+      aria-label="Zmień status inwestycji"
+      onClick={(event) => {
+        // Clicking the backdrop closes the modal, not a status option.
+        if (event.target === event.currentTarget) dialogRef.current?.close();
+      }}
+    >
+      <div className={styles.dialogContent}>
+        <div className={styles.dialogHeader}>
+          <div>
+            <span className={styles.dialogEyebrow}>Status realizacji</span>
+            <h2>Zmień status inwestycji</h2>
+            <p>Obecnie: <strong>{label}</strong></p>
+          </div>
+          <button type="button" className={styles.closeButton} onClick={() => dialogRef.current?.close()} aria-label="Zamknij okno zmiany statusu">
+            <X size={17} aria-hidden="true" />
+          </button>
+        </div>
+        <div className={styles.optionList}>
+          {OPTIONS.map((option) => <button
+            type="button"
+            key={option.value}
+            className={`${styles.optionButton} ${option.value === status ? styles.activeOption : ""}`}
+            aria-pressed={option.value === status}
+            disabled={pending || option.value === status}
+            onClick={() => changeStatus(option.value)}
+          >
+            <span className={styles.optionIcon}>{option.value === status ? <Check size={14} /> : option.value === "archived" ? <Archive size={14} /> : option.value === "paused" ? <CirclePause size={14} /> : option.value === "completed" ? <Check size={14} /> : <CirclePlay size={14} />}</span>
+            <span className={styles.optionText}><strong>{option.label}</strong><small>{option.description}</small></span>
+            {status === "archived" && option.value === "completed" ? <RotateCcw size={13} aria-label="Przywróć" /> : null}
+          </button>)}
+        </div>
+        {error ? <p className={styles.error} role="alert">{error}</p> : null}
       </div>
-    </details>
-    {error ? <span className={styles.error} role="alert">{error}</span> : null}
+    </dialog>
   </div>;
 }
