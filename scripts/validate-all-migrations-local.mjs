@@ -21,6 +21,44 @@ async function prepareDatabase(database) {
     create role anon nologin;
     create role authenticated nologin;
     create role service_role nologin;
+    -- pg_cron is a managed Supabase extension unavailable in PGlite.
+    -- Model only its catalog and scheduler interface in this isolated test DB.
+    -- We still execute the complete production migrations; no SQL is skipped.
+    create schema cron;
+    create table cron.job (
+      jobid bigint generated always as identity primary key,
+      jobname text unique not null,
+      active boolean not null default false,
+      command text
+    );
+    create table cron.job_run_details (start_time timestamptz not null default now());
+    insert into cron.job(jobname) values
+      ('octopus-background-ai-queue-132'),
+      ('octopus-finance-ai-copilot-200');
+    create function cron.alter_job(
+      job_id bigint,
+      schedule text default null,
+      command text default null,
+      database text default null,
+      username text default null,
+      active boolean default null
+    ) returns void language plpgsql as $cron_stub$
+    begin
+      update cron.job j set active=coalesce(alter_job.active,j.active),
+        command=coalesce(alter_job.command,j.command) where j.jobid=job_id;
+      if not found then raise exception 'Unknown mock cron job id %', job_id; end if;
+    end;
+    $cron_stub$;
+    create function cron.schedule(job_name text, schedule text, command text)
+    returns bigint language plpgsql as $cron_stub$
+    declare v_id bigint;
+    begin
+      insert into cron.job(jobname,command,active) values(job_name,command,true)
+      on conflict(jobname) do update set command=excluded.command,active=true
+      returning jobid into v_id;
+      return v_id;
+    end;
+    $cron_stub$;
   `);
 }
 
