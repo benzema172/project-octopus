@@ -4,6 +4,7 @@ import { findExistingExactDuplicate } from "@/lib/documents/exact-duplicate-guar
 import { runInvoiceIntakeChecks, containsInvoiceBusinessDocument, approvedDocumentContainsInvoice } from "@/lib/finance/document-invoice-finalization";
 import { recordDocumentPipelineStage } from "@/lib/documents/pipeline-stages";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
+import { safeProjectRoutingTarget } from "@/lib/ai/project-matcher";
 import { recordPipelineOutcome, type FinancialPipelineChecks } from "@/lib/documents/pipeline-outcome";
 import { enrichDocumentWithInvestmentRouting } from "@/lib/ai/investment-document-routing";
 import { geminiRateLimitInfo, geminiRateLimitMessage } from "@/lib/ai/gemini-rate-limit";
@@ -120,7 +121,7 @@ export async function POST(request: Request) {
         workspaceId: workspace.id, documentId: document.id,
         versionId: document.current_version_id
       });
-      const routingProjectId = document.project_id ?? analysis.proposedProjectId ?? null;
+      const routingProjectId = safeProjectRoutingTarget(document.project_id,analysis.proposedProjectId,analysis.projectMatch);
       let routingErrorMessage: string | null = null;
       if (routingProjectId && !exactDuplicate && analysis.confidence >= 0.82) {
         try {
