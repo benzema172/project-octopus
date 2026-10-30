@@ -368,9 +368,19 @@ export async function analyzeUnifiedDocumentReviewMulti(workspaceId: string, rev
           !base.hardDuplicateEvidence ? "Brak potwierdzonej zgodności identyfikatorów faktury." : "Za mało niezależnych, zgodnych opinii dostawców AI."].slice(0, 10),
         anomalies: [...candidateConsensus.anomalies, "Wymagana ręczna kontrola duplikatu."].slice(0, 8)
       }
-    : candidateConsensus;
+    : (text(context.review.review_type) === "project_assignment" && shouldEscalate
+        && providerFamilies.size < 2 && candidateConsensus.recommendation === "assign_project"
+      ? {
+          ...candidateConsensus,
+          recommendation: "manual_review" as UnifiedAiRecommendation,
+          recommendedProjectId: null,
+          requiresHuman: true,
+          confidence: Math.min(0.6,candidateConsensus.confidence),
+          summary: "Brak niezależnej kontroli drugiego dostawcy AI dla niepewnego przypisania inwestycji."
+        } : candidateConsensus);
   const promptHash = createHash("sha256").update(compactJson(safeContext(context), 40000)).digest("hex");
-  await Promise.all(votes.map((vote) => persistRun(workspaceId, reviewId, base.id, vote, promptHash).catch(() => undefined)));
+  // A model decision without persisted evidence cannot be counted as verified.
+  await Promise.all(votes.map((vote) => persistRun(workspaceId, reviewId, base.id, vote, promptHash)));
 
   const providers = votes.map((vote) => ({ provider: vote.provider, model: vote.model, recommendation: vote.recommendation, projectId: vote.recommendedProjectId, confidence: vote.confidence, riskScore: vote.riskScore, responseMs: vote.latencyMs }));
   const db = createServiceSupabaseClient();
@@ -392,7 +402,7 @@ export async function analyzeUnifiedDocumentReviewMulti(workspaceId: string, rev
   }).eq("workspace_id", workspaceId).eq("id", base.id).eq("status", "active");
   if (updateError) throw new Error(`Nie udało się zapisać konsensusu Multi-AI: ${updateError.message}`);
 
-  await db.from("ai_consensus_events").insert({
+  const { error: consensusAuditError } = await db.from("ai_consensus_events").insert({
     workspace_id: workspaceId,
     review_id: reviewId,
     insight_id: base.id,
@@ -405,6 +415,7 @@ export async function analyzeUnifiedDocumentReviewMulti(workspaceId: string, rev
     providers,
     summary: selected.summary
   });
+  if (consensusAuditError) throw new Error(`Nie udało się zapisać audytu konsensusu AI: ${consensusAuditError.message}`);
 
   return {
     ...base,
