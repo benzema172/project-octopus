@@ -8,7 +8,7 @@ create index if not exists idx_document_warehouse_reconciliations_invoice_fk_202
 create index if not exists idx_document_warehouse_reconciliations_review_fk_20261030
   on public.document_warehouse_reconciliations(warehouse_review_id);
 create index if not exists idx_document_versions_workspace_sha256_20261030
-  on public.document_versions(workspace_id,sha256)
+  on public.document_versions(sha256,document_id)
   where sha256 is not null;
 create or replace function public.auto_assign_fuel_receipt_by_registration_20261030(
   p_workspace_id uuid,p_document_id uuid
@@ -44,7 +44,9 @@ begin
   -- under the same lock, so two concurrent uploads cannot both pass the gate.
   perform pg_advisory_xact_lock(hashtextextended(p_workspace_id::text, 20261030));
   select v.sha256 into v_hash from public.document_versions v
-    where v.document_id=p_document_id and v.workspace_id=p_workspace_id
+    join public.documents source_document on source_document.id=v.document_id
+       and source_document.workspace_id=p_workspace_id
+    where v.document_id=p_document_id
     order by v.version_number desc limit 1;
   if v_hash is null or length(v_hash)<>64 then
     return jsonb_build_object('needsReview',true,'reason','missing_source_hash');
@@ -78,10 +80,11 @@ begin
   -- Same bytes under a different document ID are not a new purchase.
   if exists (
     select 1 from public.document_versions other_version
+    join public.documents original_document on original_document.id=other_version.document_id
+      and original_document.workspace_id=p_workspace_id
     join public.fuel_entries existing on existing.source_document_id=other_version.document_id
       and existing.workspace_id=p_workspace_id
-    where other_version.workspace_id=p_workspace_id
-      and other_version.document_id<>p_document_id
+    where other_version.document_id<>p_document_id
       and other_version.sha256=v_hash
   ) then return jsonb_build_object('needsReview',true,'reason','duplicate_source_sha256'); end if;
 
