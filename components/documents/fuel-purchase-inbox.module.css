@@ -1,0 +1,21 @@
+.root{border:1px solid #dde3ee;border-radius:14px;background:#fff;padding:13px 14px;display:grid;gap:10px;min-width:0}
+.heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.label{display:flex;align-items:center;gap:9px;color:#344d83}
+.label>svg{padding:6px;width:32px;height:32px;border-radius:9px;background:#edf3ff}
+.label>div{display:grid;gap:2px}.label strong{font-size:.84rem;color:#243347}.label small{font-size:.66rem;color:#728096}
+.actions{display:flex;align-items:center;gap:8px}.count{font-size:.67rem;font-weight:700;color:#6a539e;background:#f4efff;border-radius:9px;padding:6px 9px}
+.actions button,.rowActions button{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:30px;border:1px solid #d5dbe8;border-radius:8px;padding:5px 9px;cursor:pointer;background:#fff;color:#374860;font-size:.69rem}
+.actions button:disabled,.rowActions button:disabled{opacity:.5;cursor:not-allowed}
+.scroll{overflow-x:auto;min-width:0}.table{width:100%;border-collapse:collapse;min-width:850px;text-align:left}
+.table th{background:#f6f8fd;color:#69758a;font-size:.62rem;font-weight:800;padding:9px 8px;white-space:nowrap}
+.table td{padding:8px;border-top:1px solid #eef0f5;vertical-align:middle;font-size:.7rem;color:#384457}
+.table td strong,.table td span,.table td small{display:block}.table td span{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6a7487;font-size:.67rem;margin-top:2px}.table td small{font-size:.6rem;color:#929baa;margin-top:2px}
+.table input,.table select{border:1px solid #d8dfea;border-radius:8px;height:34px;padding:5px 7px;background:#fff;color:#29374e;font-size:.7rem;max-width:100%}
+.table input{width:95px}.table select{min-width:165px;max-width:225px}
+.rowActions{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.rowActions .assign{background:#edf8f3;color:#17754b;border-color:#bce1cc;font-weight:700}
+.rowActions .ignore{color:#7c6472}
+.empty{font-size:.68rem;color:#7b8797;margin:0;padding:4px 0}
+.hint{font-size:.64rem;color:#758196;margin:0;line-height:1.5}
+.error{color:#b91c1c;font-size:.7rem;margin:0}.success{color:#13744c;font-size:.7rem;margin:0}
+@media(max-width:700px){.root{padding:11px}.heading{align-items:flex-start}.table{min-width:790px}}
