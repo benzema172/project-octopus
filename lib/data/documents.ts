@@ -219,7 +219,9 @@ function outcomeForFlow(stage: DocumentFlowStage, flow: FlowRow) {
   if ((flow.published_count ?? 0) > 0) return `${flow.published_count} ${flow.published_count === 1 ? "wynik zapisany" : "wyniki zapisane"} w module docelowym`;
   if ((flow.proposal_count ?? 0) > 0) return `${flow.proposal_count} ${flow.proposal_count === 1 ? "propozycja czeka" : "propozycje czekają"} na decyzję`;
   if (stage === "error") return "Błąd przetwarzania · wymaga reakcji";
-  if (stage === "processing") return "Analiza i routing są w toku";
+  if (stage === "processing") return flow.ai_status === "queued"
+    ? "Dokument oczekuje w kolejce analizy AI"
+    : "Analiza i routing są w toku";
   if (stage === "review") return "Wymaga decyzji człowieka";
   if (stage === "classified") return "Rozpoznano · routing oczekuje na wynik";
   return "Plik zapisany · oczekuje na analizę";

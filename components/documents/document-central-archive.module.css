@@ -365,3 +365,5 @@
 .rowInline:hover{background:transparent}
 .rowInline .rowState{margin-left:6px}
 @media(max-width:680px){.rowInline{padding-bottom:4px}.rowInline .rowState>small{display:none}.rowInline .rowBody{gap:5px;flex-wrap:wrap}.rowInline .rowBody strong{max-width:100%}}
+
+.stageQueued { background:#eef1ff; color:#4c559a; }

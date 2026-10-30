@@ -103,6 +103,9 @@ function requiresReview(document: DocumentSummary) {
 }
 
 function stageLabel(document: DocumentSummary) {
+  const aiStatus = String(document.ai_status ?? "").toLowerCase();
+  if (aiStatus === "queued") return "Oczekuje na AI";
+  if (aiStatus === "running" || aiStatus === "processing") return "Analiza w toku";
   const stage = document.flow?.stage;
   if (stage === "ready") return "Gotowe";
   if (stage === "review") return "Do weryfikacji";
@@ -110,6 +113,13 @@ function stageLabel(document: DocumentSummary) {
   if (stage === "processing") return "Analiza w toku";
   if (stage === "error") return "Błąd AI";
   return "Wgrano";
+}
+
+function displayAiCategory(document: DocumentSummary) {
+  const status = String(document.ai_status ?? "").toLowerCase();
+  if (status === "queued") return "Nie sklasyfikowano · czeka na AI";
+  if (status === "running" || status === "processing") return "Klasyfikacja AI trwa";
+  return documentCategoryLabel(document.flow?.category ?? document.category);
 }
 
 function formatBytes(bytes: number | null | undefined) {
@@ -173,6 +183,18 @@ export function DocumentCentralArchive({
   const insightByDocument = useMemo(() => new Map(insights.map((insight) => [insight.documentId, insight])), [insights]);
   const reviewByDocument = useMemo(() => new Map(reviewItems.map((item) => [item.id, item])), [reviewItems]);
   const filteredDocuments = documents;
+  const hasPendingAi = documents.some((item) =>
+    ["queued","running","processing"].includes(String(item.ai_status ?? "").toLowerCase())
+  );
+  useEffect(() => {
+    if (!hasPendingAi || tab === "trash") return;
+    // RSC document props do not update merely because import-session polling
+    // did. Refresh only on visible tabs and only while unfinished AI exists.
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") router.refresh();
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [hasPendingAi, router, tab]);
 
   async function restoreDocument(document: DocumentSummary) {
     setRestoreError(null);
@@ -290,10 +312,10 @@ export function DocumentCentralArchive({
                         <span className={styles.fileIcon}><FileText size={16} aria-hidden="true" /></span>
                         <span className={styles.rowBody}>
                           <strong>{document.name}</strong>
-                          <small>{document.project_id ? projectNames.get(document.project_id) ?? "Inwestycja" : MODULE_LABELS[moduleId]} · {documentCategoryLabel(document.flow?.category ?? document.category)}</small>
+                          <small>{document.project_id ? projectNames.get(document.project_id) ?? "Inwestycja" : MODULE_LABELS[moduleId]} · {displayAiCategory(document)}</small>
                         </span>
                         <span className={styles.rowState}>
-                          <span className={`${styles.stage} ${isReview ? styles.stageReview : document.flow?.stage === "error" ? styles.stageError : document.flow?.stage === "ready" ? styles.stageReady : ""}`}>{stageLabel(document)}</span>
+                          <span className={`${styles.stage} ${isReview ? styles.stageReview : document.ai_status === "queued" ? styles.stageQueued : document.flow?.stage === "error" ? styles.stageError : document.flow?.stage === "ready" ? styles.stageReady : ""}`}>{stageLabel(document)}</span>
                           <small>{document.updated_at ? new Date(document.updated_at).toLocaleDateString("pl-PL") : ""}</small>
                           {isSelected ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
                         </span>
@@ -335,7 +357,7 @@ export function DocumentCentralArchive({
                   ) : null}
 
                   <div className={styles.metaGrid}>
-                    <div><span>Kategoria AI</span><strong>{documentCategoryLabel(selected.flow?.category ?? selected.category)}</strong></div>
+                    <div><span>Kategoria AI</span><strong>{displayAiCategory(selected)}</strong></div>
                     <div><span>Pewność</span><strong>{confidence(selected.flow?.confidence ?? selected.ai_confidence)}</strong></div>
                     <div><span>Wersja</span><strong>{selectedVersion ? `v${selectedVersion.version_number}` : "—"}</strong></div>
                     <div><span>Rozmiar</span><strong>{formatBytes(selectedVersion?.file_size_bytes)}</strong></div>
