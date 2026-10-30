@@ -29,7 +29,9 @@ describe("Project Octopus 1.2.1 reliability regressions", () => {
     expect(worker).toContain("user?.id ?? sourceVersion.uploaded_by");
     expect(worker).toContain("enrichDocumentWithInvestmentRouting");
     expect(worker).toContain("applyDocumentAutopilot");
-    expect(worker).toContain("projectId: sourceVersion.project_id ?? analysis.proposedProjectId");
+    expect(worker).toContain("safeProjectRoutingTarget(sourceVersion.project_id,analysis.proposedProjectId,analysis.projectMatch)");
+    expect(worker).toContain("projectId: routingProjectId");
+    expect(worker).not.toContain("projectId: sourceVersion.project_id ?? analysis.proposedProjectId");
   });
 
   it("keeps uploaded_by in the database schema for cron-worker attribution", () => {

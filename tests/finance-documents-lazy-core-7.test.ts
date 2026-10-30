@@ -22,19 +22,20 @@ describe("Finance Documents Lazy Core 7", () => {
     expect(section).toContain("initialTab={initialTab}");
   });
 
-  it("navigates to Documents only when its server data is missing", () => {
+  it("requests the Documents server layer only when it is not already active", () => {
     const tower = source("components/company/finance-control-tower.tsx");
-    expect(tower).toContain('const sourceLayerLoaded = url.searchParams.get("tab") === "documents"');
-    expect(tower).toContain('if (nextTab === "documents" && !sourceLayerLoaded)');
+    expect(tower).toContain('const serverLayer = url.searchParams.get("tab")');
+    expect(tower).toContain('if (nextTab === "documents" || nextTab === "accounting")');
+    expect(tower).toContain("if (serverLayer !== nextTab)");
     expect(tower).toContain('url.searchParams.set("tab", "documents")');
     expect(tower).toContain("router.replace(");
   });
 
-  it("keeps already loaded Documents data in the current tree when switching tabs", () => {
+  it("releases the heavy Documents/Accounting server layer when switching to a lightweight tab", () => {
     const tower = source("components/company/finance-control-tower.tsx");
-    expect(tower).toContain('if (nextTab !== "documents" && sourceLayerLoaded)');
+    expect(tower).toContain('if (serverLayer === "documents" || serverLayer === "accounting")');
     expect(tower).toContain('url.searchParams.delete("tab")');
-    expect(tower).toContain("window.history.replaceState");
+    expect(tower).toContain('router.replace(`${url.pathname}${url.search}`, { scroll: false })');
     expect(tower).toContain("onClick={() => selectTab(id)}");
   });
 });

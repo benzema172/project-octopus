@@ -10,6 +10,7 @@ describe("Accounting Copilot 7.0",()=>{
   const importRoute=read("app/api/company/accounting/plan-import/route.ts");
   const exportRoute=read("app/api/company/accounting/export/route.ts");
   const brain=read("app/api/brain/process/route.ts");
+  const finalization=read("lib/finance/document-invoice-finalization.ts");
   const finance=read("components/company/finance-control-tower.tsx");
 
   it("adds a professional accounting domain with tax, VAT and JPK controls",()=>{
@@ -51,7 +52,9 @@ describe("Accounting Copilot 7.0",()=>{
   });
 
   it("runs accounting automatically after invoice intake and exposes Księgowość in Finance",()=>{
-    expect(brain).toContain("runAccountingCopilotForDocument");
+    expect(brain).toContain("runInvoiceIntakeChecks");
+    expect(finalization).toContain("runAccountingCopilotForDocument");
+    expect(finalization.indexOf("proposeInvoiceWarehouseReconciliation(")).toBeLessThan(finalization.indexOf("await runAccountingCopilotForDocument("));
     expect(brain).toContain("accounting = checks.accounting");
     expect(finance).toContain('["accounting", "Księgowość"]');
   });
