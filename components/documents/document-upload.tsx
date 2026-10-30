@@ -258,8 +258,9 @@ export function DocumentUpload({
       const payload = await response.json().catch(()=>({})) as {error?:string;message?:string};
       if(!response.ok) throw new Error(payload.error ?? "Nie udało się ponowić kontroli etapu.");
       setStatus(payload.message ?? "Kontrola finansowa została ponowiona.");
-      // The polling loop will refresh details; force the next report read as well.
-      setBatchSummary(null);
+      // Keep the session visible; refresh its stage details without losing the
+      // polling subscription or the user's ability to inspect other reviews.
+      await refreshImportSession(batchSummary.id);
     } catch(e) {
       setError(e instanceof Error?e.message:"Nie udało się ponowić kontroli dokumentu.");
     } finally {setRetryingDocumentId(null);}
