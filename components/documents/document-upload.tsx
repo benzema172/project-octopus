@@ -70,7 +70,9 @@ type ImportSessionSummary = {
   categories: Record<string, number>;
   items: Array<{
     id: string;
+    documentId?: string | null;
     fileName: string;
+    pipelineStages?: Array<{ stage:string;status:string }>;
     state: "pending" | "processing" | "ready" | "review" | "error";
     category: string | null;
     types: string[];
@@ -219,6 +221,7 @@ export function DocumentUpload({
   const [expandedFlowId, setExpandedFlowId] = useState<string | null>(null);
   const [recentDocumentIds, setRecentDocumentIds] = useState<string[]>([]);
   const [batchSummary, setBatchSummary] = useState<ImportSessionSummary | null>(null);
+  const [retryingDocumentId,setRetryingDocumentId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const isIntake = displayMode === "intake";
 
@@ -242,6 +245,25 @@ export function DocumentUpload({
     return recentDocumentIds.map((id) => byId.get(id)).filter((document): document is DocumentSummary => Boolean(document));
   }, [documents, recentDocumentIds]);
   const visibleDocuments = isIntake ? recentDocuments : filteredDocuments;
+
+  async function retryFinanceStage(documentId:string,stage:"finance"|"accounting"|"reconciliation") {
+    if (!workspaceId || !batchSummary?.id || retryingDocumentId) return;
+    setRetryingDocumentId(documentId);
+    setError(null);
+    try {
+      const response = await fetch("/api/brain/retry", {
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({workspaceId,documentId,stage})
+      });
+      const payload = await response.json().catch(()=>({})) as {error?:string;message?:string};
+      if(!response.ok) throw new Error(payload.error ?? "Nie udało się ponowić kontroli etapu.");
+      setStatus(payload.message ?? "Kontrola finansowa została ponowiona.");
+      // The polling loop will refresh details; force the next report read as well.
+      setBatchSummary(null);
+    } catch(e) {
+      setError(e instanceof Error?e.message:"Nie udało się ponowić kontroli dokumentu.");
+    } finally {setRetryingDocumentId(null);}
+  }
 
   const refreshImportSession = useCallback(async (sessionId?: string) => {
     if (!workspaceId || reportRefreshInFlightRef.current) return null;
@@ -786,6 +808,31 @@ export function DocumentUpload({
                     </span>
                   ))}
                 </div>
+              ) : null}
+              {batchSummary.items.some((item) => item.state === "review" || item.state === "error") ? (
+                <details>
+                  <summary>Dokumenty wymagające kontroli — zobacz etapy</summary>
+                  <div className={styles.batchBreakdown}>
+                    {batchSummary.items.filter((item) => item.state === "review" || item.state === "error").slice(0, 30).map((item) => {
+                      const financeStep = item.pipelineStages?.find((step) =>
+                        (step.stage === "finance" || step.stage === "accounting") && step.status === "review");
+                      const routeComplete = item.pipelineStages?.some((step) => step.stage === "route" && step.status === "complete");
+                      return (
+                        <span key={item.id}>
+                          <b>{item.fileName}</b> — {item.pipelineStages?.filter((step) => step.status === "review" || step.status === "error")
+                            .map((step) => `${step.stage}: ${step.status}`).join(", ") || item.state}
+                          {financeStep && routeComplete && item.documentId && !item.duplicateOfDocumentId ? (
+                            <button type="button" className="secondary-button"
+                              disabled={Boolean(retryingDocumentId) || isUploading}
+                              onClick={() => void retryFinanceStage(item.documentId!,financeStep.stage as "finance"|"accounting")}>
+                              {retryingDocumentId === item.documentId ? "Kontrolowanie…" : "Ponów kontrolę"}
+                            </button>
+                          ) : null}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </details>
               ) : null}
               <div className={styles.batchBreakdown}>
                 {Object.entries(batchSummary.documentTypes).map(([type, count]) => <span key={`type-${type}`}><b>{type}</b>{count}</span>)}
