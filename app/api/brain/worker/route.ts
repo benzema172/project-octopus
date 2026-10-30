@@ -6,6 +6,7 @@ import { processDocumentVersion } from "@/lib/ai/process-document";
 import { findExistingExactDuplicate } from "@/lib/documents/exact-duplicate-guard";
 import { runInvoiceIntakeChecks, containsInvoiceBusinessDocument } from "@/lib/finance/document-invoice-finalization";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
+import { recordPipelineOutcome, type FinancialPipelineChecks } from "@/lib/documents/pipeline-outcome";
 import { enrichDocumentWithInvestmentRouting } from "@/lib/ai/investment-document-routing";
 import { geminiRateLimitInfo, geminiRateLimitMessage, wait } from "@/lib/ai/gemini-rate-limit";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
@@ -188,10 +189,15 @@ async function handleWorker(request: Request) {
         actorId
       });
 
+      const isInvoice = analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis);
       // Never mark an unhandled, duplicate or partially routed document ready.
       if (autopilot.failed > 0 || autopilot.status !== "applied" || investmentRoutingError) {
         const reason = [investmentRoutingError, ...autopilot.errors].filter(Boolean).join(" | ")
           || "Automatyczny routing dokumentu wymaga decyzji.";
+        await recordPipelineOutcome({
+          workspaceId:job.workspace_id,documentId:sourceVersion.document_id,versionId:job.document_version_id,
+          category:analysis.effectiveCategory,routeOk:false,isInvoice,failure:reason
+        });
         const update = await supabase.from("documents").update({ ai_status: "review", review_status: "pending" })
           .eq("workspace_id", job.workspace_id).eq("id", sourceVersion.document_id);
         if (update.error) throw new Error(update.error.message);
@@ -205,14 +211,19 @@ async function handleWorker(request: Request) {
         continue;
       }
 
+      let invoiceChecks: FinancialPipelineChecks | null = null;
       // Background jobs must complete the same invoice quality, warehouse receipt
       // and accounting proposal pipeline as the immediate /api/brain/process path.
-      if (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis)) {
+      if (isInvoice) {
         try {
           if (!actorId) throw new Error("Brak użytkownika do kontroli faktury i dekretacji.");
-          await runInvoiceIntakeChecks({ workspaceId: job.workspace_id, documentId: sourceVersion.document_id, actorId });
+          invoiceChecks = await runInvoiceIntakeChecks({ workspaceId: job.workspace_id, documentId: sourceVersion.document_id, actorId });
         } catch (finalizationError) {
           const message = finalizationError instanceof Error ? finalizationError.message : "Kontrola faktury nie powiodła się.";
+          await recordPipelineOutcome({
+            workspaceId:job.workspace_id,documentId:sourceVersion.document_id,versionId:job.document_version_id,
+            category:analysis.effectiveCategory,routeOk:true,isInvoice:true,failure:message
+          });
           const review = await supabase.from("documents").update({ ai_status: "review", review_status: "pending" })
             .eq("id", sourceVersion.document_id).eq("workspace_id", job.workspace_id);
           if (review.error) throw new Error(`Nie udało się oznaczyć wymaganej kontroli faktury: ${review.error.message}`);
@@ -238,6 +249,10 @@ async function handleWorker(request: Request) {
         }
       }
 
+      await recordPipelineOutcome({
+        workspaceId:job.workspace_id,documentId:sourceVersion.document_id,versionId:job.document_version_id,
+        category:analysis.effectiveCategory,routeOk:true,isInvoice,checks:invoiceChecks
+      });
       results.push({ jobId: job.id, versionId: job.document_version_id, status: "succeeded" });
       operationalLog("info", {
         event: "worker.job_succeeded",
