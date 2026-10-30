@@ -94,6 +94,7 @@ type ExtractionRow = {
   document_types: string[];
 };
 type PipelineRow = { document_version_id: string; stage: PipelineStage; status: PipelineStageStatus };
+type DocumentDestinations = { documentId:string; projectId:string|null; finance:Array<Record<string,unknown>>;accounting:Array<Record<string,unknown>>;warehouse:Array<Record<string,unknown>>;fleet:Array<Record<string,unknown>>;fuel:Array<Record<string,unknown>>;modules:Array<Record<string,unknown>> };
 
 function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
@@ -140,7 +141,7 @@ async function buildSummary(session: SessionRow) {
   const versionIds = Array.from(new Set((items ?? []).map((item) => item.document_version_id).filter((id): id is string => Boolean(id))));
   // All independent report reads run together: one network roundtrip wave
   // instead of waiting for the documents query before starting the others.
-  const [documentsResult, classificationsResult, extractionsResult, reviewActionsResult, duplicatesResult, stagesResult] = await Promise.all([
+  const [documentsResult, classificationsResult, extractionsResult, reviewActionsResult, duplicatesResult, stagesResult, destinationsResult] = await Promise.all([
     documentIds.length
       ? db.from("documents").select("id,category,ai_status,ai_confidence,current_version_id,project_id")
         .eq("workspace_id", session.workspace_id).in("id", documentIds).returns<DocumentRow[]>()
@@ -181,7 +182,10 @@ async function buildSummary(session: SessionRow) {
       ? db.from("document_pipeline_stages").select("document_version_id,stage,status")
         .eq("workspace_id", session.workspace_id).in("document_version_id", versionIds)
         .returns<PipelineRow[]>()
-      : Promise.resolve({ data: [] as PipelineRow[], error: null })
+      : Promise.resolve({ data: [] as PipelineRow[], error: null }),
+    documentIds.length
+      ? db.rpc("get_import_document_destinations_20261030", { p_workspace_id: session.workspace_id, p_document_ids: documentIds })
+      : Promise.resolve({data:[] as DocumentDestinations[],error:null})
   ]);
   if (documentsResult.error) throw new Error(`Nie udało się odczytać wyników dokumentów: ${documentsResult.error.message}`);
   const documents = new Map((documentsResult.data ?? []).map((document) => [document.id, document]));
@@ -190,6 +194,9 @@ async function buildSummary(session: SessionRow) {
   if (reviewActionsResult.error) console.error("Project Octopus: Batch Import review actions fallback", reviewActionsResult.error);
   if (duplicatesResult.error) throw new Error(`Nie udało się odczytać kontroli duplikatów: ${duplicatesResult.error.message}`);
   if (stagesResult.error) throw new Error(`Nie udało się odczytać etapów procesu: ${stagesResult.error.message}`);
+  if (destinationsResult.error || !Array.isArray(destinationsResult.data)) throw new Error("Nie udało się uzgodnić raportu modułów.");
+  const destinationsByDocument = new Map<string,DocumentDestinations>();
+  for (const row of destinationsResult.data as DocumentDestinations[]) if (row.documentId) destinationsByDocument.set(row.documentId,row);
   const duplicateByDocument = new Map<string, DuplicateAuditRow>();
   for (const entry of duplicatesResult.data ?? []) {
     if (!duplicateByDocument.has(entry.entity_id)) duplicateByDocument.set(entry.entity_id,entry);
@@ -273,6 +280,7 @@ async function buildSummary(session: SessionRow) {
       automatic,
       duplicateOfDocumentId,
       pipelineStages: stages.map((step) => ({ stage:step.stage,status:step.status })),
+      destinations: item.document_id ? destinationsByDocument.get(item.document_id) ?? null : null,
       error: item.error_message
     };
   });
