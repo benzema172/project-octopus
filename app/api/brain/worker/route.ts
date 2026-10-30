@@ -181,6 +181,18 @@ async function handleWorker(request: Request) {
         }
       }
 
+      if (investmentRoutingError) {
+        await recordPipelineOutcome({
+          workspaceId:job.workspace_id,documentId:sourceVersion.document_id,versionId:job.document_version_id,
+          category:analysis.effectiveCategory,routeOk:false,
+          isInvoice:analysis.effectiveCategory==="invoice"||containsInvoiceBusinessDocument(analysis),
+          failure:investmentRoutingError
+        });
+        await supabase.from("documents").update({ai_status:"review",review_status:"pending"})
+          .eq("workspace_id",job.workspace_id).eq("id",sourceVersion.document_id);
+        results.push({jobId:job.id,versionId:job.document_version_id,status:"failed",error:investmentRoutingError});
+        continue;
+      }
       const autopilot = await applyDocumentAutopilot({
         workspaceId: job.workspace_id,
         documentId: sourceVersion.document_id,
