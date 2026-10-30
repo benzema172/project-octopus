@@ -270,25 +270,35 @@ export function DocumentCentralArchive({
                   const isSelected = selected?.id === document.id;
                   const isReview = requiresReview(document);
                   return (
-                    <button
-                      key={document.id}
-                      type="button"
-                      className={`${styles.row} ${isSelected ? styles.rowSelected : ""}`}
-                      onClick={() => setSelectedId(isSelected ? null : document.id)}
-                      aria-expanded={isSelected}
-                      title={isSelected ? "Zwiń szczegóły dokumentu" : "Rozwiń szczegóły dokumentu"}
+                    <DocumentManagementControls
+                      key={`${document.id}:${document.updated_at}`}
+                      compact
+                      workspaceId={workspaceId}
+                      documentId={document.id}
+                      projectId={document.project_id}
+                      name={document.name}
+                      updatedAt={document.updated_at}
+                      onArchived={() => setSelectedId(null)}
                     >
-                      <span className={styles.fileIcon}><FileText size={16} aria-hidden="true" /></span>
-                      <span className={styles.rowBody}>
-                        <strong>{document.name}</strong>
-                        <small>{document.project_id ? projectNames.get(document.project_id) ?? "Inwestycja" : MODULE_LABELS[moduleId]} · {documentCategoryLabel(document.flow?.category ?? document.category)}</small>
-                      </span>
-                      <span className={styles.rowState}>
-                        <span className={`${styles.stage} ${isReview ? styles.stageReview : document.flow?.stage === "error" ? styles.stageError : document.flow?.stage === "ready" ? styles.stageReady : ""}`}>{stageLabel(document)}</span>
-                        <small>{document.updated_at ? new Date(document.updated_at).toLocaleDateString("pl-PL") : ""}</small>
-                        {isSelected ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
-                      </span>
-                    </button>
+                      <button
+                        type="button"
+                        className={`${styles.row} ${styles.rowInline} ${isSelected ? styles.rowSelected : ""}`}
+                        onClick={() => setSelectedId(isSelected ? null : document.id)}
+                        aria-expanded={isSelected}
+                        title={isSelected ? "Zwiń szczegóły dokumentu" : "Rozwiń szczegóły dokumentu"}
+                      >
+                        <span className={styles.fileIcon}><FileText size={16} aria-hidden="true" /></span>
+                        <span className={styles.rowBody}>
+                          <strong>{document.name}</strong>
+                          <small>{document.project_id ? projectNames.get(document.project_id) ?? "Inwestycja" : MODULE_LABELS[moduleId]} · {documentCategoryLabel(document.flow?.category ?? document.category)}</small>
+                        </span>
+                        <span className={styles.rowState}>
+                          <span className={`${styles.stage} ${isReview ? styles.stageReview : document.flow?.stage === "error" ? styles.stageError : document.flow?.stage === "ready" ? styles.stageReady : ""}`}>{stageLabel(document)}</span>
+                          <small>{document.updated_at ? new Date(document.updated_at).toLocaleDateString("pl-PL") : ""}</small>
+                          {isSelected ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
+                        </span>
+                      </button>
+                    </DocumentManagementControls>
                   );
                 })}
               </div>

@@ -17,3 +17,14 @@
 .message,.success,.error{font-size:11px;line-height:1.4;margin:0}
 .message{color:#667085}.success{color:#15734b}.error{color:#b42330}
 @media(max-width:680px){.form>div{align-items:stretch}.form input{flex-basis:100%}}
+
+/* Quick actions sit on the same line as the file name; the confirmation and
+   rename form expand directly beneath the file instead of opening its details. */
+.compact{grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:0;border-bottom:1px solid #edf0f4;background:#fff}
+.compact:hover{background:#fafbfc}
+.compact:focus-within{position:relative;z-index:1}
+.compact>.actions{padding:4px 12px 4px 4px;justify-content:flex-end;gap:5px;white-space:nowrap}
+.compact>.actions button{padding:6px 9px;border-radius:7px;font-size:10px}
+.compact>.form,.compact>.confirm,.compact>.message,.compact>.success,.compact>.error{grid-column:1/-1;margin:3px 10px 10px;min-width:0}
+.compact>.message,.compact>.success,.compact>.error{padding:5px 9px}
+@media(max-width:680px){.compact{grid-template-columns:minmax(0,1fr)}.compact>.actions{padding:0 10px 8px;justify-content:flex-end}.compact>.actions button{padding:5px 9px}}
