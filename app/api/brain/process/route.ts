@@ -3,6 +3,7 @@ import { getRequestUser } from "@/lib/auth";
 import { processDocumentVersion } from "@/lib/ai/process-document";
 import { findExistingExactDuplicate } from "@/lib/documents/exact-duplicate-guard";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
+import { recordPipelineOutcome, type FinancialPipelineChecks } from "@/lib/documents/pipeline-outcome";
 import { enrichDocumentWithInvestmentRouting, type InvestmentRoutingResult } from "@/lib/ai/investment-document-routing";
 import { geminiRateLimitInfo, geminiRateLimitMessage, millisecondsUntil, wait } from "@/lib/ai/gemini-rate-limit";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
@@ -140,6 +141,7 @@ export async function POST(request: Request) {
         actorId: user.id
       });
 
+      let pipelineChecks: FinancialPipelineChecks | null = null;
       let invoiceReadiness: InvoiceIntakeAssessment[] = [];
       let financeAi: FinanceAiSummary | null = null;
       let accounting: AccountingCopilotRun[] = [];
@@ -147,6 +149,7 @@ export async function POST(request: Request) {
       try {
         if (!(materialization && "autopilot" in materialization && materialization.autopilot?.failed) && await approvedDocumentContainsInvoice(workspace.id, body.versionId, approved.category)) {
           const checks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id });
+          pipelineChecks = checks;
           invoiceReadiness = checks.invoiceReadiness;
           financeAi = checks.financeAi;
           accounting = checks.accounting;
@@ -292,6 +295,13 @@ export async function POST(request: Request) {
         }
       }
 
+      const routeOk = autopilot.failed === 0 && autopilot.status === "applied" && !routingError;
+      await recordPipelineOutcome({
+        workspaceId:workspace.id,documentId:version.document_id,versionId:body.versionId,
+        category:analysis.effectiveCategory,routeOk,
+        isInvoice:analysis.effectiveCategory==="invoice" || containsInvoiceBusinessDocument(analysis),
+        checks:pipelineChecks,failure:invoiceCheckError ?? routingError
+      });
       const packageStatus = "package" in analysis
         ? {
             packageId: analysis.package.id,
