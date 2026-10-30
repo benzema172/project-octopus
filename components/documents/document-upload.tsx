@@ -23,6 +23,7 @@ import { DOCUMENT_DESTINATIONS, documentCategoryLabel } from "@/lib/documents/cl
 import type { DocumentSourceModule } from "@/lib/documents/source-module";
 import { MAX_SUPPORTED_UPLOAD_BYTES, SUPPORTED_UPLOAD_ACCEPT, validateUploadFile } from "@/lib/r2/sanitize";
 import styles from "./document-flow-200.module.css";
+import { FuelPurchaseInbox } from "./fuel-purchase-inbox";
 
 type DocumentUploadProps = {
   workspaceId?: string;
@@ -844,6 +845,8 @@ export function DocumentUpload({
           ) : null}
         </div>
       </details>
+
+      {isIntake && workspaceId ? <FuelPurchaseInbox workspaceId={workspaceId} refreshKey={batchSummaryId} processing={isUploading || batchSummaryStatus === "processing"} /> : null}
 
       {!isIntake ? (
         <div className={styles.toolbar}>

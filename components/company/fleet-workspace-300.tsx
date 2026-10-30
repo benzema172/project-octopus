@@ -1,5 +1,7 @@
 "use client";
 
+import { FuelPurchaseInbox } from "@/components/documents/fuel-purchase-inbox";
+
 import { useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -400,6 +402,7 @@ export function FleetWorkspace300({ workspaceId, data, canWrite, canApprove, que
     </div> : null}
 
     {tab === "waiting" ? <div className={styles.split}>
+      <div style={{ gridColumn: "1 / -1", minWidth: 0 }}><FuelPurchaseInbox workspaceId={workspaceId} canWrite={canWrite} /></div>
       <Panel title="Poczekalnia AI" kicker="Wrzutnia → Gemini → decyzja" aside={<Badge tone={openReviews.length ? "warn" : "good"} value={`${openReviews.length} otwartych`} />}>
         <div className={styles.cards}>{openReviews.map((review) => {
           const preview = previewByReview.get(String(review.id));
