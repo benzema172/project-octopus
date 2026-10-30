@@ -3,6 +3,7 @@ import { processDocumentVersion } from "@/lib/ai/process-document";
 import { findExistingExactDuplicate } from "@/lib/documents/exact-duplicate-guard";
 import { runInvoiceIntakeChecks, containsInvoiceBusinessDocument } from "@/lib/finance/document-invoice-finalization";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
+import { recordPipelineOutcome, type FinancialPipelineChecks } from "@/lib/documents/pipeline-outcome";
 import { enrichDocumentWithInvestmentRouting } from "@/lib/ai/investment-document-routing";
 import { geminiRateLimitInfo, geminiRateLimitMessage } from "@/lib/ai/gemini-rate-limit";
 import { getRequestUser } from "@/lib/auth";
@@ -116,11 +117,17 @@ export async function POST(request: Request) {
         actorId: user.id
       });
 
-      if (autopilot.failed === 0 && autopilot.status === "applied" && !routingErrorMessage
-        && (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis))) {
-        await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: document.id, actorId: user.id });
+      const isInvoice = analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis);
+      const routeOk = autopilot.failed === 0 && autopilot.status === "applied" && !routingErrorMessage;
+      let pipelineChecks: FinancialPipelineChecks | null = null;
+      if (routeOk && isInvoice) {
+        pipelineChecks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: document.id, actorId: user.id });
       }
-      if (autopilot.failed > 0 || autopilot.status !== "applied" || routingErrorMessage) {
+      await recordPipelineOutcome({
+        workspaceId:workspace.id,documentId:document.id,versionId:document.current_version_id,
+        category:analysis.effectiveCategory,routeOk,isInvoice,checks:pipelineChecks,failure:routingErrorMessage
+      });
+      if (!routeOk) {
         const { error: reviewError } = await supabase.from("documents")
           .update({ ai_status: "review", review_status: "pending" })
           .eq("workspace_id",workspace.id).eq("id",document.id);
