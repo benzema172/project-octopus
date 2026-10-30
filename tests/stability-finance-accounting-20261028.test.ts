@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { matchesImportManifest, fullyUploadedImport, normalizeImportSha256, type StoredImportManifestItem, type ImportManifestFile } from "../lib/documents/import-manifest-integrity";
 import { stableSessionUuid, matchesPersistedImportVersion } from "../lib/documents/import-session-identities";
 import { PIPELINE_STAGES, summarizePipelineStages, type PipelineStageStatus } from "../lib/documents/pipeline-stage-state";
+import { safeProjectRoutingTarget, type ProjectMatchDecision } from "../lib/ai/project-matcher";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = (path: string) => readFileSync(resolve(root, path), "utf8");
@@ -356,6 +357,22 @@ describe("Octopus production stability regression", () => {
       expect(summarizePipelineStages(complete.slice(0,1))).toBe("pending");
       expect(summarizePipelineStages(complete.map((s,i)=>i===5?{...s,status:"review"}:s))).toBe("review");
       expect(summarizePipelineStages(complete.map((s,i)=>i===4?{...s,status:"error"}:s))).toBe("error");
+    }
+  });
+
+  it("prevents publishing to a guessed investment below the safety threshold", () => {
+    const matched:ProjectMatchDecision={status:"matched",project:{id:"project-1",name:"Wysoka"},
+      score:0.91,runnerUpScore:0.2,margin:0.71,reason:"exact contract",
+      evidence:[{type:"contract",value:"WYS-123"}],alternatives:[]};
+    expect(safeProjectRoutingTarget(null,"project-1",matched)).toBe("project-1");
+    expect(safeProjectRoutingTarget("chosen-project","project-1",matched)).toBe("chosen-project");
+    expect(safeProjectRoutingTarget(null,"project-1",{...matched,score:0.79})).toBeNull();
+    expect(safeProjectRoutingTarget(null,"project-2",matched)).toBeNull();
+    expect(safeProjectRoutingTarget(null,"project-1",{...matched,status:"ambiguous"})).toBeNull();
+    for(const route of ["app/api/brain/worker/route.ts","app/api/brain/process/route.ts","app/api/brain/retry/route.ts"]){
+      const code=source(route);
+      expect(code).toContain("safeProjectRoutingTarget(");
+      expect(code).toContain("recordPipelineOutcome(");
     }
   });
 
