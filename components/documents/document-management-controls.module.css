@@ -1,0 +1,19 @@
+.root{display:grid;gap:8px;min-width:0}
+.actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.actions button,.form button,.confirm button{border:1px solid #d9deea;border-radius:9px;background:#fff;color:#344054;padding:7px 10px;font:inherit;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;gap:5px;cursor:pointer}
+.actions button:hover,.form button:hover,.confirm button:hover{background:#f7f5ff;border-color:#c4b5fd}
+.actions button:disabled,.form button:disabled,.confirm button:disabled{opacity:.5;cursor:wait}
+.actions .danger{color:#a62432;border-color:#ebccd1}
+.file{display:none}
+.form,.confirm{display:grid;gap:7px;padding:10px;border:1px solid #e5e7ed;border-radius:10px;background:#f9fafc}
+.form>label{font-size:11px;font-weight:750;color:#364152}
+.form>div,.confirm>div{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.form input{min-width:160px;flex:1;padding:8px 9px;font:inherit;font-size:12px;color:#283348;background:#fff;border:1px solid #cbd4e1;border-radius:8px}
+.form small,.confirm p{font-size:10px;color:#737d90;line-height:1.5;margin:0}
+.confirm{background:#fffafa;border-color:#f0d0d4}
+.confirm strong{color:#923242;font-size:11px}
+.confirm .confirmDanger{background:#b42332;color:white;border-color:#b42332}
+.confirm .confirmDanger:hover{background:#951b27}
+.message,.success,.error{font-size:11px;line-height:1.4;margin:0}
+.message{color:#667085}.success{color:#15734b}.error{color:#b42330}
+@media(max-width:680px){.form>div{align-items:stretch}.form input{flex-basis:100%}}

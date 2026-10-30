@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { AiInbox } from "@/components/brain/ai-inbox";
 import { DocumentOpenLink } from "@/components/documents/document-open-link";
+import { DocumentManagementControls } from "@/components/documents/document-management-controls";
 import { documentCategoryLabel } from "@/lib/documents/classification";
 import type { DocumentLibraryInsight } from "@/lib/documents/library-types";
 import type { AiInboxItem } from "@/lib/data/operations";
@@ -154,7 +155,7 @@ export function DocumentCentralArchive({
   const buildHref = useCallback((nextTab: ArchiveTabId, nextQuery: string) => {
     const params = new URLSearchParams(currentSearchParams.toString());
     if (nextTab === "all") params.delete("tab"); else params.set("tab", nextTab);
-    if (nextTab !== "all" && nextTab !== "trash" && nextQuery.trim()) params.set("q", nextQuery.trim());
+    if (nextTab !== "trash" && nextQuery.trim()) params.set("q", nextQuery.trim());
     else params.delete("q");
     params.delete("page");
     params.delete("trashPage");
@@ -163,7 +164,7 @@ export function DocumentCentralArchive({
   }, [currentSearchParams]);
 
   useEffect(() => {
-    if (tab === "all" || tab === "trash" || query === searchQuery) return;
+    if (tab === "trash" || query === searchQuery) return;
     const timer = window.setTimeout(() => router.replace(buildHref(tab, query)), 350);
     return () => window.clearTimeout(timer);
   }, [buildHref, query, router, searchQuery, tab]);
@@ -227,11 +228,7 @@ export function DocumentCentralArchive({
         ))}
       </div>
 
-      {tab === "all" ? (
-        <div className={styles.uploadHome} data-documents-upload-home="1">
-          {uploadContent}
-        </div>
-      ) : tab === "trash" ? (
+      {tab === "trash" ? (
         <div className={styles.list} aria-label="Kosz dokumentów">
           {restoreError ? <div className={styles.warningPanel}><AlertTriangle size={16} /><strong>{restoreError}</strong></div> : null}
           {trashedDocuments.length ? trashedDocuments.map((document) => (
@@ -251,6 +248,7 @@ export function DocumentCentralArchive({
         </div>
       ) : (
         <>
+          {tab === "all" ? <div className={styles.uploadHome} data-documents-upload-home="1">{uploadContent}</div> : null}
           <div className={styles.toolbar}>
             <div className={styles.searchBox}>
               <Search size={17} aria-hidden="true" />
@@ -307,6 +305,12 @@ export function DocumentCentralArchive({
                     {selected.flow?.resultHref ? <Link href={selected.flow.resultHref}>Przejdź do modułu →</Link> : null}
                     {requiresReview(selected) ? <a href={`#document-review-${selected.id}`}>Podejmij decyzję ↓</a> : null}
                   </div>
+
+                  <DocumentManagementControls key={`${selected.id}:${selected.updated_at}`}
+                    workspaceId={workspaceId} documentId={selected.id} projectId={selected.project_id}
+                    name={selected.name} updatedAt={selected.updated_at}
+                    onArchived={()=>setSelectedId(null)}
+                  />
 
                   {requiresReview(selected) && selectedReviewItem ? (
                     <section className={styles.aiPanel} id={`document-review-${selected.id}`} aria-label={`Decyzja dla dokumentu ${selected.name}`}>

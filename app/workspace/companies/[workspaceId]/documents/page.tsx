@@ -80,7 +80,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
   const query = await searchParams;
   const sourceModule = normalizeDocumentSourceModule(query.sourceModule);
   const activeTab = normalizeArchiveTab(query.tab);
-  const searchQuery = activeTab === "all" || activeTab === "trash" ? "" : String(query.q ?? "").trim();
+  const searchQuery = activeTab === "trash" ? "" : String(query.q ?? "").trim();
   const archivePage = Math.max(1, Math.floor(Number(query.page ?? 1) || 1));
   const trashPage = Math.max(1, Math.floor(Number(query.trashPage ?? 1) || 1));
   const moduleFilter = MODULE_FILTER_TABS.has(activeTab) ? activeTab : undefined;
@@ -135,14 +135,14 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
 
   const documents = documentsPage.items.filter(canReadDocument);
   const trashedDocuments = trashedPage.items.filter(canReadDocument);
-  const insights = activeTab === "all" || activeTab === "trash"
+  const insights = activeTab === "trash"
     ? []
     : await listDocumentLibraryInsights(workspace.id, documents.map((document) => document.id)).catch((error) => {
         console.error("Project Octopus: central document archive insight fallback", error);
         return [];
       });
 
-  const rawQueueItems = activeTab === "all" || activeTab === "trash"
+  const rawQueueItems = activeTab === "trash"
     ? []
     : await listDocumentAiInbox(workspace.id, documents.map((document) => document.id)).catch((error) => {
         console.error("Project Octopus: document-only AI review queue fallback", error);
