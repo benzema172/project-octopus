@@ -6,6 +6,7 @@ import { processDocumentVersion } from "@/lib/ai/process-document";
 import { findExistingExactDuplicate } from "@/lib/documents/exact-duplicate-guard";
 import { runInvoiceIntakeChecks, containsInvoiceBusinessDocument } from "@/lib/finance/document-invoice-finalization";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
+import { safeProjectRoutingTarget } from "@/lib/ai/project-matcher";
 import { recordPipelineOutcome, type FinancialPipelineChecks } from "@/lib/documents/pipeline-outcome";
 import { enrichDocumentWithInvestmentRouting } from "@/lib/ai/investment-document-routing";
 import { geminiRateLimitInfo, geminiRateLimitMessage, wait } from "@/lib/ai/gemini-rate-limit";
@@ -150,7 +151,7 @@ async function handleWorker(request: Request) {
       // Use the safe AI project matcher for company-wide batch uploads, too.
       // A worker must not skip project-specific module routing merely because
       // the original upload was not manually assigned to an investment.
-      const routingProjectId = sourceVersion.project_id ?? analysis.proposedProjectId ?? null;
+      const routingProjectId = safeProjectRoutingTarget(sourceVersion.project_id,analysis.proposedProjectId,analysis.projectMatch);
       // A duplicate or low-confidence classification must not enrich projects.
       if (!duplicate && routingProjectId && actorId && analysis.confidence >= 0.82) {
         try {
