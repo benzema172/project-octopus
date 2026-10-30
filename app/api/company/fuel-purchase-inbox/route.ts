@@ -54,7 +54,7 @@ export async function GET(request: Request) {
       .order("resolved_at",{ascending:false}).limit(6),
     db.from("fuel_entries")
       .select("id,vehicle_id,fuel_type,fueled_at")
-      .eq("workspace_id",workspaceId).eq("external_transaction_id","octopus_fuel_receipt_20261030")
+      .eq("workspace_id",workspaceId).like("external_transaction_id","octopus_fuel_receipt_20261030:%")
       .order("fueled_at",{ascending:false}).limit(6)
   ]);
   if (reviewsResult.error || vehiclesResult.error || automaticInvoicesResult.error || automaticReceiptsResult.error)

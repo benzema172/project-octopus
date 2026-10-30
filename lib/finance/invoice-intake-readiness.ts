@@ -58,9 +58,10 @@ export async function assessDocumentInvoiceReadiness(input: {
     .eq("document_id", input.documentId)
     .not("invoice_id", "is", null)
     .order("received_at", { ascending: false })
-    .limit(50);
+    .limit(501);
   if (inboxError) throw new Error(`Nie udało się pobrać faktur z Business Inbox: ${inboxError.message}`);
 
+  if ((inboxData ?? []).length >= 501) throw new Error("Dokument zawiera ponad 500 faktur źródłowych; kontrola kompletności wymaga podziału na mniejsze części.");
   const inboxRows = (inboxData ?? []) as Row[];
   const invoiceIds = [...new Set(inboxRows.map((row) => nullableText(row.invoice_id)).filter((id): id is string => Boolean(id)))];
   if (!invoiceIds.length) return [];
@@ -86,6 +87,12 @@ export async function assessDocumentInvoiceReadiness(input: {
     if (result.error) throw new Error(`Nie udało się pobrać ${label}: ${result.error.message}`);
   }
 
+  // Supabase Data API commonly caps responses at 1000 rows. If this is
+  // reached, never verify invoice totals or mark routing complete based on a
+  // silently truncated subset of invoice lines or open review decisions.
+  if ((lineResult.data ?? []).length >= 1000 || (reviewResult.data ?? []).length >= 1000) {
+    throw new Error("Osiągnięto limit 1000 pozycji faktur lub kontroli jakości. Dokument wymaga stronicowania i ponowienia weryfikacji przed rozliczeniem.");
+  }
   const invoices = (invoiceResult.data ?? []) as Row[];
   const lines = (lineResult.data ?? []) as Row[];
   const reviews = (reviewResult.data ?? []) as Row[];

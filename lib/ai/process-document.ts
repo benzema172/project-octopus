@@ -1,3 +1,4 @@
+import { needsBusinessDocumentSpecialist } from "@/lib/documents/business-evidence-routing";
 import "server-only";
 
 import { createHash } from "node:crypto";
@@ -266,8 +267,9 @@ export async function processDocumentVersion(input: {
         : await analyzeDocumentWithGemini({ fileName: version.file_name, mimeType: version.mime_type, ...prepared, projectCatalog });
     // If a general Wrzutnia document turns out to be financial, re-run the
     // structured specialist. The source module is a hint, not a prerequisite.
-    const classifiedBusiness = ["invoice", "warehouse"].includes(analysisResult.analysis.category)
-      || (analysisResult.analysis.category === "fleet" && analysisResult.analysis.businessDocument?.documentType === "receipt");
+    // Rerun the specialist when a general AI pass detects business-document
+    // evidence, even if its first category was Fleet/Technical.
+    const classifiedBusiness = needsBusinessDocumentSpecialist(analysisResult.analysis);
     const mustUseStructuredSpecialist = !businessDocumentSpecialist && classifiedBusiness;
     const specialized = mustUseStructuredSpecialist
       ? await analyzeWarehouseDocumentWithGemini({
