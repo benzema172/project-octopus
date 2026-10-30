@@ -61,6 +61,19 @@ type UploadOutcome = {
   aiProviders: number;
   aiAnalyzed: number;
 };
+type DestinationRecord = {
+  id:string;number?:string|null;type?:string|null;module?:string|null;title?:string|null;
+  registration?:string|null;direction?:string|null;currency?:string|null;status?:string|null;
+  amount?:number|null;lineCount?:number|null;lines?:number|null;stockLines?:number|null;
+  reviewLines?:number|null;liters?:number|null;fuelLiters?:number|null;
+  description?:string|null;needsReview?:boolean|null;entityType?:string|null;
+};
+type DocumentDestinations = {
+  documentId:string; projectId:string|null;
+  finance:DestinationRecord[];accounting:DestinationRecord[];
+  warehouse:DestinationRecord[];fleet:DestinationRecord[];
+  fuel:DestinationRecord[];modules:DestinationRecord[];
+};
 type ImportSessionSummary = {
   id: string;
   label: string | null;
@@ -74,6 +87,7 @@ type ImportSessionSummary = {
     documentId?: string | null;
     fileName: string;
     pipelineStages?: Array<{ stage:string;status:string }>;
+    destinations?: DocumentDestinations | null;
     state: "pending" | "processing" | "ready" | "review" | "error";
     category: string | null;
     types: string[];
@@ -855,6 +869,48 @@ export function DocumentUpload({
                   </div>
                 </details>
               ) : null}
+              <details>
+                <summary>Dokąd trafiły dane — szczegółowa mapa zapisów w modułach</summary>
+                <div className={styles.batchBreakdown}>
+                  {batchSummary.items.map((item) => {
+                    const d = item.destinations;
+                    const count = d ? d.finance.length+d.accounting.length+d.warehouse.length+
+                      d.fleet.length+d.fuel.length+d.modules.length : 0;
+                    return <div key={item.id} style={{display:"grid",gap:5,padding:"9px 0",borderBottom:"1px solid var(--border, #e5e7eb)"}}>
+                      <strong>{item.fileName}</strong>
+                      {d?.projectId ? <small>Inwestycja: {d.projectId}</small> : null}
+                      {d?.finance.map((entry) => <small key={"fin-"+entry.id}>
+                        <b>Finanse · faktura:</b> {entry.number || "bez numeru"} · {entry.direction || "—"} ·
+                        {entry.amount ?? "—"} {entry.currency ?? "PLN"} · {entry.lineCount ?? 0} pozycji · {entry.status || "—"}
+                      </small>)}
+                      {d?.accounting.map((entry) => <small key={"acc-"+entry.id}>
+                        <b>Księgowość · zapis:</b> {entry.description || entry.id} · {entry.status || "—"}
+                        {entry.needsReview ? " · wymaga decyzji" : ""}
+                      </small>)}
+                      {d?.warehouse.map((entry) => <small key={"wh-"+entry.id}>
+                        <b>Magazyn · dokument:</b> {entry.type || "—"} {entry.number || ""} ·
+                        {entry.lines ?? 0} pozycji · {entry.stockLines ?? 0} materiałowych ·
+                        {entry.reviewLines ?? 0} do kontroli · {entry.status || "—"}
+                      </small>)}
+                      {d?.fleet.map((entry) => <small key={"fleet-"+entry.id}>
+                        <b>Flota · dokument:</b> {entry.type || "—"} {entry.number || ""} ·
+                        {entry.registration || "brak tablic"} · {entry.fuelLiters ?? "—"} l · {entry.status || "—"}
+                      </small>)}
+                      {d?.fuel.map((entry) => <small key={"fuel-"+entry.id}>
+                        <b>Flota · tankowanie:</b> {entry.registration || "pojazd"} ·
+                        {entry.liters ?? "—"} l · {entry.amount ?? "—"} PLN
+                      </small>)}
+                      {d?.modules.map((entry) => <small key={"mod-"+entry.id}>
+                        <b>{entry.module || "Moduł"} · propozycja:</b> {entry.title || "—"} ·
+                        {entry.status || "—"}{entry.entityType ? " · zapis "+entry.entityType : ""}
+                      </small>)}
+                      {!count ? <small>{item.state==="processing"||item.state==="pending"
+                        ? "Analiza trwa — brak jeszcze potwierdzonych zapisów modułowych."
+                        : "Brak potwierdzonych zapisów w modułach. Sprawdź klasyfikację i etapy dokumentu."}</small> : null}
+                    </div>;
+                  })}
+                </div>
+              </details>
               <div className={styles.batchBreakdown}>
                 {Object.entries(batchSummary.documentTypes).map(([type, count]) => <span key={`type-${type}`}><b>{type}</b>{count}</span>)}
                 {Object.entries(batchSummary.categories).map(([type, count]) => <span key={`category-${type}`}><b>{documentCategoryLabel(type)}</b>{count}</span>)}
