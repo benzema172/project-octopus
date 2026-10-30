@@ -27,7 +27,7 @@ describe("Finance Documents Lazy Core 7", () => {
     expect(tower).toContain('const serverLayer = url.searchParams.get("tab")');
     expect(tower).toContain('if (nextTab === "documents" || nextTab === "accounting")');
     expect(tower).toContain("if (serverLayer !== nextTab)");
-    expect(tower).toContain('url.searchParams.set("tab", "documents")');
+    expect(tower).toContain('url.searchParams.set("tab", nextTab)');
     expect(tower).toContain("router.replace(");
   });
 
