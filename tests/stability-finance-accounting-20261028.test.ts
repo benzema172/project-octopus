@@ -419,6 +419,10 @@ describe("Octopus production stability regression", () => {
     expect(reconcile).toContain('status:"review"');
     expect(reconcile).toContain("ignoreDuplicates:true");
     expect(reconcile).toContain("requiresHumanReview:candidates.length>0");
+    expect(reconcile).toContain("refreshWarehouseDocumentReconciliations");
+    expect(source("lib/ai/document-autopilot.ts")).toContain(
+      "refreshWarehouseDocumentReconciliations(input.workspaceId,input.documentId)"
+    );
   });
 
   it("runs the warehouse overview data reads concurrently instead of in waterfalls", () => {
