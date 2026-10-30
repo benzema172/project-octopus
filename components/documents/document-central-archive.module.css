@@ -359,3 +359,9 @@
   .metaGrid, .facts, .proposals { grid-template-columns: 1fr; }
   .rowState .stage { display: none; }
 }
+
+/* Separate the file opener from its edit/trash buttons; never nest buttons. */
+.rowInline{min-width:0;border-bottom:0;min-height:46px;background:transparent}
+.rowInline:hover{background:transparent}
+.rowInline .rowState{margin-left:6px}
+@media(max-width:680px){.rowInline{padding-bottom:4px}.rowInline .rowState>small{display:none}.rowInline .rowBody{gap:5px;flex-wrap:wrap}.rowInline .rowBody strong{max-width:100%}}

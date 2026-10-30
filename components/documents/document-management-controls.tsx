@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { FilePlus2, Pencil, Trash2, Check, X } from "lucide-react";
 import { MAX_SUPPORTED_UPLOAD_BYTES, SUPPORTED_UPLOAD_ACCEPT, validateUploadFile } from "@/lib/r2/sanitize";
@@ -9,6 +9,7 @@ import styles from "./document-management-controls.module.css";
 type Props={
   workspaceId:string;documentId:string;projectId:string|null;
   name:string;updatedAt:string;onArchived?:()=>void;
+  compact?:boolean;children?:ReactNode;
 };
 type ApiResponse={error?:string;uploadUrl?:string;headers?:Record<string,string>;token?:string};
 
@@ -18,7 +19,7 @@ async function readResponse(response:Response, fallback:string){
   return payload;
 }
 
-export function DocumentManagementControls({workspaceId,documentId,projectId,name,updatedAt,onArchived}:Props){
+export function DocumentManagementControls({workspaceId,documentId,projectId,name,updatedAt,onArchived,compact=false,children}:Props){
   const router=useRouter();
   const picker=useRef<HTMLInputElement>(null);
   const [editing,setEditing]=useState(false);
@@ -92,16 +93,17 @@ export function DocumentManagementControls({workspaceId,documentId,projectId,nam
     finally{setBusy(null);}
   }
 
-  return <section className={styles.root} aria-label="Zarządzanie dokumentem">
+  return <section className={`${styles.root} ${compact ? styles.compact : ""}`} aria-label={`Zarządzanie dokumentem ${name}`}>
+    {children}
     <div className={styles.actions}>
       <button type="button" onClick={()=>{setEditing(value=>!value);setConfirmTrash(false);setError(null);}} disabled={Boolean(busy)}>
-        <Pencil size={14}/> Edytuj nazwę
+        <Pencil size={14}/> {compact ? "Edytuj" : "Edytuj nazwę"}
       </button>
-      <button type="button" onClick={()=>picker.current?.click()} disabled={Boolean(busy)} title="Dodaj kolejną wersję oryginalnego pliku">
+      {!compact ? <button type="button" onClick={()=>picker.current?.click()} disabled={Boolean(busy)} title="Dodaj kolejną wersję oryginalnego pliku">
         <FilePlus2 size={14}/> Nowa wersja
-      </button>
+      </button> : null}
       <button type="button" className={styles.danger} onClick={()=>{setConfirmTrash(value=>!value);setEditing(false);setError(null);}} disabled={Boolean(busy)}>
-        <Trash2 size={14}/> Do kosza
+        <Trash2 size={14}/> {compact ? "Usuń" : "Do kosza"}
       </button>
       <input ref={picker} type="file" accept={SUPPORTED_UPLOAD_ACCEPT} className={styles.file} aria-label="Wybierz nową wersję dokumentu" onChange={event=>void replaceFile(event)} disabled={Boolean(busy)}/>
     </div>
