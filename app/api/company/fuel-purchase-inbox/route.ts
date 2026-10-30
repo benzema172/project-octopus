@@ -9,6 +9,7 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type AutomaticAssignment = { id:string; plate:string; fuelType:string; date:string|null; origin:"invoice"|"receipt" };
 type Input = { workspaceId?: string; reviewId?: string; vehicleId?: string; action?: "assign" | "ignore"; liters?: string | number | null; amount?: string | number | null };
 type FuelReview = { id: string; invoice_id: string; invoice_line_id: string; suggested_fuel_type: string | null; suggested_liters: number | null; created_at: string };
 type Invoice = { id: string; invoice_number: string | null; issue_date: string | null; sale_date: string | null; currency: string | null; counterparty_id: string | null };
@@ -38,7 +39,7 @@ export async function GET(request: Request) {
   const access = await authorize(request, workspaceId, "read");
   if (access.error) return access.error;
   const db = createServiceSupabaseClient();
-  const [reviewsResult, vehiclesResult] = await Promise.all([
+  const [reviewsResult, vehiclesResult, automaticInvoicesResult, automaticReceiptsResult] = await Promise.all([
     db.from("fuel_purchase_reviews")
       .select("id,invoice_id,invoice_line_id,suggested_fuel_type,suggested_liters,created_at")
       .eq("workspace_id",workspaceId).eq("status","pending")
@@ -46,14 +47,34 @@ export async function GET(request: Request) {
     db.from("vehicles")
       .select("id,registration_number,make,model,status")
       .eq("workspace_id",workspaceId).neq("status","sold")
-      .order("registration_number").limit(1500)
+      .order("registration_number").limit(1500),
+    db.from("fuel_purchase_reviews")
+      .select("id,vehicle_id,suggested_fuel_type,resolved_at")
+      .eq("workspace_id",workspaceId).eq("status","assigned").eq("assignment_mode","automatic")
+      .order("resolved_at",{ascending:false}).limit(6),
+    db.from("fuel_entries")
+      .select("id,vehicle_id,fuel_type,fueled_at")
+      .eq("workspace_id",workspaceId).eq("external_transaction_id","octopus_fuel_receipt_20261030")
+      .order("fueled_at",{ascending:false}).limit(6)
   ]);
-  if (reviewsResult.error || vehiclesResult.error)
+  if (reviewsResult.error || vehiclesResult.error || automaticInvoicesResult.error || automaticReceiptsResult.error)
     return NextResponse.json({error:"Nie udało się pobrać kolejki tankowań."},{status:500});
+  const vehicles=(vehiclesResult.data??[]) as Array<{id:string;registration_number:string}>;
+  const byVehicle=new Map(vehicles.map(vehicle=>[vehicle.id,vehicle.registration_number]));
+  const recentAutomatic:AutomaticAssignment[]=[
+    ...(automaticInvoicesResult.data??[]).flatMap(row=>row.vehicle_id?[{
+      id:row.id,plate:byVehicle.get(row.vehicle_id)??"Pojazd",fuelType:row.suggested_fuel_type??"Paliwo",
+      date:row.resolved_at,origin:"invoice" as const
+    }]:[]),
+    ...(automaticReceiptsResult.data??[]).flatMap(row=>row.vehicle_id?[{
+      id:row.id,plate:byVehicle.get(row.vehicle_id)??"Pojazd",fuelType:row.fuel_type??"Paliwo",
+      date:row.fueled_at,origin:"receipt" as const
+    }]:[])
+  ].sort((a,b)=>(b.date??"").localeCompare(a.date??"")).slice(0,8);
   const reviews = (reviewsResult.data ?? []) as FuelReview[];
   const invoiceIds = [...new Set(reviews.map(row => row.invoice_id))];
   const lineIds = reviews.map(row => row.invoice_line_id);
-  if (!reviews.length) return NextResponse.json({ items:[], vehicles:vehiclesResult.data ?? [] }, { headers:{"Cache-Control":"no-store"} });
+  if (!reviews.length) return NextResponse.json({ items:[], vehicles:vehiclesResult.data ?? [], recentAutomatic }, { headers:{"Cache-Control":"no-store"} });
   const [invoicesResult,linesResult] = await Promise.all([
     db.from("invoices").select("id,invoice_number,issue_date,sale_date,currency,counterparty_id")
       .eq("workspace_id",workspaceId).in("id",invoiceIds),
@@ -86,7 +107,7 @@ export async function GET(request: Request) {
       suggestedVehicleId:line.vehicle_id
     }];
   });
-  return NextResponse.json({ items,vehicles:vehiclesResult.data ?? [] },{headers:{"Cache-Control":"no-store"}});
+  return NextResponse.json({ items,vehicles:vehiclesResult.data ?? [],recentAutomatic },{headers:{"Cache-Control":"no-store"}});
 }
 
 export async function POST(request: Request) {
