@@ -129,7 +129,7 @@ declare
   v_fuel_id uuid;
   v_liters numeric;
   v_amount numeric;
-  v_currency text;
+  v_project_id uuid;
 begin
   select * into r from public.fuel_purchase_reviews
     where id=p_review_id and workspace_id=p_workspace_id for update;
@@ -158,6 +158,17 @@ begin
   if exists(select 1 from public.fuel_entries f
     where f.workspace_id=p_workspace_id and f.invoice_line_id=l.id) then
     raise exception 'Tankowanie dla tej pozycji już istnieje.'; end if;
+  -- Older Fleet AI approvals may have booked this source document without
+  -- an invoice_line_id. Never re-book it from the new Wrzutnia queue.
+  if i.document_id is not null and exists (
+    select 1 from public.fuel_entries f
+    where f.workspace_id=p_workspace_id and f.source_document_id=i.document_id
+      and f.invoice_line_id is null
+  ) then raise exception 'Ten dokument ma już tankowanie w starszej Poczekalni Floty. Sprawdź historię.'; end if;
+  if exists(select 1 from public.fleet_cost_links c
+      where c.workspace_id=p_workspace_id and c.invoice_id=i.id and c.invoice_line_id is null
+        and lower(c.cost_type) like '%fuel%')
+  then raise exception 'Faktura ma już ogólny koszt paliwa przypisany do pojazdu. Wymaga uzgodnienia, aby nie podwoić kosztu.'; end if;
   -- Same supplier, invoice number and issue date in a different imported invoice:
   -- hold for review instead of counting the purchase twice.
   if nullif(trim(coalesce(i.invoice_number,'')),'') is not null and exists (
@@ -176,9 +187,11 @@ begin
      or v_amount is null or v_amount<=0 or v_amount>1000000 then
     raise exception 'Podaj rzeczywistą liczbę litrów i kwotę brutto z pozycji faktury.'; end if;
 
-  insert into public.fuel_entries(workspace_id,vehicle_id,fueled_at,liters,gross_amount,
+  select d.project_id into v_project_id from public.documents d
+    where d.id=i.document_id and d.workspace_id=p_workspace_id;
+  insert into public.fuel_entries(workspace_id,vehicle_id,project_id,fueled_at,liters,gross_amount,
     invoice_id,invoice_line_id,source_document_id,fuel_type,station_name)
-  values(p_workspace_id,p_vehicle_id,
+  values(p_workspace_id,p_vehicle_id,v_project_id,
     coalesce(i.sale_date,i.issue_date,current_date)::timestamptz,
     v_liters,v_amount,i.id,l.id,i.document_id,r.suggested_fuel_type,
     (select c.name from public.counterparties c
@@ -191,9 +204,9 @@ begin
     update public.fleet_cost_links set vehicle_id=p_vehicle_id
       where workspace_id=p_workspace_id and invoice_line_id=l.id;
   else
-    insert into public.fleet_cost_links(workspace_id,vehicle_id,invoice_id,invoice_line_id,
+    insert into public.fleet_cost_links(workspace_id,vehicle_id,project_id,invoice_id,invoice_line_id,
       document_id,cost_type,amount,currency,occurred_at,source_type,source_id,notes)
-    values(p_workspace_id,p_vehicle_id,i.id,l.id,i.document_id,'fuel',v_amount,
+    values(p_workspace_id,p_vehicle_id,v_project_id,i.id,l.id,i.document_id,'fuel',v_amount,
       i.currency,coalesce(i.sale_date,i.issue_date,current_date),
       'fuel_entry',v_fuel_id,'Przypisanie tankowania z Wrzutni; bez nowego kosztu księgowego.');
   end if;
