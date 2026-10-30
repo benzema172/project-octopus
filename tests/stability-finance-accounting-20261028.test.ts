@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { matchesImportManifest, fullyUploadedImport, normalizeImportSha256, type StoredImportManifestItem, type ImportManifestFile } from "../lib/documents/import-manifest-integrity";
 import { stableSessionUuid, matchesPersistedImportVersion } from "../lib/documents/import-session-identities";
+import { PIPELINE_STAGES, summarizePipelineStages, type PipelineStageStatus } from "../lib/documents/pipeline-stage-state";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = (path: string) => readFileSync(resolve(root, path), "utf8");
@@ -340,6 +341,58 @@ describe("Octopus production stability regression", () => {
     expect(finance).toContain("const [invoiceResult, txResult, lineResult, allocationResult] = await Promise.all");
     expect(finance).toContain("if (existing) existing.push(row)");
     expect(finance).not.toContain("allocations.set(key, [...(allocations.get(key) ?? []), row])");
+  });
+
+  it("does not claim full success for 100 extracted documents before routing, accounting and reconciliation", () => {
+    const complete = PIPELINE_STAGES.map(stage => ({stage,status:"complete" as PipelineStageStatus}));
+    const skipped = PIPELINE_STAGES.map(stage => ({
+      stage,status:stage==="extract"||stage==="route"?"complete" as PipelineStageStatus:"not_applicable" as PipelineStageStatus
+    }));
+    for(let index=0;index<100;index++) {
+      expect(summarizePipelineStages(complete)).toBe("complete");
+      expect(summarizePipelineStages(skipped)).toBe("complete");
+      expect(summarizePipelineStages(complete.slice(0,1))).toBe("pending");
+      expect(summarizePipelineStages(complete.map((s,i)=>i===5?{...s,status:"review"}:s))).toBe("review");
+      expect(summarizePipelineStages(complete.map((s,i)=>i===4?{...s,status:"error"}:s))).toBe("error");
+    }
+  });
+
+  it("routes independently of Wrzutnia and records the full stage outcome in every entry point", () => {
+    const process = source("lib/ai/process-document.ts");
+    const specialist = source("lib/ai/gemini-warehouse-document.ts");
+    const worker = source("app/api/brain/worker/route.ts");
+    const direct = source("app/api/brain/process/route.ts");
+    const retry = source("app/api/brain/retry/route.ts");
+    const summary = source("app/api/documents/import-session/route.ts");
+    expect(process).toContain("mustUseStructuredSpecialist");
+    expect(process).toContain("analyzeWarehouseDocumentWithGemini");
+    expect(specialist).toContain("businessDocuments");
+    for(const entry of [worker,direct,retry]) expect(entry).toContain("recordPipelineOutcome");
+    expect(summary).toContain("summarizePipelineStages(stages)");
+    expect(summary).toContain("document_pipeline_stages");
+  });
+
+  it("evaluates more than four AI decisions and persists provider evidence", () => {
+    const finance = source("lib/finance/document-invoice-finalization.ts");
+    const council = source("lib/ai/multi-ai-core.ts");
+    expect(finance).not.toContain(".slice(0, 4)");
+    expect(finance).toContain("for (let offset = 0; offset < reviewIds.length; offset += 2)");
+    expect(finance).toContain("proposeInvoiceWarehouseReconciliation");
+    expect(council).toContain("providerFamilies.size >= 2");
+  });
+
+  it("persists read-only WZ/PZ/MM line matching and never posts quantity on its own", () => {
+    const sql = source("supabase/migrations/20261030120000_document_pipeline_stages_and_reconciliation.sql");
+    const reconcile = source("lib/finance/warehouse-reconciliation.ts");
+    expect(sql).toContain("document_pipeline_stages");
+    expect(sql).toContain("document_warehouse_reconciliations");
+    expect(sql).toContain("stock_item_id=wal.candidate_stock_item_id");
+    expect(sql).toContain("il.supplier_sku");
+    expect(sql).toContain("quantityAgrees");
+    expect(sql).not.toContain("approve_stock_movement_atomic");
+    expect(reconcile).toContain('status:"review"');
+    expect(reconcile).toContain("ignoreDuplicates:true");
+    expect(reconcile).toContain("requiresHumanReview:candidates.length>0");
   });
 
   it("runs the warehouse overview data reads concurrently instead of in waterfalls", () => {
