@@ -266,8 +266,20 @@ export async function processDocumentVersion(input: {
         : await analyzeDocumentWithGemini({ fileName: version.file_name, mimeType: version.mime_type, ...prepared, projectCatalog });
     // If a general Wrzutnia document turns out to be financial, re-run the
     // structured specialist. The source module is a hint, not a prerequisite.
+    // The general classifier may label a fuel invoice as "fleet" (or a
+    // material invoice as "technical"). Treat structured business-document
+    // evidence as an independent trigger for the invoice/WZ/PZ/MM specialist,
+    // so module context never suppresses financial materialization.
+    const detectedBusiness = analysisResult.analysis.businessDocument;
+    const detectedBusinessType = String(detectedBusiness?.documentType ?? "").trim().toLowerCase();
+    const hasBusinessEvidence = Boolean(
+      ["invoice", "receipt", "wz", "pz", "mm", "rw", "zw", "delivery"].includes(detectedBusinessType)
+      && (detectedBusiness?.lines?.length
+        || detectedBusiness?.documentNumber?.trim()
+        || detectedBusiness?.ksefNumber?.trim())
+    );
     const classifiedBusiness = ["invoice", "warehouse"].includes(analysisResult.analysis.category)
-      || (analysisResult.analysis.category === "fleet" && analysisResult.analysis.businessDocument?.documentType === "receipt");
+      || hasBusinessEvidence;
     const mustUseStructuredSpecialist = !businessDocumentSpecialist && classifiedBusiness;
     const specialized = mustUseStructuredSpecialist
       ? await analyzeWarehouseDocumentWithGemini({
