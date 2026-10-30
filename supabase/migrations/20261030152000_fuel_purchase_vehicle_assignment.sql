@@ -20,6 +20,10 @@ create index if not exists fuel_purchase_reviews_queue_idx
   on public.fuel_purchase_reviews(workspace_id,status,created_at desc);
 create index if not exists fuel_purchase_reviews_invoice_idx
   on public.fuel_purchase_reviews(invoice_id);
+create index if not exists fuel_purchase_reviews_document_fk_idx on public.fuel_purchase_reviews(document_id) where document_id is not null;
+create index if not exists fuel_purchase_reviews_vehicle_fk_idx on public.fuel_purchase_reviews(vehicle_id) where vehicle_id is not null;
+create index if not exists fuel_purchase_reviews_fuel_entry_fk_idx on public.fuel_purchase_reviews(fuel_entry_id) where fuel_entry_id is not null;
+create index if not exists fuel_purchase_reviews_resolved_by_fk_idx on public.fuel_purchase_reviews(resolved_by) where resolved_by is not null;
 create unique index if not exists fuel_entries_one_invoice_line_tanking_20261030
   on public.fuel_entries(invoice_line_id) where invoice_line_id is not null;
 alter table public.fuel_purchase_reviews enable row level security;
