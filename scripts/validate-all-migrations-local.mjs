@@ -49,6 +49,20 @@ async function prepareDatabase(database) {
       if not found then raise exception 'Unknown mock cron job id %', job_id; end if;
     end;
     $cron_stub$;
+    create function cron.unschedule(job_id bigint)
+    returns boolean language plpgsql as $cron_stub$
+    begin
+      delete from cron.job where jobid=job_id;
+      return found;
+    end;
+    $cron_stub$;
+    create function cron.unschedule(job_name text)
+    returns boolean language plpgsql as $cron_stub$
+    begin
+      delete from cron.job where jobname=job_name;
+      return found;
+    end;
+    $cron_stub$;
     create function cron.schedule(job_name text, schedule text, command text)
     returns bigint language plpgsql as $cron_stub$
     declare v_id bigint;
