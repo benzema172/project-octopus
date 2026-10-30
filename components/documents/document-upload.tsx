@@ -745,6 +745,7 @@ export function DocumentUpload({
         throw new Error(payload?.error ?? "Nie udało się zmienić stanu dokumentu.");
       }
       setStatus(state === "trashed" ? "Dokument przeniesiony do kosza" : "Dokument przywrócony");
+      router.refresh();
     } catch (stateError) {
       setStatus(null);
       setError(stateError instanceof Error ? stateError.message : "Zmiana stanu dokumentu nie powiodła się.");
@@ -1027,7 +1028,7 @@ export function DocumentUpload({
                     <button type="button" className="secondary-button" onClick={() => openFilePicker(document.id, document.project_id)} disabled={isUploading || !storageReady} title="Dodaj nową wersję">
                       <FilePlus2 size={14} aria-hidden="true" />Nowa wersja
                     </button>
-                    <button type="button" className="secondary-button secondary-button--danger" onClick={() => void changeDocumentState(document.id, "trashed", document.project_id)} disabled={isUploading || isPending} title="Przenieś do kosza">
+                    <button type="button" className="secondary-button secondary-button--danger" onClick={() => { if (window.confirm("Przenieść dokument do kosza? Plik będzie można przywrócić. Powiązane faktury i wpisy księgowe nie są usuwane.")) void changeDocumentState(document.id, "trashed", document.project_id); }} disabled={isUploading || isPending} title="Przenieś do kosza">
                       <Trash2 size={14} aria-hidden="true" />Do kosza
                     </button>
                   </div>
