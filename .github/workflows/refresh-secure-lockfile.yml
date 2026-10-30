@@ -1,0 +1,32 @@
+name: Temporary secure dependency lockfile refresh
+on:
+  push:
+    branches:
+      - fix/secure-octopus-dependencies-20261030
+    paths:
+      - package.json
+permissions:
+  contents: write
+jobs:
+  refresh-lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - name: Regenerate lockfile and verify production security
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm ci --no-audit --no-fund
+          npm audit --omit=dev --audit-level=high
+      - name: Push lockfile update to fix branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Regenerate audited dependency lockfile"
+            git push origin HEAD:fix/secure-octopus-dependencies-20261030
+          fi
