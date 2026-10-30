@@ -1,5 +1,6 @@
-import { FuelPurchaseInbox } from "@/components/documents/fuel-purchase-inbox";
 "use client";
+
+import { FuelPurchaseInbox } from "@/components/documents/fuel-purchase-inbox";
 
 import { useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
