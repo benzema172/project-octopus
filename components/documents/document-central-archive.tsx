@@ -306,7 +306,7 @@ export function DocumentCentralArchive({
                     {requiresReview(selected) ? <a href={`#document-review-${selected.id}`}>Podejmij decyzję ↓</a> : null}
                   </div>
 
-                  <DocumentManagementControls key={selected.id}
+                  <DocumentManagementControls key={`${selected.id}:${selected.updated_at}`}
                     workspaceId={workspaceId} documentId={selected.id} projectId={selected.project_id}
                     name={selected.name} updatedAt={selected.updated_at}
                     onArchived={()=>setSelectedId(null)}
