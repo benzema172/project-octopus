@@ -8,7 +8,8 @@ describe("autonomous document ingestion", () => {
   it("runs Autopilot automatically after AI analysis in the canonical processing route", () => {
     expect(route).toContain("applyDocumentAutopilot");
     expect(route).toMatch(/const autopilot = await applyDocumentAutopilot/);
-    expect(route).toMatch(/version\.project_id \?\? analysis\.proposedProjectId/);
+    expect(route).toContain("safeProjectRoutingTarget(version.project_id,analysis.proposedProjectId,analysis.projectMatch)");
+    expect(route).not.toMatch(/version\.project_id \?\? analysis\.proposedProjectId/);
   });
 
   it("auto-approves classification and publishes module proposals instead of waiting for review", () => {
