@@ -17,6 +17,7 @@ import { buildRevisionImpacts } from "@/lib/documents/revision-radar";
 import { scanDocumentBytes, type MalwareScanResult } from "@/lib/documents/malware-scan";
 import { extractSpreadsheetIntelligence } from "@/lib/documents/spreadsheet-intelligence";
 import { normalizeDocumentSourceModule, sourceModuleLabel, sourceModulePromptHint } from "@/lib/documents/source-module";
+import { recordDocumentPipelineStage } from "@/lib/documents/pipeline-stages";
 
 const MAX_PIPELINE_BYTES = 50 * 1024 * 1024;
 const MAX_INLINE_BYTES = 18 * 1024 * 1024;
@@ -152,6 +153,10 @@ export async function processDocumentVersion(input: {
   try {
     const r2Config = getR2Config();
     if (version.r2_bucket !== r2Config.bucketName) throw new Error("Dokument wskazuje nieprawidłowy bucket R2.");
+    await recordDocumentPipelineStage({
+      workspaceId: input.workspaceId, documentId: version.document_id, versionId: version.id,
+      stage: "extract", status: "running"
+    });
     const object = await createR2Client().send(new GetObjectCommand({ Bucket: version.r2_bucket, Key: version.r2_object_key }));
     if (!object.Body) throw new Error("R2 nie zwrócił treści dokumentu.");
     const bytes = Buffer.from(await object.Body.transformToByteArray());
@@ -190,7 +195,8 @@ export async function processDocumentVersion(input: {
       });
     }
 
-    const businessDocumentSpecialist = sourceModule === "warehouse" || sourceModule === "finance";
+    const filenameFinancialHint = /(?:faktura|invoice|rachunek|\\b(?:wz|pz|mm|rw|zw)[-_ .\\d]|dostaw[ay]|zakup)/i.test(version.file_name);
+    const businessDocumentSpecialist = sourceModule === "warehouse" || sourceModule === "finance" || filenameFinancialHint;
     const warehouseBinary = businessDocumentSpecialist
       && (version.mime_type === "application/pdf" || version.mime_type.startsWith("image/"));
     const useFilesApi = !warehouseBinary
@@ -258,7 +264,21 @@ export async function processDocumentVersion(input: {
       : useFilesApi
         ? await analyzeFileWithGemini({ fileName: version.file_name, mimeType: version.mime_type, bytes, projectCatalog })
         : await analyzeDocumentWithGemini({ fileName: version.file_name, mimeType: version.mime_type, ...prepared, projectCatalog });
-    const { analysis, model } = analysisResult;
+    // If a general Wrzutnia document turns out to be financial, re-run the
+    // structured specialist. The source module is a hint, not a prerequisite.
+    const classifiedBusiness = ["invoice", "warehouse"].includes(analysisResult.analysis.category);
+    const mustUseStructuredSpecialist = !businessDocumentSpecialist && classifiedBusiness;
+    const specialized = mustUseStructuredSpecialist
+      ? await analyzeWarehouseDocumentWithGemini({
+          fileName: version.file_name,
+          mimeType: version.mime_type,
+          bytes: version.mime_type === "application/pdf" || version.mime_type.startsWith("image/") ? bytes : undefined,
+          extractedText: "extractedText" in prepared && typeof prepared.extractedText === "string"
+            ? prepared.extractedText : undefined,
+          projectCatalog
+        })
+      : analysisResult;
+    const { analysis, model } = specialized;
 
     const lockedCategory = input.categoryOverride
       ?? (intake?.category_locked ? normalizeDocumentCategory(intake.requested_category) : null);
@@ -484,6 +504,12 @@ export async function processDocumentVersion(input: {
       confidence: analysis.confidence,
       match_metadata: routing
     }).eq("document_id", version.document_id);
+    await recordDocumentPipelineStage({
+      workspaceId: input.workspaceId, documentId: version.document_id, versionId: version.id,
+      stage: "extract", status: "complete", details: {
+        category: effectiveCategory, model, specialized: businessDocumentSpecialist || mustUseStructuredSpecialist
+      }
+    });
     await supabase.from("processing_jobs").update({
       status: "succeeded",
       stage: "complete",
@@ -526,6 +552,10 @@ export async function processDocumentVersion(input: {
     } satisfies ProcessedDocumentAnalysis;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Nieznany błąd analizy.";
+    await recordDocumentPipelineStage({
+      workspaceId: input.workspaceId, documentId: version.document_id, versionId: version.id,
+      stage: "extract", status: "error", details: { reason: message.slice(0,1000) }
+    });
     const normalizedMessage = message.toLocaleLowerCase("pl");
     const maxAttempts = currentJob?.max_attempts ?? 5;
     const permanent = normalizedMessage.includes("przekracza limit 50 mb")

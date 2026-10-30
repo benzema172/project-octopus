@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { processDocumentVersion } from "@/lib/ai/process-document";
 import { findExistingExactDuplicate } from "@/lib/documents/exact-duplicate-guard";
-import { runInvoiceIntakeChecks, containsInvoiceBusinessDocument } from "@/lib/finance/document-invoice-finalization";
+import { runInvoiceIntakeChecks, containsInvoiceBusinessDocument, approvedDocumentContainsInvoice } from "@/lib/finance/document-invoice-finalization";
+import { recordDocumentPipelineStage } from "@/lib/documents/pipeline-stages";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
+import { safeProjectRoutingTarget } from "@/lib/ai/project-matcher";
+import { recordPipelineOutcome, type FinancialPipelineChecks } from "@/lib/documents/pipeline-outcome";
 import { enrichDocumentWithInvestmentRouting } from "@/lib/ai/investment-document-routing";
 import { geminiRateLimitInfo, geminiRateLimitMessage } from "@/lib/ai/gemini-rate-limit";
 import { getRequestUser } from "@/lib/auth";
@@ -19,7 +22,7 @@ export async function POST(request: Request) {
   const requestId = requestIdFrom(request);
   const user = await getRequestUser(request);
   if (!user) return NextResponse.json({ error: "Brak aktywnej sesji." }, { status: 401 });
-  let body: { workspaceId?: string; documentId?: string; force?: boolean };
+  let body: { workspaceId?: string; documentId?: string; force?: boolean; stage?: "finance"|"accounting"|"reconciliation" };
   try { body = await request.json() as typeof body; } catch { return NextResponse.json({ error: "Nieprawidłowe dane ponowienia." }, { status: 400 }); }
   if (!body.documentId) return NextResponse.json({ error: "Brakuje dokumentu." }, { status: 400 });
   const workspace = body.workspaceId ? await getWorkspaceForUser(user, body.workspaceId) : await ensureWorkspaceForUser(user);
@@ -34,6 +37,45 @@ export async function POST(request: Request) {
   if (documentError || !document?.current_version_id) return NextResponse.json({ error: "Dokument nie ma aktualnej wersji." }, { status: 404 });
   if (!await hasDomainAccess({ workspaceId: workspace.id, userId: user.id, domain: domainForDocumentCategory(document.category), level: "write", projectId: document.project_id })) {
     return NextResponse.json({ error: "Brak uprawnienia do ponowienia analizy tego dokumentu." }, { status: 403 });
+  }
+
+  // Re-run only the financial checks, without re-OCR'ing the file, altering
+  // the source document, or replaying published investment/warehouse writes.
+  if (body.stage) {
+    const { data: routingState, error: routingStateError } = await supabase
+      .from("document_pipeline_stages").select("status")
+      .eq("workspace_id", workspace.id)
+      .eq("document_version_id", document.current_version_id)
+      .eq("stage", "route")
+      .maybeSingle<{ status: string }>();
+    if (routingStateError || routingState?.status !== "complete")
+      return NextResponse.json({ error:"Najpierw trzeba zakończyć i zweryfikować routing dokumentu." },{status:409});
+    const exactDuplicate = await findExistingExactDuplicate({
+      workspaceId:workspace.id,documentId:document.id,versionId:document.current_version_id
+    });
+    if (exactDuplicate)
+      return NextResponse.json({error:"Podejrzany duplikat wymaga rozstrzygnięcia przed ponowieniem finansowym."},{status:409});
+    if (!await approvedDocumentContainsInvoice(workspace.id,document.current_version_id,document.category ?? ""))
+      return NextResponse.json({error:"Wybrany dokument nie zawiera faktury do kontroli."},{status:422});
+    try {
+      const checks = await runInvoiceIntakeChecks({ workspaceId:workspace.id,documentId:document.id,actorId:user.id });
+      await recordPipelineOutcome({
+        workspaceId:workspace.id,documentId:document.id,versionId:document.current_version_id,
+        category:document.category ?? "invoice",routeOk:true,isInvoice:true,checks
+      });
+      const requiresReview = checks.invoiceReadiness.some(v=>v.requiresReview||v.warehouseReceipt?.requiresHumanReview)
+        || checks.financeAi.requiresHuman>0 || checks.accounting.some(v=>v.needsReview)
+        || checks.reconciliations.some(v=>v.requiresHumanReview);
+      return NextResponse.json({ok:true,status:requiresReview?"review":"completed",stage:body.stage,
+        message:requiresReview?"Kontrola została odświeżona, decyzje wymagają zatwierdzenia.":"Kontrola etapu została ukończona."});
+    } catch (error) {
+      const message=error instanceof Error?error.message:"Nie udało się ponowić kontroli finansowej.";
+      await recordDocumentPipelineStage({
+        workspaceId:workspace.id,documentId:document.id,versionId:document.current_version_id,
+        stage:body.stage,status:"review",details:{reason:message}
+      });
+      return NextResponse.json({error:message,status:"review"},{status:422});
+    }
   }
 
   try {
@@ -79,7 +121,7 @@ export async function POST(request: Request) {
         workspaceId: workspace.id, documentId: document.id,
         versionId: document.current_version_id
       });
-      const routingProjectId = document.project_id ?? analysis.proposedProjectId ?? null;
+      const routingProjectId = safeProjectRoutingTarget(document.project_id,analysis.proposedProjectId,analysis.projectMatch);
       let routingErrorMessage: string | null = null;
       if (routingProjectId && !exactDuplicate && analysis.confidence >= 0.82) {
         try {
@@ -107,6 +149,15 @@ export async function POST(request: Request) {
         }
       }
 
+      if (routingErrorMessage) {
+        await recordPipelineOutcome({
+          workspaceId:workspace.id,documentId:document.id,versionId:document.current_version_id,
+          category:analysis.effectiveCategory,routeOk:false,
+          isInvoice:analysis.effectiveCategory==="invoice"||containsInvoiceBusinessDocument(analysis),
+          failure:routingErrorMessage
+        });
+        return NextResponse.json({ok:false,status:"review",error:routingErrorMessage},{status:422});
+      }
       const autopilot = await applyDocumentAutopilot({
         workspaceId: workspace.id,
         documentId: document.id,
@@ -116,11 +167,17 @@ export async function POST(request: Request) {
         actorId: user.id
       });
 
-      if (autopilot.failed === 0 && autopilot.status === "applied" && !routingErrorMessage
-        && (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis))) {
-        await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: document.id, actorId: user.id });
+      const isInvoice = analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis);
+      const routeOk = autopilot.failed === 0 && autopilot.status === "applied" && !routingErrorMessage;
+      let pipelineChecks: FinancialPipelineChecks | null = null;
+      if (routeOk && isInvoice) {
+        pipelineChecks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: document.id, actorId: user.id });
       }
-      if (autopilot.failed > 0 || autopilot.status !== "applied" || routingErrorMessage) {
+      await recordPipelineOutcome({
+        workspaceId:workspace.id,documentId:document.id,versionId:document.current_version_id,
+        category:analysis.effectiveCategory,routeOk,isInvoice,checks:pipelineChecks,failure:routingErrorMessage
+      });
+      if (!routeOk) {
         const { error: reviewError } = await supabase.from("documents")
           .update({ ai_status: "review", review_status: "pending" })
           .eq("workspace_id",workspace.id).eq("id",document.id);

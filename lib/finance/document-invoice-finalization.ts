@@ -2,6 +2,7 @@ import "server-only";
 import { analyzeUnifiedDocumentReviewMulti } from "@/lib/ai/multi-ai-core";
 import { runAccountingCopilotForDocument } from "@/lib/ai/accounting-copilot";
 import { assessDocumentInvoiceReadiness } from "@/lib/finance/invoice-intake-readiness";
+import { proposeInvoiceWarehouseReconciliation, type ReconciliationResult } from "@/lib/finance/warehouse-reconciliation";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { AccountingCopilotRun } from "@/lib/ai/accounting-copilot";
 import type { InvoiceIntakeAssessment } from "@/lib/finance/invoice-intake-readiness";
@@ -65,8 +66,9 @@ async function analyzeInvoiceReviews(workspaceId: string, documentId: string): P
       .eq("status", "open")
       .in("invoice_id", invoiceIds)
       .order("created_at", { ascending: true })
-      .limit(20);
+      .limit(1000);
     if (error) throw new Error(`Nie udało się pobrać decyzji faktury: ${error.message}`);
+    if ((data ?? []).length >= 1000) throw new Error("Liczba decyzji Multi-AI przekracza stronę 1000 rekordów; kontrola musi być kontynuowana przed rozliczeniem.");
     reviewSets.push((data ?? []) as ReviewRow[]);
   }
   if (inboxIds.length) {
@@ -78,10 +80,13 @@ async function analyzeInvoiceReviews(workspaceId: string, documentId: string): P
       .order("created_at", { ascending: true })
       .limit(20);
     if (error) throw new Error(`Nie udało się pobrać decyzji Business Inbox: ${error.message}`);
+    if ((data ?? []).length >= 1000) throw new Error("Liczba decyzji Multi-AI przekracza stronę 1000 rekordów; kontrola musi być kontynuowana przed rozliczeniem.");
     reviewSets.push((data ?? []) as ReviewRow[]);
   }
 
-  const reviewIds = [...new Set(reviewSets.flat().map((row) => row.id))].slice(0, 4);
+  const reviewIds = [...new Set(reviewSets.flat().map((row) => row.id))];
+  // Every open decision linked to this source must be checked. Never silently
+  // skip the fifth review in a multi-page/multi-document invoice.
   const results: Array<{ providers: number; requiresHuman: boolean }> = [];
   let failed = 0;
 
@@ -111,10 +116,13 @@ export async function runInvoiceIntakeChecks(input: {
   workspaceId: string;
   documentId: string;
   actorId: string;
-}): Promise<{ invoiceReadiness: InvoiceIntakeAssessment[]; financeAi: FinanceAiSummary; accounting: AccountingCopilotRun[] }> {
+}): Promise<{ invoiceReadiness: InvoiceIntakeAssessment[]; financeAi: FinanceAiSummary; accounting: AccountingCopilotRun[]; reconciliations: ReconciliationResult[] }> {
   const invoiceReadiness = await assessDocumentInvoiceReadiness(input);
   // Check reconciliation and independent AI opinions before preparing
   // accounting proposals. A failed provider check is not a clean result.
+  const reconciliations = await proposeInvoiceWarehouseReconciliation(
+    input.workspaceId, invoiceReadiness.map((invoice) => invoice.invoiceId)
+  );
   const financeAi = await analyzeInvoiceReviews(input.workspaceId, input.documentId);
   if (financeAi.failed > 0) {
     const { error } = await createServiceSupabaseClient().from("documents")
@@ -125,6 +133,7 @@ export async function runInvoiceIntakeChecks(input: {
   }
   const accounting = await runAccountingCopilotForDocument(input.workspaceId, input.documentId, input.actorId);
   if (invoiceReadiness.some((item) => item.requiresReview || item.warehouseReceipt?.requiresHumanReview)
+    || reconciliations.some((item) => item.requiresHumanReview)
     || financeAi.requiresHuman > 0
     || accounting.some((item) => item.needsReview)) {
     const { error } = await createServiceSupabaseClient().from("documents")
@@ -132,6 +141,6 @@ export async function runInvoiceIntakeChecks(input: {
       .eq("workspace_id", input.workspaceId).eq("id", input.documentId);
     if (error) throw new Error(`Nie udało się oznaczyć decyzji finansowo-magazynowej: ${error.message}`);
   }
-  return { invoiceReadiness, financeAi, accounting };
+  return { invoiceReadiness, financeAi, accounting, reconciliations };
 }
 

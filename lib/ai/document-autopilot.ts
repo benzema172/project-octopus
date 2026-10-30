@@ -2,6 +2,7 @@ import "server-only";
 
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { findExistingExactDuplicate } from "@/lib/documents/exact-duplicate-guard";
+import { refreshWarehouseDocumentReconciliations } from "@/lib/finance/warehouse-reconciliation";
 
 export type DocumentAutopilotResult = {
   status: "applied" | "partial" | "skipped";
@@ -288,6 +289,14 @@ export async function applyDocumentAutopilot(input: {
       if (!businessDocumentProcessed) {
         failed += 1;
         errors.push("AI rozpoznało dokument finansowo-magazynowy, ale nie utworzyło żadnej zweryfikowanej pozycji. Wymagana kontrola przed uznaniem go za gotowy.");
+      }
+      if (businessDocumentProcessed && reviewed.result_category === "warehouse") {
+        try {
+          await refreshWarehouseDocumentReconciliations(input.workspaceId,input.documentId);
+        } catch (reconciliationError) {
+          failed += 1;
+          errors.push(`Ponowne uzgadnianie faktur z magazynem: ${reconciliationError instanceof Error?reconciliationError.message:"nieznany błąd"}`);
+        }
       }
     }
   }

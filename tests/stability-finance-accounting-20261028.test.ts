@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { matchesImportManifest, fullyUploadedImport, normalizeImportSha256, type StoredImportManifestItem, type ImportManifestFile } from "../lib/documents/import-manifest-integrity";
 import { stableSessionUuid, matchesPersistedImportVersion } from "../lib/documents/import-session-identities";
+import { PIPELINE_STAGES, summarizePipelineStages, type PipelineStageStatus } from "../lib/documents/pipeline-stage-state";
+import { safeProjectRoutingTarget, type ProjectMatchDecision } from "../lib/ai/project-matcher";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = (path: string) => readFileSync(resolve(root, path), "utf8");
@@ -142,6 +144,8 @@ describe("Octopus production stability regression", () => {
     const policy = source("lib/ai/unified-document-ai-policy.ts");
     const base = source("lib/ai/unified-document-copilot.ts");
     expect(council).toContain("providerFamilies.size >= 2");
+    expect(council).toContain("Nie udało się zapisać audytu konsensusu AI");
+    expect(council).not.toContain("persistRun(workspaceId, reviewId, base.id, vote, promptHash).catch(() => undefined)");
     expect(council).toContain('vote.recommendation === "duplicate_same"');
     expect(council).toContain("base.hardDuplicateEvidence && providerQuorum");
     expect(council).toContain('recommendation: "manual_review"');
@@ -198,7 +202,7 @@ describe("Octopus production stability regression", () => {
       expect(guard).toBeLessThan(route);
     }
     expect(worker).toContain("!duplicate");
-    expect(worker).toContain("sourceVersion.project_id ?? analysis.proposedProjectId ?? null");
+    expect(worker).toContain("safeProjectRoutingTarget(sourceVersion.project_id,analysis.proposedProjectId,analysis.projectMatch)");
     expect(worker).toContain("routingProjectId && actorId && analysis.confidence >= 0.82");
     expect(direct).toContain("!exactDuplicate");
     expect(retry).toContain("!exactDuplicate");
@@ -340,6 +344,85 @@ describe("Octopus production stability regression", () => {
     expect(finance).toContain("const [invoiceResult, txResult, lineResult, allocationResult] = await Promise.all");
     expect(finance).toContain("if (existing) existing.push(row)");
     expect(finance).not.toContain("allocations.set(key, [...(allocations.get(key) ?? []), row])");
+  });
+
+  it("does not claim full success for 100 extracted documents before routing, accounting and reconciliation", () => {
+    const complete = PIPELINE_STAGES.map(stage => ({stage,status:"complete" as PipelineStageStatus}));
+    const skipped = PIPELINE_STAGES.map(stage => ({
+      stage,status:stage==="extract"||stage==="route"?"complete" as PipelineStageStatus:"not_applicable" as PipelineStageStatus
+    }));
+    for(let index=0;index<100;index++) {
+      expect(summarizePipelineStages(complete)).toBe("complete");
+      expect(summarizePipelineStages(skipped)).toBe("complete");
+      expect(summarizePipelineStages(complete.slice(0,1))).toBe("pending");
+      expect(summarizePipelineStages(complete.map((s,i)=>i===5?{...s,status:"review"}:s))).toBe("review");
+      expect(summarizePipelineStages(complete.map((s,i)=>i===4?{...s,status:"error"}:s))).toBe("error");
+    }
+  });
+
+  it("prevents publishing to a guessed investment below the safety threshold", () => {
+    const matched:ProjectMatchDecision={status:"matched",project:{id:"project-1",name:"Wysoka"},
+      score:0.91,runnerUpScore:0.2,margin:0.71,reason:"exact contract",
+      evidence:[{type:"contract",value:"WYS-123"}],alternatives:[]};
+    expect(safeProjectRoutingTarget(null,"project-1",matched)).toBe("project-1");
+    expect(safeProjectRoutingTarget("chosen-project","project-1",matched)).toBe("chosen-project");
+    expect(safeProjectRoutingTarget(null,"project-1",{...matched,score:0.79})).toBeNull();
+    expect(safeProjectRoutingTarget(null,"project-2",matched)).toBeNull();
+    expect(safeProjectRoutingTarget(null,"project-1",{...matched,status:"ambiguous"})).toBeNull();
+    for(const route of ["app/api/brain/worker/route.ts","app/api/brain/process/route.ts","app/api/brain/retry/route.ts"]){
+      const code=source(route);
+      expect(code).toContain("safeProjectRoutingTarget(");
+      expect(code).toContain("recordPipelineOutcome(");
+    }
+  });
+
+  it("routes independently of Wrzutnia and records the full stage outcome in every entry point", () => {
+    const process = source("lib/ai/process-document.ts");
+    const specialist = source("lib/ai/gemini-warehouse-document.ts");
+    const worker = source("app/api/brain/worker/route.ts");
+    const direct = source("app/api/brain/process/route.ts");
+    const retry = source("app/api/brain/retry/route.ts");
+    const summary = source("app/api/documents/import-session/route.ts");
+    expect(process).toContain("mustUseStructuredSpecialist");
+    expect(process).toContain("analyzeWarehouseDocumentWithGemini");
+    expect(specialist).toContain("businessDocuments");
+    for(const entry of [worker,direct,retry]) expect(entry).toContain("recordPipelineOutcome");
+    expect(summary).toContain("summarizePipelineStages(stages)");
+    expect(summary).toContain("document_pipeline_stages");
+    const ui = source("components/documents/document-upload.tsx");
+    expect(ui).toContain("Dokumenty wymagające kontroli — zobacz etapy");
+    expect(ui).toContain("retryFinanceStage");
+    expect(ui).toContain("await refreshImportSession(batchSummary.id)");
+    expect(retry).toContain('if (body.stage)');
+    expect(retry).toContain("retry_document_processing_atomic");
+    expect(retry.indexOf("if (body.stage)")).toBeLessThan(retry.indexOf("retry_document_processing_atomic"));
+  });
+
+  it("evaluates more than four AI decisions and persists provider evidence", () => {
+    const finance = source("lib/finance/document-invoice-finalization.ts");
+    const council = source("lib/ai/multi-ai-core.ts");
+    expect(finance).not.toContain(".slice(0, 4)");
+    expect(finance).toContain("for (let offset = 0; offset < reviewIds.length; offset += 2)");
+    expect(finance).toContain("proposeInvoiceWarehouseReconciliation");
+    expect(council).toContain("providerFamilies.size >= 2");
+  });
+
+  it("persists read-only WZ/PZ/MM line matching and never posts quantity on its own", () => {
+    const sql = source("supabase/migrations/20261030120000_document_pipeline_stages_and_reconciliation.sql");
+    const reconcile = source("lib/finance/warehouse-reconciliation.ts");
+    expect(sql).toContain("document_pipeline_stages");
+    expect(sql).toContain("document_warehouse_reconciliations");
+    expect(sql).toContain("stock_item_id=wal.candidate_stock_item_id");
+    expect(sql).toContain("il.supplier_sku");
+    expect(sql).toContain("quantityAgrees");
+    expect(sql).not.toContain("approve_stock_movement_atomic");
+    expect(reconcile).toContain('status:"review"');
+    expect(reconcile).toContain("ignoreDuplicates:true");
+    expect(reconcile).toContain("requiresHumanReview:candidates.length>0");
+    expect(reconcile).toContain("refreshWarehouseDocumentReconciliations");
+    expect(source("lib/ai/document-autopilot.ts")).toContain(
+      "refreshWarehouseDocumentReconciliations(input.workspaceId,input.documentId)"
+    );
   });
 
   it("runs the warehouse overview data reads concurrently instead of in waterfalls", () => {

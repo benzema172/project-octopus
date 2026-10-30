@@ -3,6 +3,8 @@ import { getRequestUser } from "@/lib/auth";
 import { processDocumentVersion } from "@/lib/ai/process-document";
 import { findExistingExactDuplicate } from "@/lib/documents/exact-duplicate-guard";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
+import { safeProjectRoutingTarget } from "@/lib/ai/project-matcher";
+import { recordPipelineOutcome, type FinancialPipelineChecks } from "@/lib/documents/pipeline-outcome";
 import { enrichDocumentWithInvestmentRouting, type InvestmentRoutingResult } from "@/lib/ai/investment-document-routing";
 import { geminiRateLimitInfo, geminiRateLimitMessage, millisecondsUntil, wait } from "@/lib/ai/gemini-rate-limit";
 import { ensureWorkspaceForUser, getWorkspaceForUser } from "@/lib/data/workspace";
@@ -140,6 +142,7 @@ export async function POST(request: Request) {
         actorId: user.id
       });
 
+      let pipelineChecks: FinancialPipelineChecks | null = null;
       let invoiceReadiness: InvoiceIntakeAssessment[] = [];
       let financeAi: FinanceAiSummary | null = null;
       let accounting: AccountingCopilotRun[] = [];
@@ -147,6 +150,7 @@ export async function POST(request: Request) {
       try {
         if (!(materialization && "autopilot" in materialization && materialization.autopilot?.failed) && await approvedDocumentContainsInvoice(workspace.id, body.versionId, approved.category)) {
           const checks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id });
+          pipelineChecks = checks;
           invoiceReadiness = checks.invoiceReadiness;
           financeAi = checks.financeAi;
           accounting = checks.accounting;
@@ -156,6 +160,14 @@ export async function POST(request: Request) {
         console.error("[brain/process] invoice readiness failed", error);
       }
 
+      const isApprovedInvoice = approved.category === "invoice"
+        || await approvedDocumentContainsInvoice(workspace.id, body.versionId, approved.category);
+      await recordPipelineOutcome({
+        workspaceId:workspace.id,documentId:version.document_id,versionId:body.versionId,
+        category:approved.category,
+        routeOk:!("autopilot" in materialization) || (materialization.autopilot?.status === "applied" && materialization.autopilot.failed === 0),
+        isInvoice:isApprovedInvoice,checks:pipelineChecks,failure:invoiceCheckError
+      });
       return NextResponse.json({
         ok: true,
         alreadyAnalyzed: true,
@@ -217,7 +229,7 @@ export async function POST(request: Request) {
       const exactDuplicate = await findExistingExactDuplicate({
         workspaceId: workspace.id, documentId: version.document_id, versionId: body.versionId
       });
-      const routingProjectId = version.project_id ?? analysis.proposedProjectId ?? null;
+      const routingProjectId = safeProjectRoutingTarget(version.project_id,analysis.proposedProjectId,analysis.projectMatch);
       let routing: InvestmentRoutingResult | null = null;
       let routingError: string | null = null;
       if (routingProjectId && !exactDuplicate && analysis.confidence >= 0.82) {
@@ -246,6 +258,15 @@ export async function POST(request: Request) {
         }
       }
 
+      if (routingError) {
+        await recordPipelineOutcome({
+          workspaceId:workspace.id,documentId:version.document_id,versionId:body.versionId,
+          category:analysis.effectiveCategory,routeOk:false,
+          isInvoice:analysis.effectiveCategory==="invoice"||containsInvoiceBusinessDocument(analysis),
+          failure:routingError
+        });
+        return NextResponse.json({ok:false,status:"review",error:routingError},{status:422});
+      }
       const autopilot = await applyDocumentAutopilot({
         workspaceId: workspace.id,
         documentId: version.document_id,
@@ -271,6 +292,7 @@ export async function POST(request: Request) {
         }
       }
 
+      let pipelineChecks: FinancialPipelineChecks | null = null;
       let invoiceReadiness: InvoiceIntakeAssessment[] = [];
       let financeAi: FinanceAiSummary | null = null;
       let accounting: AccountingCopilotRun[] = [];
@@ -279,6 +301,7 @@ export async function POST(request: Request) {
         && (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis))) {
         try {
           const checks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id });
+          pipelineChecks = checks;
           invoiceReadiness = checks.invoiceReadiness;
           financeAi = checks.financeAi;
           accounting = checks.accounting;
@@ -292,6 +315,13 @@ export async function POST(request: Request) {
         }
       }
 
+      const routeOk = autopilot.failed === 0 && autopilot.status === "applied" && !routingError;
+      await recordPipelineOutcome({
+        workspaceId:workspace.id,documentId:version.document_id,versionId:body.versionId,
+        category:analysis.effectiveCategory,routeOk,
+        isInvoice:analysis.effectiveCategory==="invoice" || containsInvoiceBusinessDocument(analysis),
+        checks:pipelineChecks,failure:invoiceCheckError ?? routingError
+      });
       const packageStatus = "package" in analysis
         ? {
             packageId: analysis.package.id,
