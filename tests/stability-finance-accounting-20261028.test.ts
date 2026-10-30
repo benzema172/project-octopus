@@ -143,6 +143,8 @@ describe("Octopus production stability regression", () => {
     const policy = source("lib/ai/unified-document-ai-policy.ts");
     const base = source("lib/ai/unified-document-copilot.ts");
     expect(council).toContain("providerFamilies.size >= 2");
+    expect(council).toContain("Nie udało się zapisać audytu konsensusu AI");
+    expect(council).not.toContain("persistRun(workspaceId, reviewId, base.id, vote, promptHash).catch(() => undefined)");
     expect(council).toContain('vote.recommendation === "duplicate_same"');
     expect(council).toContain("base.hardDuplicateEvidence && providerQuorum");
     expect(council).toContain('recommendation: "manual_review"');
@@ -370,6 +372,9 @@ describe("Octopus production stability regression", () => {
     for(const entry of [worker,direct,retry]) expect(entry).toContain("recordPipelineOutcome");
     expect(summary).toContain("summarizePipelineStages(stages)");
     expect(summary).toContain("document_pipeline_stages");
+    expect(retry).toContain('if (body.stage)');
+    expect(retry).toContain("retry_document_processing_atomic");
+    expect(retry.indexOf("if (body.stage)")).toBeLessThan(retry.indexOf("retry_document_processing_atomic"));
   });
 
   it("evaluates more than four AI decisions and persists provider evidence", () => {
