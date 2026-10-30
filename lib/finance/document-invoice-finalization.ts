@@ -65,8 +65,9 @@ async function analyzeInvoiceReviews(workspaceId: string, documentId: string): P
       .eq("status", "open")
       .in("invoice_id", invoiceIds)
       .order("created_at", { ascending: true })
-      .limit(20);
+      .limit(1000);
     if (error) throw new Error(`Nie udało się pobrać decyzji faktury: ${error.message}`);
+    if ((data ?? []).length >= 1000) throw new Error("Liczba decyzji Multi-AI przekracza stronę 1000 rekordów; kontrola musi być kontynuowana przed rozliczeniem.");
     reviewSets.push((data ?? []) as ReviewRow[]);
   }
   if (inboxIds.length) {
@@ -78,10 +79,13 @@ async function analyzeInvoiceReviews(workspaceId: string, documentId: string): P
       .order("created_at", { ascending: true })
       .limit(20);
     if (error) throw new Error(`Nie udało się pobrać decyzji Business Inbox: ${error.message}`);
+    if ((data ?? []).length >= 1000) throw new Error("Liczba decyzji Multi-AI przekracza stronę 1000 rekordów; kontrola musi być kontynuowana przed rozliczeniem.");
     reviewSets.push((data ?? []) as ReviewRow[]);
   }
 
-  const reviewIds = [...new Set(reviewSets.flat().map((row) => row.id))].slice(0, 4);
+  const reviewIds = [...new Set(reviewSets.flat().map((row) => row.id))];
+  // Every open decision linked to this source must be checked. Never silently
+  // skip the fifth review in a multi-page/multi-document invoice.
   const results: Array<{ providers: number; requiresHuman: boolean }> = [];
   let failed = 0;
 
