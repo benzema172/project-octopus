@@ -258,6 +258,15 @@ export async function POST(request: Request) {
         }
       }
 
+      if (routingError) {
+        await recordPipelineOutcome({
+          workspaceId:workspace.id,documentId:version.document_id,versionId:body.versionId,
+          category:analysis.effectiveCategory,routeOk:false,
+          isInvoice:analysis.effectiveCategory==="invoice"||containsInvoiceBusinessDocument(analysis),
+          failure:routingError
+        });
+        return NextResponse.json({ok:false,status:"review",error:routingError},{status:422});
+      }
       const autopilot = await applyDocumentAutopilot({
         workspaceId: workspace.id,
         documentId: version.document_id,
