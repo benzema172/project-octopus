@@ -195,7 +195,7 @@ export async function processDocumentVersion(input: {
       });
     }
 
-    const filenameFinancialHint = /(?:faktura|invoice|rachunek|\\b(?:wz|pz|mm|rw|zw)[-_ .\\d]|dostaw[ay]|zakup)/i.test(version.file_name);
+    const filenameFinancialHint = /(?:paragon|receipt|tankow|paliw|benzyn|diesel|stacja|faktura|invoice|rachunek|\\b(?:wz|pz|mm|rw|zw)[-_ .\\d]|dostaw[ay]|zakup)/i.test(version.file_name);
     const businessDocumentSpecialist = sourceModule === "warehouse" || sourceModule === "finance" || filenameFinancialHint;
     const warehouseBinary = businessDocumentSpecialist
       && (version.mime_type === "application/pdf" || version.mime_type.startsWith("image/"));
@@ -266,7 +266,8 @@ export async function processDocumentVersion(input: {
         : await analyzeDocumentWithGemini({ fileName: version.file_name, mimeType: version.mime_type, ...prepared, projectCatalog });
     // If a general Wrzutnia document turns out to be financial, re-run the
     // structured specialist. The source module is a hint, not a prerequisite.
-    const classifiedBusiness = ["invoice", "warehouse"].includes(analysisResult.analysis.category);
+    const classifiedBusiness = ["invoice", "warehouse"].includes(analysisResult.analysis.category)
+      || (analysisResult.analysis.category === "fleet" && analysisResult.analysis.businessDocument?.documentType === "receipt");
     const mustUseStructuredSpecialist = !businessDocumentSpecialist && classifiedBusiness;
     const specialized = mustUseStructuredSpecialist
       ? await analyzeWarehouseDocumentWithGemini({
@@ -354,6 +355,17 @@ export async function processDocumentVersion(input: {
       status: "proposed"
     }, { onConflict: "document_version_id,extraction_type,schema_version" });
     if (extractionError) throw new Error(`Nie udało się zapisać ekstrakcji: ${extractionError.message}`);
+    // A genuine fiscal receipt is a Fleet source, not a VAT invoice.
+    const containsFuelReceipt = analysis.businessDocument?.documentType === "receipt"
+      || ("businessDocuments" in analysis && Array.isArray(analysis.businessDocuments)
+        && analysis.businessDocuments.some((item) => item.documentType === "receipt"));
+    if (containsFuelReceipt) {
+      const { error: receiptMatchError } = await supabase.rpc(
+        "auto_assign_fuel_receipt_by_registration_20261030",
+        { p_workspace_id: input.workspaceId, p_document_id: version.document_id }
+      );
+      if (receiptMatchError) console.warn("[fuel-receipt-auto-assignment] Manual review required:", receiptMatchError.code ?? "RPC_FAILED");
+    }
 
     if (version.version_number > 1) {
       const { data: previousVersion } = await supabase.from("document_versions")

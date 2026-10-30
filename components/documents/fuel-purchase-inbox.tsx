@@ -10,13 +10,15 @@ type Review = {
   description:string;unit:string|null;quantity:number|null;liters:number|null;amount:number|null;
   fuelType:string;suggestedVehicleId:string|null;
 };
-type ResponseData = { items?:Review[]; vehicles?:Vehicle[]; error?:string };
+type AutomaticAssignment = { id:string;plate:string;fuelType:string;date:string|null;origin:"invoice"|"receipt" };
+type ResponseData = { items?:Review[]; vehicles?:Vehicle[]; recentAutomatic?:AutomaticAssignment[]; error?:string };
 
 export function FuelPurchaseInbox({workspaceId, refreshKey, processing=false, canWrite=true}:{
   workspaceId:string; refreshKey?:string|null; processing?:boolean;canWrite?:boolean;
 }) {
   const [items,setItems]=useState<Review[]>([]);
   const [vehicles,setVehicles]=useState<Vehicle[]>([]);
+  const [recentAutomatic,setRecentAutomatic]=useState<AutomaticAssignment[]>([]);
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState<string|null>(null);
   const [error,setError]=useState<string|null>(null);
@@ -29,7 +31,7 @@ export function FuelPurchaseInbox({workspaceId, refreshKey, processing=false, ca
       if(response.status===403){setAllowed(false);setLoading(false);return;}
       const body=await response.json().catch(()=>({})) as ResponseData;
       if(!response.ok) throw new Error(body.error??"Nie udało się odświeżyć tankowań.");
-      setAllowed(true);setItems(body.items??[]);setVehicles(body.vehicles??[]);setError(null);
+      setAllowed(true);setItems(body.items??[]);setVehicles(body.vehicles??[]);setRecentAutomatic(body.recentAutomatic??[]);setError(null);
     }catch(caught){setError(caught instanceof Error?caught.message:"Błąd odczytu tankowań.");}
     finally {setLoading(false);}
   },[workspaceId]);
@@ -70,13 +72,20 @@ export function FuelPurchaseInbox({workspaceId, refreshKey, processing=false, ca
   if(!allowed) return null;
   return <section className={styles.root} aria-label="Tankowania do przypisania">
     <div className={styles.heading}>
-      <div className={styles.label}><Fuel size={18}/><div><strong>Tankowania do przypisania</strong><small>AI rozpoznało zakup paliwa · wybierz pojazd firmowy</small></div></div>
+      <div className={styles.label}><Fuel size={18}/><div><strong>Tankowania do przypisania</strong><small>Jednoznaczne tablice AI dopasowuje automatycznie · pozostałe tankowania wymagają wyboru auta</small></div></div>
       <div className={styles.actions}><span className={styles.count}>{items.length} oczekujących</span>
         <button type="button" onClick={()=>void refresh()} title="Odśwież listę tankowań" disabled={Boolean(saving)}><RotateCcw size={15}/> Odśwież</button>
       </div>
     </div>
     {error?<p className={styles.error} role="alert">{error}</p>:null}
     {message?<p className={styles.success} role="status">{message}</p>:null}
+    {recentAutomatic.length ? <details className={styles.autoHistory}>
+      <summary><Check size={14}/> AI przypisało automatycznie {recentAutomatic.length} ostatnich tankowań <span>· zobacz</span></summary>
+      <div className={styles.autoItems}>{recentAutomatic.map(item=>
+        <div key={item.origin+"-"+item.id}><strong>{item.plate}</strong><span>{item.fuelType}</span>
+          <small>{item.origin==="receipt"?"Paragon":"Faktura"} · {item.date?.slice(0,10)??"Brak daty"}</small></div>
+      )}</div>
+    </details>:null}
     {loading?<p className={styles.empty}>Sprawdzanie zakupów paliwa…</p>:
       !items.length?<p className={styles.empty}>Brak paliwa do przypisania. Nowe faktury pojawią się tutaj po analizie AI.</p>:
       <>

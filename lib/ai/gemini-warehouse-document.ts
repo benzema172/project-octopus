@@ -104,7 +104,7 @@ const BUSINESS_DOCUMENT_SCHEMA = {
   type: "OBJECT",
   properties: {
     sourcePageStart: { type: "INTEGER" }, sourcePageEnd: { type: "INTEGER" },
-    documentType: { type: "STRING", enum: ["invoice", "WZ", "PZ", "MM", "RW", "ZW", "delivery"] },
+    documentType: { type: "STRING", enum: ["invoice", "receipt", "WZ", "PZ", "MM", "RW", "ZW", "delivery"] },
     documentNumber: { type: "STRING" }, ksefNumber: { type: "STRING" }, purchaseOrderNumber: { type: "STRING" },
     direction: { type: "STRING", enum: ["purchase", "sale", "internal"] }, issueDate: { type: "STRING" }, dueDate: { type: "STRING" },
     supplierName: { type: "STRING" }, supplierTaxId: { type: "STRING" }, buyerName: { type: "STRING" }, buyerTaxId: { type: "STRING" },
@@ -177,12 +177,13 @@ function normalizeLine(value: unknown): WarehouseBusinessLine | null {
   };
 }
 
-const BUSINESS_DOCUMENT_TYPES = ["invoice", "WZ", "PZ", "MM", "RW", "ZW", "delivery"] as const;
+const BUSINESS_DOCUMENT_TYPES = ["invoice", "receipt", "WZ", "PZ", "MM", "RW", "ZW", "delivery"] as const;
 
 function normalizeBusinessDocumentType(value: unknown): WarehouseBusinessDocument["documentType"] | null {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
   if (raw.toLowerCase() === "invoice") return "invoice";
+  if (raw.toLowerCase() === "receipt") return "receipt";
   if (raw.toLowerCase() === "delivery") return "delivery";
   const upper = raw.toUpperCase();
   return BUSINESS_DOCUMENT_TYPES.includes(upper as (typeof BUSINESS_DOCUMENT_TYPES)[number])
@@ -211,6 +212,10 @@ function businessDocumentHasEvidence(document: WarehouseBusinessDocument) {
     Boolean(line.description.trim()) && (meaningfulAmount(line.quantity) || Boolean(line.sku.trim()))
   );
 
+  if (document.documentType === "receipt") {
+    return Boolean(document.issueDate.trim()) && hasParty && hasFinancialEvidence
+      && document.lines.some(line => Boolean(line.description.trim()) && meaningfulAmount(line.grossAmount));
+  }
   if (document.documentType === "invoice") {
     if (document.ksefNumber.trim()) return hasParty || hasFinancialEvidence;
     return hasNumber && Boolean(document.issueDate.trim()) && hasParty && hasFinancialEvidence;
@@ -228,6 +233,7 @@ function categoryForBusinessDocuments(
   fallback: DocumentAnalysis["category"]
 ): DocumentAnalysis["category"] {
   if (!documents.length) return fallback;
+  if (documents.every((document) => document.documentType === "receipt")) return "fleet";
   return documents.every((document) => document.documentType === "invoice") ? "invoice" : "warehouse";
 }
 
@@ -489,12 +495,13 @@ async function analyzeUploadedFile(input: {
   const pageInstruction = input.globalPageStart && input.globalPageEnd
     ? `Ten plik jest PORCJĄ oryginalnego PDF i odpowiada globalnym stronom ${input.globalPageStart}-${input.globalPageEnd}. sourcePageStart/sourcePageEnd MUSZĄ używać tej globalnej numeracji, nigdy numeracji lokalnej 1..N. Dokument może zaczynać się przed porcją lub kończyć po niej — zwróć wyłącznie dane widoczne w tej porcji; nie wymyślaj brakujących pozycji.`
     : "Analizujesz cały pojedynczy dokument.";
-  const prompt = `Jesteś wyspecjalizowanym analizatorem dokumentów Magazynu Project Octopus dla polskiej firmy budowlano-instalacyjnej.\n\n${pageInstruction}\n\nPDF może zawierać wiele odrębnych faktur, WZ, PZ, MM, RW, ZW lub dokumentów dostawy. Zwróć osobny element businessDocuments dla KAŻDEGO rzeczywistego dokumentu biznesowego widocznego w analizowanej porcji. Nigdy nie łącz pozycji, numerów ani kwot różnych dokumentów. Dla kontynuacji wielostronicowej zachowaj prawdziwy numer i strony dokumentu.
+  const prompt = `Jesteś wyspecjalizowanym analizatorem dokumentów Magazynu Project Octopus dla polskiej firmy budowlano-instalacyjnej.\n\n${pageInstruction}\n\nPDF może zawierać wiele odrębnych faktur, paragonów fiskalnych, WZ, PZ, MM, RW, ZW lub dokumentów dostawy. Zwróć osobny element businessDocuments dla KAŻDEGO rzeczywistego dokumentu biznesowego widocznego w analizowanej porcji. Nigdy nie łącz pozycji, numerów ani kwot różnych dokumentów. Dla kontynuacji wielostronicowej zachowaj prawdziwy numer i strony dokumentu.
 
 BRAMKA TOŻSAMOŚCI:
+- documentType="receipt" ustawiaj dla paragonu fiskalnego potwierdzającego zakup, w szczególności tankowanie na stacji; paragon nie jest fakturą VAT, nie wymyślaj NIP-u nabywcy ani numeru faktury. Na paragonie wymagaj daty, dostawcy/stacji, kwot brutto i pozycji.
 - documentType="invoice" ustawiaj WYŁĄCZNIE wtedy, gdy źródło faktycznie zawiera dowody faktury: numer/KSeF, datę, strony transakcji oraz kwoty lub wycenione pozycje. Nie traktuj kosztorysu, BOQ, audytu, specyfikacji, oferty, protokołu ani opisu technicznego jako faktury tylko dlatego, że zawiera tabelę, ceny, nazwę firmy lub numer dokumentu.
 - dla WZ/PZ/MM/RW/ZW/delivery wymagaj rzeczywistego oznaczenia lub jednoznacznej treści ruchu/dostawy; nie zgaduj typu.
-- nie twórz pustego businessDocuments i nie uzupełniaj brakujących numerów, dat, kontrahentów ani kwot danymi wymyślonymi. Jeżeli dowody są niewystarczające, pomiń element z businessDocuments i ustaw kategorię zgodną z rzeczywistą treścią.\n\nROZUMIENIE OBIEGU MATERIAŁOWEGO:\n- invoice = dokument zakupu/sprzedaży i źródło ceny. Faktura zakupowa NIE oznacza jeszcze wydania materiału na inwestycję.\n- PZ = przyjęcie materiału do magazynu. Może odnosić się do faktury, ale sam PZ nie jest fakturą.\n- MM = przesunięcie materiału. W tej firmie MM często oznacza wydanie z magazynu na konkretną inwestycję/ekipę/pracownika. Jeśli na MM występuje kod/nazwa/adres inwestycji lub odbiorca-pracownik, wyciągnij te dane. Nie przypisuj MM wartości finansowej jako nowego zakupu.\n- RW/WZ = rozchód/wydanie materiału. Traktuj je jako ruch magazynowy, nie jako fakturę.\n- ZW = zwrot materiału.\n- delivery = inny dokument dostawy, gdy nie da się wiarygodnie określić PZ/WZ/MM/RW/ZW.\n\nDla każdego dokumentu podaj sourcePageStart/sourcePageEnd, documentType, numer dokumentu/KSeF/PO, daty, dostawcę/nabywcę, a także projectCode, projectName, projectAddress, recipientEmployeeName, recipientEmployeeNumber, sourceWarehouse i targetWarehouse, jeśli są widoczne. Dla MM/RW/WZ nie wymyślaj kwot z faktury — pola finansowe mogą być 0, jeśli dokument ich nie zawiera.\n\nKażdą WIDOCZNĄ pozycję zwróć dokładnie raz. Rozpoznawaj SKU/indeks, producenta, model i EAN, bo służą do połączenia tej samej kartoteki materiałowej między fakturą, PZ i MM. lineType=material tylko dla fizycznego towaru/materiału/urządzenia/części/narzędzia; service dla robocizny, transportu, najmu i usług; other dla rabatów, korekt i pozycji niejednoznacznych. Nie wymyślaj danych.\n\nJeżeli analizowana część nie zawiera dokumentu magazynowo-finansowego, businessDocuments ma być puste. projectHint ma wskazać dokładnie jeden wiersz katalogu albo OGÓLNE. W dopasowaniu inwestycji preferuj dokładny kod, następnie nazwę/adres. Nie zgaduj.\n\nKATALOG INWESTYCJI:\n${projectCatalog}\n\nZwróć wyłącznie JSON zgodny ze schematem.`;
+- nie twórz pustego businessDocuments i nie uzupełniaj brakujących numerów, dat, kontrahentów ani kwot danymi wymyślonymi. Jeżeli dowody są niewystarczające, pomiń element z businessDocuments i ustaw kategorię zgodną z rzeczywistą treścią.\n\nROZUMIENIE OBIEGU MATERIAŁOWEGO:\n- invoice = dokument zakupu/sprzedaży i źródło ceny. Faktura zakupowa NIE oznacza jeszcze wydania materiału na inwestycję.\n- PZ = przyjęcie materiału do magazynu. Może odnosić się do faktury, ale sam PZ nie jest fakturą.\n- MM = przesunięcie materiału. W tej firmie MM często oznacza wydanie z magazynu na konkretną inwestycję/ekipę/pracownika. Jeśli na MM występuje kod/nazwa/adres inwestycji lub odbiorca-pracownik, wyciągnij te dane. Nie przypisuj MM wartości finansowej jako nowego zakupu.\n- RW/WZ = rozchód/wydanie materiału. Traktuj je jako ruch magazynowy, nie jako fakturę.\n- ZW = zwrot materiału.\n- delivery = inny dokument dostawy, gdy nie da się wiarygodnie określić PZ/WZ/MM/RW/ZW.\n\nDla pozycji paliwowych rozpoznawaj ON, diesel, olej napędowy, PB95/PB98, LPG itp., wpisuj expenseCategory="fuel" i dokładnie widoczne vehicleRegistration, liters, mileage; gdy dokument zawiera jedną rejestrację odnoszącą się do tankowanego auta, przypisz ją do związanych pozycji paliwa. Przy kilku różnych tablicach lub niejasnej relacji nie zgaduj numeru. Nie przypisuj AdBlue ani oleju silnikowego jako paliwa silnikowego.\n\nDla każdego dokumentu podaj sourcePageStart/sourcePageEnd, documentType, numer dokumentu/KSeF/PO, daty, dostawcę/nabywcę, a także projectCode, projectName, projectAddress, recipientEmployeeName, recipientEmployeeNumber, sourceWarehouse i targetWarehouse, jeśli są widoczne. Dla MM/RW/WZ nie wymyślaj kwot z faktury — pola finansowe mogą być 0, jeśli dokument ich nie zawiera.\n\nKażdą WIDOCZNĄ pozycję zwróć dokładnie raz. Rozpoznawaj SKU/indeks, producenta, model i EAN, bo służą do połączenia tej samej kartoteki materiałowej między fakturą, PZ i MM. lineType=material tylko dla fizycznego towaru/materiału/urządzenia/części/narzędzia; service dla robocizny, transportu, najmu i usług; other dla rabatów, korekt i pozycji niejednoznacznych. Nie wymyślaj danych.\n\nJeżeli analizowana część nie zawiera dokumentu magazynowo-finansowego, businessDocuments ma być puste. projectHint ma wskazać dokładnie jeden wiersz katalogu albo OGÓLNE. W dopasowaniu inwestycji preferuj dokładny kod, następnie nazwę/adres. Nie zgaduj.\n\nKATALOG INWESTYCJI:\n${projectCatalog}\n\nZwróć wyłącznie JSON zgodny ze schematem.`;
   const parts: Array<Record<string, unknown>> = [{ text: prompt }];
   if (input.fileUri) parts.push({ fileData: { mimeType: input.mimeType, fileUri: input.fileUri } });
   if (input.extractedText) parts.push({ text: `\nTREŚĆ WYEKSTRAHOWANA:\n${input.extractedText.slice(0, 1_500_000)}` });
