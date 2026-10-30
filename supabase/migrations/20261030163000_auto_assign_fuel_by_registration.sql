@@ -41,7 +41,7 @@ begin
   for r in
     select pr.id,pr.workspace_id,pr.invoice_line_id,
       l.description,l.quantity,l.unit,l.gross_amount,l.business_metadata,
-      i.currency,i.id as invoice_id
+      i.currency,i.id as invoice_id,i.sale_date,i.issue_date
     from public.fuel_purchase_reviews pr
     join public.invoices i on i.id=pr.invoice_id and i.workspace_id=pr.workspace_id
     join public.invoice_lines l on l.id=pr.invoice_line_id and l.invoice_id=i.id and l.workspace_id=pr.workspace_id
@@ -90,6 +90,17 @@ begin
       where fc.workspace_id=p_workspace_id and fc.invoice_line_id=r.invoice_line_id
         and fc.vehicle_id<>v_vehicle_id
     ) then v_reason:='Pozycja jest przypisana do innego pojazdu w kosztach Floty.'; end if;
+    -- Receipt and invoice uploaded as separate files may describe the same
+    -- physical tanking. Leave an identical same-day event for manual review.
+    if v_reason is null and exists(
+      select 1 from public.fuel_entries earlier
+      where earlier.workspace_id=p_workspace_id and earlier.vehicle_id=v_vehicle_id
+        and earlier.fueled_at::date=coalesce(r.sale_date,r.issue_date,current_date)
+        and abs(earlier.liters-v_liters)<0.001
+        and abs(earlier.gross_amount-r.gross_amount)<0.01
+    ) then
+      v_reason:='Możliwy duplikat tankowania z paragonu lub innej faktury.';
+    end if;
     if v_reason is null then
       begin
         v_booking_id:=public.resolve_fuel_purchase_review_20261030(
