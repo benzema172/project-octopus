@@ -3,6 +3,7 @@ import { getRequestUser } from "@/lib/auth";
 import { processDocumentVersion } from "@/lib/ai/process-document";
 import { findExistingExactDuplicate } from "@/lib/documents/exact-duplicate-guard";
 import { applyDocumentAutopilot } from "@/lib/ai/document-autopilot";
+import { safeProjectRoutingTarget } from "@/lib/ai/project-matcher";
 import { recordPipelineOutcome, type FinancialPipelineChecks } from "@/lib/documents/pipeline-outcome";
 import { enrichDocumentWithInvestmentRouting, type InvestmentRoutingResult } from "@/lib/ai/investment-document-routing";
 import { geminiRateLimitInfo, geminiRateLimitMessage, millisecondsUntil, wait } from "@/lib/ai/gemini-rate-limit";
@@ -228,7 +229,7 @@ export async function POST(request: Request) {
       const exactDuplicate = await findExistingExactDuplicate({
         workspaceId: workspace.id, documentId: version.document_id, versionId: body.versionId
       });
-      const routingProjectId = version.project_id ?? analysis.proposedProjectId ?? null;
+      const routingProjectId = safeProjectRoutingTarget(version.project_id,analysis.proposedProjectId,analysis.projectMatch);
       let routing: InvestmentRoutingResult | null = null;
       let routingError: string | null = null;
       if (routingProjectId && !exactDuplicate && analysis.confidence >= 0.82) {
