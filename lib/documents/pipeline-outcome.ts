@@ -33,11 +33,26 @@ export async function recordPipelineOutcome(input:{
   const accountingStatus:PipelineStageStatus=financial
     ? (!input.routeOk||missingInvoice||accountingReview||aiReview?"review":"complete")
     : "not_applicable";
-  // No automatic physical-stock approval is implied by completed AI analysis.
-  const warehouseStatus:PipelineStageStatus=warehouse||financial
-    ? "review" : "not_applicable";
-  const reconciliationStatus:PipelineStageStatus=warehouse||financial
-    ? "review" : "not_applicable";
+  // Do not put service-only, fuel or other non-stock invoices into an
+  // indefinite warehouse-review queue. Actual receiving decisions remain
+  // authoritative: approval, unresolved receipt or genuinely matched WZ/PZ.
+  const receipts = checks?.invoiceReadiness.map(item=>item.warehouseReceipt).filter(
+    (value):value is NonNullable<typeof value>=>Boolean(value)
+  ) ?? [];
+  const warehouseNeedsReview=receipts.some(value=>
+    value.requiresHumanReview || value.failed>0 || (!value.skipped && value.approved===0)
+  );
+  const warehouseApplied=receipts.some(value=>value.approved>0);
+  const matchesForReview=checks?.reconciliations.some(value=>value.requiresHumanReview || value.candidates>0) ?? false;
+  const warehouseStatus:PipelineStageStatus=warehouse
+    ? "review"
+    : financial && (!input.routeOk || missingInvoice || warehouseNeedsReview)
+      ? "review"
+      : warehouseApplied ? "complete" : "not_applicable";
+  const reconciliationStatus:PipelineStageStatus=warehouse
+    ? "review"
+    : financial && (!input.routeOk || missingInvoice || matchesForReview)
+      ? "review" : "not_applicable";
   const records = [
     {stage:"route" as const,status:route},
     {stage:"finance" as const,status:financeStatus},
@@ -52,6 +67,9 @@ export async function recordPipelineOutcome(input:{
       invoiceCount:checks?.invoiceReadiness.length??0,
       verifiedModels:checks?.financeAi.maxProviders??0,
       candidateReconciliations:checks?.reconciliations.reduce((sum,row)=>sum+row.candidates,0)??0,
+      warehouseEvidence:warehouseApplied?"received":warehouseNeedsReview?"review_required":"no_stock_operation",
+      warehouseReceiptCount:receipts.length,
+      reconciliationEvidence:matchesForReview?"matched_for_review":"no_matched_document",
       postingApproval:"human_required"}
   })));
 }
