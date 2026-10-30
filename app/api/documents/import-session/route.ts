@@ -501,6 +501,13 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString()
     }).eq("id", session.id).eq("workspace_id", workspace.id);
     if (error) return jsonError(`Nie udało się zamknąć etapu uploadu: ${error.message}`, 500);
+    // Batch upload deliberately skips synchronous per-file Gemini analysis.
+    // Kick the existing service-only pg_net worker as soon as all uploads
+    // finish. The active pg_cron queue handles remaining items and retries.
+    // A wake failure must never turn a successfully uploaded batch into an
+    // HTTP error or encourage a second upload of the same 82 source files.
+    const { error: wakeError } = await db.rpc("run_background_ai_queue_tick");
+    if (wakeError) console.warn("[import-session] AI queue wake-up deferred to active cron", wakeError.code);
     const refreshed = await sessionForUser(workspace.id, session.id, user.id);
     return NextResponse.json({ session: refreshed ? await buildSummary(refreshed) : null }, { headers: { "Cache-Control": "no-store" } });
   }
