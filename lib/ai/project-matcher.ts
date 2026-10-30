@@ -212,3 +212,18 @@ export function matchProjectHint(hint: string, projects: ProjectMatchCandidate[]
     evidence: decision.evidence
   };
 }
+
+/**
+ * Automatic publication needs stronger project evidence than "show a likely
+ * project suggestion". Explicit user-selected projects always take priority.
+ */
+export function safeProjectRoutingTarget(
+  explicitProjectId: string | null,
+  proposedProjectId: string | null,
+  match: ProjectMatchDecision | null
+): string | null {
+  if (explicitProjectId) return explicitProjectId;
+  if (!proposedProjectId || match?.status !== "matched" || match.score < 0.9
+      || match.project?.id !== proposedProjectId) return null;
+  return proposedProjectId;
+}
