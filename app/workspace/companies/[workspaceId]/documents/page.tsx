@@ -142,7 +142,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
         return [];
       });
 
-  const rawQueueItems = activeTab === "all" || activeTab === "trash"
+  const rawQueueItems = activeTab === "trash"
     ? []
     : await listDocumentAiInbox(workspace.id, documents.map((document) => document.id)).catch((error) => {
         console.error("Project Octopus: document-only AI review queue fallback", error);
