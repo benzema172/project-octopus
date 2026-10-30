@@ -34,7 +34,10 @@ export function FuelPurchaseInbox({workspaceId, refreshKey, processing=false, ca
     finally {setLoading(false);}
   },[workspaceId]);
 
-  useEffect(()=>{void refresh();},[refresh,refreshKey,processing]);
+  useEffect(()=>{
+    const scheduled=window.setTimeout(()=>{void refresh();},0);
+    return ()=>window.clearTimeout(scheduled);
+  },[refresh,refreshKey,processing]);
   useEffect(()=>{
     if(!processing) return;
     const interval=window.setInterval(()=>{void refresh();},8000);
