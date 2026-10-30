@@ -149,6 +149,15 @@ export async function POST(request: Request) {
         }
       }
 
+      if (routingErrorMessage) {
+        await recordPipelineOutcome({
+          workspaceId:workspace.id,documentId:document.id,versionId:document.current_version_id,
+          category:analysis.effectiveCategory,routeOk:false,
+          isInvoice:analysis.effectiveCategory==="invoice"||containsInvoiceBusinessDocument(analysis),
+          failure:routingErrorMessage
+        });
+        return NextResponse.json({ok:false,status:"review",error:routingErrorMessage},{status:422});
+      }
       const autopilot = await applyDocumentAutopilot({
         workspaceId: workspace.id,
         documentId: document.id,
