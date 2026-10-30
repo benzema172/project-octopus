@@ -516,37 +516,56 @@ export function DocumentUpload({
       }
     }
 
-    for (const [index, candidate] of selectedFiles.entries()) {
-      if (alreadyUploaded.has(index + 1)) {
-        completed += 1;
-        continue;
-      }
-      try {
-        setStatus(`Plik ${index + 1} z ${selectedFiles.length}: ${candidate.relativePath}`);
-        const sessionItemId = importSessionId ? importItems.get(index + 1) : undefined;
-        const outcome = await uploadFile(
-          candidate,
-          targetDocumentIdRef.current,
-          targetProjectIdRef.current,
-          importSessionId && sessionItemId ? { sessionId: importSessionId, itemId: sessionItemId } : undefined,
-          selectedFiles.length > 1,
-          fileDigests.get(index + 1)
-        );
-        outcomes.push(outcome);
-        completed += 1;
-      } catch (uploadError) {
-        const failureMessage = uploadError instanceof Error ? uploadError.message : "upload nie powiódł się";
-        failures.push(`${candidate.relativePath}: ${failureMessage}`);
-        const sessionItemId = importSessionId ? importItems.get(index + 1) : undefined;
-        if (importSessionId && sessionItemId) {
-          await fetch("/api/documents/import-session", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "fail", workspaceId, sessionId: importSessionId, itemId: sessionItemId, error: failureMessage })
-          }).catch(() => undefined);
+    // Bounded worker pool: three overlapping R2 transfers, but only one
+    // buffered File per worker and stable per-file SHA/session-item identity.
+    // A failed item is recorded independently; all workers settle before
+    // finalizing the import session, making resumptions deterministic.
+    let nextCandidateIndex = 0;
+    const uploadWorker = async () => {
+      while (nextCandidateIndex < selectedFiles.length) {
+        const index = nextCandidateIndex++;
+        const candidate = selectedFiles[index];
+        if (alreadyUploaded.has(index + 1)) {
+          completed += 1;
+          continue;
+        }
+        try {
+          setStatus(`Przesyłanie ${index + 1}/${selectedFiles.length}: ${candidate.relativePath}`);
+          const sessionItemId = importSessionId ? importItems.get(index + 1) : undefined;
+          const outcome = await uploadFile(
+            candidate,
+            targetDocumentIdRef.current,
+            targetProjectIdRef.current,
+            importSessionId && sessionItemId ? { sessionId: importSessionId, itemId: sessionItemId } : undefined,
+            selectedFiles.length > 1,
+            fileDigests.get(index + 1)
+          );
+          outcomes.push(outcome);
+          completed += 1;
+        } catch (uploadError) {
+          const failureMessage = uploadError instanceof Error ? uploadError.message : "upload nie powiódł się";
+          failures.push(`${candidate.relativePath}: ${failureMessage}`);
+          const sessionItemId = importSessionId ? importItems.get(index + 1) : undefined;
+          if (importSessionId && sessionItemId) {
+            try {
+              const failedResponse = await fetch("/api/documents/import-session", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "fail", workspaceId, sessionId: importSessionId, itemId: sessionItemId, error: failureMessage })
+              });
+              if (!failedResponse.ok) failures.push(`${candidate.relativePath}: nie zapisano stanu błędu sesji.`);
+            } catch {
+              failures.push(`${candidate.relativePath}: nie zapisano stanu błędu sesji.`);
+            }
+          }
         }
       }
-    }
+    };
+    const concurrentTransfers = importSessionId && selectedFiles.length > 1 ? 3 : 1;
+    await Promise.all(Array.from(
+      { length: Math.min(concurrentTransfers, selectedFiles.length) },
+      () => uploadWorker()
+    ));
 
     if (importSessionId) {
       try {
