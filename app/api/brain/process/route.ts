@@ -159,6 +159,14 @@ export async function POST(request: Request) {
         console.error("[brain/process] invoice readiness failed", error);
       }
 
+      const isApprovedInvoice = approved.category === "invoice"
+        || await approvedDocumentContainsInvoice(workspace.id, body.versionId, approved.category);
+      await recordPipelineOutcome({
+        workspaceId:workspace.id,documentId:version.document_id,versionId:body.versionId,
+        category:approved.category,
+        routeOk:!("autopilot" in materialization) || (materialization.autopilot?.status === "applied" && materialization.autopilot.failed === 0),
+        isInvoice:isApprovedInvoice,checks:pipelineChecks,failure:invoiceCheckError
+      });
       return NextResponse.json({
         ok: true,
         alreadyAnalyzed: true,
@@ -274,6 +282,7 @@ export async function POST(request: Request) {
         }
       }
 
+      let pipelineChecks: FinancialPipelineChecks | null = null;
       let invoiceReadiness: InvoiceIntakeAssessment[] = [];
       let financeAi: FinanceAiSummary | null = null;
       let accounting: AccountingCopilotRun[] = [];
@@ -282,6 +291,7 @@ export async function POST(request: Request) {
         && (analysis.effectiveCategory === "invoice" || containsInvoiceBusinessDocument(analysis))) {
         try {
           const checks = await runInvoiceIntakeChecks({ workspaceId: workspace.id, documentId: version.document_id, actorId: user.id });
+          pipelineChecks = checks;
           invoiceReadiness = checks.invoiceReadiness;
           financeAi = checks.financeAi;
           accounting = checks.accounting;
