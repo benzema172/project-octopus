@@ -372,6 +372,10 @@ describe("Octopus production stability regression", () => {
     for(const entry of [worker,direct,retry]) expect(entry).toContain("recordPipelineOutcome");
     expect(summary).toContain("summarizePipelineStages(stages)");
     expect(summary).toContain("document_pipeline_stages");
+    const ui = source("components/documents/document-upload.tsx");
+    expect(ui).toContain("Dokumenty wymagające kontroli — zobacz etapy");
+    expect(ui).toContain("retryFinanceStage");
+    expect(ui).toContain("await refreshImportSession(batchSummary.id)");
     expect(retry).toContain('if (body.stage)');
     expect(retry).toContain("retry_document_processing_atomic");
     expect(retry.indexOf("if (body.stage)")).toBeLessThan(retry.indexOf("retry_document_processing_atomic"));
