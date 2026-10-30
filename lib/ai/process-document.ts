@@ -355,6 +355,17 @@ export async function processDocumentVersion(input: {
       status: "proposed"
     }, { onConflict: "document_version_id,extraction_type,schema_version" });
     if (extractionError) throw new Error(`Nie udało się zapisać ekstrakcji: ${extractionError.message}`);
+    // A genuine fiscal receipt is a Fleet source, not a VAT invoice.
+    const containsFuelReceipt = analysis.businessDocument?.documentType === "receipt"
+      || ("businessDocuments" in analysis && Array.isArray(analysis.businessDocuments)
+        && analysis.businessDocuments.some((item) => item.documentType === "receipt"));
+    if (containsFuelReceipt) {
+      const { error: receiptMatchError } = await supabase.rpc(
+        "auto_assign_fuel_receipt_by_registration_20261030",
+        { p_workspace_id: input.workspaceId, p_document_id: version.document_id }
+      );
+      if (receiptMatchError) console.warn("[fuel-receipt-auto-assignment] Manual review required:", receiptMatchError.code ?? "RPC_FAILED");
+    }
 
     if (version.version_number > 1) {
       const { data: previousVersion } = await supabase.from("document_versions")
