@@ -38,3 +38,32 @@ export async function proposeInvoiceWarehouseReconciliation(workspaceId:string,i
   }
   return results;
 }
+
+/**
+ * Invoice and warehouse evidence may arrive in any order. When the delivery
+ * arrives AFTER an invoice, refresh matching invoice candidates as well.
+ * This remains review-only and never approves stock movement quantities.
+ */
+export async function refreshWarehouseDocumentReconciliations(workspaceId:string,documentId:string):Promise<number> {
+  const db=createServiceSupabaseClient();
+  const {data:reviews,error:reviewsError}=await db.from("warehouse_document_reviews")
+    .select("supplier_tax_id").eq("workspace_id",workspaceId)
+    .eq("document_id",documentId).limit(100);
+  if(reviewsError) throw new Error(`Nie udało się odczytać kontrahenta z WZ/PZ/MM: ${reviewsError.message}`);
+  const taxes=new Set((reviews??[]).map(row=>String(row.supplier_tax_id??"").replace(/\D/g,"")).filter(Boolean));
+  if(!taxes.size) return 0;
+  const {data:suppliers,error:suppliersError}=await db.from("counterparties")
+    .select("id,tax_id").eq("workspace_id",workspaceId).limit(1000);
+  if(suppliersError) throw new Error(`Nie udało się odczytać kontrahentów uzgadniania: ${suppliersError.message}`);
+  if((suppliers??[]).length>=1000) throw new Error("Zbyt dużo kontrahentów do jednoznacznego dopasowania, wymagana kontrola.");
+  const ids=(suppliers??[]).filter(row=>taxes.has(String(row.tax_id??"").replace(/\D/g,""))).map(row=>row.id);
+  if(!ids.length) return 0;
+  const {data:invoices,error:invoicesError}=await db.from("invoices")
+    .select("id").eq("workspace_id",workspaceId)
+    .eq("direction","purchase").in("counterparty_id",ids)
+    .order("created_at",{ascending:false}).limit(200);
+  if(invoicesError) throw new Error(`Nie udało się znaleźć faktur do WZ/PZ/MM: ${invoicesError.message}`);
+  if((invoices??[]).length>=200) throw new Error("Zbyt wiele faktur dostawcy; uzgadnianie wymaga zawężenia.");
+  const results=await proposeInvoiceWarehouseReconciliation(workspaceId,(invoices??[]).map(v=>v.id));
+  return results.reduce((sum,item)=>sum+item.candidates,0);
+}
