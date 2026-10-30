@@ -26,6 +26,29 @@ create index if not exists fuel_purchase_reviews_fuel_entry_fk_idx on public.fue
 create index if not exists fuel_purchase_reviews_resolved_by_fk_idx on public.fuel_purchase_reviews(resolved_by) where resolved_by is not null;
 create unique index if not exists fuel_entries_one_invoice_line_tanking_20261030
   on public.fuel_entries(invoice_line_id) where invoice_line_id is not null;
+-- Both the historical Fleet AI review and the new fuel queue may encounter
+-- the same document. Prevent double tankings in either approval order while
+-- allowing distinct invoice lines from a multi-fuel purchase.
+create or replace function private.prevent_duplicate_document_fuel_20261030()
+returns trigger language plpgsql set search_path='public','pg_temp' as $fn$
+begin
+  if new.source_document_id is not null and exists(
+    select 1 from public.fuel_entries existing
+    where existing.workspace_id=new.workspace_id
+      and existing.source_document_id=new.source_document_id
+      and (existing.invoice_line_id is null or new.invoice_line_id is null)
+  ) then
+    raise exception 'Dokument ma już przypisane tankowanie. Zweryfikuj historię Floty.';
+  end if;
+  return new;
+end;
+$fn$;
+revoke all on function private.prevent_duplicate_document_fuel_20261030() from public,anon,authenticated;
+drop trigger if exists guard_duplicate_document_fuel_20261030 on public.fuel_entries;
+create trigger guard_duplicate_document_fuel_20261030
+before insert on public.fuel_entries
+for each row execute function private.prevent_duplicate_document_fuel_20261030();
+
 alter table public.fuel_purchase_reviews enable row level security;
 revoke all on public.fuel_purchase_reviews from public,anon,authenticated;
 grant select,insert,update,delete on public.fuel_purchase_reviews to service_role;
