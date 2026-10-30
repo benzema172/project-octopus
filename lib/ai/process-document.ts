@@ -195,7 +195,7 @@ export async function processDocumentVersion(input: {
       });
     }
 
-    const filenameFinancialHint = /(?:faktura|invoice|rachunek|\\b(?:wz|pz|mm|rw|zw)[-_ .\\d]|dostaw[ay]|zakup)/i.test(version.file_name);
+    const filenameFinancialHint = /(?:paragon|receipt|tankow|paliw|benzyn|diesel|stacja|faktura|invoice|rachunek|\\b(?:wz|pz|mm|rw|zw)[-_ .\\d]|dostaw[ay]|zakup)/i.test(version.file_name);
     const businessDocumentSpecialist = sourceModule === "warehouse" || sourceModule === "finance" || filenameFinancialHint;
     const warehouseBinary = businessDocumentSpecialist
       && (version.mime_type === "application/pdf" || version.mime_type.startsWith("image/"));
@@ -266,7 +266,8 @@ export async function processDocumentVersion(input: {
         : await analyzeDocumentWithGemini({ fileName: version.file_name, mimeType: version.mime_type, ...prepared, projectCatalog });
     // If a general Wrzutnia document turns out to be financial, re-run the
     // structured specialist. The source module is a hint, not a prerequisite.
-    const classifiedBusiness = ["invoice", "warehouse"].includes(analysisResult.analysis.category);
+    const classifiedBusiness = ["invoice", "warehouse"].includes(analysisResult.analysis.category)
+      || (analysisResult.analysis.category === "fleet" && analysisResult.analysis.businessDocument?.documentType === "receipt");
     const mustUseStructuredSpecialist = !businessDocumentSpecialist && classifiedBusiness;
     const specialized = mustUseStructuredSpecialist
       ? await analyzeWarehouseDocumentWithGemini({

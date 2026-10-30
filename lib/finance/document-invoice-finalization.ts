@@ -141,6 +141,14 @@ export async function runInvoiceIntakeChecks(input: {
       .eq("workspace_id", input.workspaceId).eq("id", input.documentId);
     if (error) throw new Error(`Nie udało się oznaczyć decyzji finansowo-magazynowej: ${error.message}`);
   }
+  // Only a unique explicit AI-extracted registration can book fuel against a
+  // vehicle. Booking failures leave the invoice intact and the fuel item in
+  // the manual review queue; they never abort the wider accounting pipeline.
+  const { error: fuelMatchError } = await createServiceSupabaseClient().rpc(
+    "auto_assign_fuel_by_registration_20261030",
+    { p_workspace_id: input.workspaceId, p_document_id: input.documentId }
+  );
+  if (fuelMatchError) console.warn("[fuel-auto-assignment] Manual review required:", fuelMatchError.code ?? "RPC_FAILED");
   return { invoiceReadiness, financeAi, accounting, reconciliations };
 }
 
