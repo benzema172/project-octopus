@@ -6,6 +6,7 @@ import { normalizeDocumentSourceModule } from "@/lib/documents/source-module";
 import { matchesImportManifest, fullyUploadedImport, normalizeImportSha256 } from "@/lib/documents/import-manifest-integrity";
 import { stableSessionUuid, matchesPersistedImportVersion } from "@/lib/documents/import-session-identities";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { summarizePipelineStages, type PipelineStage, type PipelineStageStatus } from "@/lib/documents/pipeline-stages";
 
 export const runtime = "nodejs";
 
@@ -92,6 +93,7 @@ type ExtractionRow = {
   document_version_id: string;
   document_types: string[];
 };
+type PipelineRow = { document_version_id: string; stage: PipelineStage; status: PipelineStageStatus };
 
 function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
@@ -138,7 +140,7 @@ async function buildSummary(session: SessionRow) {
   const versionIds = Array.from(new Set((items ?? []).map((item) => item.document_version_id).filter((id): id is string => Boolean(id))));
   // All independent report reads run together: one network roundtrip wave
   // instead of waiting for the documents query before starting the others.
-  const [documentsResult, classificationsResult, extractionsResult, reviewActionsResult, duplicatesResult] = await Promise.all([
+  const [documentsResult, classificationsResult, extractionsResult, reviewActionsResult, duplicatesResult, stagesResult] = await Promise.all([
     documentIds.length
       ? db.from("documents").select("id,category,ai_status,ai_confidence,current_version_id,project_id")
         .eq("workspace_id", session.workspace_id).in("id", documentIds).returns<DocumentRow[]>()
@@ -174,7 +176,12 @@ async function buildSummary(session: SessionRow) {
         .in("entity_id",documentIds)
         .order("created_at",{ascending:false})
         .returns<DuplicateAuditRow[]>()
-      : Promise.resolve({ data: [] as DuplicateAuditRow[], error: null })
+      : Promise.resolve({ data: [] as DuplicateAuditRow[], error: null }),
+    versionIds.length
+      ? db.from("document_pipeline_stages").select("document_version_id,stage,status")
+        .eq("workspace_id", session.workspace_id).in("document_version_id", versionIds)
+        .returns<PipelineRow[]>()
+      : Promise.resolve({ data: [] as PipelineRow[], error: null })
   ]);
   if (documentsResult.error) throw new Error(`Nie udało się odczytać wyników dokumentów: ${documentsResult.error.message}`);
   const documents = new Map((documentsResult.data ?? []).map((document) => [document.id, document]));
@@ -182,11 +189,18 @@ async function buildSummary(session: SessionRow) {
   if (extractionsResult.error) throw new Error(`Nie udało się odczytać analiz sesji: ${extractionsResult.error.message}`);
   if (reviewActionsResult.error) console.error("Project Octopus: Batch Import review actions fallback", reviewActionsResult.error);
   if (duplicatesResult.error) throw new Error(`Nie udało się odczytać kontroli duplikatów: ${duplicatesResult.error.message}`);
+  if (stagesResult.error) throw new Error(`Nie udało się odczytać etapów procesu: ${stagesResult.error.message}`);
   const duplicateByDocument = new Map<string, DuplicateAuditRow>();
   for (const entry of duplicatesResult.data ?? []) {
     if (!duplicateByDocument.has(entry.entity_id)) duplicateByDocument.set(entry.entity_id,entry);
   }
 
+  const stagesByVersion = new Map<string, PipelineRow[]>();
+  for (const row of stagesResult.data ?? []) {
+    const previous = stagesByVersion.get(row.document_version_id);
+    if (previous) previous.push(row);
+    else stagesByVersion.set(row.document_version_id, [row]);
+  }
   const classificationByVersion = new Map<string, ClassificationRow>();
   for (const row of classificationsResult.data ?? []) if (!classificationByVersion.has(row.document_version_id)) classificationByVersion.set(row.document_version_id, row);
   if (!Array.isArray(extractionsResult.data)) throw new Error("Nieprawidłowy wynik skróconego odczytu analiz AI.");
@@ -223,6 +237,16 @@ async function buildSummary(session: SessionRow) {
     else if (document?.ai_status === "ready" || classification?.status === "approved") state = "ready";
     else state = "processing";
 
+    // The extraction job finishing is not an end-to-end success. The new
+    // stage ledger overrides legacy document status whenever stage rows exist.
+    const stages = versionId ? stagesByVersion.get(versionId) ?? [] : [];
+    if (item.upload_status === "uploaded" && stages.length) {
+      const pipelineStatus = summarizePipelineStages(stages);
+      state = pipelineStatus === "complete" ? "ready"
+        : pipelineStatus === "error" ? "error"
+          : pipelineStatus === "review" ? "review"
+            : "processing";
+    }
     const latestAction = item.document_id ? latestActionByDocument.get(item.document_id) : undefined;
     const automatic = state === "ready" && Boolean(latestAction?.note?.startsWith("Autopilot AI:"));
 
@@ -248,6 +272,7 @@ async function buildSummary(session: SessionRow) {
       state,
       automatic,
       duplicateOfDocumentId,
+      pipelineStages: stages.map((step) => ({ stage:step.stage,status:step.status })),
       error: item.error_message
     };
   });
