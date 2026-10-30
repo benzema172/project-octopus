@@ -51,9 +51,10 @@ async function analyzeInvoiceReviews(workspaceId: string, documentId: string): P
     .select("id,invoice_id")
     .eq("workspace_id", workspaceId)
     .eq("document_id", documentId)
-    .limit(50);
+    .limit(501);
   if (inboxError) throw new Error(`Nie udało się pobrać kolejki faktury: ${inboxError.message}`);
 
+  if ((inboxData ?? []).length >= 501) throw new Error("Dokument zawiera ponad 500 elementów Business Inbox; pełna weryfikacja Multi-AI wymaga podziału dokumentu na mniejsze części.");
   const inboxRows = (inboxData ?? []) as Array<{ id: string; invoice_id: string | null }>;
   const inboxIds = [...new Set(inboxRows.map((row) => row.id).filter(Boolean))];
   const invoiceIds = [...new Set(inboxRows.map((row) => row.invoice_id).filter((id): id is string => Boolean(id)))];
@@ -78,7 +79,7 @@ async function analyzeInvoiceReviews(workspaceId: string, documentId: string): P
       .eq("status", "open")
       .in("business_inbox_item_id", inboxIds)
       .order("created_at", { ascending: true })
-      .limit(20);
+      .limit(1000);
     if (error) throw new Error(`Nie udało się pobrać decyzji Business Inbox: ${error.message}`);
     if ((data ?? []).length >= 1000) throw new Error("Liczba decyzji Multi-AI przekracza stronę 1000 rekordów; kontrola musi być kontynuowana przed rozliczeniem.");
     reviewSets.push((data ?? []) as ReviewRow[]);
