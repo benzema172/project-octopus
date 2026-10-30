@@ -2,6 +2,7 @@ import "server-only";
 import { analyzeUnifiedDocumentReviewMulti } from "@/lib/ai/multi-ai-core";
 import { runAccountingCopilotForDocument } from "@/lib/ai/accounting-copilot";
 import { assessDocumentInvoiceReadiness } from "@/lib/finance/invoice-intake-readiness";
+import { proposeInvoiceWarehouseReconciliation, type ReconciliationResult } from "@/lib/finance/warehouse-reconciliation";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { AccountingCopilotRun } from "@/lib/ai/accounting-copilot";
 import type { InvoiceIntakeAssessment } from "@/lib/finance/invoice-intake-readiness";
@@ -115,10 +116,13 @@ export async function runInvoiceIntakeChecks(input: {
   workspaceId: string;
   documentId: string;
   actorId: string;
-}): Promise<{ invoiceReadiness: InvoiceIntakeAssessment[]; financeAi: FinanceAiSummary; accounting: AccountingCopilotRun[] }> {
+}): Promise<{ invoiceReadiness: InvoiceIntakeAssessment[]; financeAi: FinanceAiSummary; accounting: AccountingCopilotRun[]; reconciliations: ReconciliationResult[] }> {
   const invoiceReadiness = await assessDocumentInvoiceReadiness(input);
   // Check reconciliation and independent AI opinions before preparing
   // accounting proposals. A failed provider check is not a clean result.
+  const reconciliations = await proposeInvoiceWarehouseReconciliation(
+    input.workspaceId, invoiceReadiness.map((invoice) => invoice.invoiceId)
+  );
   const financeAi = await analyzeInvoiceReviews(input.workspaceId, input.documentId);
   if (financeAi.failed > 0) {
     const { error } = await createServiceSupabaseClient().from("documents")
@@ -129,6 +133,7 @@ export async function runInvoiceIntakeChecks(input: {
   }
   const accounting = await runAccountingCopilotForDocument(input.workspaceId, input.documentId, input.actorId);
   if (invoiceReadiness.some((item) => item.requiresReview || item.warehouseReceipt?.requiresHumanReview)
+    || reconciliations.some((item) => item.requiresHumanReview)
     || financeAi.requiresHuman > 0
     || accounting.some((item) => item.needsReview)) {
     const { error } = await createServiceSupabaseClient().from("documents")
@@ -136,6 +141,6 @@ export async function runInvoiceIntakeChecks(input: {
       .eq("workspace_id", input.workspaceId).eq("id", input.documentId);
     if (error) throw new Error(`Nie udało się oznaczyć decyzji finansowo-magazynowej: ${error.message}`);
   }
-  return { invoiceReadiness, financeAi, accounting };
+  return { invoiceReadiness, financeAi, accounting, reconciliations };
 }
 
