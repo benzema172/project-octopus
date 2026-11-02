@@ -90,6 +90,13 @@ type PurchaseEvidence = {invoiceId:string;documentId:string;purchaseOrderId:stri
   purchaseOrderNumber:string;evidence:string;warehouseDocuments:Array<{
     id:string;documentId:string;documentType:string;status:string
   }>};
+type DecisionOverview = {
+  consolidatedLines:number;unresolvedTechnicalLines:number;
+  projectAssignmentReviews:number;sourceConflicts:number;
+  possibleDuplicates:number;financeDocumentsForReview:number;
+  warehouseDocumentsForReview:number;inboxInvoicesForReview:number;
+  accountingDraftDocuments:number;note:string;
+};
 type ImportSessionSummary = {
   id: string;
   label: string | null;
@@ -99,6 +106,7 @@ type ImportSessionSummary = {
   documentTypes: Record<string, number>;
   categories: Record<string, number>;
   automationQuality?: AutomationQuality;
+  decisionOverview?: DecisionOverview;
   purchaseEvidence?: PurchaseEvidence[];
   items: Array<{
     id: string;
@@ -876,9 +884,25 @@ export function DocumentUpload({
                 <span><strong>{batchSummary.counts.processing}</strong><small>w toku</small></span>
                 <span><strong>{batchSummary.counts.error}</strong><small>błędy</small></span>
               </div>
+              {batchSummary.decisionOverview ? (
+                <div className={styles.batchBreakdown} role="status" aria-label="Automatyczne uporządkowanie propozycji AI">
+                  <span><b>AI uporządkowało automatycznie {batchSummary.decisionOverview.consolidatedLines} pozycji dokumentów.</b>
+                    Są zachowane jako dane źródłowe, ale nie wymagają pojedynczego zatwierdzania.
+                    {batchSummary.decisionOverview.unresolvedTechnicalLines>0
+                      ? ` Pozostało ${batchSummary.decisionOverview.unresolvedTechnicalLines} niepowiązanych pozycji wymagających analizy.` : ""}
+                  </span>
+                  <span><b>Rzeczywiste sprawy, bez powielania każdej pozycji:</b>
+                    {" "}{batchSummary.decisionOverview.sourceConflicts} niezgodności odczytu faktur,
+                    {" "}{batchSummary.decisionOverview.possibleDuplicates} możliwych duplikatów,
+                    {" "}{batchSummary.decisionOverview.warehouseDocumentsForReview} dokumentów magazynowych do kontroli.
+                    {" "}{batchSummary.decisionOverview.projectAssignmentReviews} faktur nie ma potwierdzonej inwestycji (można je przechowywać bez zgadywania projektu).
+                    {" "}{batchSummary.decisionOverview.accountingDraftDocuments} dekretów przygotowano do zatwierdzenia przez uprawnioną osobę.
+                  </span>
+                </div>
+              ) : null}
               {batchSummary.automationQuality ? (
                 <details>
-                  <summary>Zgrupowane decyzje AI — {batchSummary.automationQuality.groups.filter(g=>g.pending>0).length} grup, {batchSummary.automationQuality.metrics.pendingProposals} propozycji</summary>
+                  <summary>Do zatwierdzenia: {batchSummary.automationQuality.groups.filter(g=>g.pending>0).length} grup propozycji modułowych · {batchSummary.automationQuality.metrics.pendingProposals} pozycji</summary>
                   <div className={styles.batchBreakdown}>
                     <span><b>Raport jakości:</b> AI odczytało {batchSummary.automationQuality.metrics.aiAnalyzed}/{batchSummary.automationQuality.metrics.files} plików.
                       Opublikowano {batchSummary.automationQuality.metrics.publishedProposals} propozycji; {batchSummary.automationQuality.metrics.accountingDrafts} dekretów do zatwierdzenia.</span>
