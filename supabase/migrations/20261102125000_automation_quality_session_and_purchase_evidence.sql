@@ -178,6 +178,9 @@ begin
      'reviewStages',(select count(*)::int from public.document_pipeline_stages ps
          join selected s on s.document_version_id=ps.document_version_id
          where ps.workspace_id=p_workspace_id and ps.status='review'),
+     'avgJobElapsedSeconds',(select round(avg(extract(epoch from (pj.updated_at-pj.created_at)))::numeric,1)
+          from public.processing_jobs pj join selected s on s.document_version_id=pj.document_version_id
+          where pj.status='succeeded'),
      'unresolvedDocuments',(select count(distinct p.document_id)::int
           from public.document_module_proposals p join selected s on s.document_version_id=p.document_version_id
           where p.workspace_id=p_workspace_id and p.status='proposed')
