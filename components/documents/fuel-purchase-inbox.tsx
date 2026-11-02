@@ -11,10 +11,11 @@ type Review = {
   fuelType:string;suggestedVehicleId:string|null;
 };
 type AutomaticAssignment = { id:string;plate:string;fuelType:string;date:string|null;origin:"invoice"|"receipt" };
-type ResponseData = { items?:Review[]; vehicles?:Vehicle[]; recentAutomatic?:AutomaticAssignment[]; error?:string };
+type ResponseData = { pendingCount?:number; items?:Review[]; vehicles?:Vehicle[]; recentAutomatic?:AutomaticAssignment[]; error?:string };
 
-export function FuelPurchaseInbox({workspaceId, refreshKey, processing=false, canWrite=true}:{
+export function FuelPurchaseInbox({workspaceId, refreshKey, processing=false, canWrite=true, onPendingCountChange}:{
   workspaceId:string; refreshKey?:string|null; processing?:boolean;canWrite?:boolean;
+  onPendingCountChange?:(count:number)=>void;
 }) {
   const [items,setItems]=useState<Review[]>([]);
   const [vehicles,setVehicles]=useState<Vehicle[]>([]);
@@ -32,9 +33,10 @@ export function FuelPurchaseInbox({workspaceId, refreshKey, processing=false, ca
       const body=await response.json().catch(()=>({})) as ResponseData;
       if(!response.ok) throw new Error(body.error??"Nie udało się odświeżyć tankowań.");
       setAllowed(true);setItems(body.items??[]);setVehicles(body.vehicles??[]);setRecentAutomatic(body.recentAutomatic??[]);setError(null);
+      onPendingCountChange?.(body.pendingCount??(body.items??[]).length);
     }catch(caught){setError(caught instanceof Error?caught.message:"Błąd odczytu tankowań.");}
     finally {setLoading(false);}
-  },[workspaceId]);
+  },[workspaceId,onPendingCountChange]);
 
   useEffect(()=>{
     const scheduled=window.setTimeout(()=>{void refresh();},0);

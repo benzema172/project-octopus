@@ -5,6 +5,7 @@ const migration=read("supabase/migrations/20261030152000_fuel_purchase_vehicle_a
 const api=read("app/api/company/fuel-purchase-inbox/route.ts");
 const ui=read("components/documents/fuel-purchase-inbox.tsx");
 const upload=read("components/documents/document-upload.tsx");
+const archive=read("components/documents/document-central-archive.tsx");
 const fleet=read("components/company/fleet-workspace-300.tsx");
 
 describe("Wrzutnia fuel purchase vehicle assignment",()=>{
@@ -34,8 +35,9 @@ describe("Wrzutnia fuel purchase vehicle assignment",()=>{
     expect(api).toContain('authorize(request,input.workspaceId,"write")');
     expect(api).toContain('rpc("resolve_fuel_purchase_review_20261030"');
   });
-  it("exposes the same compact queue in Wrzutnia and fleet waiting",()=>{
-    expect(upload).toContain("<FuelPurchaseInbox");
+  it("exposes the same compact queue as a Documents tab and in Fleet waiting",()=>{
+    expect(archive).toContain("<FuelPurchaseInbox");
+    expect(upload).not.toContain("<FuelPurchaseInbox");
     expect(fleet).toContain("<FuelPurchaseInbox");
     expect(ui).toContain('name="vehicleId"');
     expect(ui).toContain('name="liters"');

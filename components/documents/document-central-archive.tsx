@@ -21,6 +21,7 @@ import {
 import { AiInbox } from "@/components/brain/ai-inbox";
 import { DocumentOpenLink } from "@/components/documents/document-open-link";
 import { DocumentManagementControls } from "@/components/documents/document-management-controls";
+import { FuelPurchaseInbox } from "@/components/documents/fuel-purchase-inbox";
 import { documentCategoryLabel } from "@/lib/documents/classification";
 import type { DocumentLibraryInsight } from "@/lib/documents/library-types";
 import type { AiInboxItem } from "@/lib/data/operations";
@@ -28,7 +29,7 @@ import type { DocumentSummary } from "@/lib/types";
 import styles from "./document-central-archive.module.css";
 
 type ProjectOption = { id: string; name: string };
-export type ArchiveTabId = "all" | "review" | "investments" | "finance" | "warehouse" | "hr" | "fleet" | "templates" | "company" | "unassigned" | "trash";
+export type ArchiveTabId = "all" | "review" | "investments" | "finance" | "warehouse" | "hr" | "fleet" | "fuel" | "templates" | "company" | "unassigned" | "trash";
 
 type Props = {
   workspaceId: string;
@@ -43,9 +44,11 @@ type Props = {
   searchQuery: string;
   facetCounts: Record<ArchiveTabId, number>;
   total: number;
+  canReadFuel: boolean;
+  canWriteFuel: boolean;
 };
 
-const MODULE_LABELS: Record<Exclude<ArchiveTabId, "all" | "review" | "trash">, string> = {
+const MODULE_LABELS: Record<Exclude<ArchiveTabId, "all" | "review" | "trash" | "fuel">, string> = {
   investments: "Inwestycje",
   finance: "Finanse",
   warehouse: "Magazyn",
@@ -64,6 +67,7 @@ const TABS: Array<{ id: ArchiveTabId; label: string }> = [
   { id: "warehouse", label: "Magazyn" },
   { id: "hr", label: "Kadry" },
   { id: "fleet", label: "Flota" },
+  { id: "fuel", label: "Tankowania" },
   { id: "templates", label: "Wzory i Brain" },
   { id: "company", label: "Ogólne" },
   { id: "unassigned", label: "Nieprzypisane" },
@@ -78,7 +82,7 @@ function normalize(value: unknown) {
     .toLocaleLowerCase("pl");
 }
 
-function moduleForDocument(document: DocumentSummary): Exclude<ArchiveTabId, "all" | "review" | "trash"> {
+function moduleForDocument(document: DocumentSummary): Exclude<ArchiveTabId, "all" | "review" | "trash" | "fuel"> {
   const category = normalize(document.flow?.category ?? document.category);
   if (["invoice", "finance", "payment", "cost"].includes(category)) return "finance";
   if (["warehouse", "delivery note", "delivery_note", "stock", "material"].includes(category)) return "warehouse";
@@ -152,7 +156,9 @@ export function DocumentCentralArchive({
   activeTab,
   searchQuery,
   facetCounts,
-  total
+  total,
+  canReadFuel,
+  canWriteFuel
 }: Props) {
   const router = useRouter();
   const currentSearchParams = useSearchParams();
@@ -161,11 +167,12 @@ export function DocumentCentralArchive({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [pendingFuelCount, setPendingFuelCount] = useState<number | null>(null);
 
   const buildHref = useCallback((nextTab: ArchiveTabId, nextQuery: string) => {
     const params = new URLSearchParams(currentSearchParams.toString());
     if (nextTab === "all") params.delete("tab"); else params.set("tab", nextTab);
-    if (nextTab !== "trash" && nextQuery.trim()) params.set("q", nextQuery.trim());
+    if (nextTab !== "trash" && nextTab !== "fuel" && nextQuery.trim()) params.set("q", nextQuery.trim());
     else params.delete("q");
     params.delete("page");
     params.delete("trashPage");
@@ -174,10 +181,32 @@ export function DocumentCentralArchive({
   }, [currentSearchParams]);
 
   useEffect(() => {
-    if (tab === "trash" || query === searchQuery) return;
+    if (tab === "trash" || tab === "fuel" || query === searchQuery) return;
     const timer = window.setTimeout(() => router.replace(buildHref(tab, query)), 350);
     return () => window.clearTimeout(timer);
   }, [buildHref, query, router, searchQuery, tab]);
+
+  useEffect(() => {
+    if (!canReadFuel) return;
+    const controller = new AbortController();
+    const refreshFuelCount = async () => {
+      if (document.visibilityState === "hidden") return;
+      try {
+        const response = await fetch(
+          `/api/company/fuel-purchase-inbox?workspaceId=${encodeURIComponent(workspaceId)}&countOnly=1`,
+          {cache:"no-store",signal:controller.signal}
+        );
+        if (!response.ok) return;
+        const data = await response.json() as {pendingCount?:number};
+        if (!controller.signal.aborted && typeof data.pendingCount === "number") {
+          setPendingFuelCount(data.pendingCount);
+        }
+      } catch { /* The tab remains accessible if the badge cannot load. */ }
+    };
+    void refreshFuelCount();
+    const timer = window.setInterval(() => void refreshFuelCount(), 30000);
+    return () => { controller.abort(); window.clearInterval(timer); };
+  }, [canReadFuel, workspaceId]);
 
   const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
   const insightByDocument = useMemo(() => new Map(insights.map((insight) => [insight.documentId, insight])), [insights]);
@@ -231,7 +260,7 @@ export function DocumentCentralArchive({
   return (
     <div className={styles.archive} data-document-central-archive="1" data-documents-collapsed-default="1">
       <div className={styles.tabs} role="tablist" aria-label="Kategorie centralnego archiwum">
-        {TABS.map((item) => (
+        {TABS.filter(item=>item.id!=="fuel" || canReadFuel).map((item) => (
           <button
             key={item.id}
             type="button"
@@ -241,16 +270,20 @@ export function DocumentCentralArchive({
             onClick={() => {
               setTab(item.id);
               setSelectedId(null);
-              if (item.id === "all" || item.id === "trash") setQuery("");
-              router.push(buildHref(item.id, item.id === "all" || item.id === "trash" ? "" : query));
+              if (item.id === "all" || item.id === "trash" || item.id === "fuel") setQuery("");
+              router.push(buildHref(item.id, item.id === "all" || item.id === "trash" || item.id === "fuel" ? "" : query));
             }}
           >
-            {item.label}{item.id === "all" ? null : <span>{facetCounts[item.id] ?? 0}</span>}
+            {item.label}{item.id === "all" ? null : <span>{item.id === "fuel" ? (pendingFuelCount ?? "…") : (facetCounts[item.id] ?? 0)}</span>}
           </button>
         ))}
       </div>
 
-      {tab === "trash" ? (
+      {tab === "fuel" ? (
+        canReadFuel ? <div role="tabpanel" aria-label="Tankowania do przypisania">
+          <FuelPurchaseInbox workspaceId={workspaceId} canWrite={canWriteFuel} onPendingCountChange={setPendingFuelCount} />
+        </div> : <div className={styles.empty}>Brak uprawnień do Floty.</div>
+      ) : tab === "trash" ? (
         <div className={styles.list} aria-label="Kosz dokumentów">
           {restoreError ? <div className={styles.warningPanel}><AlertTriangle size={16} /><strong>{restoreError}</strong></div> : null}
           {trashedDocuments.length ? trashedDocuments.map((document) => (

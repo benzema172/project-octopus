@@ -35,7 +35,7 @@ type Props = {
 };
 
 const ARCHIVE_TABS = new Set<ArchiveTabId>([
-  "all", "review", "investments", "finance", "warehouse", "hr", "fleet", "templates", "company", "unassigned", "trash"
+  "all", "review", "investments", "finance", "warehouse", "hr", "fleet", "fuel", "templates", "company", "unassigned", "trash"
 ]);
 
 function normalizeArchiveTab(value: string | undefined): ArchiveTabId {
@@ -80,7 +80,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
   const query = await searchParams;
   const sourceModule = normalizeDocumentSourceModule(query.sourceModule);
   const activeTab = normalizeArchiveTab(query.tab);
-  const searchQuery = activeTab === "trash" ? "" : String(query.q ?? "").trim();
+  const searchQuery = activeTab === "trash" || activeTab === "fuel" ? "" : String(query.q ?? "").trim();
   const archivePage = Math.max(1, Math.floor(Number(query.page ?? 1) || 1));
   const trashPage = Math.max(1, Math.floor(Number(query.trashPage ?? 1) || 1));
   const moduleFilter = MODULE_FILTER_TABS.has(activeTab) ? activeTab : undefined;
@@ -105,7 +105,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
       console.error("Project Octopus: project list fallback in documents", error);
       return [];
     }),
-    activeTab === "trash"
+    activeTab === "trash" || activeTab === "fuel"
       ? Promise.resolve(emptyPage)
       : safeWorkspaceDocumentsPage(workspace.id, {
           page: archivePage,
@@ -197,7 +197,9 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
 
   const documentQueueItems = [...queueByDocumentId.values()].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
   const projectOptions = projects.map((project) => ({ id: project.id, name: project.name }));
-  const facetCounts: Record<ArchiveTabId, number> = { ...facets, trash: trashTotal };
+  const facetCounts: Record<ArchiveTabId, number> = { ...facets, fuel: 0, trash: trashTotal };
+  const canReadFuel = domainAccessPolicyAllows(accessPolicy, {domain:"fleet",level:"read",projectId:null});
+  const canWriteFuel = domainAccessPolicyAllows(accessPolicy, {domain:"fleet",level:"write",projectId:null});
 
   return (
     <main className="co-page co-documents-simplified" data-documents-one-flow="1">
@@ -237,6 +239,8 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
           activeTab={activeTab}
           searchQuery={searchQuery}
           facetCounts={facetCounts}
+          canReadFuel={canReadFuel}
+          canWriteFuel={canWriteFuel}
           total={activeTab === "trash" ? trashTotal : documentsPage.total}
           uploadContent={(
             <DocumentUpload
@@ -250,7 +254,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
             />
           )}
         />
-        {activeTab !== "all" && activeTab !== "trash" ? (
+        {activeTab !== "all" && activeTab !== "trash" && activeTab !== "fuel" ? (
           <ServerPagination
             page={documentsPage.page}
             pageSize={documentsPage.pageSize}
