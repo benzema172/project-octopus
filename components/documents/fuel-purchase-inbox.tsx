@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Fuel, RotateCcw, Check, X } from "lucide-react";
+import { InvoiceQuickPreview } from "./invoice-quick-preview";
 import styles from "./fuel-purchase-inbox.module.css";
 
 type Vehicle = { id:string; registration_number:string; make:string|null; model:string|null; status:string };
 type Review = {
-  id:string;invoiceId:string;invoiceNumber:string;date:string|null;station:string;currency:string;
+  id:string;invoiceId:string;invoiceLineId:string;invoiceNumber:string;date:string|null;station:string;currency:string;
   description:string;unit:string|null;quantity:number|null;liters:number|null;amount:number|null;
   fuelType:string;suggestedVehicleId:string|null;
 };
@@ -95,7 +96,16 @@ export function FuelPurchaseInbox({workspaceId, refreshKey, processing=false, ca
           <table className={styles.table}>
             <thead><tr><th>Faktura / stacja</th><th>Paliwo</th><th>Litry</th><th>Kwota brutto</th><th>Przypisz pojazd</th><th>Decyzja</th></tr></thead>
             <tbody>{items.map(item=><tr key={item.id}>
-              <td><strong>{item.invoiceNumber}</strong><span>{item.station}</span><small>{item.date??"Brak daty"}</small></td>
+              <td>
+                <strong>
+                  <InvoiceQuickPreview workspaceId={workspaceId} domain="fleet"
+                    invoiceId={item.invoiceId} invoiceLineId={item.invoiceLineId}
+                    invoiceNumber={item.invoiceNumber}>
+                    {item.invoiceNumber}
+                  </InvoiceQuickPreview>
+                </strong>
+                <span>{item.station}</span><small>{item.date??"Brak daty"}</small>
+              </td>
               <td><strong>{item.fuelType}</strong><span title={item.description}>{item.description}</span></td>
               <td><input aria-label={"Litry dla faktury "+item.invoiceNumber} name="liters" form={"fuel-"+item.id}
                 type="number" inputMode="decimal" min="0.001" max="20000" step="any"
