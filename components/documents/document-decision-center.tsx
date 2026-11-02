@@ -6,7 +6,7 @@ import {DocumentOpenLink} from "./document-open-link";
 import styles from "./document-decision-center.module.css";
 type Scope=""|"project"|"inventory"|"overhead";
 type Line={id:string;description:string;line_number:number;net_amount:number;quantity:number|null;unit:string|null};
-type Part={lineId:string;scope:Scope;projectId:string;amount:string;quantity:string;costCode:string};
+type Part={lineId:string;scope:Scope;projectId:string;materialScope:"project"|"inventory"|"none";materialProjectId:string;amount:string;quantity:string;costCode:string};
 type Project={id:string;name:string};
 type Context={
  type:"purchase_invoice"|"warehouse_document"|"sales_invoice"|"other";
@@ -48,8 +48,10 @@ export function DocumentDecisionCenter({workspaceId,documentId,versionId,project
       const old=body.allocations.filter(a=>a.source_line_id===line.id&&a.allocation_scope!=="unassigned");
       initial[line.id]=old.length?old.map(a=>({
        lineId:line.id,scope:a.allocation_scope as Scope,projectId:a.project_id??"",
+        materialScope:a.allocation_scope==="project"?"project":a.allocation_scope==="inventory"?"inventory":"none",materialProjectId:a.project_id??"",
        amount:fixed(a.amount),quantity:decimal(old.length===1?line.quantity:0),costCode:a.cost_code??""
       })):[{lineId:line.id,scope:project?"project":"",projectId:project??"",
+        materialScope:line.quantity&&project?"project":"none",materialProjectId:project??"",
         amount:fixed(line.net_amount),quantity:decimal(line.quantity),costCode:""}];
     });
     setParts(initial);
@@ -71,7 +73,7 @@ export function DocumentDecisionCenter({workspaceId,documentId,versionId,project
   void run();return()=>controller.abort();
  },[workspaceId,projectId,versionId]);
  const all=useMemo(()=>data?.lines.flatMap(l=>parts[l.id]??[])??[],[data,parts]);
- const missing=all.filter(p=>!p.scope||(p.scope==="project"&&!p.projectId)).length;
+ const missing=all.filter(p=>!p.scope||(p.scope==="project"&&!p.projectId)||(p.materialScope==="project"&&!p.materialProjectId)).length;
  const sumErrors=data?.lines.filter(l=>{
    const row=parts[l.id]??[];
    return Math.abs(row.reduce((s,p)=>s+(Number.isFinite(n(p.amount))?n(p.amount):0),0)-Number(l.net_amount??0))>0.01 ||
@@ -86,7 +88,9 @@ export function DocumentDecisionCenter({workspaceId,documentId,versionId,project
  const changeAll=()=>{
   if(!data||!target||(target==="project"&&!investment))return;
   setParts(prev=>Object.fromEntries(data.lines.map(l=>[l.id,(prev[l.id]??[]).map(p=>({...p,
-   scope:target,projectId:target==="project"?investment:""}))])));
+   scope:target,projectId:target==="project"?investment:"",
+    materialScope:target==="project"?"project":target==="inventory"?"inventory":"none",
+    materialProjectId:target==="project"?investment:""}))])));
  };
  async function save(){
   if(!data||!enabled||busy)return;
@@ -94,6 +98,7 @@ export function DocumentDecisionCenter({workspaceId,documentId,versionId,project
   const request=data.type==="purchase_invoice"?
    {mode:"invoice",workspaceId,documentId,invoiceId:data.invoice?.id,
     assignments:all.map(p=>({lineId:p.lineId,scope:p.scope,projectId:p.scope==="project"?p.projectId:null,
+      materialScope:p.materialScope,materialProjectId:p.materialScope==="project"?p.materialProjectId:null,
       amount:n(p.amount),quantity:n(p.quantity),costCode:p.costCode}))}:
    {mode:"warehouse",workspaceId,documentId,inboxId:data.warehouse?.id,scope:target,
     projectId:target==="project"?investment:null};
@@ -145,7 +150,7 @@ export function DocumentDecisionCenter({workspaceId,documentId,versionId,project
        <small>{l.quantity??"—"} {l.unit??""} · {money(l.net_amount)} netto</small></div>
        <button type="button" disabled={!canDecide||(parts[l.id]??[]).length>=12}
         onClick={()=>setParts(prev=>({...prev,[l.id]:[...(prev[l.id]??[]),
-          {lineId:l.id,scope:"",projectId:"",amount:"0,00",quantity:"0",costCode:""}]}))}>
+          {lineId:l.id,scope:"",projectId:"",materialScope:"none",materialProjectId:"",amount:"0,00",quantity:"0",costCode:""}]}))}>
         <Plus size={13}/> Podziel</button>
       </div>
       {(parts[l.id]??[]).map((p,index)=><div className={styles.part} key={index}>
@@ -160,6 +165,19 @@ export function DocumentDecisionCenter({workspaceId,documentId,versionId,project
        </select></label>:null}
        <label>Netto<input inputMode="decimal" value={p.amount} disabled={!canDecide}
         onChange={e=>change(l.id,index,{amount:e.target.value})}/></label>
+       {l.quantity!=null&&l.quantity>0?<label>Materiał<select aria-label="Gdzie trafi materiał" value={p.materialScope}
+         disabled={!canDecide} onChange={e=>change(l.id,index,{
+           materialScope:e.target.value as Part["materialScope"],
+           materialProjectId:e.target.value==="project"?p.materialProjectId:""
+         })}>
+         <option value="none">Nie dotyczy / usługa</option><option value="inventory">Magazyn</option>
+         <option value="project">Inwestycja (plan)</option>
+       </select></label>:null}
+       {l.quantity!=null&&l.quantity>0&&p.materialScope==="project"?<label>Cel materiału<select
+         aria-label="Docelowa inwestycja dla materiału" value={p.materialProjectId} disabled={!canDecide}
+         onChange={e=>change(l.id,index,{materialProjectId:e.target.value})}>
+         <option value="">Wybierz…</option>{data.projects.map(pr=><option key={pr.id} value={pr.id}>{pr.name}</option>)}
+       </select></label>:null}
        {l.quantity!=null&&l.quantity>0?<label>Ilość<input inputMode="decimal" value={p.quantity}
         disabled={!canDecide} onChange={e=>change(l.id,index,{quantity:e.target.value})}/></label>:null}
        {(parts[l.id]??[]).length>1?<button type="button" className={styles.trash} aria-label="Usuń podział"
