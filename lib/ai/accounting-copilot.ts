@@ -1,4 +1,5 @@
 import "server-only";
+import { mayApplyAccountingDraftSuggestion } from "@/lib/finance/accounting-suggestion-evidence";
 
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
@@ -306,7 +307,12 @@ export async function runAccountingCopilotForInvoice(
       }).select("id").single<{ id: string }>();
       if (stored.error) continue;
 
-      if (confidence >= autoApply && risk <= 0.10 && tax !== "review" && line.manual_override !== true) {
+      if (mayApplyAccountingDraftSuggestion({
+        invoiceNumber:invoice.invoice_number,counterpartyTaxId:counterparty.tax_id,
+        lineDescription:line.line_description,lineId:line.id,
+        accountIsActive:account.active!==false,confidence,risk,threshold:autoApply,
+        tax,vat,manualOverride:line.manual_override===true,reasons:suggestion.reasons
+      })) {
         const applied = await db.from("accounting_entry_lines").update({
           account_id: account.id,
           tax_treatment: tax,

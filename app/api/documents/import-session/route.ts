@@ -141,7 +141,7 @@ async function buildSummary(session: SessionRow) {
   const versionIds = Array.from(new Set((items ?? []).map((item) => item.document_version_id).filter((id): id is string => Boolean(id))));
   // All independent report reads run together: one network roundtrip wave
   // instead of waiting for the documents query before starting the others.
-  const [documentsResult, classificationsResult, extractionsResult, reviewActionsResult, duplicatesResult, stagesResult, destinationsResult] = await Promise.all([
+  const [documentsResult, classificationsResult, extractionsResult, reviewActionsResult, duplicatesResult, stagesResult, destinationsResult, qualityResult, purchasesResult] = await Promise.all([
     documentIds.length
       ? db.from("documents").select("id,category,ai_status,ai_confidence,current_version_id,project_id")
         .eq("workspace_id", session.workspace_id).in("id", documentIds).returns<DocumentRow[]>()
@@ -185,7 +185,13 @@ async function buildSummary(session: SessionRow) {
       : Promise.resolve({ data: [] as PipelineRow[], error: null }),
     documentIds.length
       ? db.rpc("get_import_document_destinations_20261030", { p_workspace_id: session.workspace_id, p_document_ids: documentIds })
-      : Promise.resolve({data:[] as DocumentDestinations[],error:null})
+      : Promise.resolve({data:[] as DocumentDestinations[],error:null}),
+    db.rpc("get_import_automation_quality_20261102", {
+      p_workspace_id:session.workspace_id,p_session_id:session.id
+    }),
+    db.rpc("get_import_purchase_evidence_20261102", {
+      p_workspace_id:session.workspace_id,p_session_id:session.id
+    })
   ]);
   if (documentsResult.error) throw new Error(`Nie udało się odczytać wyników dokumentów: ${documentsResult.error.message}`);
   const documents = new Map((documentsResult.data ?? []).map((document) => [document.id, document]));
@@ -195,6 +201,8 @@ async function buildSummary(session: SessionRow) {
   if (duplicatesResult.error) throw new Error(`Nie udało się odczytać kontroli duplikatów: ${duplicatesResult.error.message}`);
   if (stagesResult.error) throw new Error(`Nie udało się odczytać etapów procesu: ${stagesResult.error.message}`);
   if (destinationsResult.error || !Array.isArray(destinationsResult.data)) throw new Error("Nie udało się uzgodnić raportu modułów.");
+  if (qualityResult.error || !qualityResult.data) throw new Error("Nie udało się zebrać wyników automatyzacji dokumentów.");
+  if (purchasesResult.error || !Array.isArray(purchasesResult.data)) throw new Error("Nie udało się odczytać dowodów powiązań zakupowych.");
   const destinationsByDocument = new Map<string,DocumentDestinations>();
   for (const row of destinationsResult.data as DocumentDestinations[]) if (row.documentId) destinationsByDocument.set(row.documentId,row);
   const duplicateByDocument = new Map<string, DuplicateAuditRow>();
@@ -313,6 +321,8 @@ async function buildSummary(session: SessionRow) {
     counts,
     documentTypes,
     categories,
+    automationQuality: qualityResult.data,
+    purchaseEvidence: purchasesResult.data,
     items: rows
   };
 }
