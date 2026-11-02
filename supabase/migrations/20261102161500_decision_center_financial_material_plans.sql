@@ -87,6 +87,14 @@ begin
       abs(v_group.qty-v_line.quantity)>0.0001
     then raise exception 'Rozbicie ilości nie sumuje się do ilości dla pozycji %.',v_line.line_number; end if;
    if v_group.parts>12 then raise exception 'Maksymalnie 12 przeznaczeń jednej pozycji.'; end if;
+   if exists(
+    select 1 from (
+      select r->>'scope' scope, coalesce(r->>'projectId','') project_id, count(*) n
+      from jsonb_array_elements(p_plan) r
+      where (r->>'lineId')::uuid=v_line.id
+      group by 1,2
+    ) duplicated where duplicated.n>1
+   ) then raise exception 'Nie powielaj tego samego celu dla jednej pozycji.'; end if;
    -- Protect existing manually approved allocations from accidental overwrites.
    if exists(select 1 from public.financial_allocations a where a.workspace_id=p_workspace_id
     and a.source_type='invoice' and a.source_line_id=v_line.id and a.status='approved'
