@@ -181,7 +181,7 @@ begin
        when (select count(distinct nullif(r->>'projectId','')::uuid) from jsonb_array_elements(p_plan) r)=1
         and not exists(select 1 from jsonb_array_elements(p_plan) r
           where r->>'scope'<>'project')
-       then (select max((r->>'projectId')::uuid) from jsonb_array_elements(p_plan) r)
+       then (select (r->>'projectId')::uuid from jsonb_array_elements(p_plan) r where r->>'scope'='project' limit 1)
        else null
      end,
      true,p_actor_id,
