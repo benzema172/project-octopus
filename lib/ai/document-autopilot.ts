@@ -1,4 +1,5 @@
 import "server-only";
+import { calibratedConfidence } from "@/lib/ai/control-plane";
 
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { findExistingExactDuplicate } from "@/lib/documents/exact-duplicate-guard";
@@ -220,8 +221,14 @@ export async function applyDocumentAutopilot(input: {
     throw new Error(`Kontrola klasyfikacji przed routingiem nie powiodła się: ${classificationResult.error?.message ?? intakeResult.error?.message}`);
   }
   const classificationConfidence = classificationResult.data?.confidence;
-  const belowAutomaticThreshold = classificationConfidence != null
-    && Number(classificationConfidence) < 0.82 && !intakeResult.data?.category_locked;
+  const calibratedClassificationConfidence = classificationConfidence == null
+    ? null
+    : Math.min(Number(classificationConfidence),await calibratedConfidence({
+        workspaceId:input.workspaceId,domain:"documents",taskType:"classification",
+        raw:Number(classificationConfidence)
+      }));
+  const belowAutomaticThreshold = calibratedClassificationConfidence != null
+    && calibratedClassificationConfidence < 0.82 && !intakeResult.data?.category_locked;
   let unassignedProjectProposals = false;
   if (!input.projectId && !["invoice", "warehouse", "template", "hr"].includes(input.category)) {
     const { data: needsProject, error: needsProjectError } = await db
@@ -235,7 +242,7 @@ export async function applyDocumentAutopilot(input: {
   }
   if (belowAutomaticThreshold || unassignedProjectProposals) {
     const reason = belowAutomaticThreshold
-      ? `AI rozpoznało kategorię z pewnością ${Math.round(Number(classificationConfidence) * 100)}%. Dokument wymaga potwierdzenia przed publikacją.`
+      ? `Skalibrowana pewność klasyfikacji AI: ${Math.round(Number(calibratedClassificationConfidence) * 100)}%. Dokument wymaga potwierdzenia przed publikacją.`
       : "Dokument zawiera propozycje do modułów inwestycji, ale nie ma pewnie wskazanej inwestycji.";
     const { error: heldError } = await db.from("documents")
       .update({ ai_status: "review", review_status: "pending" })
@@ -246,7 +253,7 @@ export async function applyDocumentAutopilot(input: {
       actor_id: input.actorId, actor_type: "ai",
       event_type: "document.autopilot_routing_review_required",
       entity_type: "document", entity_id: input.documentId,
-      after_value: { versionId: input.versionId, classificationConfidence,
+      after_value: { versionId: input.versionId, classificationConfidence, calibratedClassificationConfidence,
         reason, noUncertainAutomaticPublication: true }
     });
     if (auditError) throw new Error(`Nie udało się zapisać kontroli routingu: ${auditError.message}`);
