@@ -184,7 +184,8 @@ describe("Octopus production stability regression", () => {
   it("holds low-confidence or unassigned investment documents rather than silently publishing proposals", () => {
     const pilot = source("lib/ai/document-autopilot.ts");
     expect(pilot).toContain("classificationConfidence");
-    expect(pilot).toContain("Number(classificationConfidence) < 0.82");
+    expect(pilot).toContain("calibratedClassificationConfidence < 0.82");
+    expect(pilot).toContain("Math.min(Number(classificationConfidence),await calibratedConfidence(");
     expect(pilot).toContain("unassignedProjectProposals");
     expect(pilot).toContain("noUncertainAutomaticPublication: true");
     expect(pilot).toContain("businessDocumentProcessed = result?.skipped !== true && businessDocumentCount > 0");
