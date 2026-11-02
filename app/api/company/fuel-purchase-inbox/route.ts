@@ -39,9 +39,16 @@ export async function GET(request: Request) {
   const access = await authorize(request, workspaceId, "read");
   if (access.error) return access.error;
   const db = createServiceSupabaseClient();
+  if (new URL(request.url).searchParams.get("countOnly")==="1") {
+    const {count,error} = await db.from("fuel_purchase_reviews")
+      .select("id",{count:"exact",head:true})
+      .eq("workspace_id",workspaceId).eq("status","pending");
+    if (error) return NextResponse.json({error:"Nie udało się policzyć tankowań."},{status:500});
+    return NextResponse.json({pendingCount:count??0},{headers:{"Cache-Control":"no-store"}});
+  }
   const [reviewsResult, vehiclesResult, automaticInvoicesResult, automaticReceiptsResult] = await Promise.all([
     db.from("fuel_purchase_reviews")
-      .select("id,invoice_id,invoice_line_id,suggested_fuel_type,suggested_liters,created_at")
+      .select("id,invoice_id,invoice_line_id,suggested_fuel_type,suggested_liters,created_at",{count:"exact"})
       .eq("workspace_id",workspaceId).eq("status","pending")
       .order("created_at",{ascending:false}).limit(150),
     db.from("vehicles")
@@ -72,9 +79,10 @@ export async function GET(request: Request) {
     }]:[])
   ].sort((a,b)=>(b.date??"").localeCompare(a.date??"")).slice(0,8);
   const reviews = (reviewsResult.data ?? []) as FuelReview[];
+  const pendingCount = reviewsResult.count ?? reviews.length;
   const invoiceIds = [...new Set(reviews.map(row => row.invoice_id))];
   const lineIds = reviews.map(row => row.invoice_line_id);
-  if (!reviews.length) return NextResponse.json({ items:[], vehicles:vehiclesResult.data ?? [], recentAutomatic }, { headers:{"Cache-Control":"no-store"} });
+  if (!reviews.length) return NextResponse.json({ items:[], pendingCount, vehicles:vehiclesResult.data ?? [], recentAutomatic }, { headers:{"Cache-Control":"no-store"} });
   const [invoicesResult,linesResult] = await Promise.all([
     db.from("invoices").select("id,invoice_number,issue_date,sale_date,currency,counterparty_id")
       .eq("workspace_id",workspaceId).in("id",invoiceIds),
@@ -107,7 +115,7 @@ export async function GET(request: Request) {
       suggestedVehicleId:line.vehicle_id
     }];
   });
-  return NextResponse.json({ items,vehicles:vehiclesResult.data ?? [],recentAutomatic },{headers:{"Cache-Control":"no-store"}});
+  return NextResponse.json({ items,pendingCount,vehicles:vehiclesResult.data ?? [],recentAutomatic },{headers:{"Cache-Control":"no-store"}});
 }
 
 export async function POST(request: Request) {
