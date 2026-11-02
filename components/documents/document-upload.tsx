@@ -74,6 +74,22 @@ type DocumentDestinations = {
   warehouse:DestinationRecord[];fleet:DestinationRecord[];
   fuel:DestinationRecord[];modules:DestinationRecord[];
 };
+type AutomationGroup = {
+  module:string;proposalType:string;projectId:string|null;
+  total:number;pending:number;published:number;documents:number;
+  lowConfidence:number;missingEvidence:number;eligible:number;eligibleIds:string[];
+};
+type AutomationQuality = {
+  metrics:{files:number;aiAnalyzed:number;pendingAi:number;pendingProposals:number;
+    publishedProposals:number;missingEvidence:number;lowConfidence:number;
+    accountingDrafts:number;accountingMemoryUses:number;reviewStages:number;
+    avgJobElapsedSeconds:number|null;unresolvedDocuments:number};
+  groups:AutomationGroup[];
+};
+type PurchaseEvidence = {invoiceId:string;documentId:string;purchaseOrderId:string;
+  purchaseOrderNumber:string;evidence:string;warehouseDocuments:Array<{
+    id:string;documentId:string;documentType:string;status:string
+  }>};
 type ImportSessionSummary = {
   id: string;
   label: string | null;
@@ -82,6 +98,8 @@ type ImportSessionSummary = {
   counts: { total: number; uploaded: number; ready: number; automatic: number; review: number; processing: number; error: number; duplicates: number };
   documentTypes: Record<string, number>;
   categories: Record<string, number>;
+  automationQuality?: AutomationQuality;
+  purchaseEvidence?: PurchaseEvidence[];
   items: Array<{
     id: string;
     documentId?: string | null;
@@ -237,6 +255,7 @@ export function DocumentUpload({
   const [recentDocumentIds, setRecentDocumentIds] = useState<string[]>([]);
   const [batchSummary, setBatchSummary] = useState<ImportSessionSummary | null>(null);
   const [retryingDocumentId,setRetryingDocumentId] = useState<string | null>(null);
+  const [approvingGroup,setApprovingGroup] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const isIntake = displayMode === "intake";
 
@@ -279,6 +298,27 @@ export function DocumentUpload({
     } catch(e) {
       setError(e instanceof Error?e.message:"Nie udało się ponowić kontroli dokumentu.");
     } finally {setRetryingDocumentId(null);}
+  }
+
+  async function approveAutomationGroup(group:AutomationGroup) {
+    const ids=(group.eligibleIds??[]).slice(0,20);
+    if (!workspaceId || !batchSummary?.id || !group.projectId || !ids.length || approvingGroup) return;
+    if (!window.confirm(`Zatwierdzić ${ids.length} sprawdzonych propozycji z grupy ${group.module} / ${group.proposalType}? Operacja może utworzyć zapisy w modułach. Nie zatwierdza dekretów księgowych ani przyjęć towaru.`)) return;
+    const key=group.module+":"+group.proposalType+":"+group.projectId;
+    setApprovingGroup(key);setError(null);
+    try {
+      const response=await fetch("/api/documents/import-group-approve",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({workspaceId,sessionId:batchSummary.id,
+          projectId:group.projectId,module:group.module,proposalType:group.proposalType,
+          proposalIds:ids,confirm:true})
+      });
+      const payload=await response.json().catch(()=>({})) as {error?:string;succeeded?:number;failed?:number};
+      if(!response.ok)throw new Error(payload.error??"Nie udało się zatwierdzić grupy.");
+      setStatus(`Zatwierdzono ${payload.succeeded??0} propozycji; błędy: ${payload.failed??0}.`);
+      await refreshImportSession(batchSummary.id);router.refresh();
+    }catch(e){setError(e instanceof Error?e.message:"Nie udało się zatwierdzić grupy.");}
+    finally{setApprovingGroup(null);}
   }
 
   const refreshImportSession = useCallback(async (sessionId?: string) => {
@@ -836,6 +876,56 @@ export function DocumentUpload({
                 <span><strong>{batchSummary.counts.processing}</strong><small>w toku</small></span>
                 <span><strong>{batchSummary.counts.error}</strong><small>błędy</small></span>
               </div>
+              {batchSummary.automationQuality ? (
+                <details>
+                  <summary>Zgrupowane decyzje AI — {batchSummary.automationQuality.groups.filter(g=>g.pending>0).length} grup, {batchSummary.automationQuality.metrics.pendingProposals} propozycji</summary>
+                  <div className={styles.batchBreakdown}>
+                    <span><b>Raport jakości:</b> AI odczytało {batchSummary.automationQuality.metrics.aiAnalyzed}/{batchSummary.automationQuality.metrics.files} plików.
+                      Opublikowano {batchSummary.automationQuality.metrics.publishedProposals} propozycji; {batchSummary.automationQuality.metrics.accountingDrafts} dekretów do zatwierdzenia.</span>
+                    <span><b>Dowody:</b> {batchSummary.automationQuality.metrics.missingEvidence} propozycji bez źródłowego cytatu/lokalizatora;
+                      {batchSummary.automationQuality.metrics.lowConfidence} poniżej 90% deklarowanej pewności.
+                      Pamięć zatwierdzonych księgowań wykorzystana w {batchSummary.automationQuality.metrics.accountingMemoryUses} pozycjach.</span>
+                    <span><b>Wydajność:</b> średni czas od utworzenia do zamknięcia zadania AI (z kolejką):
+                      {batchSummary.automationQuality.metrics.avgJobElapsedSeconds==null?" brak danych":
+                        " "+Math.round(batchSummary.automationQuality.metrics.avgJobElapsedSeconds)+" sekund"}.
+                      Etapy wymagające decyzji: {batchSummary.automationQuality.metrics.reviewStages}.</span>
+                    {batchSummary.automationQuality.groups.filter(g=>g.pending>0).map((group)=>(
+                      <div key={group.module+":"+group.proposalType+":"+group.projectId}
+                        style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"space-between",
+                          padding:"9px 0",borderBottom:"1px solid var(--border,#e5e7eb)"}}>
+                        <span><b>{group.module} / {group.proposalType}</b> · {group.documents} dokumentów · {group.pending} decyzji
+                          {group.projectId ? " · przypisano inwestycję" : " · przypisz inwestycję" }
+                          {group.missingEvidence ? " · "+group.missingEvidence+" bez dowodu" : ""}</span>
+                        {group.eligibleIds?.length ? (
+                          <button type="button" className="secondary-button"
+                            disabled={isUploading || Boolean(approvingGroup)}
+                            onClick={()=>void approveAutomationGroup(group)}>
+                            {approvingGroup===group.module+":"+group.proposalType+":"+group.projectId
+                              ? "Zapisywanie..." : "Zatwierdź "+Math.min(20,group.eligibleIds.length)+" sprawdzonych"}
+                          </button>
+                        ) : <small>Wymagana kontrola dowodów lub zatwierdzenie dokumentu źródłowego</small>}
+                      </div>
+                    ))}
+                    <a href={`/workspace/companies/${workspaceId}/ai-inbox`}>Przejdź do wszystkich decyzji AI</a>
+                  </div>
+                </details>
+              ) : null}
+              {batchSummary.purchaseEvidence?.length ? (
+                <details>
+                  <summary>Automatycznie powiązane dowody zakupowe — {batchSummary.purchaseEvidence.length}</summary>
+                  <div className={styles.batchBreakdown}>
+                    {batchSummary.purchaseEvidence.map((match)=>(
+                      <span key={match.invoiceId+":"+match.purchaseOrderId}>
+                        <b>Zamówienie {match.purchaseOrderNumber}</b> · faktura {match.invoiceId.slice(0,8)}
+                        {match.warehouseDocuments.length?
+                          " · powiązane WZ/PZ/MM: "+match.warehouseDocuments.length:
+                          " · oczekiwanie na WZ/PZ/MM"}
+                        <small> · Dopasowanie numeru zamówienia i kontrahenta; bez automatycznego zatwierdzenia stanu magazynowego.</small>
+                      </span>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
               {batchSummary.items.some((item) => item.duplicateOfDocumentId) ? (
                 <div className={styles.batchBreakdown} role="status" aria-label="Wykryte powtórzenia plików">
                   {batchSummary.items.filter((item) => item.duplicateOfDocumentId).slice(0, 20).map((item) => (
