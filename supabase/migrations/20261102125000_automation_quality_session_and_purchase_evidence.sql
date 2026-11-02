@@ -127,24 +127,36 @@ begin
      and i.document_id is not null
  ),
  aggregates as (
-   select p.module,p.proposal_type,
+   select p.module,p.proposal_type,p.project_id,
      count(*)::int total,
      count(*) filter(where p.status='proposed')::int pending,
      count(*) filter(where p.status='published')::int published,
      count(distinct p.document_id)::int files,
      count(*) filter(where coalesce(p.confidence,0)<0.90)::int low_confidence,
      count(*) filter(where nullif(btrim(coalesce(p.source_quote,'')),'') is null
-       and (p.source_locator is null or p.source_locator='{}'::jsonb))::int no_evidence
+       and (p.source_locator is null or p.source_locator='{}'::jsonb))::int no_evidence,
+     count(*) filter(where p.status='proposed' and p.project_id is not null
+       and d.review_status='approved' and d.deleted_at is null
+       and coalesce(p.confidence,0)>=0.90
+       and (nullif(btrim(coalesce(p.source_quote,'')),'') is not null
+         or (p.source_locator is not null and p.source_locator<>'{}'::jsonb)))::int eligible,
+     (array_agg(p.id order by p.id) filter(where p.status='proposed' and p.project_id is not null
+       and d.review_status='approved' and d.deleted_at is null
+       and coalesce(p.confidence,0)>=0.90
+       and (nullif(btrim(coalesce(p.source_quote,'')),'') is not null
+         or (p.source_locator is not null and p.source_locator<>'{}'::jsonb))))[1:30] eligible_ids
    from public.document_module_proposals p
    join selected doc on doc.document_version_id=p.document_version_id
+   join public.documents d on d.id=p.document_id and d.workspace_id=p.workspace_id
    where p.workspace_id=p_workspace_id and p.status in ('proposed','published','approved','failed')
-   group by p.module,p.proposal_type
+   group by p.module,p.proposal_type,p.project_id
  )
  select jsonb_build_object(
    'groups',coalesce((select jsonb_agg(jsonb_build_object(
-     'module',module,'proposalType',proposal_type,'total',total,
+     'module',module,'proposalType',proposal_type,'projectId',project_id,'total',total,
      'pending',pending,'published',published,'documents',files,
-     'lowConfidence',low_confidence,'missingEvidence',no_evidence
+     'lowConfidence',low_confidence,'missingEvidence',no_evidence,
+     'eligible',eligible,'eligibleIds',coalesce(to_jsonb(eligible_ids),'[]'::jsonb)
    ) order by pending desc,module,proposal_type) from aggregates),'[]'::jsonb),
    'metrics',jsonb_build_object(
      'files',(select count(*)::int from public.document_import_session_items i where i.session_id=p_session_id and i.workspace_id=p_workspace_id),
@@ -159,6 +171,13 @@ begin
      'accountingDrafts',(select count(*)::int from public.accounting_entries a
           join selected s on s.document_id=a.document_id
           where a.workspace_id=p_workspace_id and a.status='proposed'),
+     'accountingMemoryUses',(select count(*)::int from public.accounting_entry_lines l
+         join public.accounting_entries a on a.id=l.entry_id and a.workspace_id=p_workspace_id
+         join selected s on s.document_id=a.document_id
+         where l.workspace_id=p_workspace_id and l.ai_evidence->>'source'='human_memory'),
+     'reviewStages',(select count(*)::int from public.document_pipeline_stages ps
+         join selected s on s.document_version_id=ps.document_version_id
+         where ps.workspace_id=p_workspace_id and ps.status='review'),
      'unresolvedDocuments',(select count(distinct p.document_id)::int
           from public.document_module_proposals p join selected s on s.document_version_id=p.document_version_id
           where p.workspace_id=p_workspace_id and p.status='proposed')
@@ -208,7 +227,7 @@ begin
    (select jsonb_agg(jsonb_build_object('id',bi.id,'documentId',bi.document_id,
      'documentType',bi.document_type,'status',bi.status) order by bi.received_at desc)
     from public.business_inbox_items bi
-    where bi.workspace_id=p_workspace_id and bi.document_type='warehouse'
+    where bi.workspace_id=p_workspace_id and lower(coalesce(bi.document_type,'')) in ('warehouse','wz','pz','mm','rw','zw')
       and upper(btrim(coalesce(bi.canonical_payload->>'purchaseOrderNumber',
         bi.payload->>'purchaseOrderNumber',''))) = upper(btrim(e.order_number))
    ) warehouse
