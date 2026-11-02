@@ -49,6 +49,8 @@ declare
  v_line public.invoice_lines%rowtype;
  v_scope text;
  v_pid uuid;
+ v_material_scope text;
+ v_material_pid uuid;
  v_amount numeric;
  v_quantity numeric;
  v_count int:=0;
@@ -110,15 +112,22 @@ begin
  loop
    v_scope:=nullif(v_entry->>'scope','');
    v_pid:=nullif(v_entry->>'projectId','')::uuid;
+   v_material_scope:=coalesce(nullif(v_entry->>'materialScope',''),case when v_scope in ('project','inventory') then v_scope else 'none' end);
+   v_material_pid:=nullif(v_entry->>'materialProjectId','')::uuid;
    v_amount:=round((v_entry->>'amount')::numeric,2);
    v_quantity:=coalesce((v_entry->>'quantity')::numeric,0);
    if v_scope not in ('project','inventory','overhead')
      or v_amount is null or v_amount<0 or v_quantity<0
      or (v_scope='project' and v_pid is null)
      or (v_scope<>'project' and v_pid is not null)
+     or v_material_scope not in ('project','inventory','none')
+     or (v_material_scope='project' and v_material_pid is null)
+     or (v_material_scope<>'project' and v_material_pid is not null)
    then raise exception 'Nieprawidłowe przeznaczenie lub kwota.'; end if;
    if v_pid is not null and not exists(select 1 from public.projects where id=v_pid and workspace_id=p_workspace_id)
    then raise exception 'Inwestycja spoza firmy.'; end if;
+   if v_material_pid is not null and not exists(select 1 from public.projects where id=v_material_pid and workspace_id=p_workspace_id)
+   then raise exception 'Docelowa inwestycja materiałów spoza firmy.'; end if;
    if exists(select 1 from public.document_allocation_targets_20261102 t
       where t.workspace_id=p_workspace_id and t.invoice_line_id=(v_entry->>'lineId')::uuid
         and t.status='verified')
@@ -137,12 +146,12 @@ begin
  for v_entry in select value from jsonb_array_elements(p_plan) loop
    select * into v_line from public.invoice_lines
      where id=(v_entry->>'lineId')::uuid and workspace_id=p_workspace_id;
-   if coalesce(v_line.quantity,0)>0 and (v_entry->>'scope') in ('project','inventory') then
+   if coalesce(v_line.quantity,0)>0 and (v_entry->>'materialScope') in ('project','inventory') then
      insert into public.document_allocation_targets_20261102(
         workspace_id,document_id,invoice_line_id,allocation_scope,project_id,
         quantity,net_amount,unit,status,evidence,decided_by)
-     values(p_workspace_id,p_document_id,v_line.id,v_entry->>'scope',
-       nullif(v_entry->>'projectId','')::uuid,(v_entry->>'quantity')::numeric,
+     values(p_workspace_id,p_document_id,v_line.id,v_entry->>'materialScope',
+       nullif(v_entry->>'materialProjectId','')::uuid,(v_entry->>'quantity')::numeric,
        (v_entry->>'amount')::numeric,v_line.unit,'planned',
        jsonb_build_object('source','confirmed_invoice_line','invoiceId',p_invoice_id,
          'notStockMovement',true,'notConsumption',true),p_actor_id);
