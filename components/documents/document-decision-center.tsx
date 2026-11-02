@@ -13,7 +13,7 @@ type Context={
  document:{name:string;aiConfidence:number|null};
  invoice:{id:string;invoice_number:string;net_amount:number;gross_amount:number}|null;
  warehouse:{id:string;kind:string;status:string;lines:Array<{description?:string;name?:string;quantity?:number;unit?:string}>}|null;
- lines:Line[];allocations:Array<{source_line_id:string;allocation_scope:string;project_id:string|null;amount:number;cost_code:string|null}>;
+ lines:Line[];intents:Array<{invoice_line_id:string|null;allocation_scope:string;project_id:string|null;quantity:number;net_amount:number}>;allocations:Array<{source_line_id:string;allocation_scope:string;project_id:string|null;amount:number;cost_code:string|null}>;
  reviews:Array<{review_type:string;description:string}>;projects:Project[];
  aiSuggestion:{projectId:string|null;reason:string|null;trustworthy:boolean};
 };
@@ -46,11 +46,16 @@ export function DocumentDecisionCenter({workspaceId,documentId,versionId,project
     const initial:Record<string,Part[]>={};
     body.lines.forEach(line=>{
       const old=body.allocations.filter(a=>a.source_line_id===line.id&&a.allocation_scope!=="unassigned");
-      initial[line.id]=old.length?old.map(a=>({
-       lineId:line.id,scope:a.allocation_scope as Scope,projectId:a.project_id??"",
-        materialScope:a.allocation_scope==="project"?"project":a.allocation_scope==="inventory"?"inventory":"none",materialProjectId:a.project_id??"",
-       amount:fixed(a.amount),quantity:decimal(old.length===1?line.quantity:0),costCode:a.cost_code??""
-      })):[{lineId:line.id,scope:project?"project":"",projectId:project??"",
+      const saved=body.intents.filter(intent=>intent.invoice_line_id===line.id);
+      initial[line.id]=old.length?old.map(allocation=>{
+       const intent=saved.find(item=>Math.abs(Number(item.net_amount)-Number(allocation.amount))<0.01);
+       return {lineId:line.id,scope:allocation.allocation_scope as Scope,
+        projectId:allocation.project_id??"",
+        materialScope:(intent?.allocation_scope??"none") as Part["materialScope"],
+        materialProjectId:intent?.project_id??"",
+        amount:fixed(allocation.amount),quantity:decimal(old.length===1?line.quantity:0),
+        costCode:allocation.cost_code??""};
+      }):[{lineId:line.id,scope:project?"project":"",projectId:project??"",
         materialScope:line.quantity&&project?"project":"none",materialProjectId:project??"",
         amount:fixed(line.net_amount),quantity:decimal(line.quantity),costCode:""}];
     });
