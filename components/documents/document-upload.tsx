@@ -990,7 +990,7 @@ export function DocumentUpload({
                   {batchSummary.items.map((item) => {
                     const d = item.destinations;
                     const count = d ? d.finance.length+d.accounting.length+d.warehouse.length+
-                      d.fleet.length+d.fuel.length+d.modules.length : 0;
+                      d.fleet.length+d.fuel.length+d.modules.filter(entry=>entry.status!=="superseded").length : 0;
                     return <div key={item.id} style={{display:"grid",gap:5,padding:"9px 0",borderBottom:"1px solid var(--border, #e5e7eb)"}}>
                       <strong>{item.fileName}</strong>
                       {d?.projectId ? <small>Inwestycja: {d.projectId}</small> : null}
@@ -1015,7 +1015,7 @@ export function DocumentUpload({
                         <b>Flota · tankowanie:</b> {entry.registration || "pojazd"} ·
                         {entry.liters ?? "—"} l · {entry.amount ?? "—"} PLN
                       </small>)}
-                      {d?.modules.map((entry) => <small key={"mod-"+entry.id}>
+                      {d?.modules.filter(entry=>entry.status!=="superseded").map((entry) => <small key={"mod-"+entry.id}>
                         <b>{entry.module || "Moduł"} · propozycja:</b> {entry.title || "—"} ·
                         {entry.status || "—"}{entry.entityType ? " · zapis "+entry.entityType : ""}
                       </small>)}
