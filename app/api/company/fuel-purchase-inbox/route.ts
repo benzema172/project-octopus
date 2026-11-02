@@ -106,7 +106,7 @@ export async function GET(request: Request) {
     const line = lineById.get(review.invoice_line_id);
     if (!invoice || !line) return [];
     return [{
-      id:review.id,invoiceId:invoice.id,invoiceNumber:invoice.invoice_number || "Bez numeru",
+      id:review.id,invoiceId:invoice.id,invoiceLineId:line.id,invoiceNumber:invoice.invoice_number || "Bez numeru",
       date:invoice.sale_date ?? invoice.issue_date,
       station:invoice.counterparty_id ? supplierById.get(invoice.counterparty_id) ?? "Stacja paliw" : "Stacja paliw",
       currency:invoice.currency ?? "PLN",description:line.description,unit:line.unit,

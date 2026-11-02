@@ -7,6 +7,7 @@ import { getR2Config } from "@/lib/env";
 import { createR2Client } from "@/lib/r2/client";
 import { inlineContentDisposition } from "@/lib/r2/sanitize";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { isPendingFleetFuelInvoiceLine } from "@/lib/documents/fuel-invoice-preview-access";
 
 export const runtime = "nodejs";
 const ALLOWED_DOMAINS = new Set<Domain>(["finance", "warehouse", "fleet"]);
@@ -49,7 +50,11 @@ export async function GET(request: Request) {
       .eq("id", invoiceLineId)
       .eq("invoice_id", invoiceId)
       .maybeSingle<InvoiceLineRow>();
-    if (!line || !lineMatchesDomain(domain, line)) return new Response("Ta pozycja nie należy do kontekstu tego modułu.", { status: 403 });
+    const linkedFuelReview = domain === "fleet" && line && !line.vehicle_id
+      ? await isPendingFleetFuelInvoiceLine(db, workspaceId, line.id, line.invoice_id)
+      : false;
+    if (!line || (!lineMatchesDomain(domain, line) && !linkedFuelReview))
+      return new Response("Ta pozycja nie należy do kontekstu tego modułu.", { status: 403 });
   }
 
   const { data: invoice } = await db.from("invoices").select("id,document_id").eq("workspace_id", workspaceId).eq("id", invoiceId).maybeSingle<InvoiceRow>();

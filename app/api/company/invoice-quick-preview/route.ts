@@ -3,6 +3,7 @@ import { getRequestUser } from "@/lib/auth";
 import { hasDomainAccess, type Domain } from "@/lib/authorization";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { isPendingFleetFuelInvoiceLine } from "@/lib/documents/fuel-invoice-preview-access";
 
 export const runtime = "nodejs";
 
@@ -59,7 +60,11 @@ export async function GET(request: Request) {
     if (error) return jsonError(`Nie udało się odczytać pozycji faktury: ${error.message}`, 500);
     if (!data) return jsonError("Nie znaleziono pozycji faktury.", 404);
     targetLine = data as Row;
-    if (!lineMatchesDomain(domain, targetLine)) return jsonError("Ta pozycja faktury nie należy do kontekstu tego modułu.", 403);
+    const linkedFuelReview = domain === "fleet" && !targetLine.vehicle_id
+      ? await isPendingFleetFuelInvoiceLine(db, workspaceId, String(targetLine.id), String(targetLine.invoice_id))
+      : false;
+    if (!lineMatchesDomain(domain, targetLine) && !linkedFuelReview)
+      return jsonError("Ta pozycja faktury nie należy do kontekstu tego modułu.", 403);
     invoiceId = String(targetLine.invoice_id ?? "");
   }
 
