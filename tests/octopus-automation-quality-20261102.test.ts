@@ -28,7 +28,8 @@ describe("Project Octopus grouped automation and quality",()=>{
     expect(sql).toContain("supplier");
     expect(report).toContain("automationQuality: qualityResult.data");
     expect(report).toContain("purchaseEvidence: purchasesResult.data");
-    expect(panel).toContain("Zgrupowane decyzje AI");
+    expect(panel).toContain("Do zatwierdzenia:");
+    expect(panel).toContain("batchSummary.decisionOverview.consolidatedLines");
   });
   it("keeps financially binding operations behind authorised human action",()=>{
     expect(approval).toContain("body.confirm!==true");
