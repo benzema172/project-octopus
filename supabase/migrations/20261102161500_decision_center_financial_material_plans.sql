@@ -163,6 +163,31 @@ begin
       where a.workspace_id=p_workspace_id and a.source_line_id=l.id
         and a.status in ('approved','proposed') and a.allocation_scope<>'unassigned'
     ),0))>0.01);
+ -- The same explicit user decision also closes the already recognized
+ -- invoice CATEGORY review. No second "Is this an invoice?" confirmation.
+ -- Formal account approval and physical inventory operations remain separate.
+ if v_doc.review_status <> 'approved'
+   and not exists(select 1 from public.finance_document_reviews fr
+     where fr.workspace_id=p_workspace_id and fr.invoice_id=p_invoice_id and
+       fr.status='open' and fr.review_type in ('source_conflict','duplicate_candidate'))
+   and exists(select 1 from public.document_classifications c
+     where c.workspace_id=p_workspace_id and c.document_id=p_document_id
+       and c.category='invoice' and c.confidence>=0.90
+       and c.status in ('proposed','approved'))
+ then
+   perform * from public.review_document_with_proposals_atomic(
+     p_workspace_id,p_document_id,'approve','invoice',
+     case
+       when (select count(distinct nullif(r->>'projectId','')::uuid) from jsonb_array_elements(p_plan) r)=1
+        and not exists(select 1 from jsonb_array_elements(p_plan) r
+          where r->>'scope'<>'project')
+       then (select max((r->>'projectId')::uuid) from jsonb_array_elements(p_plan) r)
+       else null
+     end,
+     true,p_actor_id,
+     'Jedna decyzja: zatwierdzono rozpoznaną fakturę i podział kosztów. Zużycia materiałów nie potwierdzono.'
+   );
+ end if;
  insert into public.audit_events(workspace_id,actor_id,actor_type,event_type,entity_type,entity_id,after_value)
  values(p_workspace_id,p_actor_id,'user','document.decision_center_plan_saved','invoice',p_invoice_id::text,
  jsonb_build_object('entries',v_count,'materialIntents',v_warehouse_count,'documentId',p_document_id));
