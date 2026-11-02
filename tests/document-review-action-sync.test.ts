@@ -16,7 +16,7 @@ describe("document review action sync", () => {
   it("shows the decision controls next to the selected review document", () => {
     const archive = read("components/documents/document-central-archive.tsx");
     expect(archive).toContain("const selectedReviewItem");
-    expect(archive).toContain("Centrum decyzji AI");
+    expect(archive).toContain("CENTRUM DECYZJI AI");
     expect(archive).toContain("<DocumentDecisionCenter");
     expect(archive).toContain("Przejdź do przeznaczenia ↓");
     expect(archive).toContain("items={[selectedReviewItem]}");

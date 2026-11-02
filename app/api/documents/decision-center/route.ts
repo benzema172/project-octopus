@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
-import { hasDomainAccess, domainForDocumentCategory } from "@/lib/authorization";
+import { hasDomainAccess, domainForDocumentCategory, loadDomainAccessPolicy, domainAccessPolicyAllows } from "@/lib/authorization";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { evaluateProjectMatch, type ProjectMatchCandidate } from "@/lib/ai/project-matcher";
 
@@ -52,9 +52,10 @@ export async function GET(request:Request){
  if(invoiceError||inboxError||projectsError)return error("Nie można odczytać danych decyzji.",500);
  const projectOptions=(projects??[]).filter((p)=>uuid.test(p.id));
  // Do not give access to a project merely because another document mentions it.
- const visibleProjects=(await Promise.all(projectOptions.map(async (p)=>
-   await hasDomainAccess({workspaceId:workspace.id,userId:ctx.user.id,
-     domain:"investments",level:"read",projectId:p.id})?p:null))).filter((p)=>p!==null);
+ const access=await loadDomainAccessPolicy({workspaceId:workspace.id,userId:ctx.user.id});
+ const visibleProjects=projectOptions.filter(p=>domainAccessPolicyAllows(access,{
+   domain:"investments",level:"read",projectId:p.id
+ }));
  const invoice=(invoiceRows??[]).find(i=>i.direction==="purchase")??invoiceRows?.[0]??null;
  const origin=(inboxRows??[]).find(i=>i.document_type==="warehouse")??null;
  const classification=classifications?.[0]??null;
