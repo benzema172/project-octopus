@@ -117,6 +117,7 @@ export async function GET(request:Request){
 }
 
 type Part={lineId:string;scope:"project"|"inventory"|"overhead";projectId?:string|null;
+  materialScope?:"project"|"inventory"|"none";materialProjectId?:string|null;
   amount:number;quantity:number;costCode?:string};
 type PostBody={workspaceId:string;documentId:string;mode:"invoice"|"warehouse";
  invoiceId?:string;inboxId?:string;assignments?:Part[];scope?:string;projectId?:string|null};
@@ -140,14 +141,17 @@ export async function POST(request:Request){
    if(!uuid.test(str(part.lineId))||!["project","inventory","overhead"].includes(part.scope)
       ||!validNum(part.amount)||!validNum(part.quantity)||!Number.isFinite(n(part.amount))||!Number.isFinite(n(part.quantity))
       ||(part.scope==="project"&&!uuid.test(str(part.projectId)))
-      ||(part.scope!=="project"&&Boolean(part.projectId)))
+      ||(part.scope!=="project"&&Boolean(part.projectId))
+      ||(part.materialScope!=null&&!["project","inventory","none"].includes(part.materialScope))
+      ||(part.materialScope==="project"&&!uuid.test(str(part.materialProjectId)))
+      ||(part.materialScope!=="project"&&Boolean(part.materialProjectId)))
      return error("Brak wartości, ilości lub prawidłowego celu.",400);
   }
-  const usedProjects=[...new Set(assignments.map(p=>p.projectId).filter((x):x is string=>Boolean(x)))];
+  const usedProjects=[...new Set(assignments.flatMap(p=>[p.projectId,p.materialProjectId]).filter((x):x is string=>Boolean(x)))];
   for(const projectId of usedProjects)
    if(!await hasDomainAccess({workspaceId:workspace.id,userId:user.id,domain:"investments",level:"write",projectId}))
     return error("Nie możesz przypisać kosztu do wybranej inwestycji.",403);
-  if(assignments.some(p=>p.scope==="inventory") &&
+  if(assignments.some(p=>p.scope==="inventory"||p.materialScope==="inventory") &&
     !await hasDomainAccess({workspaceId:workspace.id,userId:user.id,domain:"warehouse",level:"write"}))
     return error("Brak prawa do magazynu.",403);
   const {data:openReviews}=await db.from("finance_document_reviews")
@@ -157,7 +161,9 @@ export async function POST(request:Request){
   const {data,error:rpcError}=await db.rpc("apply_decision_center_invoice_plan_20261102",{
     p_workspace_id:workspace.id,p_document_id:document.id,p_invoice_id:invoice.id,
     p_plan:assignments.map(p=>({lineId:p.lineId,scope:p.scope,
-      projectId:p.projectId??null,amount:p.amount,quantity:p.quantity,
+      projectId:p.projectId??null,materialScope:p.materialScope??"none",
+      materialProjectId:p.materialScope==="project"?p.materialProjectId??null:null,
+      amount:p.amount,quantity:p.quantity,
       costCode:str(p.costCode).slice(0,64)})),p_actor_id:user.id
   });
   if(rpcError)return error(rpcError.message,422);
