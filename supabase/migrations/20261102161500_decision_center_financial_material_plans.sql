@@ -32,6 +32,11 @@ create index if not exists idx_octopus_decision_targets_inbox_20261102
  on public.document_allocation_targets_20261102(workspace_id,inbox_item_id,status);
 create index if not exists idx_octopus_decision_targets_document_20261102
  on public.document_allocation_targets_20261102(workspace_id,document_id,status);
+-- Every FK must have a supporting leading-column index for deletes/joins.
+create index if not exists idx_octopus_target_project_fk_20261102 on public.document_allocation_targets_20261102(project_id);
+create index if not exists idx_octopus_target_document_fk_20261102 on public.document_allocation_targets_20261102(document_id);
+create index if not exists idx_octopus_target_line_fk_20261102 on public.document_allocation_targets_20261102(invoice_line_id);
+create index if not exists idx_octopus_target_inbox_fk_20261102 on public.document_allocation_targets_20261102(inbox_item_id);
 alter table public.document_allocation_targets_20261102 enable row level security;
 revoke all on public.document_allocation_targets_20261102 from public,anon,authenticated;
 grant select,insert,update,delete on public.document_allocation_targets_20261102 to service_role;
