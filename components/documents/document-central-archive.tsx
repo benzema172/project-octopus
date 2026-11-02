@@ -22,6 +22,7 @@ import { AiInbox } from "@/components/brain/ai-inbox";
 import { DocumentOpenLink } from "@/components/documents/document-open-link";
 import { DocumentManagementControls } from "@/components/documents/document-management-controls";
 import { FuelPurchaseInbox } from "@/components/documents/fuel-purchase-inbox";
+import { DocumentDecisionCenter } from "@/components/documents/document-decision-center";
 import { documentCategoryLabel } from "@/lib/documents/classification";
 import type { DocumentLibraryInsight } from "@/lib/documents/library-types";
 import type { AiInboxItem } from "@/lib/data/operations";
@@ -168,6 +169,7 @@ export function DocumentCentralArchive({
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [pendingFuelCount, setPendingFuelCount] = useState<number | null>(null);
+  const [decisionListFilter,setDecisionListFilter] = useState<"needed"|"conflict"|"all">("needed");
 
   const buildHref = useCallback((nextTab: ArchiveTabId, nextQuery: string) => {
     const params = new URLSearchParams(currentSearchParams.toString());
@@ -211,7 +213,9 @@ export function DocumentCentralArchive({
   const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
   const insightByDocument = useMemo(() => new Map(insights.map((insight) => [insight.documentId, insight])), [insights]);
   const reviewByDocument = useMemo(() => new Map(reviewItems.map((item) => [item.id, item])), [reviewItems]);
-  const filteredDocuments = documents;
+  const filteredDocuments = tab === "review" && decisionListFilter==="conflict"
+    ? documents.filter(doc=>insightByDocument.get(doc.id)?.warnings?.length)
+    : documents;
   const hasPendingAi = documents.some((item) =>
     ["queued","running","processing"].includes(String(item.ai_status ?? "").toLowerCase())
   );
@@ -317,8 +321,22 @@ export function DocumentCentralArchive({
             <div className={styles.summary}><FileSearch size={16} /><strong>{filteredDocuments.length}</strong><span>z {total} dokumentów</span></div>
           </div>
 
+          {tab === "review" ? <div className={styles.decisionHeader}>
+            <div><span className={styles.kicker}>CENTRUM DECYZJI AI</span>
+              <strong>AI rozpoznaje dokumenty. Ty wybierasz tylko brakujące przeznaczenie.</strong>
+              <small>Koszty i materiały można przypisać jedną decyzją; księgowanie i potwierdzenie zużycia pozostają oddzielne.</small>
+            </div>
+            <div className={styles.decisionFilters}>
+              <button type="button" className={decisionListFilter==="needed"?styles.activeFilter:undefined}
+                onClick={()=>setDecisionListFilter("needed")}>Do decyzji</button>
+              <button type="button" className={decisionListFilter==="conflict"?styles.activeFilter:undefined}
+                onClick={()=>setDecisionListFilter("conflict")}>Niezgodności</button>
+              <button type="button" className={decisionListFilter==="all"?styles.activeFilter:undefined}
+                onClick={()=>setDecisionListFilter("all")}>Wszystkie z kolejki</button>
+            </div>
+          </div> : null}
           {filteredDocuments.length ? (
-            <div className={`${styles.archiveGrid} ${selected ? "" : styles.archiveGridCollapsed}`}>
+            <div className={`${styles.archiveGrid} ${selected ? styles.archiveGridDecision : styles.archiveGridCollapsed}`}>
               <div className={styles.list} aria-label="Lista dokumentów">
                 {filteredDocuments.map((document) => {
                   const moduleId = moduleForDocument(document);
@@ -348,7 +366,7 @@ export function DocumentCentralArchive({
                           <small>{document.project_id ? projectNames.get(document.project_id) ?? "Inwestycja" : MODULE_LABELS[moduleId]} · {displayAiCategory(document)}</small>
                         </span>
                         <span className={styles.rowState}>
-                          <span className={`${styles.stage} ${isReview ? styles.stageReview : document.ai_status === "queued" ? styles.stageQueued : document.flow?.stage === "error" ? styles.stageError : document.flow?.stage === "ready" ? styles.stageReady : ""}`}>{stageLabel(document)}</span>
+                          <span className={`${styles.stage} ${isReview ? styles.stageReview : document.ai_status === "queued" ? styles.stageQueued : document.flow?.stage === "error" ? styles.stageError : document.flow?.stage === "ready" ? styles.stageReady : ""}`}>{isReview && moduleId==="finance" ? "Przypisz koszty" : isReview && moduleId==="warehouse" ? "Przypisz materiały" : stageLabel(document)}</span>
                           <small>{document.updated_at ? new Date(document.updated_at).toLocaleDateString("pl-PL") : ""}</small>
                           {isSelected ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
                         </span>
@@ -362,13 +380,13 @@ export function DocumentCentralArchive({
                 <aside className={styles.details} aria-label={`Szczegóły dokumentu ${selected.name}`} data-document-ai-ocr="1">
                   <div className={styles.detailsHeading}>
                     <div><span className={styles.kicker}>Dokument źródłowy</span><h3>{selected.name}</h3><p>{selected.project_id ? projectNames.get(selected.project_id) ?? "Inwestycja" : selectedModule ? MODULE_LABELS[selectedModule] : "Dokument firmy"}</p></div>
-                    <span className={`${styles.stage} ${requiresReview(selected) ? styles.stageReview : selected.flow?.stage === "error" ? styles.stageError : selected.flow?.stage === "ready" ? styles.stageReady : ""}`}>{stageLabel(selected)}</span>
+                    <span className={`${styles.stage} ${requiresReview(selected) ? styles.stageReview : selected.flow?.stage === "error" ? styles.stageError : selected.flow?.stage === "ready" ? styles.stageReady : ""}`}>{requiresReview(selected) && selectedModule==="finance" ? "Przeznaczenie kosztów" : requiresReview(selected) && selectedModule==="warehouse" ? "Przeznaczenie materiałów" : stageLabel(selected)}</span>
                   </div>
 
                   <div className={styles.actions}>
                     <DocumentOpenLink workspaceId={workspaceId} projectId={selected.project_id} versionId={selectedVersion?.id ?? selected.current_version_id} fallbackHref={fallbackHref} />
                     {selected.flow?.resultHref ? <Link href={selected.flow.resultHref}>Przejdź do modułu →</Link> : null}
-                    {requiresReview(selected) ? <a href={`#document-review-${selected.id}`}>Podejmij decyzję ↓</a> : null}
+                    {requiresReview(selected) ? <a href={`#document-review-${selected.id}`}>Przejdź do przeznaczenia ↓</a> : null}
                   </div>
 
                   <DocumentManagementControls key={`${selected.id}:${selected.updated_at}`}
@@ -377,18 +395,30 @@ export function DocumentCentralArchive({
                     onArchived={()=>setSelectedId(null)}
                   />
 
-                  {requiresReview(selected) && selectedReviewItem ? (
-                    <section className={styles.aiPanel} id={`document-review-${selected.id}`} aria-label={`Decyzja dla dokumentu ${selected.name}`}>
-                      <div className={styles.panelTitle}><ShieldAlert size={17} /><div><strong>Decyzja wymagana</strong><span>Popraw kategorię lub inwestycję, a następnie zatwierdź albo odrzuć dokument.</span></div></div>
-                      <AiInbox
-                        items={[selectedReviewItem]}
-                        workspaceId={workspaceId}
-                        currentUserId={currentUserId}
-                        projects={projects}
+                  {selectedModule==="finance" || selectedModule==="warehouse" ? (
+                    <div id={`document-review-${selected.id}`}>
+                      <DocumentDecisionCenter key={selected.id} workspaceId={workspaceId}
+                        documentId={selected.id}
+                        versionId={selectedVersion?.id ?? selected.current_version_id}
+                        projectId={selected.project_id}
+                        canDecide={selectedReviewItem?.canWrite !== false}
+                        onComplete={()=>{
+                          const currentIndex=filteredDocuments.findIndex(d=>d.id===selected.id);
+                          setSelectedId(filteredDocuments[currentIndex+1]?.id??null);
+                          router.refresh();
+                        }}
                       />
+                    </div>
+                  ) : requiresReview(selected) && selectedReviewItem ? (
+                    <section className={styles.aiPanel} id={`document-review-${selected.id}`}>
+                      <div className={styles.panelTitle}><ShieldAlert size={17} /><div><strong>Wyjątek AI wymagający oceny</strong>
+                        <span>Wybierz kategorię tylko wtedy, gdy nie dało się jej wiarygodnie rozpoznać.</span></div></div>
+                      <AiInbox items={[selectedReviewItem]} workspaceId={workspaceId}
+                        currentUserId={currentUserId} projects={projects}/>
                     </section>
                   ) : null}
 
+                  <details className={styles.technicalDetails}><summary>Informacje techniczne, OCR i raport routingu AI</summary>
                   <div className={styles.metaGrid}>
                     <div><span>Kategoria AI</span><strong>{displayAiCategory(selected)}</strong></div>
                     <div><span>Pewność</span><strong>{confidence(selected.flow?.confidence ?? selected.ai_confidence)}</strong></div>
@@ -424,6 +454,7 @@ export function DocumentCentralArchive({
                   {selectedInsight?.warnings.length ? (
                     <section className={styles.warningPanel}><div className={styles.panelTitle}><ShieldAlert size={17} /><strong>Uwagi analizy</strong></div><ul>{selectedInsight.warnings.map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}</ul></section>
                   ) : null}
+                  </details>
                 </aside>
               ) : null}
             </div>
