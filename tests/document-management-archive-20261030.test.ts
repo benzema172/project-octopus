@@ -43,7 +43,7 @@ describe("Simple document archive management",()=>{
   it("makes edit controls visible on the main All tab and selected files",()=>{
     expect(archive).toContain("tab === \"all\" ? <div");
     expect(archive).toContain("<DocumentManagementControls");
-    expect(page).toContain('const searchQuery = activeTab === "trash" ? ""');
+    expect(page).toContain('const searchQuery = activeTab === "trash" || activeTab === "fuel" ? ""');
     expect(archive).toContain("Wszystkie");
   });
 });
