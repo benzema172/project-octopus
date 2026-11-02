@@ -233,6 +233,17 @@ begin
     where bi.workspace_id=p_workspace_id and lower(coalesce(bi.document_type,'')) in ('warehouse','wz','pz','mm','rw','zw')
       and upper(btrim(coalesce(bi.canonical_payload->>'purchaseOrderNumber',
         bi.payload->>'purchaseOrderNumber',''))) = upper(btrim(e.order_number))
+      and exists (
+        select 1 from public.purchase_orders po
+        join public.counterparties cp on cp.id=po.counterparty_id
+            and cp.workspace_id=p_workspace_id
+        where po.id=e.purchase_order_id and po.workspace_id=p_workspace_id
+          and length(regexp_replace(coalesce(cp.tax_id,''),'[^0-9]','','g'))=10
+          and regexp_replace(coalesce(bi.canonical_payload->>'supplierTaxId',
+              bi.payload->>'supplierTaxId',
+              bi.canonical_payload->'supplier'->>'taxId',''),'[^0-9]','','g')
+            =regexp_replace(cp.tax_id,'[^0-9]','','g')
+      )
    ) warehouse
  from invoice_evidence e
  )
