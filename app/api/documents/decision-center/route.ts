@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rememberBrainDecision } from "@/lib/ai/brain-feedback";
 import { getRequestUser } from "@/lib/auth";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 import { hasDomainAccess, domainForDocumentCategory, loadDomainAccessPolicy, domainAccessPolicyAllows } from "@/lib/authorization";
@@ -167,6 +168,12 @@ export async function POST(request:Request){
       costCode:str(p.costCode).slice(0,64)})),p_actor_id:user.id
   });
   if(rpcError)return error(rpcError.message,422);
+  await rememberBrainDecision({
+    workspaceId:workspace.id,documentId:document.id,kind:"financial_plan",
+    payload:{invoice_id:invoice.id,line_count:assignments.length,
+      project_ids:usedProjects,
+      scope_counts:assignments.reduce((counts,p)=>({...counts,[p.scope]:(counts[p.scope]??0)+1}),{} as Record<string,number>)}
+  }).catch(cause=>console.warn("Octopus Brain finance feedback unavailable",cause));
   return NextResponse.json({result:data,ok:true},{headers:{"Cache-Control":"no-store"}});
  }
  if(body.mode==="warehouse"){
@@ -189,6 +196,10 @@ export async function POST(request:Request){
     p_scope:body.scope,p_project_id:projectId,p_actor_id:user.id
   });
   if(rpcError)return error(rpcError.message,422);
+  await rememberBrainDecision({
+    workspaceId:workspace.id,documentId:document.id,kind:"warehouse_intent",
+    payload:{inbox_id:source.id,scope:body.scope,project_id:projectId}
+  }).catch(cause=>console.warn("Octopus Brain warehouse feedback unavailable",cause));
   return NextResponse.json({result:data,ok:true},{headers:{"Cache-Control":"no-store"}});
  }
  return error("Nieznana decyzja.",400);
