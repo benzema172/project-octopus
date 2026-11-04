@@ -28,6 +28,26 @@ describe("global invoice quick preview", () => {
     }
   });
 
+  it("renders a complete original in the same authenticated hover preview across modules", () => {
+    const preview=read("components/documents/invoice-quick-preview.tsx");
+    const css=read("components/documents/invoice-quick-preview.module.css");
+    const api=read("app/api/company/invoice-quick-preview/route.ts");
+    const archive=read("components/documents/document-central-archive.tsx");
+    const decision=read("components/documents/document-decision-center.tsx");
+    const file=read("app/api/company/invoice-quick-preview/file/route.ts");
+    expect(preview).toContain('documentId?: string | null');
+    expect(preview).toContain('params.set("documentId", documentId)');
+    expect(preview).toContain('payload.lines.map(');
+    expect(preview).toContain('title="Cała faktura PDF"');
+    expect(preview).toContain('src={`${fileHref}#toolbar=0&navpanes=0&view=FitH`}');
+    expect(css).toContain('.original iframe');
+    expect(api).toContain('invoiceQuery.eq("document_id", documentId)');
+    expect(archive).toContain('domain="finance" documentId={document.id} hoverOnly');
+    expect(decision).toContain('invoiceId={data.invoice.id} documentId={documentId}');
+    expect(file).toContain('domain !== "finance" && !invoiceLineId');
+    expect(file).toContain('malwareScanRequiredByPolicy()');
+  });
+
   it("propagates exact invoice line ids from warehouse price truth", () => {
     const enrichment = read("lib/data/warehouse-price-history-450.ts");
     expect(enrichment).toContain("invoice_line_id");
