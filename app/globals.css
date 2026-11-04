@@ -3017,3 +3017,24 @@ button:disabled {
 .ai-inbox-row__more-evidence>div{padding:4px 8px;font-size:.67rem;color:var(--muted)}
 .ai-inbox-row__routing{margin-top:8px;padding-top:8px}
 @media(max-width:750px){.ai-inbox-row{grid-template-columns:22px minmax(0,1fr);gap:8px;padding:9px}.ai-inbox-row__decision{grid-column:2;display:flex;align-items:center;justify-items:start;flex-wrap:wrap}.ai-inbox-row__evidence-list article{width:100%}.ai-inbox-row__meta{gap:4px}}
+
+
+/* Project Octopus: AI supervision is intervention-first, not a second document archive. */
+.co-ai-control-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.co-ai-control-stats article{display:grid;gap:4px;border:1px solid var(--line);background:#fff;border-radius:12px;padding:12px 14px;min-width:0}
+.co-ai-control-stats article>span{font-size:.76rem;color:var(--muted);font-weight:650}
+.co-ai-control-stats article>strong{font-size:1.5rem;color:var(--ink);font-variant-numeric:tabular-nums}
+.co-ai-control-stats article>small{font-size:.69rem;color:var(--quiet)}
+.co-ai-control-center .ai-inbox__tabs{margin-bottom:8px;flex-wrap:wrap}
+.co-ai-control-center .ai-inbox__tabs button{min-height:32px;padding:5px 9px;font-size:.75rem}
+.co-ai-control-center .ai-inbox__list>.empty-state{padding:22px;min-height:125px}
+.ai-control-history{margin-top:14px;border-top:1px solid var(--line);padding:12px 0 0}
+.ai-control-history>summary{cursor:pointer;display:flex;align-items:center;gap:12px;font-weight:750;font-size:.83rem;color:var(--ink)}
+.ai-control-history>summary span{color:var(--muted);font-size:.74rem;font-weight:450}
+.ai-control-history__list{display:grid;gap:4px;margin-top:10px;max-height:470px;overflow-y:auto}
+.ai-control-history__row{display:flex;align-items:center;gap:10px;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:.74rem}
+.ai-control-history__row>strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+.ai-control-history__row>small{color:var(--muted);white-space:nowrap}
+.ai-control-history__row>a{font-size:.73rem;color:var(--green);font-weight:700}
+@media(max-width:900px){.co-ai-control-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.co-ai-control-stats article{padding:10px}.ai-control-history__row>small{display:none}.ai-control-history__row{gap:6px}}
