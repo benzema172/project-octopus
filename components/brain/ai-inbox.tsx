@@ -162,7 +162,7 @@ export function AiInbox({
           return <button key={item.key} type="button" role="tab" onClick={() => setTab(item.key)} aria-selected={tab === item.key}>{item.label}<span>{count}</span></button>;
         })}
         <button type="button" className={onlyMine ? "is-active" : undefined} onClick={() => setOnlyMine((value) => !value)} aria-pressed={onlyMine}><UserRoundCheck size={14} />Moje</button>
-      </div>
+      </div>}
       {message ? <p className="action-message">{message}</p> : null}
       <div className="ai-inbox__list">
         {filtered.length === 0 ? <div className="empty-state"><FileCheck2 size={26} /><strong>{controlCenter ? "Brak spraw wymagających interwencji" : activeOnly ? "Brak aktywnych plików" : "Brak elementów w tym stanie"}</strong><span>{controlCenter ? "Zakończone analizy znajdziesz w historii poniżej. Dokumenty do przypisania pozostają w Dokumentach → Do weryfikacji." : activeOnly ? "Po wrzuceniu pliku zobaczysz tutaj jego bieżący stan aż do zatwierdzenia lub odrzucenia." : "Skrzynka pokaże dokumenty, importy, zmiany i zdarzenia wymagające decyzji."}</span></div> : null}
