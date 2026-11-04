@@ -32,7 +32,7 @@ import type { DocumentSummary } from "@/lib/types";
 import styles from "./document-central-archive.module.css";
 
 type ProjectOption = { id: string; name: string };
-export type ArchiveTabId = "all" | "review" | "investments" | "finance" | "warehouse" | "hr" | "fleet" | "fuel" | "templates" | "company" | "unassigned" | "trash";
+export type ArchiveTabId = "all" | "review" | "archive" | "completed" | "investments" | "finance" | "warehouse" | "hr" | "fleet" | "fuel" | "templates" | "company" | "unassigned" | "trash";
 
 type Props = {
   workspaceId: string;
@@ -44,6 +44,7 @@ type Props = {
   currentUserId: string;
   uploadContent: ReactNode;
   activeTab: ArchiveTabId;
+  archiveCategory: ArchiveTabId;
   searchQuery: string;
   facetCounts: Record<ArchiveTabId, number>;
   total: number;
@@ -51,7 +52,7 @@ type Props = {
   canWriteFuel: boolean;
 };
 
-const MODULE_LABELS: Record<Exclude<ArchiveTabId, "all" | "review" | "trash" | "fuel">, string> = {
+const MODULE_LABELS: Record<Exclude<ArchiveTabId, "all" | "review" | "archive" | "completed" | "trash" | "fuel">, string> = {
   investments: "Inwestycje",
   finance: "Finanse",
   warehouse: "Magazyn",
@@ -63,18 +64,24 @@ const MODULE_LABELS: Record<Exclude<ArchiveTabId, "all" | "review" | "trash" | "
 };
 
 const TABS: Array<{ id: ArchiveTabId; label: string }> = [
-  { id: "all", label: "Wszystkie" },
   { id: "review", label: "Do weryfikacji" },
-  { id: "investments", label: "Inwestycje" },
-  { id: "finance", label: "Finanse" },
-  { id: "warehouse", label: "Magazyn" },
-  { id: "hr", label: "Kadry" },
-  { id: "fleet", label: "Flota" },
+  { id: "archive", label: "Archiwum" },
+  { id: "completed", label: "Zakończone" },
+  { id: "all", label: "Wrzutnia" },
   { id: "fuel", label: "Tankowania" },
-  { id: "templates", label: "Wzory i Brain" },
-  { id: "company", label: "Ogólne" },
-  { id: "unassigned", label: "Nieprzypisane" },
   { id: "trash", label: "Kosz" }
+];
+
+const ARCHIVE_CATEGORIES: Array<{id: ArchiveTabId; label:string}> = [
+  {id:"all",label:"Wszystkie kategorie"},
+  {id:"finance",label:"Finanse"},
+  {id:"warehouse",label:"Magazyn"},
+  {id:"investments",label:"Inwestycje"},
+  {id:"hr",label:"Kadry"},
+  {id:"fleet",label:"Flota"},
+  {id:"templates",label:"Wzory i Brain"},
+  {id:"company",label:"Ogólne"},
+  {id:"unassigned",label:"Nieprzypisane"}
 ];
 
 function normalize(value: unknown) {
@@ -157,6 +164,7 @@ export function DocumentCentralArchive({
   currentUserId,
   uploadContent,
   activeTab,
+  archiveCategory,
   searchQuery,
   facetCounts,
   total,
@@ -175,7 +183,8 @@ export function DocumentCentralArchive({
 
   const buildHref = useCallback((nextTab: ArchiveTabId, nextQuery: string) => {
     const params = new URLSearchParams(currentSearchParams.toString());
-    if (nextTab === "all") params.delete("tab"); else params.set("tab", nextTab);
+    if (nextTab === "review") params.delete("tab"); else params.set("tab", nextTab);
+    if (nextTab !== "archive") params.delete("category");
     if (nextTab !== "trash" && nextTab !== "fuel" && nextQuery.trim()) params.set("q", nextQuery.trim());
     else params.delete("q");
     params.delete("page");
@@ -284,6 +293,24 @@ export function DocumentCentralArchive({
           </button>
         ))}
       </div>
+
+      {tab === "archive" ? <div className={styles.archiveCategoryBar}>
+        <label htmlFor="octopus-archive-category">Kategoria dokumentów</label>
+        <select id="octopus-archive-category" value={archiveCategory} onChange={event=>{
+          const params = new URLSearchParams(currentSearchParams.toString());
+          params.set("tab","archive");
+          if(event.target.value==="all")params.delete("category");
+          else params.set("category",event.target.value);
+          params.delete("page");
+          setSelectedId(null);
+          router.push(`?${params.toString()}`);
+        }}>
+          {ARCHIVE_CATEGORIES.map(item=><option key={item.id} value={item.id}>
+            {item.label}{item.id!=="all" ? ` (${facetCounts[item.id]??0})` : ""}
+          </option>)}
+        </select>
+        <small>Dokumenty są przechowywane raz. Zmiana kategorii nie tworzy kopii pliku.</small>
+      </div> : null}
 
       {tab === "fuel" ? (
         canReadFuel ? <div role="tabpanel" aria-label="Tankowania do przypisania">
