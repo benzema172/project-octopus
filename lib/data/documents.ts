@@ -349,7 +349,7 @@ export async function countDocumentsForWorkspace(workspaceId: string, trashed = 
 
 export async function listDocumentsForWorkspacePage(
   workspaceId: string,
-  options: { trashed?: boolean; page?: number; pageSize?: number; query?: string; module?: string; review?: boolean } = {}
+  options: { trashed?: boolean; page?: number; pageSize?: number; query?: string; module?: string; review?: boolean; state?: "review" | "completed" | "archive" } = {}
 ) {
   const trashed = options.trashed ?? false;
   const page = Math.max(1, Math.floor(options.page ?? 1));
@@ -360,6 +360,31 @@ export async function listDocumentsForWorkspacePage(
   const archiveModule = options.module?.trim() ?? "";
   const review = options.review ?? false;
   const db = createServiceSupabaseClient();
+
+  // Dedicated status query: keep pagination and totals accurate across the full workspace.
+  if (options.state && !trashed) {
+    const search = await db.rpc("search_company_documents_by_state_20261104", {
+      p_workspace_id: workspaceId,
+      p_query: query || null,
+      p_module: archiveModule || null,
+      p_state: options.state,
+      p_limit: pageSize,
+      p_offset: from
+    }).returns<ArchiveSearchRow[]>();
+    if (search.error) throw new Error(`Nie udało się pobrać statusu archiwum: ${search.error.message}`);
+    const searchRows = (search.data ?? []) as ArchiveSearchRow[];
+    const ids = searchRows.map(row => row.document_id);
+    const total = searchRows.length ? Number(searchRows[0].total_count ?? 0) || 0 : 0;
+    if (!ids.length) return { items: [] as DocumentSummary[], total, page, pageSize };
+    const { data, error } = await db.from("documents")
+      .select(DOCUMENT_WITH_VERSIONS_SELECT)
+      .eq("workspace_id", workspaceId).in("id", ids).returns<FlexibleDocumentRow[]>();
+    if (error) throw new Error(`Błąd odczytu archiwum: ${error.message}`);
+    const order = new Map(ids.map((id,index) => [id,index]));
+    const documents = normalizeDocuments(data ?? [], null)
+      .sort((left,right) => (order.get(left.id) ?? 0) - (order.get(right.id) ?? 0));
+    return { items: await attachDocumentFlows(documents), total, page, pageSize };
+  }
 
   if (query || archiveModule || review) {
     const search = await db.rpc("search_company_documents_810", {
@@ -452,3 +477,16 @@ export const isDocumentStorageSchemaReady = cache(async () => {
   const { data, error } = await createServiceSupabaseClient().from("app_schema_versions").select("version").eq("version", "20260814_domain_access_hardening").maybeSingle<{ version: string }>();
   return !error && data?.version === "20260814_domain_access_hardening";
 });
+export async function getDocumentWorkflowCounts(workspaceId:string, query="") {
+ const db=createServiceSupabaseClient();
+ const count=async (state:"review"|"completed")=>{
+  const {data,error}=await db.rpc("search_company_documents_by_state_20261104",{
+   p_workspace_id:workspaceId,p_query:query.trim()||null,p_module:null,
+   p_state:state,p_limit:1,p_offset:0
+  }).returns<ArchiveSearchRow[]>();
+  if(error)throw new Error(`Nie można policzyć dokumentów ${state}: ${error.message}`);
+  return Number((data??[])[0]?.total_count??0)||0;
+ };
+ const [review,completed]=await Promise.all([count("review"),count("completed")]);
+ return {review,completed};
+}
