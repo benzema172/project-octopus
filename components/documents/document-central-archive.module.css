@@ -412,3 +412,9 @@
 .fileTools[open]{display:grid;gap:9px}
 @media(max-width:1200px){.archiveGridDecision{grid-template-columns:minmax(190px,.55fr) minmax(0,2fr)}}
 @media(max-width:850px){.archiveGridDecision{grid-template-columns:minmax(0,1fr)}}
+
+/* Explicit quick-preview target on the primary document list, also accessible by hovering filename. */
+.listPreviewIndicator{display:inline-flex;align-items:center;gap:4px;padding:3px 5px;border:1px solid #e0d7f5;border-radius:6px;color:#6548a1;background:#faf7ff;font-size:9px;font-weight:700;white-space:nowrap}
+.rowBody:has(.listPreviewIndicator) strong{max-width:65%}
+.archiveGridDecision .rowBody:has(.listPreviewIndicator) strong{max-width:100%}
+@media(max-width:1050px){.listPreviewIndicator{font-size:0;gap:0;padding:4px}.listPreviewIndicator svg{width:14px;height:14px}}
