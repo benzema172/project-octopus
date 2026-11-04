@@ -31,10 +31,11 @@ export async function GET(request: Request) {
   const domainValue = url.searchParams.get("domain")?.trim() ?? "";
   const invoiceLineId = url.searchParams.get("invoiceLineId")?.trim() ?? "";
   const requestedInvoiceId = url.searchParams.get("invoiceId")?.trim() ?? "";
+  const documentId = url.searchParams.get("documentId")?.trim() ?? "";
   const invoiceNumber = url.searchParams.get("invoiceNumber")?.trim() ?? "";
   const stockItemId = url.searchParams.get("stockItemId")?.trim() ?? "";
 
-  if (!workspaceId || !domainValue || (!invoiceLineId && !requestedInvoiceId && !invoiceNumber)) {
+  if (!workspaceId || !domainValue || (!invoiceLineId && !requestedInvoiceId && !invoiceNumber && !documentId)) {
     return jsonError("Brakuje kontekstu faktury.", 400);
   }
   if (!ALLOWED_DOMAINS.has(domainValue as Domain)) return jsonError("Ten moduł nie obsługuje podglądu faktur.", 400);
@@ -72,11 +73,13 @@ export async function GET(request: Request) {
     .select("id,counterparty_id,document_id,invoice_number,ksef_number,direction,issue_date,sale_date,due_date,currency,net_amount,tax_amount,gross_amount,paid_amount,status")
     .eq("workspace_id", workspaceId);
   if (invoiceId) invoiceQuery = invoiceQuery.eq("id", invoiceId);
+  else if (documentId) invoiceQuery = invoiceQuery.eq("document_id", documentId).order("issue_date", { ascending: false }).limit(1);
   else invoiceQuery = invoiceQuery.eq("invoice_number", invoiceNumber).order("issue_date", { ascending: false }).limit(1);
   const { data: invoiceData, error: invoiceError } = await invoiceQuery.maybeSingle();
   if (invoiceError) return jsonError(`Nie udało się odczytać faktury: ${invoiceError.message}`, 500);
   if (!invoiceData) return jsonError("Nie znaleziono faktury.", 404);
   const invoice = invoiceData as Row;
+  if (documentId && String(invoice.document_id ?? "") !== documentId) return jsonError("Faktura nie należy do tego dokumentu.", 403);
   invoiceId = String(invoice.id);
 
   const [{ data: linesData, error: linesError }, { data: counterpartyData }, { data: documentData }] = await Promise.all([
