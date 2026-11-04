@@ -65,6 +65,9 @@ describe("Octopus AI decision center",()=>{
   expect(ui).toContain('"/api/storage/download-url"');
   expect(ui).toContain('disposition:"inline"');
   expect(ui).toContain("<DocumentOpenLink");
-  expect(ui).toContain("iframe");
+  expect(ui).not.toContain("<iframe");
+  expect(ui).toContain("Oryginał faktury");
+  expect(ui).toContain("Gdzie przypisać");
+  expect(ui).toContain("lineAdvanced");
  });
 });
