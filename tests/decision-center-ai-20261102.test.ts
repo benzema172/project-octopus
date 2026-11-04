@@ -7,7 +7,7 @@ const ui=read("components/documents/document-decision-center.tsx");
 const archive=read("components/documents/document-central-archive.tsx");
 describe("Octopus AI decision center",()=>{
  it("accepts actual RFC 4122 workspace and source document UUIDs",()=>{
-  const pattern=api.match(/const uuid=\\/(.+)\\/i;/)?.[1];
+  const pattern=api.match(/const uuid=\/(.+)\/i;/)?.[1];
   expect(pattern).toBeDefined();
   const uuid=new RegExp(pattern!,"i");
   expect(uuid.test("2b01548c-f892-5fc9-9d30-662e90ffc433")).toBe(true);
