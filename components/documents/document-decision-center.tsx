@@ -1,7 +1,7 @@
 "use client";
 import {useEffect,useMemo,useState} from "react";
 import {useRouter} from "next/navigation";
-import {Sparkles,FileCheck2,Boxes,Plus,Trash2,FileText} from "lucide-react";
+import {FileCheck2,Boxes,Plus,Trash2,FileText} from "lucide-react";
 import {DocumentOpenLink} from "./document-open-link";
 import styles from "./document-decision-center.module.css";
 type Scope=""|"project"|"inventory"|"overhead";
@@ -32,7 +32,7 @@ export function DocumentDecisionCenter({workspaceId,documentId,versionId,project
  const [investment,setInvestment]=useState("");
  const [materialTarget,setMaterialTarget]=useState<"project"|"inventory"|"none">("project");
  const [materialInvestment,setMaterialInvestment]=useState("");
- const [preview,setPreview]=useState<string|null>(null);
+
  useEffect(()=>{
   const controller=new AbortController();
   async function run(){
@@ -67,19 +67,6 @@ export function DocumentDecisionCenter({workspaceId,documentId,versionId,project
   }
   void run();return()=>controller.abort();
  },[workspaceId,documentId]);
- useEffect(()=>{
-  if(!versionId)return;
-  const controller=new AbortController();
-  async function run(){
-   try{
-    const response=await fetch("/api/storage/download-url",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({workspaceId,projectId,versionId,disposition:"inline"}),signal:controller.signal});
-    const body=await response.json().catch(()=>({})) as {downloadUrl?:string};
-    if(response.ok&&body.downloadUrl&&!controller.signal.aborted)setPreview(body.downloadUrl);
-   }catch{/* The existing file opener is a fallback. */}
-  }
-  void run();return()=>controller.abort();
- },[workspaceId,projectId,versionId]);
  const all=useMemo(()=>data?.lines.flatMap(l=>parts[l.id]??[])??[],[data,parts]);
  const missing=all.filter(p=>!p.scope||(p.scope==="project"&&!p.projectId)||(p.materialScope==="project"&&!p.materialProjectId)).length;
  const sumErrors=data?.lines.filter(l=>{
@@ -93,12 +80,28 @@ export function DocumentDecisionCenter({workspaceId,documentId,versionId,project
     Boolean(data?.type==="warehouse_document"&&target&&(target!=="project"||investment)));
  const change=(id:string,index:number,patch:Partial<Part>)=>setParts(prev=>({...prev,
    [id]:(prev[id]??[]).map((p,i)=>i===index?{...p,...patch}:p)}));
- const changeAll=()=>{
-  if(!data||!target||(target==="project"&&!investment))return;
+ const changeAll=(nextScope:Scope=target,nextProject=investment)=>{
+  if(!data||!nextScope||(nextScope==="project"&&!nextProject))return;
   setParts(prev=>Object.fromEntries(data.lines.map(l=>[l.id,(prev[l.id]??[]).map(p=>({...p,
-   scope:target,projectId:target==="project"?investment:"",
-    materialScope:target==="project"?"project":target==="inventory"?"inventory":"none",
-    materialProjectId:target==="project"?investment:""}))])));
+    scope:nextScope,projectId:nextScope==="project"?nextProject:"",
+    materialScope:l.quantity!=null&&l.quantity>0?(nextScope==="project"?"project":nextScope==="inventory"?"inventory":"none"):"none",
+    materialProjectId:l.quantity!=null&&l.quantity>0&&nextScope==="project"?nextProject:""
+  }))])));
+ };
+ const chooseDestination=(value:string)=>{
+  const nextScope:Scope=value==="__inventory"?"inventory":value==="__overhead"?"overhead":value?"project":"";
+  const nextProject=nextScope==="project"?value:"";
+  setTarget(nextScope);setInvestment(nextProject);
+  if(nextScope)changeAll(nextScope,nextProject);
+ };
+ const changeLineDestination=(lineId:string,value:string)=>{
+  const scope:Scope=value==="__inventory"?"inventory":value==="__overhead"?"overhead":value?"project":"";
+  const line=data?.lines.find(item=>item.id===lineId);
+  setParts(prev=>({...prev,[lineId]:(prev[lineId]??[]).map(p=>({...p,
+    scope,projectId:scope==="project"?value:"",
+    materialScope:line?.quantity!=null&&line.quantity>0?(scope==="project"?"project":scope==="inventory"?"inventory":"none"):"none",
+    materialProjectId:line?.quantity!=null&&line.quantity>0&&scope==="project"?value:""
+  }))}));
  };
  const changeMaterialsAll=()=>{
   if(!data||(materialTarget==="project"&&!materialInvestment))return;
@@ -128,111 +131,102 @@ export function DocumentDecisionCenter({workspaceId,documentId,versionId,project
  }
  if(!data)return <div className={styles.loading} role="status">{error??"Octopus przygotowuje jedną decyzję dla dokumentu…"}</div>;
  return <section className={styles.root} data-decision-center="1">
-  <header className={styles.hero}><div>
-   <small><Sparkles size={13}/> Centrum decyzji AI</small>
-   <h3>{data.type==="purchase_invoice"?"Faktura zakupowa: gdzie trafią koszty i materiały?":
-    data.type==="warehouse_document"?"Dokument magazynowy: gdzie trafią materiały?":
-    data.type==="sales_invoice"?"Faktura sprzedażowa":"Dokument rozpoznany przez AI"}</h3>
-   <p>Typ dokumentu jest rozpoznany automatycznie. Wskaż tylko brakujące przeznaczenie.</p>
-  </div><span className={styles.auto}>✓ Rozpoznano przez AI</span></header>
-  <div className={styles.columns}>
-   <div className={styles.content}>
-    {data.aiSuggestion.trustworthy&&data.aiSuggestion.projectId?
-     <p className={styles.suggestion}>AI wykryło wskazanie inwestycji: <b>{data.projects.find(p=>p.id===data.aiSuggestion.projectId)?.name??"Inwestycja"}</b>. {data.aiSuggestion.reason}</p>:
-     <p className={styles.note}>AI nie znalazło jednoznacznego potwierdzenia inwestycji. Koszt ogólny lub magazyn są pełnoprawnymi wyborami.</p>}
-    {data.type==="purchase_invoice"&&data.invoice?<div className={styles.summary}>
-      <span>{data.invoice.invoice_number}</span><strong>{data.lines.length} pozycji</strong>
-      <strong>{money(data.invoice.net_amount)} netto</strong><strong>{money(data.invoice.gross_amount)} brutto</strong>
+  <div className={styles.compactHeader}>
+    <div><strong>{data.type==="purchase_invoice"?"Przypisz fakturę":data.type==="warehouse_document"?"Przypisz dokument magazynowy":"Dokument"}</strong>
+      <small>Typ dokumentu jest rozpoznany automatycznie. Wskaż tylko brakujące przeznaczenie.</small></div>
+    {data.invoice?<span>{data.invoice.invoice_number} · {money(data.invoice.net_amount)} netto</span>:null}
+  </div>
+  <div className={styles.content}>
+    {data.type==="purchase_invoice" || data.type==="warehouse_document"?<div className={styles.primaryRoute}>
+      <label htmlFor={"destination-"+documentId}>Gdzie przypisać {data.type==="purchase_invoice"?"koszty i materiały":"materiały"}?</label>
+      <select id={"destination-"+documentId} disabled={!canDecide}
+       value={target==="project"?investment:target==="inventory"?"__inventory":target==="overhead"?"__overhead":""}
+       onChange={e=>chooseDestination(e.target.value)}>
+       <option value="">Wybierz inwestycję lub inny cel…</option>
+       {data.projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+       <option value="__inventory">Magazyn centralny</option><option value="__overhead">Koszty ogólne firmy</option>
+      </select>
+      {data.type==="warehouse_document"?<small>Wybór zapisuje plan przeznaczenia.</small>:<small>Wybór ustawia domyślny cel dla każdej pozycji. Możesz zmienić pojedyncze pozycje poniżej.</small>}
     </div>:null}
-    {(data.type==="purchase_invoice"||data.type==="warehouse_document")?<div className={styles.bulk}>
-      <b>Przeznaczenie {data.type==="purchase_invoice"?"wszystkich pozycji":"materiałów"}</b>
-      <div className={styles.controls}>
-       <select aria-label="Wybierz przeznaczenie" value={target} onChange={e=>{setTarget(e.target.value as Scope);if(e.target.value!=="project")setInvestment("");}}>
-        <option value="">Wybierz cel…</option><option value="project">Inwestycja</option>
-        <option value="inventory">Magazyn centralny</option><option value="overhead">Koszty ogólne firmy</option>
-       </select>
-       {target==="project"?<select aria-label="Wybierz inwestycję" value={investment} onChange={e=>setInvestment(e.target.value)}>
-        <option value="">Wybierz inwestycję…</option>
-        {data.projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-       </select>:null}
-       {data.type==="purchase_invoice"?<button type="button" onClick={changeAll} disabled={!target||(target==="project"&&!investment)}>
-        Zastosuj do wszystkich</button>:null}
-      </div>
-    </div>:null}
-    {data.type==="purchase_invoice"&&data.lines.some(l=>l.quantity!=null&&l.quantity>0)?<div className={styles.bulk}>
-      <b>Gdzie trafią towary i materiały? <span className={styles.hint}>Niezależnie od przypisania kosztów.</span></b>
-      <div className={styles.controls}>
-        <select aria-label="Zbiorcze przeznaczenie materiałów" value={materialTarget} onChange={e=>setMaterialTarget(e.target.value as "project"|"inventory"|"none")}>
-          <option value="project">Na inwestycję</option><option value="inventory">Do magazynu centralnego</option><option value="none">Nie dotyczy / usługa</option>
-        </select>
-        {materialTarget==="project"?<select aria-label="Inwestycja dla wszystkich materiałów" value={materialInvestment} onChange={e=>setMaterialInvestment(e.target.value)}>
-          <option value="">Wybierz inwestycję dla materiałów…</option>
-          {data.projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>:null}
-        <button type="button" onClick={changeMaterialsAll} disabled={!canDecide||(materialTarget==="project"&&!materialInvestment)}>Przypisz materiały wszystkim pozycjom</button>
-      </div>
-      <small className={styles.hint}>Poniżej możesz zmienić inwestycję osobno przy każdym towarze albo podzielić pozycję.</small>
+    {data.aiSuggestion.trustworthy&&data.aiSuggestion.projectId?<p className={styles.aiHint}>AI sugeruje: {data.projects.find(p=>p.id===data.aiSuggestion.projectId)?.name??"inwestycję"}.</p>:null}
+    {data.type==="purchase_invoice"&&data.invoice?<div className={styles.simpleSummary}>
+     <strong>{data.lines.length} {data.lines.length===1?"pozycja":"pozycji"}</strong>
+     <span>{money(data.invoice.net_amount)} netto · {money(data.invoice.gross_amount)} brutto</span>
     </div>:null}
     {data.type==="purchase_invoice"?<div className={styles.lines}>
      {data.lines.map(l=><article className={styles.line} key={l.id}>
       <div className={styles.lineTitle}><div><strong>{l.description||"Pozycja "+l.line_number}</strong>
-       <small>{l.quantity??"—"} {l.unit??""} · {money(l.net_amount)} netto</small></div>
-       <button type="button" disabled={!canDecide||(parts[l.id]??[]).length>=12}
-        onClick={()=>setParts(prev=>({...prev,[l.id]:[...(prev[l.id]??[]),
-          {lineId:l.id,scope:"",projectId:"",materialScope:"none",materialProjectId:"",amount:"0,00",quantity:"0",costCode:""}]}))}>
-        <Plus size={13}/> Podziel</button>
-      </div>
-      {(parts[l.id]??[]).map((p,index)=><div className={styles.part} key={index}>
-       <label>Cel<select value={p.scope} disabled={!canDecide}
-        onChange={e=>change(l.id,index,{scope:e.target.value as Scope,projectId:e.target.value==="project"?p.projectId:""})}>
-        <option value="">Wybierz…</option><option value="project">Inwestycja</option>
-        <option value="inventory">Magazyn</option><option value="overhead">Koszt ogólny</option>
-       </select></label>
-       {p.scope==="project"?<label>Inwestycja<select value={p.projectId} disabled={!canDecide}
-        onChange={e=>change(l.id,index,{projectId:e.target.value})}>
-         <option value="">Wybierz…</option>{data.projects.map(project=><option key={project.id} value={project.id}>{project.name}</option>)}
-       </select></label>:null}
-       <label>Netto<input inputMode="decimal" value={p.amount} disabled={!canDecide}
-        onChange={e=>change(l.id,index,{amount:e.target.value})}/></label>
-       {l.quantity!=null&&l.quantity>0?<label>Materiał<select aria-label="Gdzie trafi materiał" value={p.materialScope}
-         disabled={!canDecide} onChange={e=>change(l.id,index,{
-           materialScope:e.target.value as Part["materialScope"],
-           materialProjectId:e.target.value==="project"?p.materialProjectId:""
-         })}>
-         <option value="none">Nie dotyczy / usługa</option><option value="inventory">Magazyn</option>
-         <option value="project">Inwestycja (plan)</option>
-       </select></label>:null}
-       {l.quantity!=null&&l.quantity>0&&p.materialScope==="project"?<label>Cel materiału<select
-         aria-label="Docelowa inwestycja dla materiału" value={p.materialProjectId} disabled={!canDecide}
-         onChange={e=>change(l.id,index,{materialProjectId:e.target.value})}>
-         <option value="">Wybierz…</option>{data.projects.map(pr=><option key={pr.id} value={pr.id}>{pr.name}</option>)}
-       </select></label>:null}
-       {l.quantity!=null&&l.quantity>0?<label>Ilość<input inputMode="decimal" value={p.quantity}
-        disabled={!canDecide} onChange={e=>change(l.id,index,{quantity:e.target.value})}/></label>:null}
-       {(parts[l.id]??[]).length>1?<button type="button" className={styles.trash} aria-label="Usuń podział"
-         onClick={()=>setParts(prev=>({...prev,[l.id]:(prev[l.id]??[]).filter((_,i)=>i!==index)}))}><Trash2 size={14}/></button>:null}
-      </div>)}
+        <small>{l.quantity??"—"} {l.unit??""} · {money(l.net_amount)} netto</small></div></div>
+      <select className={styles.lineDestination} aria-label={"Cel pozycji "+l.line_number}
+        disabled={!canDecide||(parts[l.id]??[]).length>1}
+        value={(parts[l.id]??[]).length===1?(parts[l.id][0].scope==="project"?parts[l.id][0].projectId:parts[l.id][0].scope==="inventory"?"__inventory":parts[l.id][0].scope==="overhead"?"__overhead":""):""}
+        onChange={e=>changeLineDestination(l.id,e.target.value)}>
+        <option value="">Przypisz pozycję…</option>
+        {data.projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+        <option value="__inventory">Magazyn centralny</option><option value="__overhead">Koszty ogólne firmy</option>
+      </select>
+      <details className={styles.lineAdvanced}>
+        <summary>Zaawansowane: oddzielny cel materiału / podział</summary>
+        <button type="button" disabled={!canDecide||(parts[l.id]??[]).length>=12}
+         onClick={()=>setParts(prev=>({...prev,[l.id]:[...(prev[l.id]??[]),
+           {lineId:l.id,scope:"",projectId:"",materialScope:"none",materialProjectId:"",amount:"0,00",quantity:"0",costCode:""}]}))}>
+          <Plus size={13}/> Podziel</button>
+        {(parts[l.id]??[]).map((p,index)=><div className={styles.part} key={index}>
+          <label>Koszt<select value={p.scope} disabled={!canDecide}
+           onChange={e=>change(l.id,index,{scope:e.target.value as Scope,projectId:e.target.value==="project"?p.projectId:""})}>
+            <option value="">Wybierz…</option><option value="project">Inwestycja</option>
+            <option value="inventory">Magazyn</option><option value="overhead">Koszt ogólny</option>
+          </select></label>
+          {p.scope==="project"?<label>Inwestycja kosztu<select value={p.projectId} disabled={!canDecide}
+           onChange={e=>change(l.id,index,{projectId:e.target.value})}>
+            <option value="">Wybierz…</option>{data.projects.map(pr=><option key={pr.id} value={pr.id}>{pr.name}</option>)}
+          </select></label>:null}
+          <label>Netto<input inputMode="decimal" value={p.amount} disabled={!canDecide}
+           onChange={e=>change(l.id,index,{amount:e.target.value})}/></label>
+          {l.quantity!=null&&l.quantity>0?<label>Materiał<select aria-label="Gdzie trafi materiał" value={p.materialScope}
+           disabled={!canDecide} onChange={e=>change(l.id,index,{materialScope:e.target.value as Part["materialScope"],materialProjectId:e.target.value==="project"?p.materialProjectId:""})}>
+            <option value="none">Nie dotyczy / usługa</option><option value="inventory">Magazyn</option><option value="project">Inwestycja (plan)</option>
+          </select></label>:null}
+          {l.quantity!=null&&l.quantity>0&&p.materialScope==="project"?<label>Inwestycja materiału<select
+           aria-label="Docelowa inwestycja dla materiału" value={p.materialProjectId} disabled={!canDecide}
+           onChange={e=>change(l.id,index,{materialProjectId:e.target.value})}>
+            <option value="">Wybierz…</option>{data.projects.map(pr=><option key={pr.id} value={pr.id}>{pr.name}</option>)}
+          </select></label>:null}
+          {l.quantity!=null&&l.quantity>0?<label>Ilość<input inputMode="decimal" value={p.quantity}
+           disabled={!canDecide} onChange={e=>change(l.id,index,{quantity:e.target.value})}/></label>:null}
+          {(parts[l.id]??[]).length>1?<button type="button" className={styles.trash} aria-label="Usuń podział"
+           onClick={()=>setParts(prev=>({...prev,[l.id]:(prev[l.id]??[]).filter((_,i)=>i!==index)}))}><Trash2 size={14}/></button>:null}
+        </div>)}
+      </details>
      </article>)}</div>:null}
     {data.type==="warehouse_document"&&data.warehouse?<div className={styles.lines}>
       {data.warehouse.lines.map((l,i)=><div className={styles.warehouseLine} key={i}>
        <Boxes size={14}/><span>{l.description??l.name??"Materiał "+(i+1)}</span><b>{l.quantity??"—"} {l.unit??""}</b>
       </div>)}</div>:null}
-    {conflicts>0?<p className={styles.warning}>Faktura ma {conflicts} nierozstrzygniętych niezgodności lub możliwych duplikatów. Sprawdź je w Finansach.</p>:null}
+    {conflicts>0?<p className={styles.warning}>Wymagana weryfikacja {conflicts} niezgodności lub możliwych duplikatów w Finansach.</p>:null}
     {error?<p role="alert" className={styles.warning}>{error}</p>:null}
     {(data.type==="purchase_invoice"||data.type==="warehouse_document")?<footer className={styles.footer}>
-      <small>{data.type==="purchase_invoice"?String(missing)+" bez celu · "+String(sumErrors)+" niezgodności sum":"Zapisuje plan, nie zużycie"}</small>
+      <small>{missing>0?`Uzupełnij ${missing} przypisania`:sumErrors>0?`${sumErrors} niezgodności wartości lub ilości`:conflicts>0?"Rozstrzygnij niezgodności":"Gotowe do zapisania"}</small>
       <button type="button" onClick={()=>void save()} disabled={!enabled||busy}>
-       <FileCheck2 size={15}/>{busy?"Zapisywanie…":"Zapisz i następny dokument"}
-      </button></footer>:<p className={styles.note}>Nie ma tutaj dodatkowych pytań o kategorię. Jeżeli dokument wymaga rozliczenia, użyj właściwego modułu.</p>}
-   </div>
-   <aside className={styles.preview}><div className={styles.previewHead}>
-     <span>Oryginał dokumentu</span>
-     <DocumentOpenLink workspaceId={workspaceId} projectId={projectId} versionId={versionId} fallbackHref="#source"/>
+        <FileCheck2 size={15}/>{busy?"Zapisywanie…":"Zapisz i następny dokument"}
+      </button>
+    </footer>:<p className={styles.note}>Brak decyzji do podjęcia.</p>}
+    <details className={styles.extraOptions}><summary>Więcej opcji</summary>
+      <p>Możesz przypisać koszty i materiały do różnych miejsc. Zapis nie potwierdza fizycznego zużycia ani księgowania.</p>
+      <div className={styles.controls}>
+       <select aria-label="Oddzielne przeznaczenie materiałów" value={materialTarget} onChange={e=>setMaterialTarget(e.target.value as "project"|"inventory"|"none")}>
+        <option value="project">Materiały na inwestycję</option><option value="inventory">Do magazynu centralnego</option><option value="none">Nie dotyczy / usługa</option>
+       </select>
+       {materialTarget==="project"?<select aria-label="Inwestycja dla materiałów" value={materialInvestment} onChange={e=>setMaterialInvestment(e.target.value)}>
+        <option value="">Wybierz inwestycję…</option>{data.projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+       </select>:null}
+       <button type="button" onClick={changeMaterialsAll} disabled={!canDecide||(materialTarget==="project"&&!materialInvestment)}>Zastosuj do wszystkich materiałów</button>
+       <button type="button" disabled={!canDecide||!target||(target==="project"&&!investment)} onClick={()=>changeAll()}>Zastosuj do wszystkich kosztów</button>
+      </div>
+    </details>
+    <div className={styles.openSource}><FileText size={16}/><span>Oryginał faktury</span>
+      <DocumentOpenLink workspaceId={workspaceId} projectId={projectId} versionId={versionId} fallbackHref="#source"/>
     </div>
-    {preview?<iframe title="Oryginalny dokument PDF" src={preview} className={styles.frame} loading="lazy" referrerPolicy="no-referrer"/>:
-      <div className={styles.noPreview}><FileText size={23}/> Użyj „Otwórz”, aby podejrzeć oryginał.</div>}
-    <small>Przeznaczenie materiałów ≠ potwierdzenie ich fizycznego zużycia.</small>
-   </aside>
   </div>
  </section>;
 }
