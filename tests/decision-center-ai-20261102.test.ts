@@ -62,8 +62,9 @@ describe("Octopus AI decision center",()=>{
   expect(ui).toContain("Magazyn centralny");
  });
  it("shows the real source preview under the user's existing access controls",()=>{
-  expect(ui).toContain('"/api/storage/download-url"');
-  expect(ui).toContain('disposition:"inline"');
+  const opener=read("components/documents/document-open-link.tsx");
+  expect(opener).toContain('"/api/storage/download-url"');
+  expect(opener).toContain('disposition: "inline"');
   expect(ui).toContain("<DocumentOpenLink");
   expect(ui).not.toContain("<iframe");
   expect(ui).toContain("Oryginał faktury");
