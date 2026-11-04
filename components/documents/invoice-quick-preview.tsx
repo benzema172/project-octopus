@@ -130,7 +130,7 @@ export function InvoiceQuickPreview({ workspaceId, domain, invoiceLineId, invoic
 
   return <>
     <span ref={anchorRef} className={`${styles.anchor} ${className ?? ""}`} role={hasIdentity && !hoverOnly ? "button" : undefined} tabIndex={hasIdentity && !hoverOnly ? 0 : undefined}
-      aria-label={hasIdentity ? `Szybki podgląd faktury ${invoiceNumber ?? ""}`.trim() : undefined}
+      aria-label={hasIdentity && !hoverOnly ? `Szybki podgląd faktury ${invoiceNumber ?? ""}`.trim() : undefined}
       onMouseEnter={() => show(false)} onMouseLeave={hide} onFocus={hoverOnly ? undefined : () => show(true)} onBlur={hoverOnly ? undefined : hide} onClick={hoverOnly ? undefined : (event) => { event.stopPropagation(); show(true); }} onKeyDown={hoverOnly ? undefined : onKeyDown}>
       {children}
     </span>
