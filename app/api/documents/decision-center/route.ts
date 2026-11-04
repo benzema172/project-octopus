@@ -8,7 +8,7 @@ import { evaluateProjectMatch, type ProjectMatchCandidate } from "@/lib/ai/proje
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 type Row=Record<string,unknown>;
-const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const error=(message:string,status=400)=>NextResponse.json({error:message},{status,headers:{"Cache-Control":"no-store"}});
 const str=(v:unknown)=>typeof v==="string"?v.trim():"";
 const n=(v:unknown)=>typeof v==="number"?v:Number(v);
