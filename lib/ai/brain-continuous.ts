@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { indexWorkspaceBrain } from "@/lib/ai/brain-retrieval";
 import { getMultiAiProviderStatus } from "@/lib/ai/provider-vault";
+import { parseCuratedResearch } from "@/lib/ai/curated-feed-parser";
 
 type Row = Record<string, unknown>;
 type BrainResult = {
@@ -17,35 +18,6 @@ const SAFE_RESEARCH_FEEDS = [
  { name: "URE · Ciepło", url: "https://ure.gov.pl/dokumenty/rss/9-rss-486.rss" },
  { name: "URE · Aktualności", url: "https://ure.gov.pl/dokumenty/rss/9-rss-424.rss" }
 ] as const;
-
-const truncate = (value: unknown, max = 350) => String(value ?? "").trim().slice(0, max);
-function xmlEntities(value: string) {
- return value.replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-  .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
-  .replace(/&amp;/g, "&").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-}
-function safeLink(value: string, host: string): string | null {
- try {
-  const parsed = new URL(xmlEntities(value));
-  if (parsed.protocol !== "https:" || (parsed.hostname !== host && parsed.hostname !== "www."+host) || parsed.username || parsed.password) return null;
-  parsed.hash = "";
-  return parsed.toString();
- } catch { return null; }
-}
-/** Feed links are untrusted candidates, never executable instructions or approved company knowledge. */
-export function parseCuratedResearch(feed: string, sourceHost: string) {
- const entries: Array<{ url: string; title: string }> = [];
- const blocks = feed.match(/<(?:item|entry)(?:\s[^>]*)?>[\s\S]*?<\/(?:item|entry)>/gi) ?? [];
- for (const block of blocks.slice(0, 15)) {
-  const title = xmlEntities(block.match(/<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/i)?.[1] ?? "");
-  const link = block.match(/<link(?:\s[^>]*)?>([\s\S]*?)<\/link>/i)?.[1]
-   ?? block.match(/<link\s+[^>]*href=["']([^"']+)["'][^>]*\/?\s*>/i)?.[1] ?? "";
-  const url = safeLink(link, sourceHost);
-  if (!url || !title || entries.some(entry=>entry.url===url)) continue;
-  entries.push({ url, title: truncate(title, 200) });
- }
- return entries;
-}
 
 async function captureHumanFeedback(workspaceId: string) {
  const db = createServiceSupabaseClient();
