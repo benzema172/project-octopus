@@ -361,6 +361,9 @@ export function DocumentCentralArchive({
                         <span className={styles.fileIcon}><FileText size={16} aria-hidden="true" /></span>
                         <span className={styles.rowBody}>
                           <strong title={document.name}>{moduleId==="finance" ? <InvoiceQuickPreview workspaceId={workspaceId} domain="finance" documentId={document.id} hoverOnly>{document.name}</InvoiceQuickPreview> : document.name}</strong>
+                          {moduleId==="finance" ? <InvoiceQuickPreview workspaceId={workspaceId} domain="finance" documentId={document.id} hoverOnly>
+                            <span className={styles.listPreviewIndicator} title="Najedź, aby podejrzeć całą fakturę"><FileSearch size={13}/> Podgląd</span>
+                          </InvoiceQuickPreview> : null}
                           <small>{document.project_id ? projectNames.get(document.project_id) ?? "Inwestycja" : MODULE_LABELS[moduleId]} · {displayAiCategory(document)}</small>
                         </span>
                         <span className={styles.rowState}>
