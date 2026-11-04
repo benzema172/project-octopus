@@ -87,7 +87,8 @@ export default async function CompanyAiInboxPage({ params }: Props) {
       </section>
 
       {brainSnapshot ? <BrainLearningDashboard workspaceId={workspace.id} snapshot={brainSnapshot}
-        canApproveResearch={domainAccessPolicyAllows(accessPolicy,{domain:"reports",level:"approve"})}/> : null}
+        canApproveResearch={domainAccessPolicyAllows(accessPolicy,{domain:"reports",level:"approve"})}
+        canRefresh={domainAccessPolicyAllows(accessPolicy,{domain:"settings",level:"admin"})}/> : null}
 
       <section className="co-section co-section--compact">
         <div className="co-section-heading">
