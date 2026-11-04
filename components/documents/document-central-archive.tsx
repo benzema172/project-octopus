@@ -165,7 +165,7 @@ export function DocumentCentralArchive({
   const currentSearchParams = useSearchParams();
   const [tab, setTab] = useState<ArchiveTabId>(activeTab);
   const [query, setQuery] = useState(searchQuery);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => activeTab === "review" ? documents.find(requiresReview)?.id ?? null : null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [pendingFuelCount, setPendingFuelCount] = useState<number | null>(null);
@@ -356,9 +356,9 @@ export function DocumentCentralArchive({
                       <button
                         type="button"
                         className={`${styles.row} ${styles.rowInline} ${isSelected ? styles.rowSelected : ""}`}
-                        onClick={() => setSelectedId(isSelected ? null : document.id)}
+                        onClick={() => setSelectedId(document.id)}
                         aria-expanded={isSelected}
-                        title={isSelected ? "Zwiń szczegóły dokumentu" : "Rozwiń szczegóły dokumentu"}
+                        title="Pokaż fakturę, jej pozycje i przypisanie do inwestycji"
                       >
                         <span className={styles.fileIcon}><FileText size={16} aria-hidden="true" /></span>
                         <span className={styles.rowBody}>
