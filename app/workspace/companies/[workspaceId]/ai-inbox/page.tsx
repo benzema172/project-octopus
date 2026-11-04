@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, FileCheck2, RotateCcw, ShieldCheck, Sparkles } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { notFound } from "next/navigation";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { AiInbox } from "@/components/brain/ai-inbox";
@@ -11,7 +11,7 @@ import {
   loadDomainAccessPolicy,
   type Domain
 } from "@/lib/authorization";
-import { getProjectMatchQuality, listAiInbox } from "@/lib/data/operations";
+import { listAiInbox } from "@/lib/data/operations";
 import { listProjectsForWorkspace } from "@/lib/data/projects";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
 
@@ -53,67 +53,41 @@ export default async function CompanyAiInboxPage({ params }: Props) {
       canApprove: domainAccessPolicyAllows(accessPolicy, { domain, level: "approve", projectId: item.projectId })
     }];
   });
-  const matchQuality = await getProjectMatchQuality(workspace.id, projects.map((project) => project.id)).catch((error) => {
-    console.error("Project Octopus: matcher quality fallback", error);
-    return { reviewed: 0, confirmed: 0, corrected: 0, rejected: 0, aliases: 0, precision: null, recall: null, correctionRate: null };
-  });
-
   const reviewCount = items.filter((item) => item.status === "review").length;
   const errorCount = items.filter((item) => item.status === "error").length;
   const processingCount = items.filter((item) => ["new", "processing"].includes(item.status)).length;
   const readyCount = items.filter((item) => item.status === "ready").length;
+  const awaitingCount = reviewCount + errorCount + processingCount;
 
   return (
-    <main className="co-page">
-      <header className="co-page-heading">
+    <main className="co-page co-ai-control-center" data-ai-control-center="1">
+      <header className="co-page-heading co-page-heading--compact">
         <div>
-          <p className="co-kicker">Wspólna kontrola AI</p>
-          <h1>Skrzynka AI</h1>
-          <p>To nie jest poczta ani chatbot. To kolejka decyzji człowieka dla rzeczy, których AI nie powinno zatwierdzić samodzielnie.</p>
+          <p className="co-kicker">Octopus Brain</p>
+          <h1>Centrum kontroli AI</h1>
+          <p>Nadzór nad automatyzacją. Pokazujemy tu tylko sprawy wymagające interwencji; faktury przypisujesz w Dokumentach.</p>
         </div>
-        <strong className="co-count-badge">{reviewCount} decyzji · {errorCount} błędów</strong>
+        <div className="co-heading-actions">
+          <strong className="co-count-badge">{awaitingCount} spraw wymagających uwagi</strong>
+          <Link href={`/workspace/companies/${workspace.id}/documents?tab=review`} className="co-text-link">Dokumenty do weryfikacji →</Link>
+        </div>
       </header>
 
-      <section className="co-metric-grid" aria-label="Stan Skrzynki AI">
-        <article className="co-metric-card"><span>Wymaga decyzji</span><strong>{reviewCount}</strong><small>zatwierdź albo odrzuć propozycję AI</small></article>
-        <article className="co-metric-card"><span>Błędy</span><strong>{errorCount}</strong><small>można ponowić analizę dokumentu</small></article>
-        <article className="co-metric-card"><span>W toku</span><strong>{processingCount}</strong><small>nowe i przetwarzane elementy</small></article>
-        <article className="co-metric-card co-metric-card--ai"><span>Gotowe</span><strong>{readyCount}</strong><small>pozycje przyjęte przez pipeline</small></article>
+      <section className="co-ai-control-stats" aria-label="Stan kontroli AI">
+        <article><span>Decyzje AI</span><strong>{reviewCount}</strong><small>Sprawy oczekujące na ocenę</small></article>
+        <article><span>Błędy</span><strong>{errorCount}</strong><small>Można ponowić analizę</small></article>
+        <article><span>Przetwarzanie</span><strong>{processingCount}</strong><small>Nowe i w toku</small></article>
+        <article><span>Przetworzone</span><strong>{readyCount}</strong><small>Historia dostępna poniżej</small></article>
       </section>
 
-      <section className="ai-quality-strip" aria-label="Jakość dopasowania inwestycji">
-        <article><span>Zweryfikowane przypisania</span><strong>{matchQuality.reviewed}</strong><small>{matchQuality.confirmed} bez korekty</small></article>
-        <article><span>Precision</span><strong>{matchQuality.precision == null ? "—" : `${Math.round(matchQuality.precision * 100)}%`}</strong><small>trafność propozycji oznaczonych przez użytkowników</small></article>
-        <article><span>Recall</span><strong>{matchQuality.recall == null ? "—" : `${Math.round(matchQuality.recall * 100)}%`}</strong><small>wykrycie przypisań potwierdzonych korektą</small></article>
-        <article><span>Pamięć matchera</span><strong>{matchQuality.aliases}</strong><small>{matchQuality.correctionRate == null ? "brak próby" : `${Math.round(matchQuality.correctionRate * 100)}% korekt`}</small></article>
-      </section>
-
-      <section className="document-principles" aria-label="Jak działa Skrzynka AI">
-        <div><Sparkles size={18} /><strong>AI proponuje</strong><span>Klasyfikację dokumentu, inwestycję, zmianę, import kosztorysu albo wpis wiedzy.</span></div>
-        <div><ShieldCheck size={18} /><strong>System zatrzymuje ryzyko</strong><span>Niepewna propozycja nie zmienia danych operacyjnych bez decyzji użytkownika.</span></div>
-        <div><CheckCircle2 size={18} /><strong>Ty zatwierdzasz</strong><span>Po zatwierdzeniu element może zasilić właściwy moduł i stać się zaufanym źródłem.</span></div>
-        <div><RotateCcw size={18} /><strong>Błąd można ponowić</strong><span>Nieudana analiza dokumentu może wrócić do kolejki bez ponownego wrzucania pliku.</span></div>
-      </section>
-
-      <section className="co-section">
+      <section className="co-section co-section--compact">
         <div className="co-section-heading">
-          <div><p className="co-kicker">Co trafia tutaj</p><h2>Elementy wymagające świadomej decyzji</h2></div>
-        </div>
-        <div className="co-settings-cards">
-          <article><FileCheck2 size={21} /><div><strong>Dokumenty</strong><p>Niepewna kategoria, dopasowanie do inwestycji i dane wyciągnięte z pliku.</p></div></article>
-          <article><Sparkles size={21} /><div><strong>Kosztorysy i zmiany</strong><p>Mapowanie BOQ/WBS, skutki nowych rewizji i propozycje wpływu na realizację.</p></div></article>
-          <article><ShieldCheck size={21} /><div><strong>Wzory i wiedza firmy</strong><p>Nowe wzory oraz wpisy pamięci organizacji przed dopuszczeniem ich do pracy AI.</p></div></article>
-        </div>
-        <p className="section-lead"><strong>Zasada:</strong> jeśli AI jest wystarczająco pewne i operacja jest bezpieczna, element nie powinien zawracać Ci głowy. Skrzynka ma pokazywać przede wszystkim wyjątki, błędy i decyzje o realnym skutku.</p>
-      </section>
-
-      <section className="co-section">
-        <div className="co-section-heading">
-          <div><p className="co-kicker">Kolejka</p><h2>Decyzje i wyjątki</h2></div>
+          <div><p className="co-kicker">Nadzór AI</p><h2>Wymagają Twojej uwagi</h2></div>
           <Link href={`/workspace/companies/${workspace.id}/documents?upload=1`} className="co-text-link">Dodaj dokument →</Link>
         </div>
-        {errorCount > 0 ? <p className="form-message form-message--error"><AlertTriangle size={15} /> {errorCount} elementów wymaga ponowienia lub sprawdzenia przyczyny błędu.</p> : null}
-        <AiInbox items={items} workspaceId={workspace.id} currentUserId={user.id} projects={projects.map((project) => ({ id: project.id, name: project.name }))} />
+        {errorCount > 0 ? <p className="form-message form-message--error"><AlertTriangle size={15}/> {errorCount} błędów wymaga sprawdzenia lub ponowienia.</p> : null}
+        <AiInbox controlCenter items={items} workspaceId={workspace.id} currentUserId={user.id}
+          projects={projects.map(project=>({id:project.id,name:project.name}))}/>
       </section>
     </main>
   );
