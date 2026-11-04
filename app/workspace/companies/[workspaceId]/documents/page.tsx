@@ -17,6 +17,7 @@ import { listDocumentLibraryInsights } from "@/lib/data/document-library";
 import {
   countDocumentsForWorkspace,
   getDocumentArchiveFacets,
+  getDocumentWorkflowCounts,
   isDocumentStorageSchemaReady,
   listDocumentsForWorkspacePage,
   type DocumentArchiveFacets
@@ -31,11 +32,11 @@ export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ workspaceId: string }>;
-  searchParams: Promise<{ upload?: string; sourceModule?: string; page?: string; trashPage?: string; tab?: string; q?: string }>;
+  searchParams: Promise<{ upload?: string; sourceModule?: string; page?: string; trashPage?: string; tab?: string; category?: string; q?: string }>;
 };
 
 const ARCHIVE_TABS = new Set<ArchiveTabId>([
-  "all", "review", "investments", "finance", "warehouse", "hr", "fleet", "fuel", "templates", "company", "unassigned", "trash"
+  "all", "review", "archive", "completed", "investments", "finance", "warehouse", "hr", "fleet", "fuel", "templates", "company", "unassigned", "trash"
 ]);
 
 function normalizeArchiveTab(value: string | undefined): ArchiveTabId {
@@ -79,11 +80,14 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
   const { workspaceId } = await params;
   const query = await searchParams;
   const sourceModule = normalizeDocumentSourceModule(query.sourceModule);
-  const activeTab = normalizeArchiveTab(query.tab);
+  const legacyCategory = MODULE_FILTER_TABS.has(normalizeArchiveTab(query.tab)) ? normalizeArchiveTab(query.tab) : null;
+  const activeTab = legacyCategory ? "archive" : normalizeArchiveTab(query.tab);
+  const requestedCategory = String(query.category ?? legacyCategory ?? "all");
+  const archiveCategory = MODULE_FILTER_TABS.has(requestedCategory as ArchiveTabId) ? requestedCategory as ArchiveTabId : "all";
   const searchQuery = activeTab === "trash" || activeTab === "fuel" ? "" : String(query.q ?? "").trim();
   const archivePage = Math.max(1, Math.floor(Number(query.page ?? 1) || 1));
   const trashPage = Math.max(1, Math.floor(Number(query.trashPage ?? 1) || 1));
-  const moduleFilter = MODULE_FILTER_TABS.has(activeTab) ? activeTab : undefined;
+  const moduleFilter = activeTab === "archive" && archiveCategory !== "all" ? archiveCategory : undefined;
   const user = await requireCurrentUser();
   const workspace = await getWorkspaceForUser(user, workspaceId);
 
@@ -100,7 +104,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
     hr: 0, fleet: 0, templates: 0, company: 0, unassigned: 0
   };
 
-  const [projects, documentsPage, trashedPage, trashTotal, storageReady, accessPolicy, facets] = await Promise.all([
+  const [projects, documentsPage, trashedPage, trashTotal, storageReady, accessPolicy, facets, workflowCounts] = await Promise.all([
     listProjectsForWorkspace(user, workspace.id).catch((error) => {
       console.error("Project Octopus: project list fallback in documents", error);
       return [];
@@ -112,7 +116,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
           pageSize: 60,
           query: searchQuery,
           module: moduleFilter,
-          review: activeTab === "review"
+          state: activeTab === "review" ? "review" : activeTab === "completed" ? "completed" : "archive"
         }),
     activeTab === "trash"
       ? safeWorkspaceDocumentsPage(workspace.id, { trashed: true, page: trashPage, pageSize: 40 })
@@ -123,6 +127,10 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
     getDocumentArchiveFacets(workspace.id, searchQuery).catch((error) => {
       console.error("Project Octopus: document archive facets fallback", error);
       return zeroFacets;
+    }),
+    getDocumentWorkflowCounts(workspace.id, searchQuery).catch((error) => {
+      console.error("Project Octopus: workflow status count fallback", error);
+      return {review:0,completed:0};
     })
   ]);
 
@@ -197,7 +205,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
 
   const documentQueueItems = [...queueByDocumentId.values()].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
   const projectOptions = projects.map((project) => ({ id: project.id, name: project.name }));
-  const facetCounts: Record<ArchiveTabId, number> = { ...facets, fuel: 0, trash: trashTotal };
+  const facetCounts: Record<ArchiveTabId, number> = { ...facets, review:workflowCounts.review, archive:facets.all, completed:workflowCounts.completed, fuel: 0, trash: trashTotal };
   const canReadFuel = domainAccessPolicyAllows(accessPolicy, {domain:"fleet",level:"read",projectId:null});
   const canWriteFuel = domainAccessPolicyAllows(accessPolicy, {domain:"fleet",level:"write",projectId:null});
 
@@ -210,7 +218,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
           <p>Wszystkie nowe pliki zaczynają we Wrzutni. Octopus AI rozpoznaje je, odczytuje i przekazuje do właściwego modułu, a archiwum zachowuje jedno źródło dokumentu.</p>
         </div>
         <div className="co-heading-actions">
-          <strong className="co-count-badge">{facets.all} plików · {facets.review} do weryfikacji</strong>
+          <strong className="co-count-badge">{facets.all} plików · {workflowCounts.review} do weryfikacji</strong>
           <Link href={`/workspace/companies/${workspace.id}/ai-inbox`} className="co-text-link">Pełna Skrzynka AI →</Link>
         </div>
       </header>
@@ -228,7 +236,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
           <span>Wyszukiwanie obejmuje całe archiwum firmy: nazwy, OCR, fakty AI, inwestycje i propozycje modułowe.</span>
         </div>
         <DocumentCentralArchive
-          key={`${activeTab}:${searchQuery}:${activeTab === "trash" ? trashPage : archivePage}`}
+          key={`${activeTab}:${archiveCategory}:${searchQuery}:${activeTab === "trash" ? trashPage : archivePage}`}
           workspaceId={workspace.id}
           documents={documents}
           trashedDocuments={trashedDocuments}
@@ -237,6 +245,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
           reviewItems={documentQueueItems}
           currentUserId={user.id}
           activeTab={activeTab}
+          archiveCategory={archiveCategory}
           searchQuery={searchQuery}
           facetCounts={facetCounts}
           canReadFuel={canReadFuel}
@@ -260,7 +269,7 @@ export default async function CompanyDocumentsPage({ params, searchParams }: Pro
             pageSize={documentsPage.pageSize}
             total={documentsPage.total}
             pathname={`/workspace/companies/${workspace.id}/documents`}
-            query={{ sourceModule: query.sourceModule, tab: activeTab, q: searchQuery || undefined }}
+            query={{ sourceModule: query.sourceModule, tab: activeTab, category: archiveCategory === "all" ? undefined : archiveCategory, q: searchQuery || undefined }}
           />
         ) : null}
         {activeTab === "trash" ? (
