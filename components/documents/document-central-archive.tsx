@@ -356,7 +356,7 @@ export function DocumentCentralArchive({
                       <button
                         type="button"
                         className={`${styles.row} ${styles.rowInline} ${isSelected ? styles.rowSelected : ""}`}
-                        onClick={() => setSelectedId(document.id)}
+                        onClick={() => setSelectedId(isSelected ? null : document.id)}
                         aria-expanded={isSelected}
                         title="Pokaż fakturę, jej pozycje i przypisanie do inwestycji"
                       >
