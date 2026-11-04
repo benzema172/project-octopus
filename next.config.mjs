@@ -56,7 +56,9 @@ const nextConfig = {
   async headers() {
     return [
       {
-        source: "/(.*)",
+        // The source invoice stream is intentionally embeddable only by this app.
+        // Keep every other page and API endpoint unframeable.
+        source: "/((?!api/company/invoice-quick-preview/file(?:/|$)).*)",
         headers: [
           { key: "Content-Security-Policy", value: contentSecurityPolicy },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -66,6 +68,17 @@ const nextConfig = {
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" }
+        ]
+      },
+      {
+        source: "/api/company/invoice-quick-preview/file",
+        headers: [
+          { key: "Content-Security-Policy", value: contentSecurityPolicy.replace("frame-ancestors 'none'", "frame-ancestors 'self'") },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" }
         ]
       }
     ];
