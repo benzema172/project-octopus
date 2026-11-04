@@ -2991,3 +2991,29 @@ button:disabled {
   letter-spacing: 0.02em;
   text-align: center;
 }
+
+
+/* AI Inbox compact triage: one document per short row, no empty 3-column evidence grid. */
+.ai-inbox__list{display:grid;gap:7px}
+.ai-inbox-row{grid-template-columns:26px minmax(0,1fr) auto;gap:10px;padding:10px 12px;border-radius:10px;align-items:center}
+.ai-inbox-row__state{width:26px;height:26px;border-radius:7px;align-self:start}
+.ai-inbox-row__state svg{width:15px;height:15px}
+.ai-inbox-row__body{min-width:0}
+.ai-inbox-row__body h3{font-size:.87rem;line-height:1.3;overflow-wrap:anywhere}
+.ai-inbox-row__meta{margin-bottom:3px;font-size:.64rem;gap:5px;line-height:1.25}
+.ai-inbox-row__meta span:nth-child(3){display:none}
+.ai-inbox-row__body p.ai-inbox-row__description{margin-top:3px;font-size:.72rem}
+.ai-inbox-row__decision{align-self:start;gap:4px}
+.ai-inbox-row__decision>small{font-size:.66rem}
+.ai-inbox-row__evidence{margin-top:6px;padding-top:6px;gap:4px}
+.ai-inbox-row__evidence-list{display:flex;flex-wrap:wrap;align-items:stretch;gap:6px}
+.ai-inbox-row__evidence-list article{display:flex;align-items:center;flex-wrap:wrap;gap:5px 10px;width:auto;max-width:100%;padding:5px 8px;border-radius:7px}
+.ai-inbox-row__evidence-list article>span{order:2;font-size:.64rem}
+.ai-inbox-row__evidence-list article>strong{order:1;font-size:.73rem;max-width:290px}
+.ai-inbox-row__evidence-list article>q{order:3;max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ai-inbox-row__evidence-list article>span+strong{margin-left:0}
+.ai-inbox-row__evidence-list article button{order:4;min-height:25px;padding:3px 7px}
+.ai-inbox-row__more-evidence summary{cursor:pointer;color:#685394;font-size:.68rem;padding:3px 0}
+.ai-inbox-row__more-evidence>div{padding:4px 8px;font-size:.67rem;color:var(--muted)}
+.ai-inbox-row__routing{margin-top:8px;padding-top:8px}
+@media(max-width:750px){.ai-inbox-row{grid-template-columns:22px minmax(0,1fr);gap:8px;padding:9px}.ai-inbox-row__decision{grid-column:2;display:flex;align-items:center;justify-items:start;flex-wrap:wrap}.ai-inbox-row__evidence-list article{width:100%}.ai-inbox-row__meta{gap:4px}}
