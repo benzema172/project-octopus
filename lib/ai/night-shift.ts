@@ -2,6 +2,7 @@ import "server-only";
 
 import { geminiGenerate, loadAiWorkspacePolicy } from "@/lib/ai/control-plane";
 import { indexWorkspaceBrain } from "@/lib/ai/brain-retrieval";
+import { refreshContinuousBrain } from "@/lib/ai/brain-continuous";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 function outputText(payload: Record<string, unknown>) {
@@ -24,7 +25,8 @@ export async function runOctopusNightShift(input: { workspaceId: string; referen
     completed_at: null
   }, { onConflict: "workspace_id,briefing_date" });
 
-  const brainIndex = await indexWorkspaceBrain({ workspaceId: input.workspaceId, limit: 40 }).catch((error) => ({ indexed: 0, failed: 1, error: error instanceof Error ? error.message : String(error) }));
+  const brainCycle = await refreshContinuousBrain({workspaceId:input.workspaceId,referenceDate});
+  const brainIndex = brainCycle.documents;
   const dayStart = `${referenceDate}T00:00:00.000Z`;
 
   const [
@@ -80,7 +82,10 @@ export async function runOctopusNightShift(input: { workspaceId: string; referen
     fleetRisks: highRiskFleet.slice(0, 40),
     financialSignals: financialSignals.slice(0, 40),
     autonomousActions,
-    brainIndex
+    brainIndex,
+    brainFeedback:brainCycle.feedback,
+    agentCouncil:brainCycle.council,
+    externalResearch: {pendingCandidates:brainCycle.research.candidates, warnings:brainCycle.research.failures.slice(0,3)}
   };
 
   let summary = `Octopus Night Shift: ${decisionsRequired} decyzji, ${risksFound} sygnałów ryzyka, ${autonomousActions} wykonanych bezpiecznych działań.`;
@@ -130,5 +135,5 @@ export async function runOctopusNightShift(input: { workspaceId: string; referen
     payload: { decisionsRequired, autonomousActions, risksFound, brainIndex }
   }).then(() => undefined);
 
-  return { skipped: false, status, summary, decisionsRequired, autonomousActions, risksFound, brainIndex, model: modelName };
+  return { skipped: false, status, summary, decisionsRequired, autonomousActions, risksFound, brainIndex, brainCycle, model: modelName };
 }
