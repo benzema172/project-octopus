@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { AlertTriangle, Check, Clock3, Eye, FileCheck2, LoaderCircle, RotateCcw, UserRoundCheck, X } from "lucide-react";
 import { DOCUMENT_DESTINATIONS, documentCategoryLabel, normalizeDocumentCategory } from "@/lib/documents/classification";
 import type { AiInboxItem, AiInboxProjectOption } from "@/lib/data/operations";
@@ -23,18 +24,21 @@ export function AiInbox({
   workspaceId,
   projects = [],
   currentUserId,
-  activeOnly = false
+  activeOnly = false,
+  controlCenter = false
 }: {
   items: AiInboxItem[];
   workspaceId?: string;
   projects?: AiInboxProjectOption[];
   currentUserId?: string;
   activeOnly?: boolean;
+  controlCenter?: boolean;
 }) {
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("all");
   const [message, setMessage] = useState<string | null>(null);
   const [corrections, setCorrections] = useState<Record<string, DocumentCorrection>>({});
   const [onlyMine, setOnlyMine] = useState(false);
+  const [controlFilter, setControlFilter] = useState<"attention"|"review"|"error"|"processing">("attention");
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const scopedItems = useMemo(
@@ -42,7 +46,13 @@ export function AiInbox({
     [activeOnly, items]
   );
   const tabs = activeOnly ? TABS.filter((item) => item.key !== "ready" && item.key !== "rejected") : TABS;
-  const filtered = useMemo(() => scopedItems.filter((item) => (tab === "all" || item.status === tab) && (!onlyMine || item.assignedTo === currentUserId)), [currentUserId, onlyMine, scopedItems, tab]);
+  const controlItems = useMemo(() => scopedItems.filter(item => item.status !== "ready" && item.status !== "rejected"), [scopedItems]);
+  const historyItems = useMemo(() => scopedItems.filter(item => item.status === "ready" || item.status === "rejected"), [scopedItems]);
+  const filtered = useMemo(() => (controlCenter ? controlItems.filter(item =>
+    (controlFilter === "attention" || (controlFilter === "processing" ? ["new","processing"].includes(item.status) : item.status === controlFilter)) &&
+    (!onlyMine || item.assignedTo === currentUserId)
+  ) : scopedItems.filter(item => (tab === "all" || item.status === tab) && (!onlyMine || item.assignedTo === currentUserId))),
+    [controlCenter,controlFilter,controlItems,currentUserId,onlyMine,scopedItems,tab]);
 
   function documentCorrection(item: AiInboxItem): DocumentCorrection {
     return corrections[item.id] ?? {
@@ -142,7 +152,11 @@ export function AiInbox({
 
   return (
     <section className="ai-inbox">
-      <div className="ai-inbox__tabs" role="tablist" aria-label="Statusy Skrzynki AI">
+      {controlCenter ? <div className="ai-inbox__tabs" role="tablist" aria-label="Filtry spraw wymagających uwagi">
+        {([{key:"attention",label:"Wymagają uwagi"},{key:"review",label:"Decyzje"},{key:"error",label:"Błędy"},{key:"processing",label:"W toku"}] as const).map(option => <button key={option.key} type="button" role="tab"
+          aria-selected={controlFilter===option.key} onClick={()=>setControlFilter(option.key)}>{option.label}
+          <span>{controlItems.filter(item => option.key==="attention" || (option.key==="processing" ? ["new","processing"].includes(item.status) : item.status===option.key)).length}</span></button>)}
+      </div> : <div className="ai-inbox__tabs" role="tablist" aria-label="Statusy Skrzynki AI">
         {tabs.map((item) => {
           const count = item.key === "all" ? scopedItems.length : scopedItems.filter((entry) => entry.status === item.key).length;
           return <button key={item.key} type="button" role="tab" onClick={() => setTab(item.key)} aria-selected={tab === item.key}>{item.label}<span>{count}</span></button>;
@@ -151,7 +165,7 @@ export function AiInbox({
       </div>
       {message ? <p className="action-message">{message}</p> : null}
       <div className="ai-inbox__list">
-        {filtered.length === 0 ? <div className="empty-state"><FileCheck2 size={26} /><strong>{activeOnly ? "Brak aktywnych plików" : "Brak elementów w tym stanie"}</strong><span>{activeOnly ? "Po wrzuceniu pliku zobaczysz tutaj jego bieżący stan aż do zatwierdzenia lub odrzucenia." : "Skrzynka pokaże dokumenty, importy, zmiany i zdarzenia wymagające decyzji."}</span></div> : null}
+        {filtered.length === 0 ? <div className="empty-state"><FileCheck2 size={26} /><strong>{controlCenter ? "Brak spraw wymagających interwencji" : activeOnly ? "Brak aktywnych plików" : "Brak elementów w tym stanie"}</strong><span>{controlCenter ? "Zakończone analizy znajdziesz w historii poniżej. Dokumenty do przypisania pozostają w Dokumentach → Do weryfikacji." : activeOnly ? "Po wrzuceniu pliku zobaczysz tutaj jego bieżący stan aż do zatwierdzenia lub odrzucenia." : "Skrzynka pokaże dokumenty, importy, zmiany i zdarzenia wymagające decyzji."}</span></div> : null}
         {filtered.map((item) => {
           const correction = item.entityType === "document" ? documentCorrection(item) : null;
           const canWrite = item.canWrite !== false;
@@ -166,7 +180,7 @@ export function AiInbox({
               <h3>{item.entityType === "document" && workspaceId && normalizeDocumentCategory(item.category) === "invoice" ?
                 <InvoiceQuickPreview workspaceId={workspaceId} domain="finance" documentId={item.id}>{item.title}</InvoiceQuickPreview>
                 : item.title}</h3>{item.status !== "ready" && item.detail ? <p className="ai-inbox-row__description">{item.detail}</p> : null}
-              {item.entityType === "document" && item.status === "review" && correction ? (
+              {item.entityType === "document" && item.status === "review" && correction && !(controlCenter && normalizeDocumentCategory(item.category) === "invoice") ? (
                 <div className="ai-inbox-row__routing">
                   <label>
                     <span>Kategoria docelowa{item.categoryLocked ? " · zablokowana przy wysyłaniu" : ""}</span>
@@ -208,7 +222,7 @@ export function AiInbox({
                   </label>
                 </div>
               ) : null}
-              {item.entityType === "document" && item.evidence?.length ? (
+              {item.entityType === "document" && item.evidence?.length && !controlCenter ? (
                 <div className="ai-inbox-row__evidence">
                   <div className="ai-inbox-row__evidence-list">
                     {item.evidence.slice(0, 2).map((evidence, index) => {
@@ -250,12 +264,24 @@ export function AiInbox({
               {item.confidence != null ? <small>Pewność AI: {Math.round(item.confidence * 100)}%</small> : null}
               {item.reviewDueAt && item.status !== "ready" ? <small className={item.overdue ? "ai-inbox-row__overdue" : undefined}><Clock3 size={13} /> {item.overdue ? "Po SLA · " : "SLA · "}{new Date(item.reviewDueAt).toLocaleString("pl-PL")}{item.escalationLevel ? ` · eskalacja ${item.escalationLevel}` : ""}</small> : null}
               {item.entityType === "document" && item.status === "review" && canWrite && (!item.assignedTo || item.assignedTo === currentUserId || canApprove) ? <button type="button" className="secondary-button" onClick={() => triage(item, item.assignedTo === currentUserId ? "release" : "claim")} disabled={pending}>{item.assignedTo === currentUserId ? "Zwolnij" : item.assignedTo ? "Przejmij" : "Przypisz do mnie"}</button> : null}
-              {item.status === "review" && canApprove ? <div><button type="button" className="approve-button" onClick={() => decide(item, "approve")} disabled={pending}><Check size={15} />Zatwierdź</button><button type="button" className="reject-button" onClick={() => decide(item, "reject")} disabled={pending}><X size={15} />Odrzuć</button></div> : null}
+              {controlCenter && item.entityType === "document" && item.status === "review" && normalizeDocumentCategory(item.category) === "invoice" && workspaceId ? <Link className="secondary-button" href={`/workspace/companies/${workspaceId}/documents?tab=review`}>Otwórz weryfikację faktury</Link> : null}
+              {item.status === "review" && canApprove && !(controlCenter && item.entityType === "document" && normalizeDocumentCategory(item.category) === "invoice") ? <div><button type="button" className="approve-button" onClick={() => decide(item, "approve")} disabled={pending}><Check size={15} />Zatwierdź</button><button type="button" className="reject-button" onClick={() => decide(item, "reject")} disabled={pending}><X size={15} />Odrzuć</button></div> : null}
               {item.status === "error" && item.entityType === "document" && canWrite ? <button type="button" className="secondary-button" onClick={() => retry(item)} disabled={pending}><RotateCcw size={15} />Ponów z kolejki</button> : null}
             </div>
           </article>
         );})}
       </div>
+      {controlCenter && !activeOnly ? <details className="ai-control-history">
+        <summary>Historia pracy AI <span>{historyItems.length} zakończonych lub odrzuconych</span></summary>
+        <div className="ai-control-history__list">
+          {historyItems.length ? historyItems.map(item => <div className="ai-control-history__row" key={`${item.entityType}-${item.id}`}>
+            <span className={`status-chip status-chip--${item.status}`}>{STATUS_LABEL[item.status]}</span>
+            <strong title={item.title}>{item.title}</strong>
+            <small>{documentCategoryLabel(item.category)} · {new Date(item.createdAt).toLocaleDateString("pl-PL")}</small>
+            {item.entityType === "document" && workspaceId ? <Link href={`/workspace/companies/${workspaceId}/documents?tab=archive`}>Archiwum</Link> : null}
+          </div>) : <p>Brak zakończonych operacji w dostępnej historii.</p>}
+        </div>
+      </details> : null}
     </section>
   );
 }
