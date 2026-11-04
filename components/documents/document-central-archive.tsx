@@ -92,7 +92,7 @@ function normalize(value: unknown) {
     .toLocaleLowerCase("pl");
 }
 
-function moduleForDocument(document: DocumentSummary): Exclude<ArchiveTabId, "all" | "review" | "trash" | "fuel"> {
+function moduleForDocument(document: DocumentSummary): Exclude<ArchiveTabId, "all" | "review" | "archive" | "completed" | "trash" | "fuel"> {
   const category = normalize(document.flow?.category ?? document.category);
   if (["invoice", "finance", "payment", "cost"].includes(category)) return "finance";
   if (["warehouse", "delivery note", "delivery_note", "stock", "material"].includes(category)) return "warehouse";
