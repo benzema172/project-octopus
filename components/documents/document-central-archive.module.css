@@ -398,3 +398,17 @@
  .archiveGridDecision .details{order:-1}
  .archiveGridDecision .list{max-height:240px}
 }
+
+/* Keep archive triage visually subordinate to the invoice decision. */
+.archiveGridDecision{grid-template-columns:minmax(190px,.53fr) minmax(0,2.8fr)}
+.archiveGridDecision .list .rowInline{grid-template-columns:24px minmax(0,1fr) 15px;gap:7px}
+.archiveGridDecision .list .rowState .stage,.archiveGridDecision .list .rowState>small{display:none}
+.archiveGridDecision .list [aria-label^="Zarządzanie dokumentem"] > [class*="actions"]{display:none}
+.archiveGridDecision .list .rowBody strong{font-size:11px}
+.decisionHeader{padding:8px 10px}
+.decisionHeader .kicker{display:none}
+.fileTools{border-top:1px solid #edf0f5;padding-top:8px}
+.fileTools summary{cursor:pointer;font-size:10px;color:#7c879a;overflow-wrap:anywhere}
+.fileTools[open]{display:grid;gap:9px}
+@media(max-width:1200px){.archiveGridDecision{grid-template-columns:minmax(190px,.55fr) minmax(0,2fr)}}
+@media(max-width:850px){.archiveGridDecision{grid-template-columns:minmax(0,1fr)}}
