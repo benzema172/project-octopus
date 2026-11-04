@@ -322,7 +322,7 @@ export function DocumentCentralArchive({
           </div>
 
           {tab === "review" ? <div className={styles.decisionHeader}>
-            <div><strong>Do przypisania: {filteredDocuments.length}</strong><small>Wybierz fakturę, inwestycję i zapisz.</small></div>
+            <div><strong>Do przypisania: {filteredDocuments.length}</strong><small>AI rozpoznaje dokumenty. Wybierz inwestycję i zapisz.</small></div>
             <div className={styles.decisionFilters}>
               <button type="button" className={decisionListFilter==="needed"?styles.activeFilter:undefined}
                 onClick={()=>setDecisionListFilter("needed")}>Do decyzji</button>
