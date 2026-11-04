@@ -3038,3 +3038,31 @@ button:disabled {
 .ai-control-history__row>a{font-size:.73rem;color:var(--green);font-weight:700}
 @media(max-width:900px){.co-ai-control-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.co-ai-control-stats article{padding:10px}.ai-control-history__row>small{display:none}.ai-control-history__row{gap:6px}}
+
+
+/* Octopus Brain quality ledger, curated knowledge and agent supervision */
+.brain-learning{display:grid;gap:10px;margin:8px 0 14px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:13px}
+.brain-learning__head{display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap}
+.brain-learning__head strong{font-size:.9rem;color:var(--ink)}
+.brain-learning__head p{font-size:.72rem;color:var(--muted);margin:2px 0 0}
+.brain-learning__head>span{font-size:.68rem;color:var(--quiet)}
+.brain-learning__stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.brain-learning__stats article{padding:10px;border:1px solid var(--line);background:var(--panel-2);border-radius:9px;display:grid;gap:4px;min-width:0}
+.brain-learning__stats article span{font-size:.69rem;color:var(--muted)}
+.brain-learning__stats article strong{font-size:1.25rem;color:var(--ink);font-variant-numeric:tabular-nums}
+.brain-learning__stats article small{font-size:.64rem;color:var(--quiet)}
+.brain-learning__details{border-top:1px solid var(--line);padding-top:8px}
+.brain-learning__details summary{cursor:pointer;color:var(--ink);font-size:.75rem;font-weight:650}
+.brain-learning__metrics{padding:8px;color:var(--muted);font-size:.72rem}
+.brain-learning__metrics p{margin:5px 0}
+.brain-learning__notice{font-size:.72rem;color:var(--muted)}
+.brain-learning__sources{display:grid;gap:6px;padding-top:8px}
+.brain-learning__sources article{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:9px}
+.brain-learning__sources article>div:first-child{display:grid;gap:4px;min-width:0}
+.brain-learning__sources strong{font-size:.74rem}
+.brain-learning__sources small{color:var(--muted);font-size:.66rem}
+.brain-learning__sources a{color:var(--green);font-size:.7rem;font-weight:650}
+.brain-learning__sources article>div:last-child{display:flex;flex-wrap:wrap;gap:5px;flex:0 0 auto}
+.brain-learning__sources button{cursor:pointer;border:1px solid var(--line-strong);border-radius:7px;background:#fff;padding:6px 8px;font-size:.67rem}
+.brain-learning__sources button:disabled{opacity:.6}
+@media(max-width:850px){.brain-learning__stats{grid-template-columns:repeat(2,minmax(0,1fr))}.brain-learning__sources article{align-items:start;flex-direction:column}}
