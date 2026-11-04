@@ -30,6 +30,8 @@ export function DocumentDecisionCenter({workspaceId,documentId,versionId,project
  const [busy,setBusy]=useState(false);
  const [target,setTarget]=useState<Scope>("");
  const [investment,setInvestment]=useState("");
+ const [materialTarget,setMaterialTarget]=useState<"project"|"inventory"|"none">("project");
+ const [materialInvestment,setMaterialInvestment]=useState("");
  const [preview,setPreview]=useState<string|null>(null);
  useEffect(()=>{
   const controller=new AbortController();
@@ -43,6 +45,7 @@ export function DocumentDecisionCenter({workspaceId,documentId,versionId,project
     setData(body);
     const project=body.aiSuggestion.trustworthy?body.aiSuggestion.projectId:null;
     setTarget(project?"project":"");setInvestment(project??"");
+    setMaterialTarget(project?"project":"inventory");setMaterialInvestment(project??"");
     const initial:Record<string,Part[]>={};
     body.lines.forEach(line=>{
       const old=body.allocations.filter(a=>a.source_line_id===line.id&&a.allocation_scope!=="unassigned");
@@ -97,6 +100,13 @@ export function DocumentDecisionCenter({workspaceId,documentId,versionId,project
     materialScope:target==="project"?"project":target==="inventory"?"inventory":"none",
     materialProjectId:target==="project"?investment:""}))])));
  };
+ const changeMaterialsAll=()=>{
+  if(!data||(materialTarget==="project"&&!materialInvestment))return;
+  setParts(prev=>Object.fromEntries(data.lines.map(l=>[l.id,(prev[l.id]??[]).map(p=>({...p,
+    materialScope:l.quantity!=null&&l.quantity>0?materialTarget:"none",
+    materialProjectId:l.quantity!=null&&l.quantity>0&&materialTarget==="project"?materialInvestment:""
+  }))])));
+ };
  async function save(){
   if(!data||!enabled||busy)return;
   setBusy(true);setError(null);
@@ -148,6 +158,20 @@ export function DocumentDecisionCenter({workspaceId,documentId,versionId,project
        {data.type==="purchase_invoice"?<button type="button" onClick={changeAll} disabled={!target||(target==="project"&&!investment)}>
         Zastosuj do wszystkich</button>:null}
       </div>
+    </div>:null}
+    {data.type==="purchase_invoice"&&data.lines.some(l=>l.quantity!=null&&l.quantity>0)?<div className={styles.bulk}>
+      <b>Gdzie trafią towary i materiały? <span className={styles.hint}>Niezależnie od przypisania kosztów.</span></b>
+      <div className={styles.controls}>
+        <select aria-label="Zbiorcze przeznaczenie materiałów" value={materialTarget} onChange={e=>setMaterialTarget(e.target.value as "project"|"inventory"|"none")}>
+          <option value="project">Na inwestycję</option><option value="inventory">Do magazynu centralnego</option><option value="none">Nie dotyczy / usługa</option>
+        </select>
+        {materialTarget==="project"?<select aria-label="Inwestycja dla wszystkich materiałów" value={materialInvestment} onChange={e=>setMaterialInvestment(e.target.value)}>
+          <option value="">Wybierz inwestycję dla materiałów…</option>
+          {data.projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>:null}
+        <button type="button" onClick={changeMaterialsAll} disabled={!canDecide||(materialTarget==="project"&&!materialInvestment)}>Przypisz materiały wszystkim pozycjom</button>
+      </div>
+      <small className={styles.hint}>Poniżej możesz zmienić inwestycję osobno przy każdym towarze albo podzielić pozycję.</small>
     </div>:null}
     {data.type==="purchase_invoice"?<div className={styles.lines}>
      {data.lines.map(l=><article className={styles.line} key={l.id}>
