@@ -40,19 +40,6 @@ const dateLabel = (value: unknown) => {
   return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat("pl-PL").format(date);
 };
 
-function visibleLines(lines: Row[], targetLineId: string | null) {
-  if (lines.length <= 8) return lines.map((line) => ({ kind: "line" as const, line }));
-  const found = lines.findIndex((line) => String(line.id) === targetLineId);
-  const targetIndex = found >= 0 ? found : 0;
-  const start = Math.max(0, targetIndex - 2);
-  const end = Math.min(lines.length, targetIndex + 3);
-  const result: Array<{ kind: "line"; line: Row } | { kind: "ellipsis"; key: string }> = [];
-  if (start > 0) result.push({ kind: "ellipsis", key: "before" });
-  for (let index = start; index < end; index += 1) result.push({ kind: "line", line: lines[index] });
-  if (end < lines.length) result.push({ kind: "ellipsis", key: "after" });
-  return result;
-}
-
 export function InvoiceQuickPreview({ workspaceId, domain, invoiceLineId, invoiceId, documentId, hoverOnly = false, invoiceNumber, stockItemId, children, className }: Props) {
   const anchorRef = useRef<HTMLSpanElement | null>(null);
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -161,7 +148,7 @@ export function InvoiceQuickPreview({ workspaceId, domain, invoiceLineId, invoic
           </section> : null}
           <div className={styles.summary}><div><small>Netto</small><strong>{money(invoice.net_amount, currency)}</strong></div><div><small>VAT</small><strong>{money(invoice.tax_amount, currency)}</strong></div><div><small>Brutto</small><strong>{money(invoice.gross_amount, currency)}</strong></div></div>
           <div className={styles.sheet}><div className={styles.sheetHead}><span>Lp.</span><span>Pozycja</span><span>Ilość</span><span>J.m.</span><span>Cena netto</span><span>Netto</span></div>
-            {renderedLines.map((entry) => entry.kind === "ellipsis" ? <div className={styles.ellipsis} key={entry.key}>… pozostałe pozycje faktury …</div> : <div className={`${styles.line} ${String(entry.line.id) === payload.targetLineId ? styles.target : ""}`} key={String(entry.line.id)}><span>{str(entry.line.line_number)}</span><span>{str(entry.line.description)}</span><span className={styles.num}>{num(entry.line.quantity)}</span><span>{str(entry.line.unit)}</span><span className={styles.num}>{money(entry.line.unit_price, currency)}</span><span className={styles.num}>{money(entry.line.net_amount, currency)}</span></div>)}
+            {renderedLines.map((entry) => <div className={`${styles.line} ${String(entry.line.id) === payload.targetLineId ? styles.target : ""}`} key={String(entry.line.id)}><span>{str(entry.line.line_number)}</span><span>{str(entry.line.description)}</span><span className={styles.num}>{num(entry.line.quantity)}</span><span>{str(entry.line.unit)}</span><span className={styles.num}>{money(entry.line.unit_price, currency)}</span><span className={styles.num}>{money(entry.line.net_amount, currency)}</span></div>)}
           </div>
           <div className={styles.source}>{payload.targetLineId ? "Żółty wiersz to dokładna pozycja faktury powiązana z tym towarem/zdarzeniem." : "Nie znaleziono jednoznacznego powiązania pozycji — pokazano kontekst faktury."}{sourcePage ? ` Źródło wskazuje stronę ${sourcePage}.` : ""}</div>
           <div className={styles.hint}>Pełny oryginał jest przewijany powyżej; poniżej znajdują się wszystkie rozpoznane pozycje. Kliknij „Oryginał”, aby otworzyć dokument w dużym widoku.</div>
