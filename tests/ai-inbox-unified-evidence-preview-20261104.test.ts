@@ -12,6 +12,16 @@ describe("AI Inbox shared evidence and invoice preview", () => {
     expect(data).toContain("modules: [proposal.module]");
     expect(data).toContain("evidence: evidenceByDocument.get(row.document_id) ?? []");
   });
+  it("keeps completed rows compact and displays repeated quote only when useful", () => {
+    const ui=read("components/brain/ai-inbox.tsx");
+    const styles=read("app/globals.css");
+    expect(ui).toContain('item.status !== "ready" && item.detail');
+    expect(ui).toContain('item.evidence.slice(0, 2)');
+    expect(ui).toContain('item.evidence.slice(2)');
+    expect(ui).toContain('evidence.quote.trim().toLocaleLowerCase("pl") !== evidence.title.trim().toLocaleLowerCase("pl")');
+    expect(styles).toContain(".ai-inbox-row__evidence-list{display:flex");
+    expect(styles).toContain(".ai-inbox-row__more-evidence");
+  });
   it("uses the same smart authenticated preview as the other invoice screens", () => {
     const inbox = read("components/brain/ai-inbox.tsx");
     expect(inbox).toContain("InvoiceQuickPreview");
