@@ -39,7 +39,7 @@ const ARCHIVE_TABS = new Set<ArchiveTabId>([
 ]);
 
 function normalizeArchiveTab(value: string | undefined): ArchiveTabId {
-  return value && ARCHIVE_TABS.has(value as ArchiveTabId) ? value as ArchiveTabId : "all";
+  return value && ARCHIVE_TABS.has(value as ArchiveTabId) ? value as ArchiveTabId : "review";
 }
 
 async function safeWorkspaceDocumentsPage(
