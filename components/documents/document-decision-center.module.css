@@ -7,3 +7,29 @@
  .frame{height:340px}
  .lines{max-height:450px}
 }
+
+/* Compact decision-first flow. Advanced split and finance/material separation remain opt-in. */
+.compactHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.compactHeader>div{display:grid;gap:2px}
+.compactHeader strong{font-size:14px;color:#253047}
+.compactHeader small{font-size:10px;color:#778396}
+.compactHeader>span{font-size:11px;color:#47536a;font-weight:700}
+.primaryRoute{display:grid;gap:7px;padding:12px;border:1px solid #ded6f4;border-radius:10px;background:#faf8ff}
+.primaryRoute label{font-size:12px;font-weight:800;color:#44316b}
+.primaryRoute select,.lineDestination{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:white;color:#27344a;font:inherit;font-size:12px;min-width:0}
+.primaryRoute select:focus-visible,.lineDestination:focus-visible{outline:2px solid #9e80e9;outline-offset:1px}
+.primaryRoute small{font-size:10px;color:#738095}
+.aiHint{font-size:10px;color:#326449;margin:0}
+.simpleSummary{display:flex;gap:10px;align-items:center;justify-content:space-between;font-size:11px;color:#64748b}
+.simpleSummary strong{color:#28384c}
+.lineDestination{margin-top:1px}
+.lineAdvanced{border-top:1px solid #edf0f5;padding-top:7px}
+.lineAdvanced summary,.extraOptions summary{cursor:pointer;color:#69508d;font-weight:650;font-size:10px}
+.lineAdvanced[open]{display:grid;gap:9px}
+.lineAdvanced>button{justify-self:start;display:flex;gap:5px;align-items:center;border:0;background:none;color:#643ea1;font-size:11px;cursor:pointer}
+.extraOptions{border-top:1px solid #e8ebf0;padding-top:8px}
+.extraOptions p{font-size:10px;color:#7b8596}
+.extraOptions[open]{display:grid;gap:8px}
+.openSource{display:flex;justify-content:flex-start;align-items:center;gap:9px;font-size:11px;color:#687388}
+.openSource a{font-size:11px;color:#6440ad;font-weight:750}
+@media(max-width:700px){.compactHeader{align-items:flex-start}.simpleSummary{flex-wrap:wrap}.footer{align-items:stretch}}
