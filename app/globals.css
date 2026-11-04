@@ -3066,3 +3066,10 @@ button:disabled {
 .brain-learning__sources button{cursor:pointer;border:1px solid var(--line-strong);border-radius:7px;background:#fff;padding:6px 8px;font-size:.67rem}
 .brain-learning__sources button:disabled{opacity:.6}
 @media(max-width:850px){.brain-learning__stats{grid-template-columns:repeat(2,minmax(0,1fr))}.brain-learning__sources article{align-items:start;flex-direction:column}}
+
+
+.brain-learning__refresh{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.brain-learning__refresh span{font-size:.67rem;color:var(--muted)}
+.brain-learning__refresh button{font-size:.7rem;border:1px solid #8b68c9;color:#63409f;background:#faf7ff;border-radius:7px;padding:6px 10px;cursor:pointer}
+.brain-learning__refresh button:disabled{opacity:.5;cursor:wait}
+.brain-learning__error{font-size:.72rem;color:#aa3c34;background:#fff3ef;border:1px solid #f0c9bf;border-radius:7px;padding:8px;margin:0}
