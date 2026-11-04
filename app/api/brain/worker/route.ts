@@ -266,6 +266,17 @@ async function handleWorker(request: Request) {
         workspaceId:job.workspace_id,documentId:sourceVersion.document_id,versionId:job.document_version_id,
         category:analysis.effectiveCategory,routeOk:true,isInvoice,checks:invoiceChecks
       });
+      // Store a deduplicated source receipt, not model weights or an unreviewed fact.
+      // A transient Brain error must not turn a successfully processed document into a failed job.
+      await supabase.from("brain_learning_events").upsert({
+        workspace_id:job.workspace_id,document_id:sourceVersion.document_id,
+        event_key:"document:"+job.document_version_id,
+        origin:"document_ingest",outcome:"indexed",
+        context:{version_id:job.document_version_id,category:analysis.effectiveCategory}
+      },{onConflict:"workspace_id,event_key",ignoreDuplicates:true})
+        .then(({error})=>{if(error)operationalLog("warn",{event:"brain.document_receipt_failed",
+          route:"/api/brain/worker",method:request.method,module:"documents",
+          workspaceId:job.workspace_id,requestId,errorMessage:error.message});});
       results.push({ jobId: job.id, versionId: job.document_version_id, status: "succeeded" });
       operationalLog("info", {
         event: "worker.job_succeeded",
