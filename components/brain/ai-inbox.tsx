@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Clock3, Eye, FileCheck2, LoaderCircle, RotateCcw, UserRoundCheck, X } from "lucide-react";
 import { DOCUMENT_DESTINATIONS, documentCategoryLabel, normalizeDocumentCategory } from "@/lib/documents/classification";
 import type { AiInboxItem, AiInboxProjectOption } from "@/lib/data/operations";
+import { InvoiceQuickPreview } from "@/components/documents/invoice-quick-preview";
 
 const TABS: Array<{ key: AiInboxItem["status"] | "all"; label: string }> = [
   { key: "all", label: "Wszystkie" }, { key: "new", label: "Nowe" }, { key: "processing", label: "Przetwarzane" },
@@ -162,7 +163,9 @@ export function AiInbox({
             </span>
             <div className="ai-inbox-row__body">
               <div className="ai-inbox-row__meta"><span>{item.subtitle}</span><span>{documentCategoryLabel(item.category)}</span>{item.channel ? <span>{item.channel}</span> : null}<span>{new Date(item.createdAt).toLocaleString("pl-PL")}</span></div>
-              <h3>{item.title}</h3><p>{item.detail}</p>
+              <h3>{item.entityType === "document" && workspaceId && normalizeDocumentCategory(item.category) === "invoice" ?
+                <InvoiceQuickPreview workspaceId={workspaceId} domain="finance" documentId={item.id}>{item.title}</InvoiceQuickPreview>
+                : item.title}</h3><p>{item.detail}</p>
               {item.entityType === "document" && item.status === "review" && correction ? (
                 <div className="ai-inbox-row__routing">
                   <label>
@@ -216,10 +219,20 @@ export function AiInbox({
                           ? `arkusz ${evidence.sheet}${evidence.row ? `, wiersz ${evidence.row}` : ""}`
                           : evidence.label || "źródło";
                       return <article key={`${evidence.module}-${index}`}>
-                        <span>{evidence.module} · {location}{evidence.confidence != null ? ` · ${Math.round(evidence.confidence * 100)}%` : ""}</span>
+                        <span>{(evidence.modules?.length ? evidence.modules : [evidence.module]).join(" + ")} · {location}{evidence.confidence != null ? ` · ${Math.round(evidence.confidence * 100)}%` : ""}</span>
                         <strong>{evidence.title}</strong>
                         {evidence.quote ? <q>{evidence.quote}</q> : null}
-                        {item.documentVersionId ? <button type="button" className="secondary-button" onClick={() => void previewEvidence(item, evidence.page)} disabled={pending}><Eye size={14}/>Pokaż źródło</button> : null}
+                        {item.documentVersionId ? (
+                          item.entityType === "document" && workspaceId && normalizeDocumentCategory(item.category) === "invoice" ?
+                            <InvoiceQuickPreview workspaceId={workspaceId} domain="finance" documentId={item.id} hoverOnly>
+                              <button type="button" className="secondary-button" onClick={() => void previewEvidence(item, evidence.page)} disabled={pending}>
+                                <Eye size={14}/>Podgląd · otwórz źródło
+                              </button>
+                            </InvoiceQuickPreview> :
+                            <button type="button" className="secondary-button" onClick={() => void previewEvidence(item, evidence.page)} disabled={pending}>
+                              <Eye size={14}/>Pokaż źródło
+                            </button>
+                        ) : null}
                       </article>;
                     })}
                   </div>
