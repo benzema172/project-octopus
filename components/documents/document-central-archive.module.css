@@ -386,3 +386,15 @@
 .technicalDetails summary{font-size:11px;font-weight:700;color:#66758a;cursor:pointer}
 .technicalDetails[open]>section,.technicalDetails[open]>.metaGrid{margin-top:10px}
 @media(max-width:1200px){.archiveGridDecision{grid-template-columns:minmax(0,1fr)}}
+
+/* Keep the active invoice and its item editor visible without scrolling past the queue. */
+.archiveGridDecision .list{max-height:min(76vh,850px)}
+.archiveGridDecision .details{min-width:0;align-self:start}
+@media (max-width:1200px){
+ .archiveGridDecision{grid-template-columns:minmax(220px,.72fr) minmax(0,2fr)}
+}
+@media (max-width:850px){
+ .archiveGridDecision{grid-template-columns:minmax(0,1fr)}
+ .archiveGridDecision .details{order:-1}
+ .archiveGridDecision .list{max-height:240px}
+}
