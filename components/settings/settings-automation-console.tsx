@@ -98,10 +98,11 @@ export function SettingsAutomationConsole({ workspaceId, integrations, rules, no
     <div className="settings-automation-console">
       {message ? <p className="action-message">{message}</p> : null}
 
-      <div className="control-dashboard-grid">
+      <details className="settings-automation-console__group">
+        <summary>Dodaj integrację lub regułę</summary>
+        <div className="control-dashboard-grid">
         <article className="module-panel">
           <div className="module-panel__heading"><PlugZap size={20} /><div><p className="eyebrow">Rejestr integracji</p><h2>Dodaj lub zaktualizuj połączenie</h2></div></div>
-          <p>To jest bezpieczny rejestr stanu i zakresu integracji. Klucze API i tokeny nie są zapisywane w tabelach biznesowych.</p>
           <form className="template-generator" onSubmit={submitIntegration}>
             <div className="form-row">
               <label>Typ integracji
@@ -134,7 +135,6 @@ export function SettingsAutomationConsole({ workspaceId, integrations, rules, no
 
         <article className="module-panel">
           <div className="module-panel__heading"><BellRing size={20} /><div><p className="eyebrow">Automatyczne kontrole</p><h2>Dodaj regułę alertu</h2></div></div>
-          <p>Reguła określa, czego system ma szukać i z jakim wyprzedzeniem. Przycisk kontroli poniżej uruchamia realny skan danych firmy.</p>
           <form className="template-generator" onSubmit={submitRule}>
             <label>Zdarzenie
               <select name="eventType" defaultValue="qualification_expiry" disabled={!canWrite}>
@@ -157,7 +157,8 @@ export function SettingsAutomationConsole({ workspaceId, integrations, rules, no
             <button className="primary-button" type="submit" disabled={pending || !canWrite}>{pending ? <LoaderCircle className="spin" size={16} /> : <BellRing size={16} />}Dodaj regułę</button>
           </form>
         </article>
-      </div>
+        </div>
+      </details>
 
       <section className="co-section">
         <div className="co-section-heading">
@@ -211,8 +212,8 @@ export function SettingsAutomationConsole({ workspaceId, integrations, rules, no
         </div>
       </section>
 
-      <section className="co-section">
-        <div className="co-section-heading"><div><p className="co-kicker">Historia alertów</p><h2>Ostatnie wykryte wyjątki</h2></div><strong>{notifications.filter((item) => !item.readAt).length} nieprzeczytanych</strong></div>
+      <details className="settings-automation-console__group">
+        <summary>Historia alertów ({notifications.filter((item) => !item.readAt).length} nieodczytanych)</summary>
         <div className="ops-simple-list">
           {notifications.map((notification) => (
             <div key={notification.id}>
@@ -228,7 +229,7 @@ export function SettingsAutomationConsole({ workspaceId, integrations, rules, no
           ))}
           {!notifications.length ? <p className="ops-simple-list__empty">Nie ma jeszcze alertów. Dodaj regułę i uruchom kontrolę.</p> : null}
         </div>
-      </section>
+      </details>
     </div>
   );
 }
