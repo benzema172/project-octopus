@@ -84,10 +84,10 @@ describe("Document Central Archive 5.5.0", () => {
     expect(upload).toContain("visibleDocuments.length > 0 || !isIntake");
   });
 
-  it("opens the first review document immediately while other archive tabs remain collapsible", () => {
+  it("keeps archive files collapsed until selected", () => {
     const archive = source("components/documents/document-central-archive.tsx");
     const css = source("components/documents/document-central-archive.module.css");
-    expect(archive).toContain('activeTab === "review" ? documents.find(requiresReview)?.id ?? null : null');
+    expect(archive).toContain('useState<string | null>(null)');
     expect(archive).toContain('data-documents-collapsed-default="1"');
     expect(archive).toContain('setSelectedId(isSelected ? null : document.id)');
     expect(archive).toContain('aria-expanded={isSelected}');
