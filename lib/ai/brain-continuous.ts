@@ -27,7 +27,7 @@ async function captureHumanFeedback(workspaceId: string) {
    .eq("workspace_id",workspaceId).order("created_at",{ascending:false}).limit(250),
   db.from("project_match_feedback")
    .select("id,document_id,proposed_project_id,selected_project_id,outcome,decided_at")
-   .eq("workspace_id",workspaceId).order("decided_at",{ascending:false}).limit(250)
+   .eq("workspace_id",workspaceId).not("selected_project_id","is",null).order("decided_at",{ascending:false}).limit(250)
  ]);
  if (reviews.error) throw new Error(reviews.error.message);
  if (matches.error) throw new Error(matches.error.message);
