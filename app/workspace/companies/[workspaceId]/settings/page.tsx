@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Database, PlugZap, ShieldCheck, SlidersHorizontal, UsersRound } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Database, PlugZap, ShieldCheck, UsersRound } from "lucide-react";
 import { notFound } from "next/navigation";
 import { updateCompanyAction } from "@/app/actions";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
@@ -78,12 +78,11 @@ export default async function CompanySettingsPage({ params, searchParams }: Prop
   const updateAction = updateCompanyAction.bind(null, workspace.id);
 
   return (
-    <main className="co-page">
-      <header className="co-page-heading">
+    <main className="co-page co-settings-compact">
+      <header className="co-page-heading co-page-heading--compact">
         <div>
           <p className="co-kicker">Ustawienia</p>
           <h1>Ustawienia firmy</h1>
-          <p>Dane organizacji, kontrola dostępu, integracje, alerty i rzeczywisty stan infrastruktury Project Octopus.</p>
         </div>
         {query.saved === "1" ? <span className="co-saved-badge"><CheckCircle2 size={16} /> Zapisano</span> : null}
       </header>
@@ -91,8 +90,17 @@ export default async function CompanySettingsPage({ params, searchParams }: Prop
       {!schemaReady ? <div className="co-schema-warning"><AlertTriangle size={16} /> Profil firmy wymaga zastosowania najnowszej migracji Supabase. Strona pozostaje dostępna, ale zapis danych profilu jest zablokowany.</div> : null}
       {!executionReady ? <div className="co-schema-warning"><AlertTriangle size={16} /> Warstwa bezpieczeństwa i automatyzacji nie jest jeszcze kompletna w bazie. Role podstawowe są widoczne, ale integracje i alerty pozostają tylko do odczytu.</div> : null}
 
-      <section className="co-section">
-        <div className="co-section-heading"><div><p className="co-kicker">Dane podstawowe</p><h2>Profil przedsiębiorstwa</h2></div></div>
+      <div className="co-settings-compact__overview" aria-label="Podsumowanie ustawień">
+        <span><UsersRound size={14}/>{members.length} użytkowników</span>
+        <span><ShieldCheck size={14}/>{grants.length} ról</span>
+        <span><PlugZap size={14}/>{activeIntegrations} integracji</span>
+        <span><AlertTriangle size={14}/>{unreadNotifications} alertów</span>
+        {!executionReady || !schemaReady ? <strong>Wymagana konfiguracja</strong> : null}
+      </div>
+      <div className="co-settings-compact__sections">
+      <details className="co-settings-compact__group" id="company-profile">
+        <summary><span><strong>Profil firmy</strong><small>{workspace.name}{workspace.city ? " · " + workspace.city : ""}</small></span><span className="co-settings-compact__indicator">Edytuj</span></summary>
+        <div className="co-settings-compact__content">
         <form action={updateAction} className="co-settings-form">
           <label className="co-field co-field--wide"><span>Nazwa firmy *</span><input name="name" defaultValue={workspace.name} required minLength={2} /></label>
           <label className="co-field"><span>NIP</span><input name="tax_id" defaultValue={workspace.tax_id ?? ""} /></label>
@@ -104,33 +112,25 @@ export default async function CompanySettingsPage({ params, searchParams }: Prop
           <label className="co-field"><span>E-mail</span><input name="email" type="email" defaultValue={workspace.email ?? ""} /></label>
           <label className="co-field"><span>Telefon</span><input name="phone" type="tel" defaultValue={workspace.phone ?? ""} /></label>
           <label className="co-field co-field--wide"><span>Osoba kontaktowa</span><input name="contact_person" defaultValue={workspace.contact_person ?? ""} /></label>
-          <label className="co-field co-field--wide"><span>Notatka</span><textarea name="notes" rows={4} defaultValue={workspace.notes ?? ""} /></label>
+          <label className="co-field co-field--wide"><span>Notatka</span><textarea name="notes" rows={2} defaultValue={workspace.notes ?? ""} /></label>
           <div className="co-settings-form__actions"><button className="co-primary-button" type="submit" disabled={!schemaReady || !canWrite}>Zapisz dane firmy</button></div>
         </form>
-      </section>
-
-      <section className="co-settings-cards">
-        <article><UsersRound size={21} /><div><strong>Użytkownicy i uprawnienia</strong><p>{members.length} użytkowników · {grants.length} dodatkowych uprawnień domenowych.</p></div></article>
-        <article><PlugZap size={21} /><div><strong>Integracje</strong><p>{integrations.length} wpisów w rejestrze · {activeIntegrations} oznaczonych jako aktywne.</p></div></article>
-        <article><SlidersHorizontal size={21} /><div><strong>Automatyzacja</strong><p>{activeRules} aktywnych reguł · {unreadNotifications} nieprzeczytanych alertów.</p></div></article>
-      </section>
-
-      <MultiAiProviderSettings workspaceId={workspace.id} canWrite={canAdminAi} initialStatus={multiAiStatus} />
-
-      <section id="security-automation" className="section-band">
-        <div className="section-heading"><div><p className="eyebrow">Bezpieczeństwo i automatyzacja</p><h2>Kontrola dostępu, integracje i alerty operacyjne</h2></div><span className={`status-chip ${executionReady ? "status-chip--positive" : "status-chip--warning"}`}>{executionReady ? "Warstwa aktywna" : "Wymaga migracji"}</span></div>
-
-        <div className="live-domain-grid">
-          <article><UsersRound size={18} /><span>Użytkownicy</span><strong>{members.length}</strong><small>członków aktywnej firmy</small></article>
-          <article><ShieldCheck size={18} /><span>Role domenowe</span><strong>{grants.length}</strong><small>zakresy Finanse, HR, Inwestycje, Magazyn, Flota i inne</small></article>
-          <article><PlugZap size={18} /><span>Integracje</span><strong>{integrations.length}</strong><small>{activeIntegrations} aktywnych w rejestrze</small></article>
-          <article><AlertTriangle size={18} /><span>Alerty</span><strong>{unreadNotifications}</strong><small>{activeRules} aktywnych reguł kontroli</small></article>
         </div>
+      </details>
 
+      <details className="co-settings-compact__group" id="settings-ai">
+        <summary><span><strong>Dostawcy AI</strong><small>Gemini · Groq {multiAiStatus.groq.configured ? "aktywny" : "niepodłączony"} · Cloudflare {multiAiStatus.cloudflare.configured ? "aktywny" : "niepodłączony"}</small></span><span className="co-settings-compact__indicator">Konfiguruj</span></summary>
+        <div className="co-settings-compact__content">
+          <MultiAiProviderSettings workspaceId={workspace.id} canWrite={canAdminAi} initialStatus={multiAiStatus} />
+        </div>
+      </details>
+
+      <details id="security-automation" className="co-settings-compact__group">
+        <summary><span><strong>Użytkownicy i uprawnienia</strong><small>{members.length} użytkowników · {grants.length} dodatkowych ról</small></span><span className="co-settings-compact__indicator">Zarządzaj</span></summary>
+        <div className="co-settings-compact__content">
         <div className="control-dashboard-grid">
           <article className="module-panel role-grant-panel">
             <div className="module-panel__heading"><ShieldCheck size={19} /><div><p className="eyebrow">Zasada najmniejszych uprawnień</p><h2>Nadaj rolę domenową</h2></div></div>
-            <p>Możesz ograniczyć użytkownika do konkretnego obszaru i konkretnej inwestycji oraz osobno nadać odczyt, zapis, zatwierdzanie lub administrację.</p>
             <RoleGrantForm workspaceId={workspace.id} members={members.map((member) => ({ userId: member.user_id, role: member.role }))} projects={projects} />
           </article>
 
@@ -149,8 +149,13 @@ export default async function CompanySettingsPage({ params, searchParams }: Prop
           </article>
         </div>
 
+        </div>
+      </details>
+
+      <details className="co-settings-compact__group" id="settings-infrastructure">
+        <summary><span><strong>Infrastruktura</strong><small>Supabase · R2 · Gemini · KSeF</small></span><span className="co-settings-compact__indicator">Stan usług</span></summary>
+        <div className="co-settings-compact__content">
         <section className="co-section">
-          <div className="co-section-heading"><div><p className="co-kicker">Stan infrastruktury</p><h2>Co jest faktycznie skonfigurowane</h2></div></div>
           <div className="live-domain-grid">
             <article><Database size={18} /><span>Supabase</span><strong>{supabaseReady ? "Gotowy" : "Brak"}</strong><small>publiczny URL i klucz aplikacji</small></article>
             <article><Database size={18} /><span>Cloudflare R2</span><strong>{r2Ready ? "Gotowy" : "Brak"}</strong><small>bucket, endpoint i poświadczenia serwerowe</small></article>
@@ -158,7 +163,12 @@ export default async function CompanySettingsPage({ params, searchParams }: Prop
             <article><PlugZap size={18} /><span>KSeF</span><strong>{ksef?.status ?? "Nie skonfigurowano"}</strong><small>{ksef ? `${ksef.environment} · zakup ${ksef.inbound_enabled ? "on" : "off"} · sprzedaż ${ksef.sales_enabled ? "on" : "off"}` : "brak połączenia firmy"}</small></article>
           </div>
         </section>
+        </div>
+      </details>
 
+      <details className="co-settings-compact__group" id="settings-automation">
+        <summary><span><strong>Automatyzacja i alerty</strong><small>{activeRules} aktywnych reguł · {unreadNotifications} nieodczytanych</small></span><span className="co-settings-compact__indicator">Zarządzaj</span></summary>
+        <div className="co-settings-compact__content">
         <SettingsAutomationConsole
           workspaceId={workspace.id}
           integrations={integrations.map((item) => ({ id: item.id, integrationType: item.integration_type, displayName: item.display_name, status: item.status, scope: configurationScope(item.configuration), lastSyncAt: item.last_sync_at }))}
@@ -167,7 +177,9 @@ export default async function CompanySettingsPage({ params, searchParams }: Prop
           projects={projects}
           canWrite={canWrite && executionReady}
         />
-      </section>
+        </div>
+      </details>
+      </div>
     </main>
   );
 }
