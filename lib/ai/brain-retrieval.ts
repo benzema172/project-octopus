@@ -61,7 +61,24 @@ export async function searchBrainHybrid(input: {
     p_limit: Math.max(1, Math.min(60, input.limit ?? 20))
   });
   if (error) throw new Error(`Hybrid RAG nie powiódł się: ${error.message}`);
-  return ((data ?? []) as Array<{
+  // Prior corrections become grounded examples, never automatic financial instructions.
+  const phrase=input.query.trim().slice(0,120).replace(/[%_]/g,"");
+  const previous=phrase.length>=4
+   ? await db.from("project_match_feedback").select("id,selected_project_id,project_hint,outcome")
+       .eq("workspace_id",input.workspaceId).in("outcome",["confirmed","corrected"])
+       .ilike("project_hint","%"+phrase+"%")
+       .order("decided_at",{ascending:false}).limit(5)
+   : {data:[],error:null};
+  if(previous.error)console.warn("Octopus Brain: previous corrections unavailable",previous.error.message);
+  const memory=(previous.data??[]).filter(row=>row.selected_project_id&&
+    (!input.projectId||row.selected_project_id===input.projectId))
+    .map((row):BrainSource=>({
+      sourceType:"human_project_feedback",sourceId:String(row.id),projectId:String(row.selected_project_id),
+      title:"Zweryfikowany przykład przypisania",
+      context:"Użytkownik wcześniej przypisał wskazówkę: "+String(row.project_hint??"").slice(0,180),
+      category:"decision_memory",sourceLocator:{feedbackId:row.id,outcome:row.outcome},score:0.45
+    }));
+  const retrieved = ((data ?? []) as Array<{
     source_type: string; source_id: string; project_id: string | null; title: string; context: string;
     category: string; source_locator: Record<string, unknown> | null; score: number;
   }>).map((row): BrainSource => ({
@@ -74,6 +91,7 @@ export async function searchBrainHybrid(input: {
     sourceLocator: row.source_locator,
     score: Number(row.score ?? 0)
   }));
+  return [...retrieved,...memory].slice(0,Math.max(1,Math.min(input.limit??20,60)));
 }
 
 export async function indexWorkspaceBrain(input: { workspaceId: string; limit?: number }) {
