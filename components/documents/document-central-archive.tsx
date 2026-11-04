@@ -24,6 +24,7 @@ import { DocumentManagementControls } from "@/components/documents/document-mana
 import { FuelPurchaseInbox } from "@/components/documents/fuel-purchase-inbox";
 import { DocumentDecisionCenter } from "@/components/documents/document-decision-center";
 import { InvoiceQuickPreview } from "@/components/documents/invoice-quick-preview";
+import { InvoiceInlineAssign } from "@/components/documents/invoice-inline-assign";
 import { documentCategoryLabel } from "@/lib/documents/classification";
 import type { DocumentLibraryInsight } from "@/lib/documents/library-types";
 import type { AiInboxItem } from "@/lib/data/operations";
@@ -166,7 +167,7 @@ export function DocumentCentralArchive({
   const currentSearchParams = useSearchParams();
   const [tab, setTab] = useState<ArchiveTabId>(activeTab);
   const [query, setQuery] = useState(searchQuery);
-  const [selectedId, setSelectedId] = useState<string | null>(() => activeTab === "review" ? documents.find(requiresReview)?.id ?? null : null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [pendingFuelCount, setPendingFuelCount] = useState<number | null>(null);
@@ -372,6 +373,10 @@ export function DocumentCentralArchive({
                           {isSelected ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
                         </span>
                       </button>
+                      {tab === "review" && moduleId === "finance" ? <InvoiceInlineAssign
+                        workspaceId={workspaceId} documentId={document.id} projects={projects}
+                        canWrite={reviewByDocument.get(document.id)?.canWrite !== false}
+                        onAdvanced={() => setSelectedId(document.id)} /> : null}
                     </DocumentManagementControls>
                   );
                 })}
