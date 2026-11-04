@@ -23,6 +23,7 @@ import { DocumentOpenLink } from "@/components/documents/document-open-link";
 import { DocumentManagementControls } from "@/components/documents/document-management-controls";
 import { FuelPurchaseInbox } from "@/components/documents/fuel-purchase-inbox";
 import { DocumentDecisionCenter } from "@/components/documents/document-decision-center";
+import { InvoiceQuickPreview } from "@/components/documents/invoice-quick-preview";
 import { documentCategoryLabel } from "@/lib/documents/classification";
 import type { DocumentLibraryInsight } from "@/lib/documents/library-types";
 import type { AiInboxItem } from "@/lib/data/operations";
@@ -359,7 +360,7 @@ export function DocumentCentralArchive({
                       >
                         <span className={styles.fileIcon}><FileText size={16} aria-hidden="true" /></span>
                         <span className={styles.rowBody}>
-                          <strong>{document.name}</strong>
+                          <strong title={document.name}>{moduleId==="finance" ? <InvoiceQuickPreview workspaceId={workspaceId} domain="finance" documentId={document.id} hoverOnly>{document.name}</InvoiceQuickPreview> : document.name}</strong>
                           <small>{document.project_id ? projectNames.get(document.project_id) ?? "Inwestycja" : MODULE_LABELS[moduleId]} · {displayAiCategory(document)}</small>
                         </span>
                         <span className={styles.rowState}>
