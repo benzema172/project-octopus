@@ -32,6 +32,7 @@ export type AiInboxItem = {
   evidence?: Array<{
     title: string;
     module: string;
+    modules?: string[];
     quote: string;
     label: string;
     page: number | null;
@@ -140,23 +141,41 @@ export async function listDocumentAiInbox(workspaceId: string, documentIds?: str
   if (evidenceResult.error) console.error("Project Octopus: document-only AI Inbox evidence fallback", evidenceResult.error);
 
   const evidenceByDocument = new Map<string, NonNullable<AiInboxItem["evidence"]>>();
+  // Module proposals can cite exactly the same physical invoice text. Show the
+  // source once, but retain all downstream modules that rely on that evidence.
+  const seenEvidenceByDocument = new Map<string, Map<string, NonNullable<AiInboxItem["evidence"]>[number]>>();
   for (const proposal of evidenceResult.data ?? []) {
     const locator = proposal.source_locator && typeof proposal.source_locator === "object" ? proposal.source_locator : {};
     const quote = inboxEvidenceText(proposal.source_quote);
     const label = inboxEvidenceText(locator.label);
     if (!quote && !label) continue;
+    const page = inboxEvidenceNumber(locator.page);
+    const sheet = inboxEvidenceText(locator.sheet) || null;
+    const row = inboxEvidenceNumber(locator.row);
+    const dedupKey = JSON.stringify([
+      proposal.document_version_id, page, sheet, row,
+      proposal.title.trim().toLocaleLowerCase("pl"),
+      quote.toLocaleLowerCase("pl"), label.toLocaleLowerCase("pl")
+    ]);
+    const seen = seenEvidenceByDocument.get(proposal.document_id) ?? new Map();
+    const existing = seen.get(dedupKey);
+    if (existing) {
+      if (!existing.modules?.includes(proposal.module))
+        existing.modules = [...(existing.modules ?? [existing.module]), proposal.module];
+      continue;
+    }
     const current = evidenceByDocument.get(proposal.document_id) ?? [];
     if (current.length >= 4) continue;
-    current.push({
+    const evidence = {
       title: proposal.title,
       module: proposal.module,
-      quote,
-      label,
-      page: inboxEvidenceNumber(locator.page),
-      sheet: inboxEvidenceText(locator.sheet) || null,
-      row: inboxEvidenceNumber(locator.row),
+      modules: [proposal.module],
+      quote, label, page, sheet, row,
       confidence: proposal.confidence == null ? null : Number(proposal.confidence)
-    });
+    };
+    current.push(evidence);
+    seen.set(dedupKey, evidence);
+    seenEvidenceByDocument.set(proposal.document_id, seen);
     evidenceByDocument.set(proposal.document_id, current);
   }
 
@@ -269,23 +288,41 @@ export async function listAiInbox(workspaceId: string): Promise<AiInboxItem[]> {
   if (evidenceResult.error) console.error("Project Octopus: AI Inbox evidence fallback", evidenceResult.error);
 
   const evidenceByDocument = new Map<string, NonNullable<AiInboxItem["evidence"]>>();
+  // Module proposals can cite exactly the same physical invoice text. Show the
+  // source once, but retain all downstream modules that rely on that evidence.
+  const seenEvidenceByDocument = new Map<string, Map<string, NonNullable<AiInboxItem["evidence"]>[number]>>();
   for (const proposal of evidenceResult.data ?? []) {
     const locator = proposal.source_locator && typeof proposal.source_locator === "object" ? proposal.source_locator : {};
     const quote = inboxEvidenceText(proposal.source_quote);
     const label = inboxEvidenceText(locator.label);
     if (!quote && !label) continue;
+    const page = inboxEvidenceNumber(locator.page);
+    const sheet = inboxEvidenceText(locator.sheet) || null;
+    const row = inboxEvidenceNumber(locator.row);
+    const dedupKey = JSON.stringify([
+      proposal.document_version_id, page, sheet, row,
+      proposal.title.trim().toLocaleLowerCase("pl"),
+      quote.toLocaleLowerCase("pl"), label.toLocaleLowerCase("pl")
+    ]);
+    const seen = seenEvidenceByDocument.get(proposal.document_id) ?? new Map();
+    const existing = seen.get(dedupKey);
+    if (existing) {
+      if (!existing.modules?.includes(proposal.module))
+        existing.modules = [...(existing.modules ?? [existing.module]), proposal.module];
+      continue;
+    }
     const current = evidenceByDocument.get(proposal.document_id) ?? [];
     if (current.length >= 4) continue;
-    current.push({
+    const evidence = {
       title: proposal.title,
       module: proposal.module,
-      quote,
-      label,
-      page: inboxEvidenceNumber(locator.page),
-      sheet: inboxEvidenceText(locator.sheet) || null,
-      row: inboxEvidenceNumber(locator.row),
+      modules: [proposal.module],
+      quote, label, page, sheet, row,
       confidence: proposal.confidence == null ? null : Number(proposal.confidence)
-    });
+    };
+    current.push(evidence);
+    seen.set(dedupKey, evidence);
+    seenEvidenceByDocument.set(proposal.document_id, seen);
     evidenceByDocument.set(proposal.document_id, current);
   }
 
