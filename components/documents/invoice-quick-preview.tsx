@@ -54,7 +54,7 @@ export function InvoiceQuickPreview({ workspaceId, domain, invoiceLineId, invoic
   const place = useCallback(() => {
     const rect = anchorRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const width = Math.min(540, window.innerWidth - 24);
+    const width = Math.min(580, window.innerWidth - 24);
     const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
     const height = Math.min(680, window.innerHeight - 24);
     const preferBelow = rect.bottom + height + 8 <= window.innerHeight;
@@ -92,7 +92,7 @@ export function InvoiceQuickPreview({ workspaceId, domain, invoiceLineId, invoic
   }, [hasIdentity, load, place]);
   const hide = useCallback(() => {
     if (openTimer.current) clearTimeout(openTimer.current);
-    closeTimer.current = setTimeout(() => setOpen(false), 180);
+    closeTimer.current = setTimeout(() => setOpen(false), 420);
   }, []);
 
   useEffect(() => {
