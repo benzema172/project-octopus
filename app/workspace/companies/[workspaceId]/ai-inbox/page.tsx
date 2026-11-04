@@ -3,6 +3,8 @@ import { AlertTriangle } from "lucide-react";
 import { notFound } from "next/navigation";
 import { DomainAccessDenied } from "@/components/access/domain-access-denied";
 import { AiInbox } from "@/components/brain/ai-inbox";
+import { BrainLearningDashboard } from "@/components/brain/brain-learning-dashboard";
+import { getBrainLearningSnapshot } from "@/lib/data/brain-learning";
 import { requireCurrentUser } from "@/lib/auth";
 import {
   domainAccessPolicyAllows,
@@ -29,13 +31,17 @@ export default async function CompanyAiInboxPage({ params }: Props) {
     return <DomainAccessDenied workspaceId={workspace.id} area="Skrzynka AI" />;
   }
 
-  const [allItems, accessPolicy, projects] = await Promise.all([
+  const [allItems, accessPolicy, projects, brainSnapshot] = await Promise.all([
     listAiInbox(workspace.id).catch((error) => {
       console.error("Project Octopus: AI inbox fallback", error);
       return [];
     }),
     loadDomainAccessPolicy({ workspaceId: workspace.id, userId: user.id }),
-    listProjectsForWorkspace(user, workspace.id)
+    listProjectsForWorkspace(user, workspace.id),
+    getBrainLearningSnapshot(workspace.id).catch(error=>{
+      console.error("Project Octopus Brain monitoring fallback",error);
+      return null;
+    })
   ]);
 
   const items = allItems.flatMap((item) => {
@@ -79,6 +85,9 @@ export default async function CompanyAiInboxPage({ params }: Props) {
         <article><span>Przetwarzanie</span><strong>{processingCount}</strong><small>Nowe i w toku</small></article>
         <article><span>Przetworzone</span><strong>{readyCount}</strong><small>Historia dostępna poniżej</small></article>
       </section>
+
+      {brainSnapshot ? <BrainLearningDashboard workspaceId={workspace.id} snapshot={brainSnapshot}
+        canApproveResearch={domainAccessPolicyAllows(accessPolicy,{domain:"reports",level:"approve"})}/> : null}
 
       <section className="co-section co-section--compact">
         <div className="co-section-heading">
