@@ -45,7 +45,7 @@ function normalizeArchiveTab(value: string | undefined): ArchiveTabId {
 
 async function safeWorkspaceDocumentsPage(
   workspaceId: string,
-  options: { trashed?: boolean; page?: number; pageSize?: number; query?: string; module?: string; review?: boolean }
+  options: { trashed?: boolean; page?: number; pageSize?: number; query?: string; module?: string; review?: boolean; state?: "review" | "completed" | "archive" }
 ) {
   try {
     return await listDocumentsForWorkspacePage(workspaceId, options);
