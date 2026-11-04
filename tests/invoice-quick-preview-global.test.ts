@@ -48,6 +48,20 @@ describe("global invoice quick preview", () => {
     expect(file).toContain('malwareScanRequiredByPolicy()');
   });
 
+  it("allows same-origin PDF iframe only on authenticated invoice file route", () => {
+    const config=read("next.config.mjs");
+    const archive=read("components/documents/document-central-archive.tsx");
+    const preview=read("components/documents/invoice-quick-preview.tsx");
+    expect(config).toContain('frame-ancestors \'none\'');
+    expect(config).toContain('source: "/api/company/invoice-quick-preview/file"');
+    expect(config).toContain("frame-ancestors 'self'");
+    expect(config).toContain('X-Frame-Options", value: "SAMEORIGIN"');
+    expect(config).toContain('X-Frame-Options", value: "DENY"');
+    expect(preview).toContain('title="Cała faktura PDF"');
+    expect(archive).toContain("listPreviewIndicator");
+    expect(archive).toContain('documentId={document.id} hoverOnly');
+  });
+
   it("propagates exact invoice line ids from warehouse price truth", () => {
     const enrichment = read("lib/data/warehouse-price-history-450.ts");
     expect(enrichment).toContain("invoice_line_id");
