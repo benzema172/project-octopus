@@ -14,8 +14,8 @@ type BrainResult = {
 };
 
 const SAFE_RESEARCH_FEEDS = [
- { name: "Zamówienia publiczne", url: "https://www.uzp.gov.pl/aktualnosci/rss" },
- { name: "Informacje rządowe", url: "https://www.gov.pl/web/rozwoj-technologia/aktualnosci" }
+ { name: "URE · Ciepło", url: "https://ure.gov.pl/dokumenty/rss/9-rss-486.rss" },
+ { name: "URE · Aktualności", url: "https://ure.gov.pl/dokumenty/rss/9-rss-424.rss" }
 ] as const;
 
 const truncate = (value: unknown, max = 350) => String(value ?? "").trim().slice(0, max);
@@ -27,7 +27,7 @@ function xmlEntities(value: string) {
 function safeLink(value: string, host: string): string | null {
  try {
   const parsed = new URL(xmlEntities(value));
-  if (parsed.protocol !== "https:" || parsed.hostname !== host || parsed.username || parsed.password) return null;
+  if (parsed.protocol !== "https:" || (parsed.hostname !== host && parsed.hostname !== "www."+host) || parsed.username || parsed.password) return null;
   parsed.hash = "";
   return parsed.toString();
  } catch { return null; }
