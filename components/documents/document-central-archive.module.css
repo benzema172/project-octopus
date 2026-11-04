@@ -418,3 +418,10 @@
 .rowBody:has(.listPreviewIndicator) strong{max-width:65%}
 .archiveGridDecision .rowBody:has(.listPreviewIndicator) strong{max-width:100%}
 @media(max-width:1050px){.listPreviewIndicator{font-size:0;gap:0;padding:4px}.listPreviewIndicator svg{width:14px;height:14px}}
+
+/* Status-first document navigation with one compact category filter in Archive. */
+.archiveCategoryBar{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid #e4e8f0;border-radius:10px;margin:8px 0;background:#fafbfe;flex-wrap:wrap}
+.archiveCategoryBar label{font-size:11px;font-weight:800;color:#475569}
+.archiveCategoryBar select{width:min(270px,100%);min-height:35px;padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;font-size:12px;background:#fff;color:#26344a}
+.archiveCategoryBar small{font-size:10px;color:#78869a}
+@media(max-width:700px){.archiveCategoryBar select{flex:1;min-width:170px}.archiveCategoryBar small{flex-basis:100%}}
