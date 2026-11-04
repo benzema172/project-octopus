@@ -29,7 +29,8 @@ export async function POST(request:Request){
   await db.from("brain_agent_coordinations").upsert({
    workspace_id:workspace.id,reference_date:new Date().toISOString().slice(0,10),scope:"manual",
    providers:result.council.configuredProviders,indexing:result.documents,
-   feedback_count:result.feedback.total,warnings:result.research.failures
+   feedback_count:result.feedback.total,warnings:result.research.failures,
+   created_at:new Date().toISOString()
   },{onConflict:"workspace_id,reference_date,scope"});
   return NextResponse.json({ok:true,result},{headers:{"Cache-Control":"no-store"}});
  }catch(error){
