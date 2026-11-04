@@ -165,7 +165,7 @@ export function AiInbox({
               <div className="ai-inbox-row__meta"><span>{item.subtitle}</span><span>{documentCategoryLabel(item.category)}</span>{item.channel ? <span>{item.channel}</span> : null}<span>{new Date(item.createdAt).toLocaleString("pl-PL")}</span></div>
               <h3>{item.entityType === "document" && workspaceId && normalizeDocumentCategory(item.category) === "invoice" ?
                 <InvoiceQuickPreview workspaceId={workspaceId} domain="finance" documentId={item.id}>{item.title}</InvoiceQuickPreview>
-                : item.title}</h3><p>{item.detail}</p>
+                : item.title}</h3>{item.status !== "ready" && item.detail ? <p className="ai-inbox-row__description">{item.detail}</p> : null}
               {item.entityType === "document" && item.status === "review" && correction ? (
                 <div className="ai-inbox-row__routing">
                   <label>
@@ -210,9 +210,8 @@ export function AiInbox({
               ) : null}
               {item.entityType === "document" && item.evidence?.length ? (
                 <div className="ai-inbox-row__evidence">
-                  <div className="ai-inbox-row__evidence-heading"><strong>Dowód AI</strong><small>fragmenty użyte do propozycji</small></div>
                   <div className="ai-inbox-row__evidence-list">
-                    {item.evidence.slice(0, 3).map((evidence, index) => {
+                    {item.evidence.slice(0, 2).map((evidence, index) => {
                       const location = evidence.page
                         ? `strona ${evidence.page}`
                         : evidence.sheet
@@ -221,7 +220,7 @@ export function AiInbox({
                       return <article key={`${evidence.module}-${index}`}>
                         <span>{(evidence.modules?.length ? evidence.modules : [evidence.module]).join(" + ")} · {location}{evidence.confidence != null ? ` · ${Math.round(evidence.confidence * 100)}%` : ""}</span>
                         <strong>{evidence.title}</strong>
-                        {evidence.quote ? <q>{evidence.quote}</q> : null}
+                        {evidence.quote && evidence.quote.trim().toLocaleLowerCase("pl") !== evidence.title.trim().toLocaleLowerCase("pl") ? <q>{evidence.quote}</q> : null}
                         {item.documentVersionId ? (
                           item.entityType === "document" && workspaceId && normalizeDocumentCategory(item.category) === "invoice" ?
                             <InvoiceQuickPreview workspaceId={workspaceId} domain="finance" documentId={item.id} hoverOnly>
@@ -236,13 +235,20 @@ export function AiInbox({
                       </article>;
                     })}
                   </div>
+                  {item.evidence.length > 2 ? <details className="ai-inbox-row__more-evidence">
+                    <summary>Pozostałe dowody ({item.evidence.length - 2})</summary>
+                    {item.evidence.slice(2).map((evidence,index)=><div key={index}>
+                      <strong>{evidence.title}</strong> · {(evidence.modules?.length ? evidence.modules : [evidence.module]).join(" + ")}
+                      {evidence.page ? ` · str. ${evidence.page}` : ""}
+                    </div>)}
+                  </details> : null}
                 </div>
               ) : null}
             </div>
             <div className="ai-inbox-row__decision">
               <span className={`status-chip status-chip--${item.status}`}>{STATUS_LABEL[item.status]}</span>
               {item.confidence != null ? <small>Pewność AI: {Math.round(item.confidence * 100)}%</small> : null}
-              {item.reviewDueAt ? <small className={item.overdue ? "ai-inbox-row__overdue" : undefined}><Clock3 size={13} /> {item.overdue ? "Po SLA · " : "SLA · "}{new Date(item.reviewDueAt).toLocaleString("pl-PL")}{item.escalationLevel ? ` · eskalacja ${item.escalationLevel}` : ""}</small> : null}
+              {item.reviewDueAt && item.status !== "ready" ? <small className={item.overdue ? "ai-inbox-row__overdue" : undefined}><Clock3 size={13} /> {item.overdue ? "Po SLA · " : "SLA · "}{new Date(item.reviewDueAt).toLocaleString("pl-PL")}{item.escalationLevel ? ` · eskalacja ${item.escalationLevel}` : ""}</small> : null}
               {item.entityType === "document" && item.status === "review" && canWrite && (!item.assignedTo || item.assignedTo === currentUserId || canApprove) ? <button type="button" className="secondary-button" onClick={() => triage(item, item.assignedTo === currentUserId ? "release" : "claim")} disabled={pending}>{item.assignedTo === currentUserId ? "Zwolnij" : item.assignedTo ? "Przejmij" : "Przypisz do mnie"}</button> : null}
               {item.status === "review" && canApprove ? <div><button type="button" className="approve-button" onClick={() => decide(item, "approve")} disabled={pending}><Check size={15} />Zatwierdź</button><button type="button" className="reject-button" onClick={() => decide(item, "reject")} disabled={pending}><X size={15} />Odrzuć</button></div> : null}
               {item.status === "error" && item.entityType === "document" && canWrite ? <button type="button" className="secondary-button" onClick={() => retry(item)} disabled={pending}><RotateCcw size={15} />Ponów z kolejki</button> : null}
