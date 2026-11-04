@@ -322,10 +322,7 @@ export function DocumentCentralArchive({
           </div>
 
           {tab === "review" ? <div className={styles.decisionHeader}>
-            <div><span className={styles.kicker}>CENTRUM DECYZJI AI</span>
-              <strong>AI rozpoznaje dokumenty. Ty wybierasz tylko brakujące przeznaczenie.</strong>
-              <small>Koszty i materiały można przypisać jedną decyzją; księgowanie i potwierdzenie zużycia pozostają oddzielne.</small>
-            </div>
+            <div><strong>Do przypisania: {filteredDocuments.length}</strong><small>Wybierz fakturę, inwestycję i zapisz.</small></div>
             <div className={styles.decisionFilters}>
               <button type="button" className={decisionListFilter==="needed"?styles.activeFilter:undefined}
                 onClick={()=>setDecisionListFilter("needed")}>Do decyzji</button>
@@ -378,6 +375,7 @@ export function DocumentCentralArchive({
 
               {selected ? (
                 <aside className={styles.details} aria-label={`Szczegóły dokumentu ${selected.name}`} data-document-ai-ocr="1">
+                  {tab !== "review" ? <>
                   <div className={styles.detailsHeading}>
                     <div><span className={styles.kicker}>Dokument źródłowy</span><h3>{selected.name}</h3><p>{selected.project_id ? projectNames.get(selected.project_id) ?? "Inwestycja" : selectedModule ? MODULE_LABELS[selectedModule] : "Dokument firmy"}</p></div>
                     <span className={`${styles.stage} ${requiresReview(selected) ? styles.stageReview : selected.flow?.stage === "error" ? styles.stageError : selected.flow?.stage === "ready" ? styles.stageReady : ""}`}>{requiresReview(selected) && selectedModule==="finance" ? "Przeznaczenie kosztów" : requiresReview(selected) && selectedModule==="warehouse" ? "Przeznaczenie materiałów" : stageLabel(selected)}</span>
@@ -394,6 +392,17 @@ export function DocumentCentralArchive({
                     name={selected.name} updatedAt={selected.updated_at}
                     onArchived={()=>setSelectedId(null)}
                   />
+
+                  </> : <details className={styles.fileTools}>
+                    <summary>Plik: {selected.name} · opcje dokumentu</summary>
+                    <div className={styles.actions}>
+                      <DocumentOpenLink workspaceId={workspaceId} projectId={selected.project_id} versionId={selectedVersion?.id ?? selected.current_version_id} fallbackHref={fallbackHref}/>
+                      {selected.flow?.resultHref ? <Link href={selected.flow.resultHref}>Przejdź do modułu →</Link> : null}
+                    </div>
+                    <DocumentManagementControls key={`${selected.id}:${selected.updated_at}`}
+                      workspaceId={workspaceId} documentId={selected.id} projectId={selected.project_id}
+                      name={selected.name} updatedAt={selected.updated_at} onArchived={()=>setSelectedId(null)}/>
+                  </details>}
 
                   {selectedModule==="finance" || selectedModule==="warehouse" ? (
                     <div id={`document-review-${selected.id}`}>
