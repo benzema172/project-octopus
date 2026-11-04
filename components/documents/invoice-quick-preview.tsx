@@ -22,6 +22,8 @@ type Props = {
   domain: Domain;
   invoiceLineId?: string | null;
   invoiceId?: string | null;
+  documentId?: string | null;
+  hoverOnly?: boolean;
   invoiceNumber?: string | null;
   stockItemId?: string | null;
   children: ReactNode;
@@ -51,7 +53,7 @@ function visibleLines(lines: Row[], targetLineId: string | null) {
   return result;
 }
 
-export function InvoiceQuickPreview({ workspaceId, domain, invoiceLineId, invoiceId, invoiceNumber, stockItemId, children, className }: Props) {
+export function InvoiceQuickPreview({ workspaceId, domain, invoiceLineId, invoiceId, documentId, hoverOnly = false, invoiceNumber, stockItemId, children, className }: Props) {
   const anchorRef = useRef<HTMLSpanElement | null>(null);
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -59,16 +61,17 @@ export function InvoiceQuickPreview({ workspaceId, domain, invoiceLineId, invoic
   const [payload, setPayload] = useState<Payload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [position, setPosition] = useState({ top: 0, left: 0 });
-  const key = [workspaceId, domain, invoiceLineId, invoiceId, invoiceNumber, stockItemId].map((v) => v ?? "").join("|");
-  const hasIdentity = Boolean(invoiceLineId || (domain === "finance" && (invoiceId || invoiceNumber)));
+  const key = [workspaceId, domain, invoiceLineId, invoiceId, documentId, invoiceNumber, stockItemId].map((v) => v ?? "").join("|");
+  const hasIdentity = Boolean(invoiceLineId || (domain === "finance" && (invoiceId || documentId || invoiceNumber)));
 
   const place = useCallback(() => {
     const rect = anchorRef.current?.getBoundingClientRect();
     if (!rect) return;
     const width = Math.min(540, window.innerWidth - 24);
     const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
-    const preferBelow = rect.bottom + 390 < window.innerHeight;
-    const top = preferBelow ? rect.bottom + 7 : Math.max(12, rect.top - 397);
+    const height = Math.min(680, window.innerHeight - 24);
+    const preferBelow = rect.bottom + height + 8 <= window.innerHeight;
+    const top = preferBelow ? rect.bottom + 7 : Math.max(12, Math.min(rect.top - height - 7, window.innerHeight - height - 12));
     setPosition({ top, left });
   }, []);
 
@@ -78,6 +81,7 @@ export function InvoiceQuickPreview({ workspaceId, domain, invoiceLineId, invoic
     const params = new URLSearchParams({ workspaceId, domain });
     if (invoiceLineId) params.set("invoiceLineId", invoiceLineId);
     if (invoiceId) params.set("invoiceId", invoiceId);
+    if (documentId) params.set("documentId", documentId);
     if (invoiceNumber) params.set("invoiceNumber", invoiceNumber.replace(/^FV\s+/i, ""));
     if (stockItemId) params.set("stockItemId", stockItemId);
     try {
@@ -90,7 +94,7 @@ export function InvoiceQuickPreview({ workspaceId, domain, invoiceLineId, invoic
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Nie udało się odczytać faktury.");
     }
-  }, [domain, invoiceId, invoiceLineId, invoiceNumber, key, stockItemId, workspaceId]);
+  }, [domain, documentId, invoiceId, invoiceLineId, invoiceNumber, key, stockItemId, workspaceId]);
 
   const show = useCallback((immediate = false) => {
     if (!hasIdentity) return;
@@ -132,12 +136,15 @@ export function InvoiceQuickPreview({ workspaceId, domain, invoiceLineId, invoic
   const fileParams = invoice?.id ? new URLSearchParams({ workspaceId, domain, invoiceId: String(invoice.id) }) : null;
   if (fileParams && invoiceLineId) fileParams.set("invoiceLineId", invoiceLineId);
   const fileHref = fileParams ? `/api/company/invoice-quick-preview/file?${fileParams.toString()}${sourcePage ? `#page=${sourcePage}` : ""}` : "";
-  const renderedLines = payload ? visibleLines(payload.lines, payload.targetLineId) : [];
+  const renderedLines = payload ? payload.lines.map((line) => ({ kind: "line" as const, line })) : [];
+  const mime = String(payload?.version?.mime_type ?? "").toLowerCase();
+  const showPdf = mime === "application/pdf" || mime.endsWith("+pdf");
+  const showImage = mime.startsWith("image/");
 
   return <>
-    <span ref={anchorRef} className={`${styles.anchor} ${className ?? ""}`} role={hasIdentity ? "button" : undefined} tabIndex={hasIdentity ? 0 : undefined}
+    <span ref={anchorRef} className={`${styles.anchor} ${className ?? ""}`} role={hasIdentity && !hoverOnly ? "button" : undefined} tabIndex={hasIdentity && !hoverOnly ? 0 : undefined}
       aria-label={hasIdentity ? `Szybki podgląd faktury ${invoiceNumber ?? ""}`.trim() : undefined}
-      onMouseEnter={() => show(false)} onMouseLeave={hide} onFocus={() => show(true)} onBlur={hide} onClick={(event) => { event.stopPropagation(); show(true); }} onKeyDown={onKeyDown}>
+      onMouseEnter={() => show(false)} onMouseLeave={hide} onFocus={hoverOnly ? undefined : () => show(true)} onBlur={hoverOnly ? undefined : hide} onClick={hoverOnly ? undefined : (event) => { event.stopPropagation(); show(true); }} onKeyDown={hoverOnly ? undefined : onKeyDown}>
       {children}
     </span>
     {open && typeof document !== "undefined" ? createPortal(
@@ -147,12 +154,17 @@ export function InvoiceQuickPreview({ workspaceId, domain, invoiceLineId, invoic
         {error ? <div className={styles.error}>{error}</div> : null}
         {payload && invoice ? <>
           <header className={styles.head}><div><small>FAKTURA · SZYBKI PODGLĄD</small><strong>FV {str(invoice.invoice_number)}</strong><span>{str(payload.counterparty?.name)} · {dateLabel(invoice.issue_date)}</span></div>{fileHref ? <a className={styles.open} href={fileHref} target="_blank" rel="noreferrer">Oryginał <ExternalLink size={11}/></a> : null}</header>
+          {fileHref && (showPdf || showImage) ? <section className={styles.original} aria-label="Pełny oryginał faktury">
+            {showPdf ? <iframe title="Cała faktura PDF" src={`${fileHref}#toolbar=0&navpanes=0&view=FitH`} loading="lazy" referrerPolicy="same-origin" /> :
+              /* The same authenticated origin streams original image bytes. */
+              <img src={fileHref} alt="Cała faktura — dokument źródłowy" loading="lazy" />}
+          </section> : null}
           <div className={styles.summary}><div><small>Netto</small><strong>{money(invoice.net_amount, currency)}</strong></div><div><small>VAT</small><strong>{money(invoice.tax_amount, currency)}</strong></div><div><small>Brutto</small><strong>{money(invoice.gross_amount, currency)}</strong></div></div>
           <div className={styles.sheet}><div className={styles.sheetHead}><span>Lp.</span><span>Pozycja</span><span>Ilość</span><span>J.m.</span><span>Cena netto</span><span>Netto</span></div>
             {renderedLines.map((entry) => entry.kind === "ellipsis" ? <div className={styles.ellipsis} key={entry.key}>… pozostałe pozycje faktury …</div> : <div className={`${styles.line} ${String(entry.line.id) === payload.targetLineId ? styles.target : ""}`} key={String(entry.line.id)}><span>{str(entry.line.line_number)}</span><span>{str(entry.line.description)}</span><span className={styles.num}>{num(entry.line.quantity)}</span><span>{str(entry.line.unit)}</span><span className={styles.num}>{money(entry.line.unit_price, currency)}</span><span className={styles.num}>{money(entry.line.net_amount, currency)}</span></div>)}
           </div>
           <div className={styles.source}>{payload.targetLineId ? "Żółty wiersz to dokładna pozycja faktury powiązana z tym towarem/zdarzeniem." : "Nie znaleziono jednoznacznego powiązania pozycji — pokazano kontekst faktury."}{sourcePage ? ` Źródło wskazuje stronę ${sourcePage}.` : ""}</div>
-          <div className={styles.hint}>Najedź, ustaw fokus lub kliknij numer faktury. Na telefonie użyj kliknięcia.</div>
+          <div className={styles.hint}>Pełny oryginał jest przewijany powyżej; poniżej znajdują się wszystkie rozpoznane pozycje. Kliknij „Oryginał”, aby otworzyć dokument w dużym widoku.</div>
         </> : null}
       </aside>, document.body) : null}
   </>;
