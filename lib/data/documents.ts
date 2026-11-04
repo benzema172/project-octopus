@@ -485,7 +485,8 @@ export async function getDocumentWorkflowCounts(workspaceId:string, query="") {
    p_state:state,p_limit:1,p_offset:0
   }).returns<ArchiveSearchRow[]>();
   if(error)throw new Error(`Nie można policzyć dokumentów ${state}: ${error.message}`);
-  return Number((data??[])[0]?.total_count??0)||0;
+  const rows:ArchiveSearchRow[]=Array.isArray(data)?data as ArchiveSearchRow[]:[];
+  return Number(rows[0]?.total_count??0)||0;
  };
  const [review,completed]=await Promise.all([count("review"),count("completed")]);
  return {review,completed};
