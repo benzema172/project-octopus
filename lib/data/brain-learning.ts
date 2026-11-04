@@ -36,9 +36,12 @@ export async function getBrainLearningSnapshot(workspaceId:string):Promise<Brain
  const ids=Array.from(new Set((documentResult.data??[]).map(row=>row.current_version_id).filter((id):id is string=>Boolean(id))));
  let chunks=0,embedded=0;
  for(let i=0;i<ids.length;i+=100){
-  const {data,error}=await db.from("document_chunks").select("id,embedding_vector").in("document_version_id",ids.slice(i,i+100)).limit(5000);
-  if(error)throw new Error(error.message);
-  chunks+=(data??[]).length;embedded+=(data??[]).filter(row=>row.embedding_vector!=null).length;
+  const [totalCount, embeddedCount]=await Promise.all([
+   db.from("document_chunks").select("id",{head:true,count:"exact"}).in("document_version_id",ids.slice(i,i+100)),
+   db.from("document_chunks").select("id",{head:true,count:"exact"}).in("document_version_id",ids.slice(i,i+100)).not("embedding_vector","is",null)
+  ]);
+  if(totalCount.error||embeddedCount.error)throw new Error(totalCount.error?.message??embeddedCount.error?.message);
+  chunks+=totalCount.count??0;embedded+=embeddedCount.count??0;
  }
  const accepted=events.filter(row=>row.outcome==="accepted").length;
  const corrected=events.filter(row=>row.outcome==="corrected").length;
