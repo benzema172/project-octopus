@@ -3,6 +3,7 @@ import {useEffect,useMemo,useState} from "react";
 import {useRouter} from "next/navigation";
 import {FileCheck2,Boxes,Plus,Trash2,FileText} from "lucide-react";
 import {DocumentOpenLink} from "./document-open-link";
+import {InvoiceQuickPreview} from "./invoice-quick-preview";
 import styles from "./document-decision-center.module.css";
 type Scope=""|"project"|"inventory"|"overhead";
 type Line={id:string;description:string;line_number:number;net_amount:number;quantity:number|null;unit:string|null};
@@ -134,7 +135,7 @@ export function DocumentDecisionCenter({workspaceId,documentId,versionId,project
   <div className={styles.compactHeader}>
     <div><strong>{data.type==="purchase_invoice"?"Przypisz fakturę":data.type==="warehouse_document"?"Przypisz dokument magazynowy":"Dokument"}</strong>
       <small>Typ dokumentu jest rozpoznany automatycznie. Wskaż tylko brakujące przeznaczenie.</small></div>
-    {data.invoice?<span>{data.invoice.invoice_number} · {money(data.invoice.net_amount)} netto</span>:null}
+    {data.invoice?<span><InvoiceQuickPreview workspaceId={workspaceId} domain="finance" invoiceId={data.invoice.id} documentId={documentId}>{data.invoice.invoice_number}</InvoiceQuickPreview> · {money(data.invoice.net_amount)} netto</span>:null}
   </div>
   <div className={styles.content}>
     {data.type==="purchase_invoice" || data.type==="warehouse_document"?<div className={styles.primaryRoute}>
