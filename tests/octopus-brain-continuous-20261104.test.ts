@@ -30,9 +30,12 @@ describe("Octopus Brain continuous quality infrastructure",()=>{
   expect(service).toContain('review_status:"pending"');
   expect(route).toContain('getRequestUser(request)');
   expect(route).toContain('domain:"reports",level:"approve"');
-  expect(route).toContain('review_status!=="pending"');
-  expect(route).toContain('status:"approved"');
-  expect(route).toContain('observation_id:data.id');
+  const migration=read("supabase/migrations/20261104150000_brain_external_approval_atomic.sql");
+  expect(route).toContain('review_brain_external_source_20261104');
+  expect(migration).toContain("review_status='pending'");
+  expect(migration).toContain("for update");
+  expect(migration).toContain("insert into public.knowledge_entries");
+  expect(migration).toContain("to service_role");
  });
  it("makes learned corrections available to RAG as examples, not autonomous decisions",()=>{
   const retrieval=read("lib/ai/brain-retrieval.ts");
@@ -64,5 +67,7 @@ describe("Octopus Brain continuous quality infrastructure",()=>{
   expect(ui).toContain("snapshot.documents.embedded");
   expect(ui).toContain("snapshot.agents.escalations");
   expect(ui).toContain("snapshot.research.pending");
+  expect(ui).toContain("Odśwież wiedzę");
+  expect(ui).toContain("canRefresh");
  });
 });
