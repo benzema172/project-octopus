@@ -143,6 +143,13 @@ async function handleWorker(request: Request) {
         alreadyClaimed: true
       });
 
+      if ("package" in analysis) {
+        await recordPipelineOutcome({ workspaceId: job.workspace_id, documentId: sourceVersion.document_id,
+          versionId: job.document_version_id, category: "other", routeOk: true, isInvoice: false });
+        results.push({ jobId: job.id, versionId: job.document_version_id, status: "succeeded" });
+        continue;
+      }
+
       const duplicate = await findExistingExactDuplicate({
         workspaceId: job.workspace_id, documentId: sourceVersion.document_id,
         versionId: job.document_version_id

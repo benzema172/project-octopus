@@ -1,8 +1,9 @@
 import "server-only";
+import { recordDocumentPipelineStage } from "./pipeline-stages";
 
 import { randomUUID } from "node:crypto";
 import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { parseSecureZip } from "@/lib/documents/secure-zip";
+import { parseSecureZip, type SecureZipResult } from "@/lib/documents/secure-zip";
 import { scanDocumentBytes, type MalwareScanResult } from "@/lib/documents/malware-scan";
 import { normalizeDocumentCategory, type DocumentCategory } from "@/lib/documents/classification";
 import { getR2Config } from "@/lib/env";
@@ -125,6 +126,7 @@ export async function processDocumentPackage(input: {
   bytes: Buffer;
   userId?: string | null;
   parentSha256: string;
+  generatedPdf?: { archive: SecureZipResult; ranges: Array<{ pageStart: number; pageEnd: number; title: string }> };
 }): Promise<PackageDocumentAnalysis> {
   const db = createServiceSupabaseClient();
   const { data: parentIntake, error: parentIntakeError } = await db.from("document_intakes")
@@ -148,7 +150,7 @@ export async function processDocumentPackage(input: {
     return packageAnalysis(existingResult.data.id, existingResult.data.accepted_count, existingResult.data.rejected_count, queued, [], input.parent.project_id);
   }
 
-  const archive = parseSecureZip(input.bytes);
+  const archive = input.generatedPdf?.archive ?? parseSecureZip(input.bytes);
   const initialManifest = archive.entries.map((entry) => ({
     path: entry.path,
     compressedBytes: entry.compressedBytes,
@@ -165,7 +167,7 @@ export async function processDocumentPackage(input: {
     entry_count: archive.entries.length,
     total_uncompressed_bytes: archive.totalUncompressedBytes,
     manifest: initialManifest,
-    security_report: { ...archive.security, ignoredEntries: archive.ignoredEntries, parentSha256: input.parentSha256 },
+    security_report: { generatedFromPdf: Boolean(input.generatedPdf), ...archive.security, ignoredEntries: archive.ignoredEntries, parentSha256: input.parentSha256 },
     created_by: input.userId ?? null,
     updated_at: new Date().toISOString()
   }, { onConflict: "parent_version_id" }).select("id").single<{ id: string }>();
@@ -209,6 +211,16 @@ export async function processDocumentPackage(input: {
       continue;
     }
 
+    const { data: existingChild, error: existingChildError } = await db.from("document_package_items")
+      .select("child_document_id,child_version_id,status")
+      .eq("package_id", packageRow.id).eq("entry_path", entry.path)
+      .maybeSingle<{ child_document_id: string | null; child_version_id: string | null; status: string }>();
+    if (existingChildError) throw new Error(`Nie udało się sprawdzić ponowienia pliku: ${existingChildError.message}`);
+    if (existingChild?.child_document_id && existingChild.child_version_id) {
+      accepted += 1; queuedVersionIds.push(existingChild.child_version_id);
+      manifest.push({ path: entry.path, status: "queued", documentId: existingChild.child_document_id, childVersionId: existingChild.child_version_id, sha256: entry.sha256 });
+      continue;
+    }
     const documentId = randomUUID();
     const versionId = randomUUID();
     const objectKey = objectKeyForChild({
@@ -259,7 +271,11 @@ export async function processDocumentPackage(input: {
         parentDocumentId: input.parent.document_id,
         parentVersionId: input.parent.id,
         entryPath: entry.path,
-        malwareScan
+        malwareScan,
+        ...(input.generatedPdf ? { pdfLogicalChild: true, originalFileName: input.parent.file_name,
+          originalPageStart: input.generatedPdf.ranges[archive.entries.indexOf(entry)]?.pageStart,
+          originalPageEnd: input.generatedPdf.ranges[archive.entries.indexOf(entry)]?.pageEnd,
+          logicalTitle: input.generatedPdf.ranges[archive.entries.indexOf(entry)]?.title } : {})
       };
       const childIntakePatch: Record<string, unknown> = {
         channel: parentSourceModule ? `module:${parentSourceModule}` : "package",
@@ -349,7 +365,7 @@ export async function processDocumentPackage(input: {
     status: "ready", suggested_category: "other", confidence: 1,
     proposed_project_id: input.parent.project_id, decided_by: input.userId ?? null, decided_at: now,
     decision_note: "Manifest paczki zatwierdzony automatycznie; każdy plik ma osobną analizę i decyzję.",
-    source_metadata: { packageId: packageRow.id, accepted, rejected }
+    source_metadata: { ...inheritedSourceMetadata, packageId: packageRow.id, accepted, rejected, generatedFromPdf: Boolean(input.generatedPdf) }
   }).eq("document_id", input.parent.document_id);
   await db.from("documents").update({
     category: "other", ai_status: "ready", review_status: "approved", ai_confidence: 1,
@@ -365,6 +381,8 @@ export async function processDocumentPackage(input: {
     entity_type: "document_package", entity_id: packageRow.id,
     after_value: { parentDocumentId: input.parent.document_id, parentVersionId: input.parent.id, accepted, rejected, totalUncompressedBytes: archive.totalUncompressedBytes }
   });
+  await recordDocumentPipelineStage({ workspaceId: input.workspaceId, documentId: input.parent.document_id,
+    versionId: input.parent.id, stage: "extract", status: "complete", details: { packageId: packageRow.id, accepted, rejected, generatedFromPdf: Boolean(input.generatedPdf) } });
   return analysis;
 }
 

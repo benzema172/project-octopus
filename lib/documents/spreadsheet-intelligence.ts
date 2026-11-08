@@ -1,14 +1,16 @@
 import "server-only";
 
 import { createRequire } from "node:module";
-import type { DocumentAnalysis } from "@/lib/ai/gemini-document";
+import type { FieldEvidence } from "./field-evidence";
+import { validIsoDay } from "./field-quality";
+import type { DocumentAnalysis } from "../ai/gemini-document";
 
 const requireNode = createRequire(import.meta.url);
 const XLSX = requireNode("xlsx") as typeof import("xlsx");
 
 type SpecialistResult = Pick<DocumentAnalysis,
   "boqItems" | "materialRequirements" | "scheduleItems" | "progressItems"
-> & { warnings: string[] };
+> & { warnings: string[]; fieldEvidence: FieldEvidence[] };
 
 type ColumnKind =
   | "itemNumber" | "description" | "quantity" | "unit" | "unitPrice" | "totalPrice" | "wbsCode"
@@ -50,7 +52,7 @@ function normalize(value: unknown) {
     .trim()
     .toLocaleLowerCase("pl")
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\u0300-\u036f]/g, "").replace(/ł/g, "l")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 }
@@ -75,9 +77,9 @@ function isoDate(value: unknown) {
   }
   const raw = text(value);
   const direct = /^\d{4}-\d{2}-\d{2}/.exec(raw)?.[0];
-  if (direct) return direct;
+  if (direct) return validIsoDay(direct) ? direct : "";
   const polish = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/.exec(raw);
-  if (polish) return `${polish[3]}-${polish[2].padStart(2, "0")}-${polish[1].padStart(2, "0")}`;
+  if (polish) { const day = `${polish[3]}-${polish[2].padStart(2, "0")}-${polish[1].padStart(2, "0")}`; return validIsoDay(day) ? day : ""; }
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
 }
@@ -94,7 +96,7 @@ function findHeader(rows: unknown[][]) {
       const key = normalize(cell);
       if (!key) return;
       for (const [kind, aliases] of Object.entries(ALIASES) as Array<[ColumnKind, string[]]>) {
-        if (mapping[kind] === undefined && aliases.some((alias) => key === normalize(alias) || key.includes(normalize(alias)))) mapping[kind] = columnIndex;
+        if (mapping[kind] === undefined && aliases.some((alias) => key === normalize(alias))) mapping[kind] = columnIndex;
       }
     });
     const score = Object.keys(mapping).length;
@@ -114,15 +116,17 @@ function rowQuote(row: unknown[]) {
 
 export function extractSpreadsheetIntelligence(buffer: Buffer): SpecialistResult {
   const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true, sheetRows: MAX_ROWS_PER_SHEET });
-  const result: SpecialistResult = { boqItems: [], materialRequirements: [], scheduleItems: [], progressItems: [], warnings: [] };
+  const result: SpecialistResult = { boqItems: [], materialRequirements: [], scheduleItems: [], progressItems: [], warnings: [], fieldEvidence: [] };
 
   for (const sheetName of workbook.SheetNames.slice(0, MAX_SHEETS)) {
     const sheet = workbook.Sheets[sheetName];
     if (!sheet) continue;
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "", blankrows: false }) as unknown[][];
+    const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "", blankrows: true }) as unknown[][];
     const header = findHeader(rows);
     if (!header) continue;
     const mapping = header.mapping;
+    const headerRow = header.row;
     const hasBoq = mapping.description !== undefined && (mapping.quantity !== undefined || mapping.unitPrice !== undefined || mapping.totalPrice !== undefined);
     const hasSchedule = (mapping.title !== undefined || mapping.description !== undefined) && (mapping.plannedStart !== undefined || mapping.plannedFinish !== undefined || mapping.durationDays !== undefined);
     const hasProgress = (mapping.description !== undefined || mapping.itemNumber !== undefined) && (mapping.quantityExecuted !== undefined || mapping.quantityAccepted !== undefined);
@@ -132,20 +136,39 @@ export function extractSpreadsheetIntelligence(buffer: Buffer): SpecialistResult
       const row = rows[rowIndex];
       const description = text(value(row, mapping, "description") ?? value(row, mapping, "title"));
       if (!description || /^razem|^suma|^podsumowanie/i.test(description)) continue;
-      const locator = `Arkusz: ${sheetName}, wiersz ${rowIndex + 1}`;
+      const locator = `Arkusz: ${sheetName}, wiersz ${range.s.r + rowIndex + 1}`;
       const quote = rowQuote(row);
+      function addEvidence(collection: string, index: number, keys: ColumnKind[]) {
+        for (const key of keys) {
+          const column = mapping[key];
+          if (column === undefined) {
+            result.fieldEvidence.push({ path: `${collection}.${index}.${key}`, quote: "", locator, origin: "native", missingValue: true });
+            continue;
+          }
+          const address = XLSX.utils.encode_cell({ r: range.s.r + rowIndex, c: range.s.c + column });
+          const cell = sheet[address];
+          const headerValue = text(rows[headerRow][column]);
+          const raw = row[column];
+          result.fieldEvidence.push({ path: `${collection}.${index}.${key}`,
+            quote: ["plannedStart", "plannedFinish", "period"].includes(key) ? isoDate(raw) || text(raw) : text(raw), locator: `${locator}, komórka ${address} (${headerValue})`, cell: address,
+            origin: "native", ...(cell?.f ? { formula: String(cell.f) } : {}),
+            missingValue: raw === "" || raw === undefined || cell?.t === "e" });
+          if (cell?.f && (cell.v === undefined || cell.t === "e")) result.warnings.push(`${locator}, ${address}: formuła nie ma poprawnej zapisanej wartości; wymagane przeliczenie w Excelu.`);
+        }
+      }
 
       if (hasBoq && result.boqItems.length < MAX_OUTPUT_ROWS) {
         const quantity = numeric(value(row, mapping, "quantity"));
         const unitPrice = numeric(value(row, mapping, "unitPrice"));
         const reportedTotal = numeric(value(row, mapping, "totalPrice"));
+        addEvidence("boqItems", result.boqItems.length, ["quantity", "unit", "unitPrice", "totalPrice"]);
         result.boqItems.push({
           itemNumber: text(value(row, mapping, "itemNumber")) || String(rowIndex - header.row),
           description,
           quantity,
           unit: text(value(row, mapping, "unit")),
           unitPrice,
-          totalPrice: reportedTotal || quantity * unitPrice,
+          totalPrice: mapping.totalPrice !== undefined && text(value(row, mapping, "totalPrice")) !== "" ? reportedTotal : quantity * unitPrice,
           wbsCode: text(value(row, mapping, "wbsCode")) || "00",
           confidence: 0.96,
           locator,
@@ -154,6 +177,7 @@ export function extractSpreadsheetIntelligence(buffer: Buffer): SpecialistResult
       }
 
       if (hasSchedule && result.scheduleItems.length < MAX_OUTPUT_ROWS) {
+        addEvidence("scheduleItems", result.scheduleItems.length, ["plannedStart", "plannedFinish", "durationDays"]);
         result.scheduleItems.push({
           code: text(value(row, mapping, "itemNumber")) || `S-${rowIndex - header.row}`,
           title: description,
@@ -174,7 +198,9 @@ export function extractSpreadsheetIntelligence(buffer: Buffer): SpecialistResult
       if (hasProgress && result.progressItems.length < MAX_OUTPUT_ROWS) {
         const quantityExecuted = Math.max(0, numeric(value(row, mapping, "quantityExecuted")));
         const quantityAccepted = Math.max(0, numeric(value(row, mapping, "quantityAccepted")));
-        if (quantityExecuted || quantityAccepted) result.progressItems.push({
+        if (quantityExecuted || quantityAccepted) {
+        addEvidence("progressItems", result.progressItems.length, ["quantityExecuted", "quantityAccepted", "unit", "period"]);
+        result.progressItems.push({
           boqItemNumber: text(value(row, mapping, "itemNumber")),
           wbsCode: text(value(row, mapping, "wbsCode")),
           description,
@@ -186,6 +212,7 @@ export function extractSpreadsheetIntelligence(buffer: Buffer): SpecialistResult
           locator,
           quote
         });
+        }
       }
 
       if (hasMaterials && result.materialRequirements.length < MAX_OUTPUT_ROWS) result.materialRequirements.push({

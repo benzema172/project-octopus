@@ -1,5 +1,8 @@
 import { needsBusinessDocumentSpecialist } from "@/lib/documents/business-evidence-routing";
 import "server-only";
+import { assessFieldQuality, attachProposalQuality } from "@/lib/documents/field-quality";
+import { detectPdfBoundaries, logicalPageRanges, splitLogicalPdf, type PdfSegmentation } from "@/lib/documents/pdf-segmentation";
+import { verifyUncertainVisualFields } from "@/lib/ai/visual-field-verifier";
 
 import { createHash } from "node:crypto";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
@@ -196,8 +199,40 @@ export async function processDocumentVersion(input: {
       });
     }
 
+    let pdfSegmentation: PdfSegmentation | null = null;
+    if (version.mime_type === "application/pdf" && intake?.source_metadata?.pdfLogicalChild !== true) {
+      const { data: cachedSegmentation, error: cacheError } = await supabase.from("document_extractions")
+        .select("payload").eq("document_version_id", version.id).eq("extraction_type", "pdf_segmentation")
+        .eq("schema_version", "pdf-boundaries-v1").maybeSingle<{ payload: PdfSegmentation }>();
+      if (cacheError) throw new Error(`Nie udało się odczytać granic PDF: ${cacheError.message}`);
+      const persistSegmentationProgress = async (payload: PdfSegmentation) => {
+        const { error } = await supabase.from("document_extractions").upsert({
+          workspace_id: input.workspaceId, project_id: version.project_id, document_id: version.document_id,
+          document_version_id: version.id, extraction_type: "pdf_segmentation", schema_version: "pdf-boundaries-v1",
+          payload, warnings: [], confidence: 0, status: "proposed"
+        }, { onConflict: "document_version_id,extraction_type,schema_version" });
+        if (error) throw new Error(`Nie udało się zapisać postępu granic PDF: ${error.message}`);
+      };
+      pdfSegmentation = cachedSegmentation?.payload && cachedSegmentation.payload.complete !== false
+        ? cachedSegmentation.payload : await detectPdfBoundaries(bytes, { cached: cachedSegmentation?.payload, saveProgress: persistSegmentationProgress });
+      const { error: boundarySaveError } = await supabase.from("document_extractions").upsert({
+        workspace_id: input.workspaceId, project_id: version.project_id, document_id: version.document_id,
+        document_version_id: version.id, extraction_type: "pdf_segmentation", schema_version: "pdf-boundaries-v1",
+        payload: pdfSegmentation, warnings: pdfSegmentation.reason ? [pdfSegmentation.reason] : [],
+        confidence: pdfSegmentation.requiresReview ? 0 : 1, status: "proposed"
+      }, { onConflict: "document_version_id,extraction_type,schema_version" });
+      if (boundarySaveError) throw new Error(`Nie udało się zapisać granic PDF: ${boundarySaveError.message}`);
+      const ranges = logicalPageRanges(pdfSegmentation);
+      if (ranges.length > 1) {
+        const archive = await splitLogicalPdf(bytes, pdfSegmentation);
+        return await processDocumentPackage({ workspaceId: input.workspaceId, parent: version, bytes,
+          userId: input.userId, parentSha256: actualSha256, generatedPdf: { archive, ranges } });
+      }
+    }
+
     const filenameFinancialHint = /(?:paragon|receipt|tankow|paliw|benzyn|diesel|stacja|faktura|invoice|rachunek|\\b(?:wz|pz|mm|rw|zw)[-_ .\\d]|dostaw[ay]|zakup)/i.test(version.file_name);
-    const businessDocumentSpecialist = sourceModule === "warehouse" || sourceModule === "finance" || filenameFinancialHint;
+    const businessDocumentSpecialist = intake?.source_metadata?.pdfLogicalChild !== true
+      && (sourceModule === "warehouse" || sourceModule === "finance" || filenameFinancialHint);
     const warehouseBinary = businessDocumentSpecialist
       && (version.mime_type === "application/pdf" || version.mime_type.startsWith("image/"));
     const useFilesApi = !warehouseBinary
@@ -293,9 +328,21 @@ export async function processDocumentVersion(input: {
     if (["xls", "xlsx"].includes(extension(version.file_name))) {
       try {
         const spreadsheet = extractSpreadsheetIntelligence(bytes);
-        if (effectiveCategory === "estimate" && spreadsheet.boqItems.length > 0) analysis.boqItems = spreadsheet.boqItems;
-        if (effectiveCategory === "schedule" && spreadsheet.scheduleItems.length > 0) analysis.scheduleItems = spreadsheet.scheduleItems;
-        if (spreadsheet.progressItems.length > 0) analysis.progressItems = spreadsheet.progressItems;
+        if (["estimate", "schedule"].includes(effectiveCategory) && spreadsheet.boqItems.length > 0) {
+          analysis.boqItems = spreadsheet.boqItems;
+          analysis.fieldEvidence = (analysis.fieldEvidence ?? []).filter(item => !item.path.startsWith("boqItems."));
+          analysis.fieldEvidence.push(...spreadsheet.fieldEvidence.filter(item => item.path.startsWith("boqItems.")));
+        }
+        if (["estimate", "schedule"].includes(effectiveCategory) && spreadsheet.scheduleItems.length > 0) {
+          analysis.scheduleItems = spreadsheet.scheduleItems;
+          analysis.fieldEvidence = (analysis.fieldEvidence ?? []).filter(item => !item.path.startsWith("scheduleItems."));
+          analysis.fieldEvidence.push(...spreadsheet.fieldEvidence.filter(item => item.path.startsWith("scheduleItems.")));
+        }
+        if (spreadsheet.progressItems.length > 0) {
+          analysis.progressItems = spreadsheet.progressItems;
+          analysis.fieldEvidence = (analysis.fieldEvidence ?? []).filter(item => !item.path.startsWith("progressItems."));
+          analysis.fieldEvidence.push(...spreadsheet.fieldEvidence.filter(item => item.path.startsWith("progressItems.")));
+        }
         if (spreadsheet.materialRequirements.length > 0) {
           const materialMap = new Map<string, (typeof analysis.materialRequirements)[number]>();
           for (const item of [...analysis.materialRequirements, ...spreadsheet.materialRequirements]) {
@@ -310,6 +357,11 @@ export async function processDocumentVersion(input: {
         analysis.warnings.push(`Analizator arkusza nie uzupełnił danych tabelarycznych: ${spreadsheetError instanceof Error ? spreadsheetError.message : "nieznany błąd"}`);
       }
     }
+    const nativeText = "extractedText" in prepared && typeof prepared.extractedText === "string" ? prepared.extractedText : undefined;
+    let fieldQuality = assessFieldQuality(analysis, { documentId: version.document_id, documentVersionId: version.id, nativeText });
+    const visualVerification = await verifyUncertainVisualFields({ analysis, quality: fieldQuality, bytes, mimeType: version.mime_type });
+    if (visualVerification.attempted > 0) fieldQuality = assessFieldQuality(analysis, { documentId: version.document_id, documentVersionId: version.id, nativeText });
+    if (pdfSegmentation?.requiresReview) analysis.warnings.push(pdfSegmentation.reason ?? "Granice PDF wymagają sprawdzenia.");
     const projectMatch = version.project_id ? null : evaluateProjectMatch(analysis.projectHint, projectCandidates);
     const proposedProjectId = version.project_id ?? projectMatch?.project?.id ?? null;
     const routing = {
@@ -351,7 +403,7 @@ export async function processDocumentVersion(input: {
       document_version_id: version.id,
       extraction_type: "document_context",
       schema_version: "document-analysis-v3",
-      payload: { ...analysis, routing },
+      payload: { ...analysis, routing, fieldQuality, pdfSegmentation, visualVerification },
       warnings: analysis.warnings,
       confidence: analysis.confidence,
       status: "proposed"
@@ -440,7 +492,12 @@ export async function processDocumentVersion(input: {
         .eq("document_version_id", version.id).eq("extraction_type", "document_context").eq("schema_version", "document-analysis-v3");
     }
 
-    const moduleProposals = buildDocumentModuleProposals(analysis);
+    const moduleProposals = attachProposalQuality(buildDocumentModuleProposals(analysis), analysis, fieldQuality).map(proposal => ({
+      ...proposal, sourceLocator: { ...proposal.sourceLocator,
+        ...(intake?.source_metadata?.pdfLogicalChild ? { originalDocumentId: intake.source_metadata.parentDocumentId,
+          originalVersionId: intake.source_metadata.parentVersionId, originalPageStart: intake.source_metadata.originalPageStart,
+          originalPageEnd: intake.source_metadata.originalPageEnd } : {}) }
+    }));
     await supabase.from("document_module_proposals").update({ status: "superseded", updated_at: new Date().toISOString() })
       .eq("document_id", version.document_id)
       .neq("document_version_id", version.id)
@@ -521,7 +578,8 @@ export async function processDocumentVersion(input: {
     await recordDocumentPipelineStage({
       workspaceId: input.workspaceId, documentId: version.document_id, versionId: version.id,
       stage: "extract", status: "complete", details: {
-        category: effectiveCategory, model, specialized: businessDocumentSpecialist || mustUseStructuredSpecialist
+        category: effectiveCategory, model, specialized: businessDocumentSpecialist || mustUseStructuredSpecialist,
+        fieldQuality: { fields: fieldQuality.fields.length, issues: fieldQuality.issues.length, requiresReview: fieldQuality.requiresReview }, visualVerification
       }
     });
     await supabase.from("processing_jobs").update({

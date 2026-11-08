@@ -1,9 +1,12 @@
 import "server-only";
+import { FIELD_EVIDENCE_SCHEMA, FIELD_EVIDENCE_PROMPT, normalizeFieldEvidence, type FieldEvidence } from "@/lib/documents/field-evidence";
 
 import { getOptionalEnv, requireServerEnv } from "@/lib/env";
 import { normalizeDocumentCategory, type DocumentCategory } from "@/lib/documents/classification";
 
 export type DocumentAnalysis = {
+  fieldEvidence?: FieldEvidence[];
+  businessDocuments?: Array<DocumentAnalysis["businessDocument"] & { sourcePageStart?: number; sourcePageEnd?: number }>;
   category: DocumentCategory;
   subcategory: string;
   confidence: number;
@@ -154,6 +157,7 @@ export type DocumentAnalysis = {
 const RESPONSE_SCHEMA = {
   type: "OBJECT",
   properties: {
+    fieldEvidence: FIELD_EVIDENCE_SCHEMA,
     category: { type: "STRING", enum: ["technical", "specification", "estimate", "schedule", "protocol", "application", "contract", "correspondence", "invoice", "warehouse", "hr", "fleet", "template", "report", "other"] },
     subcategory: { type: "STRING" },
     confidence: { type: "NUMBER" },
@@ -294,7 +298,7 @@ const RESPONSE_SCHEMA = {
     },
     warnings: { type: "ARRAY", items: { type: "STRING" } }
   },
-  required: ["category", "subcategory", "confidence", "summary", "projectHint", "installations", "workStages", "requiredProtocols", "requiredApplications", "searchPassages", "businessDocument", "boqItems", "materialRequirements", "protocolRequirementsDetailed", "scheduleItems", "siteEvents", "progressItems", "tasks", "risks", "facts", "warnings"]
+  required: ["fieldEvidence", "category", "subcategory", "confidence", "summary", "projectHint", "installations", "workStages", "requiredProtocols", "requiredApplications", "searchPassages", "businessDocument", "boqItems", "materialRequirements", "protocolRequirementsDetailed", "scheduleItems", "siteEvents", "progressItems", "tasks", "risks", "facts", "warnings"]
 };
 
 type AnalyzeInput = { fileName: string; mimeType: string; extractedText?: string; inlineData?: string; fileUri?: string; projectCatalog?: string[] };
@@ -361,6 +365,7 @@ function normalizeAnalysis(value: unknown): DocumentAnalysis {
   const warnings = Array.isArray(source.warnings) ? source.warnings.map(String) : [];
   if ((source.boqItems?.length ?? 0) >= 500) warnings.push("Analiza osiągnęła limit 500 pozycji BOQ i wymaga kontroli kompletności.");
   return {
+    fieldEvidence: normalizeFieldEvidence(source.fieldEvidence),
     category,
     subcategory: source.subcategory ?? "",
     confidence: Math.max(0, Math.min(1, source.confidence)),
@@ -528,7 +533,7 @@ KATALOG INWESTYCJI:
 ${projectCatalog}
 
 W searchPassages zwróć ważne, możliwe do wyszukania fragmenty i nagłówki dokumentu, zachowując istotne oznaczenia techniczne. Nie wymyślaj brakujących parametrów. Każdy fakt musi mieć lokalizator i krótki cytat ze źródła. Zwróć wyłącznie JSON zgodny ze schematem.`;
-  const parts: Array<Record<string, unknown>> = [{ text: prompt }];
+  const parts: Array<Record<string, unknown>> = [{ text: prompt + FIELD_EVIDENCE_PROMPT }];
   if (input.inlineData) parts.push({ inlineData: { mimeType: input.mimeType, data: input.inlineData } });
   if (input.fileUri) parts.push({ fileData: { mimeType: input.mimeType, fileUri: input.fileUri } });
   if (input.extractedText) parts.push({ text: `\nTREŚĆ WYEKSTRAHOWANA:\n${input.extractedText.slice(0, 1_500_000)}` });

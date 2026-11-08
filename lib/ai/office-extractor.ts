@@ -4,7 +4,6 @@ import { createRequire } from "node:module";
 import { inflateRawSync } from "node:zlib";
 
 const MAX_ENTRY_BYTES = 12 * 1024 * 1024;
-const MAX_TOTAL_BYTES = 36 * 1024 * 1024;
 const requireNode = createRequire(import.meta.url);
 
 type LegacyWordDocument = {
@@ -77,17 +76,6 @@ function decodeXml(value: string) {
     .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16)));
 }
 
-function textNodes(xml: string) {
-  return decodeXml(Array.from(xml.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)).map((match) => match[1]).join(""));
-}
-
-function columnNumber(reference: string) {
-  const letters = reference.replace(/[^A-Z]/gi, "").toUpperCase();
-  let result = 0;
-  for (const letter of letters) result = result * 26 + letter.charCodeAt(0) - 64;
-  return Math.max(1, result);
-}
-
 export function extractDocxText(buffer: Buffer) {
   const entries = readZipEntries(buffer);
   const documentEntry = entries.find((entry) => entry.name === "word/document.xml");
@@ -95,6 +83,8 @@ export function extractDocxText(buffer: Buffer) {
   const xml = extractZipEntry(buffer, documentEntry).toString("utf8");
   return decodeXml(
     xml
+      .replace(/<\/w:tc>/g, "\t")
+      .replace(/<\/w:tr>/g, "\n")
       .replace(/<w:tab\s*\/>/g, "\t")
       .replace(/<w:br[^>]*\/>/g, "\n")
       .replace(/<\/w:p>/g, "\n")
@@ -103,39 +93,7 @@ export function extractDocxText(buffer: Buffer) {
 }
 
 export function extractXlsxText(buffer: Buffer) {
-  const entries = readZipEntries(buffer);
-  const sharedEntry = entries.find((entry) => entry.name === "xl/sharedStrings.xml");
-  const sharedStrings = sharedEntry
-    ? Array.from(extractZipEntry(buffer, sharedEntry).toString("utf8").matchAll(/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/g)).map((match) => textNodes(match[1]))
-    : [];
-  const sheetEntries = entries.filter((entry) => /^xl\/worksheets\/sheet\d+\.xml$/.test(entry.name));
-  let totalBytes = 0;
-  const sheets: string[] = [];
-
-  for (const entry of sheetEntries) {
-    totalBytes += entry.uncompressedSize;
-    if (totalBytes > MAX_TOTAL_BYTES) break;
-    const xml = extractZipEntry(buffer, entry).toString("utf8");
-    const lines: string[] = [`[Arkusz: ${entry.name.split("/").at(-1)}]`];
-    for (const rowMatch of xml.matchAll(/<row(?:\s[^>]*)?>([\s\S]*?)<\/row>/g)) {
-      const values: string[] = [];
-      for (const cellMatch of rowMatch[1].matchAll(/<c([^>]*)>([\s\S]*?)<\/c>/g)) {
-        const attributes = cellMatch[1];
-        const body = cellMatch[2];
-        const reference = /\br="([A-Z]+\d+)"/.exec(attributes)?.[1] ?? "A1";
-        const type = /\bt="([^"]+)"/.exec(attributes)?.[1];
-        const raw = /<v>([\s\S]*?)<\/v>/.exec(body)?.[1] ?? textNodes(body);
-        const value = type === "s" ? sharedStrings[Number(raw)] ?? raw : decodeXml(raw);
-        const index = columnNumber(reference) - 1;
-        while (values.length < index) values.push("");
-        values[index] = value;
-      }
-      if (values.some(Boolean)) lines.push(values.join("\t"));
-    }
-    sheets.push(lines.join("\n"));
-  }
-
-  return sheets.join("\n\n").trim();
+  return extractLegacyXlsText(buffer);
 }
 
 function safeLegacySection(reader: (() => string) | undefined) {
@@ -170,8 +128,16 @@ export function extractLegacyXlsText(buffer: Buffer) {
   for (const name of workbook.SheetNames.slice(0, 100)) {
     const sheet = workbook.Sheets[name];
     if (!sheet) continue;
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "", blankrows: false }) as unknown[][];
-    const lines = rows.slice(0, 20_000).map((row) => row.map((value) => String(value ?? "").replace(/[\t\r\n]+/g, " ").trim()).join("\t"));
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "", blankrows: true }) as unknown[][];
+    const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+    const lines = rows.slice(0, 20_000).map((row, index) => {
+      const cells = row.map((value, column) => {
+        const cell = XLSX.utils.encode_cell({ r: range.s.r + index, c: range.s.c + column });
+        const content = value instanceof Date ? value.toISOString().slice(0, 10) : String(value ?? "").replace(/[\t\r\n]+/g, " ").trim();
+        return content ? `${cell}: ${content}` : "";
+      }).filter(Boolean);
+      return cells.length ? `[Wiersz ${range.s.r + index + 1}] ${cells.join(" | ")}` : "";
+    }).filter(Boolean);
     sheets.push(`[Arkusz: ${name}]\n${lines.join("\n")}`);
   }
   const text = sheets.join("\n\n").trim();

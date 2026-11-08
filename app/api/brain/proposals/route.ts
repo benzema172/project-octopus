@@ -1,3 +1,4 @@
+import { validIsoDay } from "@/lib/documents/field-quality";
 import { NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth";
 import { hasDomainAccess } from "@/lib/authorization";
@@ -14,6 +15,7 @@ type Body = {
   proposalIds?: string[];
   proposalId?: string;
   note?: string;
+  confirmFieldReview?: boolean;
   title?: string;
   module?: InvestmentAiModule;
   payload?: Record<string, unknown>;
@@ -44,7 +46,20 @@ export async function POST(request: Request) {
     if (body.module && !INVESTMENT_AI_MODULES.includes(body.module)) return error("Nieprawidłowy moduł docelowy.", 400);
     const patch: Record<string, unknown> = { title, updated_at: new Date().toISOString() };
     if (body.module) patch.module = body.module;
-    if (body.payload && !Array.isArray(body.payload)) patch.payload = body.payload;
+    if (body.payload && !Array.isArray(body.payload)) {
+      const { data: existing, error: readError } = await db.from("document_module_proposals").select("payload")
+        .eq("id", body.proposalId).eq("workspace_id", project.workspace_id).eq("project_id", project.id).maybeSingle();
+      if (readError || !existing) return error("Nie można odczytać źródła korekty.", 409);
+      const values = { ...body.payload };
+      delete values.fieldQuality;
+      for (const [key, value] of Object.entries(values)) {
+        if (/^(quantity|unitPrice|totalPrice|durationDays|quantityExecuted|quantityAccepted)$/.test(key) && (typeof value !== "number" || !Number.isFinite(value))) return error("Korekta zawiera nieprawidłową liczbę.", 422);
+        if (/^(plannedStart|plannedFinish|dueDate)$/.test(key) && value !== "" && !validIsoDay(value)) return error("Korekta zawiera nieprawidłową datę.", 422);
+      }
+      patch.review_note = "Ręczna korekta wartości: " + new Date().toISOString();
+      patch.payload = { ...values, fieldQuality: { ...(existing.payload?.fieldQuality ?? {}), requiresReview: true,
+        correction: { actorId: user.id, at: new Date().toISOString(), reason: "Ręczna korekta wartości; wymagana kontrola źródła." } } };
+    }
     const { data, error: updateError } = await db.from("document_module_proposals").update(patch)
       .eq("id", body.proposalId).eq("workspace_id", project.workspace_id).eq("project_id", project.id)
       .in("status", ["proposed", "approved", "failed"]).select("id").maybeSingle<{ id: string }>();
@@ -56,12 +71,14 @@ export async function POST(request: Request) {
 
   const proposalIds = [...new Set((body.proposalIds ?? []).filter((id) => typeof id === "string" && id.length > 0))].slice(0, 200);
   if (!proposalIds.length) return error("Wybierz co najmniej jedną propozycję.", 400);
-  const { data: proposalSources, error: proposalSourcesError } = await db.from("document_module_proposals").select("id,document_id")
+  const { data: proposalSources, error: proposalSourcesError } = await db.from("document_module_proposals").select("id,document_id,payload")
     .eq("workspace_id", project.workspace_id).eq("project_id", project.id).in("id", proposalIds)
-    .returns<Array<{ id: string; document_id: string }>>();
+    .returns<Array<{ id: string; document_id: string; payload: Record<string, unknown> | null }>>();
   if (proposalSourcesError) return error(`Nie udało się sprawdzić źródeł propozycji: ${proposalSourcesError.message}`, 500);
   if ((proposalSources ?? []).length !== proposalIds.length) return error("Część propozycji nie należy do tej inwestycji.", 404);
   if (body.action === "approve") {
+    const requiresFieldReview = (proposalSources ?? []).some(row => (row.payload?.fieldQuality as { requiresReview?: boolean } | undefined)?.requiresReview);
+    if (requiresFieldReview && (proposalIds.length !== 1 || body.confirmFieldReview !== true)) return error("Sprawdź wskazane pola w źródle i potwierdź pojedynczą propozycję.", 409);
     const documentIds = [...new Set((proposalSources ?? []).map((row) => row.document_id))];
     const { count: approvedDocuments, error: approvedDocumentsError } = await db.from("documents").select("id", { count: "exact", head: true })
       .eq("workspace_id", project.workspace_id).eq("project_id", project.id).in("id", documentIds).eq("review_status", "approved").is("deleted_at", null);
@@ -76,7 +93,7 @@ export async function POST(request: Request) {
       p_proposal_id: id,
       p_action: body.action,
       p_actor_id: user.id,
-      p_note: body.note?.trim() || null
+      p_note: body.confirmFieldReview === true && proposalIds.length === 1 ? "Kontrola pól potwierdzona przez użytkownika: " + (body.note?.trim() || "Sprawdzono źródło i wartości.") : body.note?.trim() || null
     }).single<{ result_proposal_id: string; result_status: string; result_entity_type: string | null; result_entity_id: string | null }>();
     if (rpcError || !data) results.push({ id, ok: false, error: rpcError?.message ?? "Brak wyniku operacji." });
     else results.push({ id, ok: true, status: data.result_status, entityType: data.result_entity_type, entityId: data.result_entity_id });

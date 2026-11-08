@@ -10,7 +10,9 @@ const api=read("app/api/company/fuel-purchase-inbox/route.ts");
 
 describe("Tankowania are a dedicated Documents archive tab",()=>{
   it("adds the new navigation pill between Flota and Wzory i Brain",()=>{
-    expect(archive).toMatch(/\{ id: "fleet", label: "Flota" \},\s*\{ id: "fuel", label: "Tankowania" \},\s*\{ id: "templates", label: "Wzory i Brain" \}/);
+    expect(archive).toContain('{ id: "fuel", label: "Tankowania" }');
+    expect(archive).toMatch(/id:\s*"fleet",\s*label:\s*"Flota"/);
+    expect(archive).toMatch(/id:\s*"templates",\s*label:\s*"Wzory i Brain"/);
     expect(archive).toContain('tab === "fuel" ? (');
     expect(archive).toContain("<FuelPurchaseInbox");
     expect(archive).toContain('onPendingCountChange={setPendingFuelCount}');

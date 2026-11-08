@@ -41,7 +41,7 @@ describe("Warehouse 4.2 chunked multi-invoice PDF production path", () => {
     expect(chunkCacheMigration).toContain("warehouse_pdf_ai_chunks");
     expect(chunkCacheMigration).toContain("unique (document_sha256, context_sha256, parser_version, page_start, page_end)");
     expect(chunkCacheMigration).toContain("revoke all on table public.warehouse_pdf_ai_chunks from anon, authenticated");
-    expect(specialist).toContain('PARSER_VERSION = "business-pdf-chunks-6.1-evidence-gate"');
+    expect(specialist).toContain('PARSER_VERSION = "business-pdf-chunks-6.2-field-evidence"');
     expect(specialist).toContain('status === "succeeded"');
     expect(specialist).toContain("Udane porcje są zapisane i nie będą analizowane ponownie");
   });

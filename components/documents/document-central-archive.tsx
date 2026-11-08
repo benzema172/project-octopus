@@ -1,4 +1,5 @@
 "use client";
+import { DocumentFieldQuality } from "./document-field-quality";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
@@ -439,6 +440,8 @@ export function DocumentCentralArchive({
                       workspaceId={workspaceId} documentId={selected.id} projectId={selected.project_id}
                       name={selected.name} updatedAt={selected.updated_at} onArchived={()=>setSelectedId(null)}/>
                   </details>}
+
+                  <DocumentFieldQuality key={selected.id + (selected.current_version_id ?? "")} workspaceId={workspaceId} documentId={selected.id}/>
 
                   {selectedModule==="finance" || selectedModule==="warehouse" ? (
                     <div id={`document-review-${selected.id}`}>

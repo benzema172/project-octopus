@@ -19,6 +19,8 @@ const MODULE_LABELS: Record<InvestmentAiModule, string> = {
   protocols: "Protokoły", finance: "Finanse", warehouse: "Magazyn", reports: "Raporty", closeout: "Zamknięcie"
 };
 
+const FIELD_LABELS: Record<string, string> = { quantity: "Ilość", unit: "Jednostka", unitPrice: "Cena jednostkowa", totalPrice: "Wartość pozycji", plannedStart: "Początek", plannedFinish: "Koniec", durationDays: "Czas trwania (dni)", quantityExecuted: "Wykonano", quantityAccepted: "Odebrano", period: "Okres" };
+
 const STATUS_LABELS: Record<string, string> = {
   proposed: "do decyzji", approved: "zatwierdzona", rejected: "odrzucona", publishing: "publikowanie",
   published: "opublikowana", failed: "błąd", superseded: "zastąpiona"
@@ -44,23 +46,27 @@ function locatorLabel(locator: Record<string, unknown>) {
 
 function ProposalRow({ item, selected, canWrite, canApprove, busy, onToggle, onAction, onEdit }: {
   item: ProjectAiProposal; selected: boolean; canWrite: boolean; canApprove: boolean; busy: boolean;
-  onToggle: () => void; onAction: (action: "approve" | "reject") => void; onEdit: (title: string, module: InvestmentAiModule) => void;
+  onToggle: () => void; onAction: (action: "approve" | "reject") => void; onEdit: (title: string, module: InvestmentAiModule, payload: Record<string, unknown>) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [sourceChecked, setSourceChecked] = useState(false);
+  const [values, setValues] = useState(item.payload);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(item.title);
   const [module, setModule] = useState<InvestmentAiModule>(item.module);
   const pending = ["proposed", "approved", "failed"].includes(item.status);
+  const quality = item.payload.fieldQuality as { requiresReview?: boolean; issues?: Array<{ message: string }>; fields?: Array<{ path: string; status: string; reasons: string[] }> } | undefined;
   const payload = Object.entries(item.payload).filter(([, value]) => scalar(value)).slice(0, 8);
   return (
     <article className={`ai-proposal-row${selected ? " is-selected" : ""}`}>
-      {pending && canApprove ? <input aria-label={`Wybierz ${item.title}`} type="checkbox" checked={selected} onChange={onToggle} /> : <span className="ai-proposal-row__marker" />}
+      {pending && canApprove ? <input aria-label={`Wybierz ${item.title}`} type="checkbox" checked={selected} onChange={onToggle} disabled={Boolean(quality?.requiresReview)} /> : <span className="ai-proposal-row__marker" />}
       <button className="ai-proposal-row__main" type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
         <span className="ai-proposal-row__title">
           <strong>{item.title}</strong>
           <small>{item.documentName} · {locatorLabel(item.sourceLocator)}</small>
         </span>
         <span className="ai-proposal-row__badges">
+          {quality?.requiresReview ? <b className="is-formal"><AlertTriangle size={11}/> sprawdź pola</b> : null}
           {item.requiresFormalApproval ? <b className="is-formal"><ShieldCheck size={11}/> formalna</b> : null}
           <b>{MODULE_LABELS[item.module]}</b>
           <b className={`is-status is-${item.status}`}>{STATUS_LABELS[item.status] ?? item.status}</b>
@@ -70,18 +76,21 @@ function ProposalRow({ item, selected, canWrite, canApprove, busy, onToggle, onA
       </button>
       {pending && (canApprove || canWrite) ? <span className="ai-proposal-row__actions">
         {canWrite ? <button type="button" title="Koryguj" onClick={() => setEditing((value) => !value)} disabled={busy}><Pencil size={13}/></button> : null}
-        {canApprove ? <><button className="is-approve" type="button" title="Zatwierdź i opublikuj" onClick={() => onAction("approve")} disabled={busy}><Check size={14}/></button><button className="is-reject" type="button" title="Odrzuć" onClick={() => onAction("reject")} disabled={busy}><X size={14}/></button></> : null}
+        {canApprove ? <><button className="is-approve" type="button" title={quality?.requiresReview ? "Najpierw rozwiń i sprawdź pola w źródle" : "Zatwierdź i opublikuj"} onClick={() => onAction("approve")} disabled={busy || Boolean(quality?.requiresReview && !sourceChecked)}><Check size={14}/></button><button className="is-reject" type="button" title="Odrzuć" onClick={() => onAction("reject")} disabled={busy}><X size={14}/></button></> : null}
       </span> : null}
-      {editing ? <form className="ai-proposal-row__edit" onSubmit={(event) => { event.preventDefault(); onEdit(title, module); setEditing(false); }}>
+      {editing ? <form className="ai-proposal-row__edit" onSubmit={(event) => { event.preventDefault(); onEdit(title, module, values); setEditing(false); }}>
         <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={300} aria-label="Tytuł propozycji" />
         <select value={module} onChange={(event) => setModule(event.target.value as InvestmentAiModule)} aria-label="Moduł docelowy">
           {INVESTMENT_AI_MODULES.map((value) => <option key={value} value={value}>{MODULE_LABELS[value]}</option>)}
         </select>
+        {Object.entries(values).filter(([key, value]) => /^(quantity|unit|unitPrice|totalPrice|plannedStart|plannedFinish|durationDays|quantityExecuted|quantityAccepted|period)$/.test(key) && ["string", "number"].includes(typeof value)).map(([key, value]) => <label key={key}>{FIELD_LABELS[key] ?? key}<input aria-label={`Korekta ${FIELD_LABELS[key] ?? key}`} type={typeof value === "number" ? "number" : "text"} step="any" value={String(value)} onChange={event => setValues(current => ({ ...current, [key]: typeof value === "number" ? Number(event.target.value) : event.target.value }))}/></label>)}
         <button type="submit" disabled={busy || !title.trim()}>Zapisz korektę</button>
       </form> : null}
       {open ? <div className="ai-proposal-row__details">
         {item.sourceQuote ? <blockquote>„{item.sourceQuote}”</blockquote> : <p className="is-warning"><AlertTriangle size={12}/> Brak krótkiego cytatu — sprawdź dokument źródłowy.</p>}
         {payload.length ? <dl>{payload.map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{scalar(value)}</dd></div>)}</dl> : null}
+        {quality?.requiresReview ? <p className="is-warning">{[...(quality.issues ?? []).map(issue => issue.message), ...(quality.fields ?? []).filter(field => ["missing", "conflict"].includes(field.status)).flatMap(field => field.reasons)].filter((message, index, all) => all.indexOf(message) === index).slice(0, 5).join(" ") || "Sprawdź wartości w dokumencie źródłowym."}</p> : null}
+        {quality?.requiresReview && pending && canApprove ? <label><input type="checkbox" checked={sourceChecked} onChange={event => setSourceChecked(event.target.checked)}/> Sprawdziłem wskazane wartości w dokumencie źródłowym</label> : null}
         {item.reviewNote ? <p>Notatka: {item.reviewNote}</p> : null}
       </div> : null}
     </article>
@@ -130,9 +139,9 @@ export function ProjectAiReviewCenter({ projectId, review, canWrite, canApprove,
       {message ? <p className="ai-review-center__message is-success">{message}</p> : null}{error ? <p className="ai-review-center__message is-error">{error}</p> : null}
       {busy ? <p className="ai-review-center__busy"><LoaderCircle className="spin" size={14}/> Trwa bezpieczna publikacja…</p> : null}
       <div className="ai-review-center__list">
-        {visible.map((item) => <ProposalRow key={item.id} item={item} selected={selected.includes(item.id)} canWrite={canWrite} canApprove={canApprove} busy={busy}
+        {visible.map((item) => <ProposalRow key={`${item.id}:${item.reviewNote ?? ""}:${item.title}`} item={item} selected={selected.includes(item.id)} canWrite={canWrite} canApprove={canApprove} busy={busy}
           onToggle={() => setSelected((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])}
-          onAction={(action) => decide([item.id], action)} onEdit={(title, module) => void post({ action: "update", proposalId: item.id, title, module })}/>) }
+          onAction={(action) => void post({ action, proposalIds: [item.id], confirmFieldReview: action === "approve" && Boolean((item.payload.fieldQuality as { requiresReview?: boolean } | undefined)?.requiresReview) })} onEdit={(title, module, payload) => void post({ action: "update", proposalId: item.id, title, module, payload })}/>) }
         {!visible.length ? <p className="ai-review-center__empty"><ShieldCheck size={16}/> {filter === "pending" ? "Brak propozycji wymagających decyzji." : "Brak rozstrzygniętych propozycji w tym filtrze."}</p> : null}
       </div>
     </section>

@@ -48,7 +48,7 @@ export async function POST(request:Request) {
   if(sessionError||!session)return reply("Sesja importu nie należy do tej firmy.",404);
   const [{data:rows,error:readError},{data:sessionVersions,error:versionError}]=await Promise.all([
     db.from("document_module_proposals")
-      .select("id,document_id,document_version_id,project_id,module,proposal_type,status,confidence,source_quote,source_locator")
+      .select("id,document_id,document_version_id,project_id,module,proposal_type,status,confidence,source_quote,source_locator,payload")
       .eq("workspace_id",workspace.id).eq("project_id",project.id)
       .eq("module",body.module).eq("proposal_type",body.proposalType)
       .eq("status","proposed").in("id",ids),
@@ -60,6 +60,7 @@ export async function POST(request:Request) {
   const versionIds=new Set((sessionVersions??[]).map(v=>v.document_version_id));
   if((rows??[]).length!==ids.length
     || (rows??[]).some(r=>!versionIds.has(r.document_version_id)
+      || (r.payload?.fieldQuality as {requiresReview?:boolean}|undefined)?.requiresReview===true
       || Number(r.confidence??0)<0.90
       || !(String(r.source_quote??"").trim()
         || (r.source_locator && Object.keys(r.source_locator).length>0))))

@@ -208,17 +208,21 @@ export async function applyDocumentAutopilot(input: {
   // Classification and destination are separate decisions: do not publish to
   // cost estimate, protocols, warehouse etc. when model confidence or project
   // identity does not meet the unattended-processing gate.
-  const [classificationResult, intakeResult] = await Promise.all([
+  const [classificationResult, intakeResult, extractionQualityResult] = await Promise.all([
     db.from("document_classifications").select("confidence")
       .eq("workspace_id", input.workspaceId).eq("document_version_id", input.versionId)
       .eq("status", "proposed").order("created_at", { ascending: false })
       .limit(1).maybeSingle<{ confidence: number | null }>(),
     db.from("document_intakes").select("category_locked")
       .eq("document_id", input.documentId)
-      .maybeSingle<{ category_locked: boolean | null }>()
+      .maybeSingle<{ category_locked: boolean | null }>(),
+    db.from("document_extractions").select("payload")
+      .eq("workspace_id", input.workspaceId).eq("document_version_id", input.versionId)
+      .eq("extraction_type", "document_context").eq("schema_version", "document-analysis-v3")
+      .maybeSingle<{ payload: { fieldQuality?: { blockingBusinessFields?: boolean }; pdfSegmentation?: { requiresReview?: boolean; reason?: string } } }>()
   ]);
-  if (classificationResult.error || intakeResult.error) {
-    throw new Error(`Kontrola klasyfikacji przed routingiem nie powiodła się: ${classificationResult.error?.message ?? intakeResult.error?.message}`);
+  if (classificationResult.error || intakeResult.error || extractionQualityResult.error) {
+    throw new Error(`Kontrola klasyfikacji przed routingiem nie powiodła się: ${classificationResult.error?.message ?? intakeResult.error?.message ?? extractionQualityResult.error?.message}`);
   }
   const classificationConfidence = classificationResult.data?.confidence;
   const calibratedClassificationConfidence = classificationConfidence == null
@@ -227,6 +231,8 @@ export async function applyDocumentAutopilot(input: {
         workspaceId:input.workspaceId,domain:"documents",taskType:"classification",
         raw:Number(classificationConfidence)
       }));
+  const extractionQuality = extractionQualityResult.data?.payload;
+  const qualityHold = extractionQuality?.fieldQuality?.blockingBusinessFields === true || extractionQuality?.pdfSegmentation?.requiresReview === true;
   const belowAutomaticThreshold = calibratedClassificationConfidence != null
     && calibratedClassificationConfidence < 0.82 && !intakeResult.data?.category_locked;
   let unassignedProjectProposals = false;
@@ -240,8 +246,9 @@ export async function applyDocumentAutopilot(input: {
     if (needsProjectError) throw new Error(`Nie udało się sprawdzić celu dokumentu: ${needsProjectError.message}`);
     unassignedProjectProposals = Boolean(needsProject?.length);
   }
-  if (belowAutomaticThreshold || unassignedProjectProposals) {
-    const reason = belowAutomaticThreshold
+  if (belowAutomaticThreshold || unassignedProjectProposals || qualityHold) {
+    const reason = qualityHold ? "Odczyt pól lub granic PDF wymaga kontroli źródła przed automatycznym zapisem."
+      : belowAutomaticThreshold
       ? `Skalibrowana pewność klasyfikacji AI: ${Math.round(Number(calibratedClassificationConfidence) * 100)}%. Dokument wymaga potwierdzenia przed publikacją.`
       : "Dokument zawiera propozycje do modułów inwestycji, ale nie ma pewnie wskazanej inwestycji.";
     const { error: heldError } = await db.from("documents")
@@ -363,6 +370,16 @@ export async function applyDocumentAutopilot(input: {
   let hasBoq = false;
 
   for (const proposal of proposals ?? []) {
+    const quality = proposal.payload?.fieldQuality as { requiresReview?: boolean } | undefined;
+    if (proposal.status !== "published" && quality?.requiresReview === true) {
+      failed += 1;
+      errors.push(`${proposal.title}: sprawdź wskazane pola i źródło przed publikacją.`);
+      const { error: holdError } = await db.from("document_module_proposals").update({
+        status: "proposed", review_note: "Kontrola pól: wymagana weryfikacja źródła; pozostałe poprawne propozycje są przetwarzane niezależnie.", updated_at: new Date().toISOString()
+      }).eq("id", proposal.id).eq("workspace_id", input.workspaceId);
+      if (holdError) throw new Error(`Nie udało się zapisać kontroli pól: ${holdError.message}`);
+      continue;
+    }
     hasBoq ||= proposal.proposal_type === "boq_item";
 
     let publishResult: PublishResult | null = null;
@@ -426,7 +443,7 @@ export async function applyDocumentAutopilot(input: {
   }
 
   let boqImported = false;
-  if (hasBoq) {
+  if (hasBoq && !(proposals ?? []).some(proposal => proposal.proposal_type === "boq_item" && (proposal.payload?.fieldQuality as { requiresReview?: boolean } | undefined)?.requiresReview)) {
     const { data: estimateImport, error: estimateError } = await db
       .from("estimate_imports")
       .select("id,status")

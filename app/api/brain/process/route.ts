@@ -226,6 +226,14 @@ export async function POST(request: Request) {
         categoryOverride: body.lockCategory ? normalizeDocumentCategory(sourceDocument.category) : null
       });
 
+      if ("package" in analysis) {
+        await recordPipelineOutcome({ workspaceId: workspace.id, documentId: version.document_id, versionId: body.versionId,
+          category: "other", routeOk: true, isInvoice: false });
+        return NextResponse.json({ ok: true, status: "package_expanded", counts: {}, analysis,
+          package: { packageId: analysis.package.id, acceptedEntries: analysis.package.accepted,
+            skippedEntries: analysis.package.rejected, queuedVersionIds: analysis.package.queuedVersionIds } }, { headers: { "Cache-Control": "no-store" } });
+      }
+
       const exactDuplicate = await findExistingExactDuplicate({
         workspaceId: workspace.id, documentId: version.document_id, versionId: body.versionId
       });
@@ -322,14 +330,7 @@ export async function POST(request: Request) {
         isInvoice:analysis.effectiveCategory==="invoice" || containsInvoiceBusinessDocument(analysis),
         checks:pipelineChecks,failure:invoiceCheckError ?? routingError
       });
-      const packageStatus = "package" in analysis
-        ? {
-            packageId: analysis.package.id,
-            acceptedEntries: analysis.package.accepted,
-            skippedEntries: analysis.package.rejected,
-            queuedVersionIds: analysis.package.queuedVersionIds
-          }
-        : null;
+      const packageStatus = null;
       const counts = {
         facts: analysis.facts.length,
         materials: analysis.materialRequirements.length || analysis.requiredApplications.length,

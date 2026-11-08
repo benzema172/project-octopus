@@ -43,7 +43,7 @@ describe("Document Intelligence 6.2", () => {
     expect(uploadUi).toContain("Pokaż źródło");
     expect(uploadUi).toContain("#page=");
     expect(operations).toContain("evidenceByDocument");
-    expect(inbox).toContain("Dowód AI");
+    expect(inbox).toContain("Pokaż źródło");
     expect(inbox).toContain("previewEvidence");
   });
 

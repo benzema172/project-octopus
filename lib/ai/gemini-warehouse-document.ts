@@ -1,4 +1,5 @@
 import "server-only";
+import { FIELD_EVIDENCE_SCHEMA, FIELD_EVIDENCE_PROMPT, normalizeFieldEvidence } from "@/lib/documents/field-evidence";
 
 import { createHash } from "node:crypto";
 import type { DocumentAnalysis } from "@/lib/ai/gemini-document";
@@ -54,7 +55,7 @@ type ChunkAnalysisResult = {
 };
 
 const RETRYABLE_GEMINI_STATUS = new Set([408, 429, 500, 502, 503, 504]);
-const PARSER_VERSION = "business-pdf-chunks-6.1-evidence-gate";
+const PARSER_VERSION = "business-pdf-chunks-6.2-field-evidence";
 const PDF_PAGES_PER_CHUNK = 4;
 const PDF_OVERLAP_PAGES = 1;
 const PDF_CHUNK_CONCURRENCY = 2;
@@ -122,9 +123,10 @@ const RESPONSE_SCHEMA = {
   properties: {
     category: { type: "STRING", enum: ["warehouse", "invoice", "hr", "fleet", "technical", "contract", "other"] },
     subcategory: { type: "STRING" }, confidence: { type: "NUMBER" }, summary: { type: "STRING" }, projectHint: { type: "STRING" },
+    fieldEvidence: FIELD_EVIDENCE_SCHEMA,
     businessDocuments: { type: "ARRAY", items: BUSINESS_DOCUMENT_SCHEMA }, warnings: { type: "ARRAY", items: { type: "STRING" } }
   },
-  required: ["category", "subcategory", "confidence", "summary", "projectHint", "businessDocuments", "warnings"]
+  required: ["fieldEvidence", "category", "subcategory", "confidence", "summary", "projectHint", "businessDocuments", "warnings"]
 };
 
 function bounded(value: unknown) {
@@ -305,6 +307,7 @@ function normalizeAnalysis(value: unknown): WarehouseDocumentAnalysis {
     projectHint: String(source.projectHint ?? "OGÓLNE").trim() || "OGÓLNE",
     installations: [], workStages: [], requiredProtocols: [], requiredApplications: [], searchPassages,
     businessDocument: businessDocuments[0] ?? emptyBusinessDocument(), businessDocuments,
+    fieldEvidence: normalizeFieldEvidence(source.fieldEvidence),
     boqItems: [], materialRequirements: [], protocolRequirementsDetailed: [], scheduleItems: [], siteEvents: [], progressItems: [], tasks: [], risks: [], facts: [],
     warnings: [
       ...(Array.isArray(source.warnings) ? source.warnings.map(String) : []),
@@ -502,7 +505,7 @@ BRAMKA TOŻSAMOŚCI:
 - documentType="invoice" ustawiaj WYŁĄCZNIE wtedy, gdy źródło faktycznie zawiera dowody faktury: numer/KSeF, datę, strony transakcji oraz kwoty lub wycenione pozycje. Nie traktuj kosztorysu, BOQ, audytu, specyfikacji, oferty, protokołu ani opisu technicznego jako faktury tylko dlatego, że zawiera tabelę, ceny, nazwę firmy lub numer dokumentu.
 - dla WZ/PZ/MM/RW/ZW/delivery wymagaj rzeczywistego oznaczenia lub jednoznacznej treści ruchu/dostawy; nie zgaduj typu.
 - nie twórz pustego businessDocuments i nie uzupełniaj brakujących numerów, dat, kontrahentów ani kwot danymi wymyślonymi. Jeżeli dowody są niewystarczające, pomiń element z businessDocuments i ustaw kategorię zgodną z rzeczywistą treścią.\n\nROZUMIENIE OBIEGU MATERIAŁOWEGO:\n- invoice = dokument zakupu/sprzedaży i źródło ceny. Faktura zakupowa NIE oznacza jeszcze wydania materiału na inwestycję.\n- PZ = przyjęcie materiału do magazynu. Może odnosić się do faktury, ale sam PZ nie jest fakturą.\n- MM = przesunięcie materiału. W tej firmie MM często oznacza wydanie z magazynu na konkretną inwestycję/ekipę/pracownika. Jeśli na MM występuje kod/nazwa/adres inwestycji lub odbiorca-pracownik, wyciągnij te dane. Nie przypisuj MM wartości finansowej jako nowego zakupu.\n- RW/WZ = rozchód/wydanie materiału. Traktuj je jako ruch magazynowy, nie jako fakturę.\n- ZW = zwrot materiału.\n- delivery = inny dokument dostawy, gdy nie da się wiarygodnie określić PZ/WZ/MM/RW/ZW.\n\nDla pozycji paliwowych rozpoznawaj ON, diesel, olej napędowy, PB95/PB98, LPG itp., wpisuj expenseCategory="fuel" i dokładnie widoczne vehicleRegistration, liters, mileage; gdy dokument zawiera jedną rejestrację odnoszącą się do tankowanego auta, przypisz ją do związanych pozycji paliwa. Przy kilku różnych tablicach lub niejasnej relacji nie zgaduj numeru. Nie przypisuj AdBlue ani oleju silnikowego jako paliwa silnikowego.\n\nDla każdego dokumentu podaj sourcePageStart/sourcePageEnd, documentType, numer dokumentu/KSeF/PO, daty, dostawcę/nabywcę, a także projectCode, projectName, projectAddress, recipientEmployeeName, recipientEmployeeNumber, sourceWarehouse i targetWarehouse, jeśli są widoczne. Dla MM/RW/WZ nie wymyślaj kwot z faktury — pola finansowe mogą być 0, jeśli dokument ich nie zawiera.\n\nKażdą WIDOCZNĄ pozycję zwróć dokładnie raz. Rozpoznawaj SKU/indeks, producenta, model i EAN, bo służą do połączenia tej samej kartoteki materiałowej między fakturą, PZ i MM. lineType=material tylko dla fizycznego towaru/materiału/urządzenia/części/narzędzia; service dla robocizny, transportu, najmu i usług; other dla rabatów, korekt i pozycji niejednoznacznych. Nie wymyślaj danych.\n\nJeżeli analizowana część nie zawiera dokumentu magazynowo-finansowego, businessDocuments ma być puste. projectHint ma wskazać dokładnie jeden wiersz katalogu albo OGÓLNE. W dopasowaniu inwestycji preferuj dokładny kod, następnie nazwę/adres. Nie zgaduj.\n\nKATALOG INWESTYCJI:\n${projectCatalog}\n\nZwróć wyłącznie JSON zgodny ze schematem.`;
-  const parts: Array<Record<string, unknown>> = [{ text: prompt }];
+  const parts: Array<Record<string, unknown>> = [{ text: prompt + FIELD_EVIDENCE_PROMPT }];
   if (input.fileUri) parts.push({ fileData: { mimeType: input.mimeType, fileUri: input.fileUri } });
   if (input.extractedText) parts.push({ text: `\nTREŚĆ WYEKSTRAHOWANA:\n${input.extractedText.slice(0, 1_500_000)}` });
 
@@ -514,7 +517,7 @@ BRAMKA TOŻSAMOŚCI:
         headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
         body: JSON.stringify({
           contents: [{ role: "user", parts }],
-          generationConfig: { responseMimeType: "application/json", responseSchema: RESPONSE_SCHEMA, temperature: 0.03, maxOutputTokens: 20_000 }
+          generationConfig: { responseMimeType: "application/json", responseSchema: RESPONSE_SCHEMA, temperature: 0.03, maxOutputTokens: 32_768 }
         }),
         signal: AbortSignal.timeout(60_000)
       });
@@ -765,6 +768,16 @@ function aggregateChunkAnalyses(results: ChunkAnalysisResult[], pageCount: numbe
     installations: [], workStages: [], requiredProtocols: [], requiredApplications: [], searchPassages,
     businessDocument: businessDocuments[0] ?? emptyBusinessDocument(),
     businessDocuments,
+    fieldEvidence: results.flatMap(result => (result.analysis.fieldEvidence ?? []).flatMap(evidence => {
+      const match = /^businessDocuments\.(\d+)(\.lines\.(\d+))?(\..+)$/.exec(evidence.path);
+      if (!match) return [];
+      const source = result.analysis.businessDocuments[Number(match[1])];
+      const index = source ? businessDocuments.findIndex(doc => sameBusinessDocument(doc, source)) : -1;
+      if (index < 0) return [];
+      const line = match[3] === undefined ? -1 : businessDocuments[index].lines.findIndex(row => lineSignature(row) === lineSignature(source.lines[Number(match[3])] ?? {} as WarehouseBusinessLine) );
+      if (match[3] !== undefined && line < 0) return [];
+      return [{ ...evidence, path: `businessDocuments.${index}${line < 0 ? "" : `.lines.${line}`}${match[4]}` }];
+    })),
     boqItems: [], materialRequirements: [], protocolRequirementsDetailed: [], scheduleItems: [], siteEvents: [], progressItems: [], tasks: [], risks: [], facts: [],
     warnings
   };
