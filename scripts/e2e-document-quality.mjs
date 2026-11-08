@@ -21,14 +21,24 @@ if (projects.error || !projects.data?.length) throw Error("Missing dedicated aud
 const projectId = projects.data[0].id;
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
 async function upload(fileName, mimeType, bytes) {
-  const existing = await db.from("documents").select("id").eq("workspace_id", workspaceId).eq("project_id", projectId).eq("name", fileName).is("deleted_at", null).limit(1).maybeSingle();
+  // AI may rename documents; the immutable uploaded filename identifies the fixture.
+  const existing = await db.from("document_versions").select("document_id,documents!document_versions_document_id_fkey!inner(workspace_id)")
+    .eq("documents.workspace_id", workspaceId).eq("project_id", projectId).eq("file_name", fileName)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (existing.error) throw existing.error;
-  const url = await api("/api/storage/upload-url", token, { workspaceId, projectId, ...(existing.data ? { documentId: existing.data.id } : {}), fileName, mimeType, fileSize: bytes.length });
+  const documentId = existing.data?.document_id;
+  if (documentId) {
+    const document = await db.from("documents").select("deleted_at").eq("id", documentId).eq("workspace_id", workspaceId).single();
+    if (document.error) throw document.error;
+    if (document.data.deleted_at) await api("/api/storage/document-state", token, { workspaceId, projectId, documentId, state: "active" });
+  }
+  console.log(`Checking live fixture: ${fileName}`);
+  const url = await api("/api/storage/upload-url", token, { workspaceId, projectId, ...(documentId ? { documentId } : {}), fileName, mimeType, fileSize: bytes.length });
   const stored = await fetch(url.uploadUrl, { method: "PUT", headers: url.headers, body: bytes });
   if (!stored.ok) throw Error(`R2 fixture upload failed: ${stored.status}`);
   return api("/api/storage/complete", token, { token: url.token, sha256: sha(bytes) });
 }
-async function process(versionId) { return api("/api/brain/process", token, { workspaceId, versionId }); }
+async function processVersion(versionId) { return api("/api/brain/process", token, { workspaceId, versionId }); }
 async function extraction(versionId) {
   const result = await db.from("document_extractions").select("payload").eq("workspace_id", workspaceId).eq("document_version_id", versionId).eq("extraction_type", "document_context").eq("schema_version", "document-analysis-v3").single();
   if (result.error) throw result.error;
@@ -49,7 +59,7 @@ function spreadsheet(bad) {
 const summary = [];
 for (const bad of [false, true]) {
   const fixture = await upload(`octopus-live-field-quality-${bad ? "conflict" : "valid"}.xlsx`, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", spreadsheet(bad));
-  await process(fixture.versionId);
+  await processVersion(fixture.versionId);
   const data = await extraction(fixture.versionId);
   const total = data.fieldQuality.fields.find(field => field.path === "boqItems.0.totalPrice");
   if (!total || total.source?.cell !== "F3") throw Error("Lost physical Excel cell provenance");
@@ -74,11 +84,11 @@ for (const lines of [
 }
 const bytes = Buffer.from(await pdf.save());
 const fixture = await upload("octopus-live-field-quality-mixed.pdf", "application/pdf", bytes);
-const processed = await process(fixture.versionId);
+const processed = await processVersion(fixture.versionId);
 if (processed.package?.acceptedEntries !== 3 || processed.package.queuedVersionIds?.length !== 3) throw Error(`Mixed PDF was not split into three documents: ${JSON.stringify(processed.package ?? processed.status)}`);
 const children = [];
 for (const versionId of processed.package.queuedVersionIds) {
-  await process(versionId); const data = await extraction(versionId);
+  await processVersion(versionId); const data = await extraction(versionId);
   children.push({ category: data.category, fields: data.fieldQuality.fields.length });
   const origin = await db.from("document_intakes").select("source_metadata").eq("workspace_id", workspaceId).eq("document_id", data.fieldQuality.documentId).single();
   if (origin.error || origin.data.source_metadata.parentVersionId !== fixture.versionId || origin.data.source_metadata.pdfLogicalChild !== true) throw Error("Child lost its original PDF lineage");
