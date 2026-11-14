@@ -3,6 +3,7 @@ import "server-only";
 import { createRequire } from "node:module";
 import type { FieldEvidence } from "./field-evidence";
 import { validIsoDay } from "./field-quality";
+import { parseDocumentNumber } from "./numeric-source";
 import type { DocumentAnalysis } from "../ai/gemini-document";
 
 const requireNode = createRequire(import.meta.url);
@@ -62,10 +63,7 @@ function text(value: unknown) {
 }
 
 function numeric(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  const candidate = text(value).replace(/\s/g, "").replace(/,(?=\d{1,4}$)/, ".").replace(/[^0-9.-]/g, "");
-  const parsed = Number(candidate);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return parseDocumentNumber(value) ?? 0;
 }
 
 function isoDate(value: unknown) {
@@ -152,7 +150,8 @@ export function extractSpreadsheetIntelligence(buffer: Buffer): SpecialistResult
           result.fieldEvidence.push({ path: `${collection}.${index}.${key}`,
             quote: ["plannedStart", "plannedFinish", "period"].includes(key) ? isoDate(raw) || text(raw) : text(raw), locator: `${locator}, komórka ${address} (${headerValue})`, cell: address,
             origin: "native", ...(cell?.f ? { formula: String(cell.f) } : {}),
-            missingValue: raw === "" || raw === undefined || cell?.t === "e" });
+            missingValue: raw === "" || raw === undefined || cell?.t === "e"
+              || (["quantity", "unitPrice", "totalPrice", "durationDays", "quantityExecuted", "quantityAccepted"].includes(key) && parseDocumentNumber(raw) === null) });
           if (cell?.f && (cell.v === undefined || cell.t === "e")) result.warnings.push(`${locator}, ${address}: formuła nie ma poprawnej zapisanej wartości; wymagane przeliczenie w Excelu.`);
         }
       }
@@ -198,7 +197,8 @@ export function extractSpreadsheetIntelligence(buffer: Buffer): SpecialistResult
       if (hasProgress && result.progressItems.length < MAX_OUTPUT_ROWS) {
         const quantityExecuted = Math.max(0, numeric(value(row, mapping, "quantityExecuted")));
         const quantityAccepted = Math.max(0, numeric(value(row, mapping, "quantityAccepted")));
-        if (quantityExecuted || quantityAccepted) {
+        // Zero and unreadable quantities are source rows too. Keep their evidence
+        // so the model fallback cannot replace a dropped row with a guessed value.
         addEvidence("progressItems", result.progressItems.length, ["quantityExecuted", "quantityAccepted", "unit", "period"]);
         result.progressItems.push({
           boqItemNumber: text(value(row, mapping, "itemNumber")),
@@ -212,7 +212,6 @@ export function extractSpreadsheetIntelligence(buffer: Buffer): SpecialistResult
           locator,
           quote
         });
-        }
       }
 
       if (hasMaterials && result.materialRequirements.length < MAX_OUTPUT_ROWS) result.materialRequirements.push({

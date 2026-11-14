@@ -43,6 +43,7 @@ async function extraction(versionId) {
   const result = await db.from("document_extractions").select("payload").eq("workspace_id", workspaceId).eq("document_version_id", versionId).eq("extraction_type", "document_context").eq("schema_version", "document-analysis-v3").single();
   if (result.error) throw result.error;
   if (result.data.payload.fieldQuality?.version !== "field-quality-v1") throw Error("Detailed field validation was not persisted");
+  if (result.data.payload.fieldQuality.rulesVersion !== "typed-spans-20261114") throw Error("The deployed typed-span validation rules were not used");
   return result.data.payload;
 }
 function spreadsheet(bad) {
@@ -74,6 +75,45 @@ for (const bad of [false, true]) {
   if (anon.status !== 401) throw Error("Quality endpoint lacks authentication");
   summary.push({ fixture: bad ? "conflicting_excel" : "valid_excel", cell: total.source.cell, status: total.status, fields: data.fieldQuality.fields.length, guarded: bad ? true : undefined });
 }
+// Native cell parsing must retain the sign and grouped decimal instead of cleaning
+// them into a different, apparently valid value. No model answer is mocked here.
+const signedBook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(signedBook, XLSX.utils.aoa_to_sheet([
+  ["Lp", "Opis", "Ilość", "Jm", "Cena jednostkowa", "Wartość"],
+  ["N1", "Korekta ilości rury DN50", "(10)", "m", 20, "(200)"],
+  ["N2", "Zawór testowy DN50", 2, "szt.", "1.234,56", "2.469,12"],
+  ["N3", "Rura z nieczytelną ilością", "0 nieczytelne", "m", 20, 0]
+]), "Kosztorys");
+const signedFixture = await upload("octopus-live-field-quality-typed-spans.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Buffer.from(XLSX.write(signedBook, { type: "buffer", bookType: "xlsx" })));
+await processVersion(signedFixture.versionId);
+const signedData = await extraction(signedFixture.versionId);
+const findField = path => signedData.fieldQuality.fields.find(field => field.path === path);
+for (const [path, value, cell] of [["boqItems.0.quantity", -10, "C2"], ["boqItems.0.totalPrice", -200, "F2"], ["boqItems.1.unitPrice", 1234.56, "E3"], ["boqItems.1.totalPrice", 2469.12, "F3"]]) {
+  const field = findField(path);
+  if (field?.value !== value || field.status !== "verified" || field.source?.cell !== cell) throw Error(`Native signed/grouped source corrupted: ${path} ${JSON.stringify(field)}`);
+}
+if (findField("boqItems.2.quantity")?.status !== "missing" || !signedData.fieldQuality.requiresReview) throw Error("Unreadable numeric text was accepted as a native zero");
+const typedProposals = await db.from("document_module_proposals").select("status,payload,source_locator").eq("document_version_id", signedFixture.versionId).eq("proposal_type", "boq_item");
+if (typedProposals.error) throw typedProposals.error;
+if (typedProposals.data.length !== 3) throw Error("Native typed-span fixture did not produce the expected BOQ proposals");
+const unreadable = typedProposals.data.find(row => row.source_locator?.analysisPath === "boqItems.2");
+if (!unreadable?.payload.fieldQuality?.requiresReview || unreadable.status === "published") throw Error("Unreadable cell reached publication or lost its source row identity");
+if (typedProposals.data.some(row => !row.source_locator?.analysisPath || row.payload.fieldQuality.rulesVersion !== "typed-spans-20261114")) throw Error("Published proposal lost its typed-span provenance");
+summary.push({ fixture: "typed_spans_excel", signedQuantity: -10, signedTotal: -200, groupedTotal: 2469.12, unreadableCellGuarded: true, sourceRowIdentity: true });
+const progressBook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(progressBook, XLSX.utils.aoa_to_sheet([
+  ["Lp", "Opis", "Wykonano", "Odebrano", "Jm"],
+  ["P1", "Montaż rur — ilość nieczytelna", "0 nieczytelne", 0, "m"]
+]), "Przeroby");
+const progressFixture = await upload("octopus-live-field-quality-progress.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Buffer.from(XLSX.write(progressBook, { type: "buffer", bookType: "xlsx" })));
+await processVersion(progressFixture.versionId);
+const progressData = await extraction(progressFixture.versionId);
+const executed = progressData.fieldQuality.fields.find(field => field.path === "progressItems.0.quantityExecuted");
+if (progressData.progressItems.length !== 1 || executed?.status !== "missing" || executed.source?.cell !== "C2") throw Error("Unreadable progress source disappeared or became a verified zero");
+const progressProposals = await db.from("document_module_proposals").select("status,payload,source_locator").eq("document_version_id", progressFixture.versionId).eq("proposal_type", "progress_claim");
+if (progressProposals.error) throw progressProposals.error;
+if (progressProposals.data.length !== 1 || !progressProposals.data[0].payload.fieldQuality?.requiresReview || progressProposals.data[0].status === "published" || progressProposals.data[0].source_locator?.analysisPath !== "progressItems.0") throw Error("Unreadable progress was not held with its original row identity");
+summary.push({ fixture: "unreadable_progress_excel", cell: "C2", rowPreserved: true, publicationGuarded: true });
 const pdf = await PDFDocument.create(); const font = await pdf.embedFont(StandardFonts.Helvetica);
 for (const lines of [
   ["INDEPENDENT DOCUMENT 1 - COST ESTIMATE EST-QA-01", "Project Octopus test investment", "Item | Description | Quantity | Unit | Unit price PLN | Total PLN", "1 | Steel pipe DN50 | 10 | m | 20 | 200", "END OF COST ESTIMATE"],

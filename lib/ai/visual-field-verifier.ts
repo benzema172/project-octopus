@@ -5,6 +5,7 @@ import type { DocumentAnalysis } from "./gemini-document";
 import { structuredVision } from "./structured-vision";
 import { valueAtPath } from "../documents/field-evidence";
 import { valueInQuote, type FieldQualityReport } from "../documents/field-quality";
+import { equalDocumentNumbers, parseDocumentNumber } from "../documents/numeric-source";
 
 export function planVisualVerification(quality: FieldQualityReport) {
   return quality.fields.filter(field => field.status !== "verified" && field.source?.page
@@ -77,8 +78,9 @@ export async function verifyUncertainVisualFields(input: { analysis: DocumentAna
       if (!evidence || rows.length !== 1 || !rows[0].value?.trim() || !rows[0].quote?.trim()) { summary.unavailable++; unavailable(field.path); continue; }
       const expected = valueAtPath(input.analysis, field.path);
       const actual = rows[0].value.trim();
-      const agrees = typeof expected === "number" ? Number.isFinite(Number(actual.replace(",", "."))) && Math.abs(Number(actual.replace(",", ".")) - expected) < 0.000001 : actual === String(expected);
-      if (!valueInQuote(typeof expected === "number" ? Number(actual.replace(",", ".")) : actual, rows[0].quote)) { summary.unavailable++; unavailable(field.path); continue; }
+      const parsed = typeof expected === "number" ? parseDocumentNumber(actual) : null;
+      const agrees = typeof expected === "number" ? parsed !== null && equalDocumentNumbers(parsed, expected) : actual === String(expected);
+      if (typeof expected === "number" && parsed === null || !valueInQuote(typeof expected === "number" ? parsed : actual, rows[0].quote)) { summary.unavailable++; unavailable(field.path); continue; }
       evidence.verification = agrees ? "agrees" : "disagrees";
       evidence.verificationQuote = rows[0].quote.slice(0, 1000);
       if (agrees) summary.agreed++; else summary.conflicts++;

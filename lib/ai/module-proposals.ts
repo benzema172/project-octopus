@@ -98,14 +98,14 @@ function businessDocumentsForAnalysis(analysis: DocumentAnalysis) {
 export function buildDocumentModuleProposals(analysis: DocumentAnalysis) {
   const proposals: ModuleProposalDraft[] = [];
 
-  analysis.facts.forEach((fact) => proposals.push({
+  analysis.facts.forEach((fact, index) => proposals.push({
     module: "data",
     proposalType: "project_fact",
     naturalKey: naturalKey("fact", [fact.type || fact.label, fact.value]),
     title: fact.label || fact.type || "Fakt inwestycji",
     payload: { type: fact.type || fact.label, label: fact.label, value: fact.value, unit: fact.unit },
     confidence: bounded(fact.confidence),
-    sourceLocator: locator(fact.locator),
+    sourceLocator: { ...locator(fact.locator), analysisPath: `facts.${index}` },
     sourceQuote: quote(fact.quote),
     requiresFormalApproval: false
   }));
@@ -117,7 +117,7 @@ export function buildDocumentModuleProposals(analysis: DocumentAnalysis) {
     title: `${item.itemNumber ? `${item.itemNumber} · ` : ""}${item.description}`,
     payload: { ...item, sourceRow: index + 1 },
     confidence: bounded(item.confidence),
-    sourceLocator: locator(item.locator),
+    sourceLocator: { ...locator(item.locator), analysisPath: `boqItems.${index}` },
     sourceQuote: quote(item.quote || item.description),
     requiresFormalApproval: true
   }));
@@ -153,7 +153,7 @@ export function buildDocumentModuleProposals(analysis: DocumentAnalysis) {
   });
 
   const protocolTitles = new Set<string>();
-  analysis.protocolRequirementsDetailed.forEach((item) => {
+  analysis.protocolRequirementsDetailed.forEach((item, index) => {
     protocolTitles.add(normalize(item.title));
     proposals.push({
       module: "protocols",
@@ -162,7 +162,7 @@ export function buildDocumentModuleProposals(analysis: DocumentAnalysis) {
       title: item.title,
       payload: item,
       confidence: bounded(item.confidence),
-      sourceLocator: locator(item.locator),
+      sourceLocator: { ...locator(item.locator), analysisPath: `protocolRequirementsDetailed.${index}` },
       sourceQuote: quote(item.quote),
       requiresFormalApproval: true
     });
@@ -183,7 +183,7 @@ export function buildDocumentModuleProposals(analysis: DocumentAnalysis) {
   });
 
   const scheduleTitles = new Set<string>();
-  analysis.scheduleItems.forEach((item) => {
+  analysis.scheduleItems.forEach((item, index) => {
     scheduleTitles.add(normalize(item.title));
     proposals.push({
       module: "schedule",
@@ -192,7 +192,7 @@ export function buildDocumentModuleProposals(analysis: DocumentAnalysis) {
       title: item.title,
       payload: item,
       confidence: bounded(item.confidence),
-      sourceLocator: locator(item.locator),
+      sourceLocator: { ...locator(item.locator), analysisPath: `scheduleItems.${index}` },
       sourceQuote: quote(item.quote),
       requiresFormalApproval: true
     });
@@ -224,14 +224,14 @@ export function buildDocumentModuleProposals(analysis: DocumentAnalysis) {
     requiresFormalApproval: true
   }));
 
-  analysis.progressItems.forEach((item) => proposals.push({
+  analysis.progressItems.forEach((item, index) => proposals.push({
     module: "progress",
     proposalType: "progress_claim",
     naturalKey: naturalKey("progress", [item.boqItemNumber, item.wbsCode, item.period, item.description]),
     title: item.description,
     payload: item,
     confidence: bounded(item.confidence),
-    sourceLocator: locator(item.locator),
+    sourceLocator: { ...locator(item.locator), analysisPath: `progressItems.${index}` },
     sourceQuote: quote(item.quote),
     requiresFormalApproval: true
   }));

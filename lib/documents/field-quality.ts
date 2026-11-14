@@ -1,6 +1,7 @@
 import type { DocumentAnalysis } from "@/lib/ai/gemini-document";
 import type { ModuleProposalDraft } from "@/lib/ai/module-proposals";
 import { valueAtPath, type FieldEvidence } from "./field-evidence";
+import { numberInSourceQuote } from "./numeric-source";
 
 export type FieldCheck = {
   path: string; value: unknown; source: FieldEvidence | null;
@@ -9,6 +10,7 @@ export type FieldCheck = {
 };
 export type FieldQualityReport = {
   version: "field-quality-v1";
+  rulesVersion?: string;
   /** A deterministic evidence score, NOT a calibrated probability of correctness. */
   scoreKind: "evidence_and_consistency";
   documentId: string; documentVersionId: string;
@@ -23,17 +25,19 @@ export function validIsoDay(value: unknown): boolean {
 }
 
 function normalized(value: string) { return value.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase("pl"); }
-function numberInQuote(value: number, quote: string) {
-  return (quote.match(/-?\d+(?:[ \u00a0\u202f]\d{3})*(?:[.,]\d+)?/g) ?? []).some(token =>
-    Math.abs(Number(token.replace(/[ \u00a0\u202f]/g, "").replace(",", ".")) - value) < 0.000001);
+function completeSpanInQuote(value: string, quote: string) {
+  if (!value) return false;
+  const literal = normalized(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\p{L}\\p{N}_/-])${literal}(?![\\p{L}\\p{N}_/-])`, "u").test(normalized(quote));
 }
 export function valueInQuote(value: unknown, quote: string) {
-  if (typeof value === "number") return numberInQuote(value, quote);
+  if (typeof value === "number") return numberInSourceQuote(value, quote);
   if (validIsoDay(value)) {
     const [y, m, d] = String(value).split("-");
-    return quote.includes(String(value)) || [".", "/", "-"].some(s => quote.includes(`${d}${s}${m}${s}${y}`));
+    return completeSpanInQuote(String(value), quote) || [".", "/", "-"].some(s =>
+      [d, String(Number(d))].some(day => [m, String(Number(m))].some(month => completeSpanInQuote(`${day}${s}${month}${s}${y}`, quote))));
   }
-  return normalized(quote).includes(normalized(String(value ?? "")));
+  return completeSpanInQuote(String(value ?? ""), quote);
 }
 
 export function assessFieldQuality(analysis: DocumentAnalysis, context: {
@@ -120,7 +124,7 @@ export function assessFieldQuality(analysis: DocumentAnalysis, context: {
       if (fiscal && line.quantity && line.unitPrice && Math.abs(line.quantity * line.unitPrice - line.netAmount) > Math.max(0.02, Math.abs(line.quantity) * 0.005)) fail(`${prefix}.lines.${j}.netAmount`, "Ilość × cena różni się od wartości netto; sprawdź rabat lub odczyt.");
     });
   });
-  return { version: "field-quality-v1", scoreKind: "evidence_and_consistency", documentId: context.documentId, documentVersionId: context.documentVersionId, fields, issues,
+  return { version: "field-quality-v1", rulesVersion: "typed-spans-20261114", scoreKind: "evidence_and_consistency", documentId: context.documentId, documentVersionId: context.documentVersionId, fields, issues,
     requiresReview: fields.some(row => ["missing", "conflict"].includes(row.status)) || issues.length > 0,
     blockingBusinessFields: fields.some(row => /^business/.test(row.path) && ["missing", "conflict"].includes(row.status)) || issues.some(row => /^business/.test(row.path)) };
 }
@@ -137,21 +141,26 @@ export function attachProposalQuality(proposals: ModuleProposalDraft[], analysis
     const rows = analysis[collection];
     if (!Array.isArray(rows)) continue;
     const byKey = new Map<string, number>();
-    rows.forEach((row, index) => { if (row && typeof row === "object") { const key = rowKey(row as unknown as Record<string, unknown>); if (!byKey.has(key)) byKey.set(key, index); } });
+    rows.forEach((row, index) => { if (row && typeof row === "object") { const key = rowKey(row as unknown as Record<string, unknown>); byKey.set(key, byKey.has(key) ? -1 : index); } });
     rowIndexes.set(collection, byKey);
   }
   return proposals.map(proposal => {
     const collection = indexes[proposal.proposalType];
-    const index = collection ? rowIndexes.get(collection)?.get(rowKey({ ...proposal.payload, locator: proposal.payload.locator ?? proposal.sourceLocator.label })) : undefined;
+    const pointer = proposal.sourceLocator.analysisPath;
+    const match = typeof pointer === "string" && collection ? new RegExp(`^${collection}\\.(\\d+)$`).exec(pointer) : null;
+    const candidate = pointer === undefined ? rowIndexes.get(collection)?.get(rowKey({ ...proposal.payload, locator: proposal.payload.locator ?? proposal.sourceLocator.label })) : match ? Number(match[1]) : undefined;
+    const rows = collection ? analysis[collection] : undefined;
+    const index = candidate !== undefined && Number.isSafeInteger(candidate) && candidate >= 0 && Array.isArray(rows) && candidate < rows.length ? candidate : undefined;
     const key = collection && index !== undefined ? `${collection}.${index}` : "";
     const fields = fieldsByRow.get(key) ?? [];
     const issues = issuesByRow.get(key) ?? [];
     const needsEvidence = ["boq_item", "schedule_activity", "progress_claim", "protocol_requirement"].includes(proposal.proposalType);
     const sourceMissing = needsEvidence && (!proposal.sourceQuote || !proposal.sourceLocator.label);
-    const requiresReview = sourceMissing || fields.some(row => ["missing", "conflict"].includes(row.status)) || issues.length > 0;
+    const unresolvedSource = Boolean(collection && index === undefined && (pointer !== undefined || ["boq_item", "progress_claim", "project_fact"].includes(proposal.proposalType)));
+    const requiresReview = sourceMissing || unresolvedSource || fields.some(row => ["missing", "conflict"].includes(row.status)) || issues.length > 0;
     return { ...proposal, payload: { ...proposal.payload, fieldQuality: {
-      version: report.version, scoreKind: report.scoreKind, requiresReview,
-      fields, issues, ...(sourceMissing ? { reason: "Brak cytatu lub lokalizacji źródła." } : {})
+      version: report.version, rulesVersion: report.rulesVersion, scoreKind: report.scoreKind, requiresReview,
+      fields, issues, ...(sourceMissing ? { reason: "Brak cytatu lub lokalizacji źródła." } : unresolvedSource ? { reason: "Nie można jednoznacznie powiązać propozycji z wierszem analizy." } : {})
     } }, sourceLocator: { ...proposal.sourceLocator, documentId: report.documentId, documentVersionId: report.documentVersionId } };
   });
 }
