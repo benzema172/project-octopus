@@ -21,7 +21,7 @@ ponownie w ACL Anthology 14 listopada. Wszystkie mają datę publikacji: paździ
 | [Splitting Documents at Lower Cost: Multi-Split Boundary Decisions for LLM-Based Page Stream Segmentation](https://aclanthology.org/2026.docinsights-1.3/) | Kilka granic dokumentów w jednym oknie stron. Dobór wielkości okna zależy od modelu i korpusu; metoda sama nie klasyfikuje ani nie usuwa duplikatów. | Podział PDF z nakładaniem okien i zachowaniem oryginału działa od 8 listopada. Nie zmieniono parametrów bez nowych pomiarów. |
 | [Look Where It Matters: High-Resolution Crops Retrieval for Efficient VLMs](https://aclanthology.org/2026.docinsights-1.25/) | Trenowany wybór wycinków o wysokiej rozdzielczości. Samo przycinanie z istniejącym modelem nie odtwarza wyników AwaRes. | Pozostaje ograniczony drugi odczyt wycinka z nagłówkiem. Wspólne zasady interpretacji liczb obejmują teraz również porównanie drugiego odczytu. |
 
-### Własne ustalenia i wdrażana poprawka
+### Własne ustalenia i wdrożone poprawki
 
 1. Stary warunek podciągu mógł uznać `m` za potwierdzone przez `cm`, `m²` lub `m/s`,
    a `FV/1` przez `FV/10`. Nowa kontrola sprawdza granice całego fragmentu.
@@ -73,7 +73,25 @@ Supabase w istniejącym wydzielonym projekcie gościa. Oprócz poprawnego/błęd
 kosztorysu i mieszanego PDF sprawdza teraz ujemne i grupowane wartości, nieczytelne
 komórki BOQ i przerobów, blokadę publikacji oraz identyfikator źródłowego wiersza.
 Sprawdza też aktualną wersję reguł, aby nie zaliczyć raportu ze starej ekstrakcji.
-Dowody wdrożenia i wyniki E2E zostaną uzupełnione po potwierdzeniu produkcji.
+
+Potwierdzone wdrożenie funkcjonalne:
+[`07499c4cfdfb33408e002c58c84cd8a5f330c9da`](https://github.com/benzema172/project-octopus/commit/07499c4cfdfb33408e002c58c84cd8a5f330c9da).
+
+| Kontrola po publikacji | Potwierdzony wynik 14 listopada |
+| --- | --- |
+| [CI](https://github.com/benzema172/project-octopus/actions/runs/43573202683) | Sukces: 218 plików, 11 120 testów; 238 migracji; typecheck; build; 0 podatności; lint 0 błędów / 5 wcześniejszych ostrzeżeń. |
+| Produkcja Vercel | READY; alias `project-octopus-alpha.vercel.app` wskazywał commit `07499c4`; skrypt oczekiwania niezależnie potwierdził ten sam commit w aplikacji. |
+| [Testy produkcyjne E2E](https://github.com/benzema172/project-octopus/actions/runs/43573202710) | Wszystkie trzy kroki poprawne: integracja, tenant isolation / IDOR, kontrola pól i PDF. |
+| Poprawny XLSX | Wartość potwierdzona z komórki F3; raport zawiera 6 pól. |
+| Błędny XLSX | Rozbieżność F3, wymagane sprawdzenie; brak publikacji błędnej pozycji. |
+| XLSX ze znakami i separatorami | `quantity=-10`, `total=-200`, druga wartość `2469.12`; zachowane komórki; nieczytelny wiersz BOQ wstrzymany; `analysisPath` obecny w propozycjach. |
+| Nieczytelny przerób | Wiersz zachowany, komórka C2 skierowana do kontroli, propozycja nieopublikowana. |
+| Mieszany PDF | Trzy dokumenty potomne rozpoznane jako `estimate`, `schedule`, `protocol`; oryginał zachował SHA-256 i powiązania źródłowe. |
+| Kontrola widoków | Zalogowany pulpit firmy, inwestycja, archiwum, filtr kategorii i otwarcie panelu źródeł; brak błędów aplikacji w konsoli. Dokumenty historyczne bez raportu nadal poprawnie udostępniają oryginał. |
+| Logi uruchomieniowe | Brak wpisów `error` / `fatal` nowego wdrożenia w sprawdzonym oknie 07:43–07:58 UTC obejmującym E2E. |
+
+Uzupełnienie tego rejestru po testach nie zmienia kodu aplikacji. Historyczne
+wyniki powyżej odnoszą się do wskazanego wdrożenia funkcjonalnego.
 
 Reguły obejmują nowe i ponownie analizowane pliki; nie przepisywano historycznych
 decyzji ani danych użytkowników. Pojedynczy separator `,` lub `.` oznacza część
