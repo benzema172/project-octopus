@@ -22,6 +22,8 @@ create table if not exists public.project_intelligence_edges (
 );
 create index if not exists project_intelligence_edges_project_idx
   on public.project_intelligence_edges(workspace_id,project_id,source_version_id);
+create index if not exists project_intelligence_edges_source_document_idx
+  on public.project_intelligence_edges(source_document_id);
 
 create table if not exists public.project_intelligence_findings (
   id uuid primary key default gen_random_uuid(),
@@ -46,6 +48,12 @@ create table if not exists public.project_intelligence_findings (
 create index if not exists project_intelligence_findings_pending_idx
   on public.project_intelligence_findings(workspace_id,project_id,created_at desc)
   where status='pending';
+create index if not exists project_intelligence_findings_project_idx
+  on public.project_intelligence_findings(project_id);
+create index if not exists project_intelligence_findings_source_document_idx
+  on public.project_intelligence_findings(source_document_id);
+create index if not exists project_intelligence_findings_source_version_idx
+  on public.project_intelligence_findings(source_version_id);
 
 create table if not exists public.project_intelligence_events (
   id uuid primary key default gen_random_uuid(),
@@ -62,6 +70,8 @@ create table if not exists public.project_intelligence_events (
 );
 create index if not exists project_intelligence_events_project_idx
   on public.project_intelligence_events(workspace_id,project_id,created_at desc);
+create index if not exists project_intelligence_events_version_idx
+  on public.project_intelligence_events(document_version_id);
 
 -- All intelligence is service-owned; never expose privileged writes through PostgREST.
 alter table public.project_intelligence_edges enable row level security;
@@ -311,3 +321,41 @@ drop trigger if exists project_intelligence_warehouse_event on public.stock_move
 create trigger project_intelligence_warehouse_event
   after insert or update of source_document_id on public.stock_movements
   for each row execute function public.trg_refresh_project_intelligence_source();
+
+-- Proposals and detected revisions may be persisted after the route stage;
+-- listen for those native events too instead of requiring a manual reprocess.
+create or replace function public.trg_refresh_project_intelligence_proposal()
+returns trigger language plpgsql security definer
+set search_path=public,pg_temp
+as $octopus_intelligence_proposal$
+begin
+  if new.document_version_id is not null and new.workspace_id is not null then
+    perform public.refresh_project_intelligence_for_version(new.workspace_id,new.document_version_id);
+  end if;
+  return new;
+end;
+$octopus_intelligence_proposal$;
+revoke all on function public.trg_refresh_project_intelligence_proposal()
+  from public,anon,authenticated;
+drop trigger if exists project_intelligence_proposal_event on public.document_module_proposals;
+create trigger project_intelligence_proposal_event
+  after insert or update of status,published_entity_id,published_entity_type on public.document_module_proposals
+  for each row execute function public.trg_refresh_project_intelligence_proposal();
+
+create or replace function public.trg_refresh_project_intelligence_impact()
+returns trigger language plpgsql security definer
+set search_path=public,pg_temp
+as $octopus_intelligence_impact$
+begin
+  if new.to_version_id is not null and new.workspace_id is not null then
+    perform public.refresh_project_intelligence_for_version(new.workspace_id,new.to_version_id);
+  end if;
+  return new;
+end;
+$octopus_intelligence_impact$;
+revoke all on function public.trg_refresh_project_intelligence_impact()
+  from public,anon,authenticated;
+drop trigger if exists project_intelligence_change_event on public.document_change_impacts;
+create trigger project_intelligence_change_event
+  after insert or update of status,risk_level,summary,evidence on public.document_change_impacts
+  for each row execute function public.trg_refresh_project_intelligence_impact();
