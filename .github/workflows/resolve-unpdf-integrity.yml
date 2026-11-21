@@ -1,0 +1,19 @@
+name: Resolve PDF reader integrity
+on:
+  push:
+    branches: [maintenance/unpdf-lock-20261121]
+permissions:
+  contents: read
+jobs:
+  pin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Produce canonical npm lock entry
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --save-exact unpdf@2.2.1
+          node -e 'const p=require("./package-lock.json").packages; console.log("OCTOPUS_UNPDF_LOCK="+JSON.stringify(p["node_modules/unpdf"]))'
+          git diff --stat -- package-lock.json
