@@ -28,7 +28,7 @@ const guest = await api("/api/auth/guest", null, { login: process.env.E2E_GUEST_
 const signed = await db.auth.signInWithPassword({ email: guest.email, password: guest.password });
 if (signed.error || !signed.data.session) throw Error("Guest audit sign-in failed");
 const token = signed.data.session.access_token, workspaceId = guest.workspaceId;
-const projects = await db.from("projects").select("id,name").eq("workspace_id", workspaceId).eq("status", "active").limit(1);
+const projects = await db.from("projects").select("id,name").eq("workspace_id", workspaceId).eq("status", "active").order("id").limit(1);
 if (projects.error || !projects.data?.length) throw Error("Missing dedicated audit project");
 const projectId = projects.data[0].id;
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
