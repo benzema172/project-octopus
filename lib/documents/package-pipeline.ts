@@ -383,6 +383,10 @@ export async function processDocumentPackage(input: {
   });
   await recordDocumentPipelineStage({ workspaceId: input.workspaceId, documentId: input.parent.document_id,
     versionId: input.parent.id, stage: "extract", status: "complete", details: { packageId: packageRow.id, accepted, rejected, generatedFromPdf: Boolean(input.generatedPdf) } });
+  const { error: extractionStateError } = await db.from("document_versions")
+    .update({ extraction_status: "completed" })
+    .eq("id", input.parent.id).eq("document_id", input.parent.document_id);
+  if (extractionStateError) throw new Error(`Nie udało się zapisać statusu ekstrakcji paczki: ${extractionStateError.message}`);
   return analysis;
 }
 
