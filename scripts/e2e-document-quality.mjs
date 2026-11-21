@@ -185,6 +185,12 @@ async function checkConstructionFlow() {
   ["TECHNICAL SPECIFICATION - ACCEPTANCE CRITERION",reference+" | "+scope+" | test pressure >= 5 bar",
     "BOQ "+tag+" | WBS W2 | "+scope+" | "+reference+" | test pressure >= 5 bar"].forEach((line,i)=>page.drawText(line,{x:30,y:760-i*35,size:11,font}));
   const spec = await file("specification.pdf","application/pdf",Buffer.from(await section.save()),"specification");
+  const required = spec.data.constructionSource.entries.filter(row => row.kind === "criterion" &&
+    row.locator === "Strona 1" && row.reference === reference && row.scope === scope);
+  if (!required.some(row => row.itemNumber === tag && row.wbs === "W2") ||
+      !required.some(row => row.itemNumber === "" && row.valueText === ">= 5 bar")) {
+    throw Error("Both native PDF source lines must survive the extraction");
+  }
   await api("/api/brain/review",token,{workspaceId,projectId,entityType:"document",entityId:spec.documentId,action:"approve",category:"specification",note:"Synthetic acceptance fixture"});
   const z = XLSX.CFB.utils.cfb_new();
   const add = (path,xml) => XLSX.CFB.utils.cfb_add(z,path,Buffer.from(xml));
