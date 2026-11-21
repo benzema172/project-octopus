@@ -54,6 +54,36 @@ describe("obieg dokumentów inwestycji", () => {
     expect(meetsCriterion(5,{value:5,operator:">"})).toBe(false);
     expect(readConstructionEvidence([{...evidence, code:"BŁĘDNY"}])[0].code).toBe("");
   });
+  it("paruje cały odcinek i równoważne powtórzenie progu w jednej specyfikacji", () => {
+    const spec = doc("specification"), protocol = doc("protocol");
+    const scope = "OCT-PIPE-17", reference = "SPEC-17", metric = "test pressure";
+    const clause = { ...evidence, scope: "", reference, metric, valueText: ">= 5 bar", quote: "SPEC-17 | OCT-PIPE-17 | test pressure >= 5 bar" };
+    const repeated = { ...clause, unit: "kPa", valueText: ">= 500 kPa", quote: "BOQ B1 | WBS W2 | OCT-PIPE-17 | SPEC-17 | test pressure >= 500 kPa" };
+    const measurement = { ...evidence, kind: "measurement" as const, scope, reference, valueText: "0,5", unit: "MPa" };
+    protocol.source.entries = [measurement];
+    spec.source.entries = [clause, repeated];
+    const review = (sources = [spec, protocol]) => projectSourceReview(sources, "protocols")[0];
+    expect(review().status).toBe("Pomiar spełnia kryterium");
+    expect(review().sources).toHaveLength(3);
+    protocol.source.entries = [{ ...measurement, valueText: "0,49" }];
+    expect(review().status).toBe("Pomiar poza kryterium");
+    protocol.source.entries = [measurement];
+    expect(review([spec, { ...spec, versionId: "other-spec" }, protocol]).status).toContain("Do weryfikacji");
+    spec.source.entries = [clause, { ...clause, valueText: "> 5 bar", quote: clause.quote.replace(">=", ">") }];
+    expect(review().status).toContain("Do weryfikacji");
+    spec.source.entries = [clause];
+    for (const item of [{ ...measurement, scope: "OCT-PIPE-1" }, { ...measurement, reference: "" },
+      { ...measurement, reference: "SPEC-18" }, { ...measurement, metric: "spadek ciśnienia" }]) {
+      protocol.source.entries = [item];
+      expect(review().status).toContain("Do weryfikacji");
+    }
+    protocol.source.entries = [measurement];
+    for (const quote of [clause.quote + " | inny odcinek", clause.quote.replace(scope, "model " + scope),
+      clause.quote.replace("test pressure >= 5 bar", "test pressure >= 6 bar"), clause.quote.replace("5 bar", "5")]) {
+      spec.source.entries = [{ ...clause, quote }];
+      expect(review().status).toContain("Do weryfikacji");
+    }
+  });
   it("łączy wariant i jednostkę, pokazuje oba źródła i nie zgaduje przy dwóch dopasowaniach", () => {
     const bo = doc("estimate"), card = doc("application");bo.source.boq=[item,{...item,id:"B2",variant:"DN65"}];
     card.source.entries=[{...evidence,kind:"product",itemNumber:"",wbs:"",code:"P-44",variant:"DN65",unit:"szt"}];

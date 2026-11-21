@@ -1,11 +1,22 @@
 /** Live integration fixtures run only in the existing dedicated guest audit workspace. */
 import { createHash } from "node:crypto";
-import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import * as XLSX from "xlsx";
 const base = process.env.E2E_BASE_URL;
 if (!base || !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) throw Error("Missing public live-test configuration");
-const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+const browserCookies = new Map();
+const db = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, {
+  cookies: {
+    getAll: () => Array.from(browserCookies, ([name, value]) => ({ name, value })),
+    setAll: cookies => {
+      for (const { name, value } of cookies) {
+        if (value) browserCookies.set(name, value);
+        else browserCookies.delete(name);
+      }
+    }
+  }
+});
 async function api(path, token, body) {
   const res = await fetch(base + path, { method: body ? "POST" : "GET", headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body ? { "Content-Type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(310_000) });
   const data = await res.json().catch(() => ({}));
@@ -203,5 +214,24 @@ async function checkConstructionFlow() {
   if (!measures.some(r=>r.title===scope&&r.status.includes("nie odebrano")&&r.links?.[0]?.href==="https://example.org/fixture.pdf")) throw Error("Nested DOCX note or attached footnote lost");
   const anonymous=await fetch(base+"/api/projects/construction-review?projectId="+projectId+"&kind=materials");
   if (anonymous.status!==401) throw Error("Construction review requires a session");
+  const views = [
+    ["", "Finanse inwestycji"],
+    ["/cost-estimate", "Importy i analiza kosztorysu"],
+    ["/schedule", "Zadania z przedmiaru i warunki odbioru"],
+    ["/requests", "Karty wyrobów i pozycje kosztorysu"],
+    ["/protocols", "Pomiary, kryteria i uwagi do odcinków"]
+  ];
+  const cookie = Array.from(browserCookies, ([name, value]) => name + "=" + value).join("; ");
+  if (!cookie) throw Error("Guest session for rendered project views is missing");
+  for (const [path, heading] of views) {
+    const page = await fetch(base + "/workspace/projects/" + projectId + path, {
+      headers: { cookie }, redirect: "error", cache: "no-store", signal: AbortSignal.timeout(45000)
+    });
+    const html = await page.text();
+    if (!page.ok || !html.includes(heading) || (process.env.GITHUB_SHA && !html.includes(process.env.GITHUB_SHA))) {
+      throw Error("Production project view did not render the expected release and content: " + (path || "/"));
+    }
+  }
+  console.log("Authenticated production views verified: project, cost estimate, schedule, materials, protocols.");
   summary.push({fixture:"cross_document_construction",matchedRevision:"R2",boqRows:2,heldScheduleDrafts:2,materialVariant:"DN50",approvedSpec:reference,pressure:"0.5 MPa",scopedFootnote:true});
 }
