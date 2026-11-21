@@ -57,7 +57,15 @@ export async function verifyConstructionPanels(base, projectId, cookies) {
     }
     const logs = await command("POST", session + "/se/log", { type: "browser" });
     const errors = logs.filter(entry => entry.level === "SEVERE");
-    if (errors.length) throw Error("Production browser errors: " + errors.length + " (" + errors.map(e => e.source || "browser").join(", ") + ")");
+    if (errors.length) throw Error("Production browser errors: " + errors.length + " (" + errors.map(entry => {
+      const rawUrl = entry.message?.match(/https?:\/\/[^\s]+/)?.[0];
+      let route = "";
+      if (rawUrl) {
+        try { const url = new URL(rawUrl); route = url.origin + url.pathname; } catch { /* log only valid, query-free URLs */ }
+      }
+      const reason = entry.message?.match(/status of \d{3}|net::ERR_[A-Z_]+|Uncaught [A-Za-z]+/i)?.[0] || "";
+      return [entry.source || "browser", route, reason].filter(Boolean).join(" ");
+    }).join(", ") + ")");
     console.log("Chrome verified 3 expanded source panels with live rows; zero severe browser errors.");
   } finally {
     await command("DELETE", session);

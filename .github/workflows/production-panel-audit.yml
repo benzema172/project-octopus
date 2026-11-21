@@ -1,0 +1,32 @@
+name: Read-only production panel verification
+on:
+  push:
+    branches: [audits/production-20261121]
+    paths: [".github/workflows/production-panel-audit.yml", "scripts/e2e-existing-panels.mjs", "scripts/e2e-construction-browser.mjs"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_SUPABASE_URL: https://tlbqwbdfoeuvwdlmdzhd.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_GKNVG1MgDSyYhfhMn4um4g_GonPEXAE
+      E2E_BASE_URL: https://project-octopus-alpha.vercel.app
+      E2E_GUEST_LOGIN: gosc
+      E2E_GUEST_PASSWORD: gosc
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Verify the three expanded production panels
+        run: |
+          chromedriver --port=9515 > "$RUNNER_TEMP/octopus-chromedriver.log" 2>&1 &
+          driver_pid=$!
+          trap 'kill "$driver_pid" 2>/dev/null || true' EXIT
+          node scripts/e2e-existing-panels.mjs
