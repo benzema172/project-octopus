@@ -9,7 +9,8 @@ import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { analyzeDocumentWithGemini, analyzeFileWithGemini } from "@/lib/ai/gemini-document";
 import { analyzeWarehouseDocumentWithGemini } from "@/lib/ai/gemini-warehouse-document";
 import { buildDocumentModuleProposals, proposalCounts } from "@/lib/ai/module-proposals";
-import { extractDocxText, extractLegacyDocText, extractLegacyXlsText, extractXlsxText } from "@/lib/ai/office-extractor";
+import { buildConstructionSource } from "../documents/construction-evidence";
+import { extractDocxDocument, extractLegacyDocText, extractLegacyXlsText, extractXlsxText } from "@/lib/ai/office-extractor";
 import { getR2Config } from "@/lib/env";
 import { createR2Client } from "@/lib/r2/client";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -82,7 +83,7 @@ function extension(fileName: string) {
 async function prepareInput(fileName: string, mimeType: string, bytes: Buffer) {
   const ext = extension(fileName);
   if (ext === "doc") return { extractedText: await extractLegacyDocText(bytes) };
-  if (ext === "docx") return { extractedText: extractDocxText(bytes) };
+  if (ext === "docx") { const word = extractDocxDocument(bytes); return { extractedText: word.text, wordRows: word.rows }; }
   if (ext === "xls") return { extractedText: extractLegacyXlsText(bytes) };
   if (ext === "xlsx") return { extractedText: extractXlsxText(bytes) };
   if (["txt", "csv", "xml", "json", "md"].includes(ext) || mimeType.startsWith("text/")) return { extractedText: bytes.toString("utf8") };
@@ -328,8 +329,9 @@ export async function processDocumentVersion(input: {
     if (["xls", "xlsx"].includes(extension(version.file_name))) {
       try {
         const spreadsheet = extractSpreadsheetIntelligence(bytes);
-        if (["estimate", "schedule"].includes(effectiveCategory) && spreadsheet.boqItems.length > 0) {
+        if (["estimate", "schedule"].includes(effectiveCategory) && (spreadsheet.boqItems.length > 0 || spreadsheet.hasCorrections)) {
           analysis.boqItems = spreadsheet.boqItems;
+          analysis.workbookReview = spreadsheet.workbookReview;
           analysis.fieldEvidence = (analysis.fieldEvidence ?? []).filter(item => !item.path.startsWith("boqItems."));
           analysis.fieldEvidence.push(...spreadsheet.fieldEvidence.filter(item => item.path.startsWith("boqItems.")));
         }
@@ -346,7 +348,7 @@ export async function processDocumentVersion(input: {
         if (spreadsheet.materialRequirements.length > 0) {
           const materialMap = new Map<string, (typeof analysis.materialRequirements)[number]>();
           for (const item of [...analysis.materialRequirements, ...spreadsheet.materialRequirements]) {
-            const key = `${item.installation}|${item.name}|${item.manufacturer}|${item.model}`.toLocaleLowerCase("pl");
+            const key = `${item.installation}|${item.name}|${item.manufacturer}|${item.model}|${item.productCode ?? ""}|${item.variant ?? ""}|${item.unit}`.toLocaleLowerCase("pl");
             const current = materialMap.get(key);
             if (!current || current.confidence < item.confidence) materialMap.set(key, item);
           }
@@ -358,6 +360,7 @@ export async function processDocumentVersion(input: {
       }
     }
     const nativeText = "extractedText" in prepared && typeof prepared.extractedText === "string" ? prepared.extractedText : undefined;
+    const constructionSource = buildConstructionSource(analysis, effectiveCategory, nativeText, "wordRows" in prepared && Array.isArray(prepared.wordRows) ? prepared.wordRows : undefined);
     let fieldQuality = assessFieldQuality(analysis, { documentId: version.document_id, documentVersionId: version.id, nativeText });
     const visualVerification = await verifyUncertainVisualFields({ analysis, quality: fieldQuality, bytes, mimeType: version.mime_type });
     if (visualVerification.attempted > 0) fieldQuality = assessFieldQuality(analysis, { documentId: version.document_id, documentVersionId: version.id, nativeText });
@@ -403,7 +406,7 @@ export async function processDocumentVersion(input: {
       document_version_id: version.id,
       extraction_type: "document_context",
       schema_version: "document-analysis-v3",
-      payload: { ...analysis, routing, fieldQuality, pdfSegmentation, visualVerification },
+      payload: { ...analysis, routing, fieldQuality, pdfSegmentation, visualVerification, constructionSource },
       warnings: analysis.warnings,
       confidence: analysis.confidence,
       status: "proposed"
@@ -492,7 +495,7 @@ export async function processDocumentVersion(input: {
         .eq("document_version_id", version.id).eq("extraction_type", "document_context").eq("schema_version", "document-analysis-v3");
     }
 
-    const moduleProposals = attachProposalQuality(buildDocumentModuleProposals(analysis), analysis, fieldQuality).map(proposal => ({
+    const moduleProposals = attachProposalQuality(buildDocumentModuleProposals(analysis, effectiveCategory), analysis, fieldQuality).map(proposal => ({
       ...proposal, sourceLocator: { ...proposal.sourceLocator,
         ...(intake?.source_metadata?.pdfLogicalChild ? { originalDocumentId: intake.source_metadata.parentDocumentId,
           originalVersionId: intake.source_metadata.parentVersionId, originalPageStart: intake.source_metadata.originalPageStart,

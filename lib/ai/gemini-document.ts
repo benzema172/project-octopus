@@ -1,10 +1,14 @@
 import "server-only";
+import { constructionEvidenceSchema, readConstructionEvidence, type ConstructionEvidence } from "../documents/construction-evidence";
+import { valueInQuote } from "../documents/field-quality";
 import { FIELD_EVIDENCE_SCHEMA, FIELD_EVIDENCE_PROMPT, normalizeFieldEvidence, type FieldEvidence } from "@/lib/documents/field-evidence";
 
 import { getOptionalEnv, requireServerEnv } from "@/lib/env";
 import { normalizeDocumentCategory, type DocumentCategory } from "@/lib/documents/classification";
 
 export type DocumentAnalysis = {
+  constructionEvidence?: ConstructionEvidence[];
+  workbookReview?: string[];
   fieldEvidence?: FieldEvidence[];
   businessDocuments?: Array<DocumentAnalysis["businessDocument"] & { sourcePageStart?: number; sourcePageEnd?: number }>;
   category: DocumentCategory;
@@ -52,6 +56,13 @@ export type DocumentAnalysis = {
     }>;
   };
   boqItems: Array<{
+    numberFromSource?: boolean;
+    location?: string;
+    productCode?: string;
+    variant?: string;
+    revision?: string;
+    corrections?: Array<{ locator: string; revision: string }>;
+    revisionIssues?: string[];
     itemNumber: string;
     description: string;
     quantity: number;
@@ -64,6 +75,8 @@ export type DocumentAnalysis = {
     quote: string;
   }>;
   materialRequirements: Array<{
+    productCode?: string;
+    variant?: string;
     name: string;
     installation: string;
     manufacturer: string;
@@ -157,6 +170,7 @@ export type DocumentAnalysis = {
 const RESPONSE_SCHEMA = {
   type: "OBJECT",
   properties: {
+    constructionEvidence: constructionEvidenceSchema,
     fieldEvidence: FIELD_EVIDENCE_SCHEMA,
     category: { type: "STRING", enum: ["technical", "specification", "estimate", "schedule", "protocol", "application", "contract", "correspondence", "invoice", "warehouse", "hr", "fleet", "template", "report", "other"] },
     subcategory: { type: "STRING" },
@@ -197,6 +211,7 @@ const RESPONSE_SCHEMA = {
       items: {
         type: "OBJECT",
         properties: {
+          productCode: { type: "STRING" }, variant: { type: "STRING" }, location: { type: "STRING" },
           itemNumber: { type: "STRING" }, description: { type: "STRING" }, quantity: { type: "NUMBER" },
           unit: { type: "STRING" }, unitPrice: { type: "NUMBER" }, totalPrice: { type: "NUMBER" },
           wbsCode: { type: "STRING" }, confidence: { type: "NUMBER" }, locator: { type: "STRING" }, quote: { type: "STRING" }
@@ -365,6 +380,7 @@ function normalizeAnalysis(value: unknown): DocumentAnalysis {
   const warnings = Array.isArray(source.warnings) ? source.warnings.map(String) : [];
   if ((source.boqItems?.length ?? 0) >= 500) warnings.push("Analiza osiągnęła limit 500 pozycji BOQ i wymaga kontroli kompletności.");
   return {
+    constructionEvidence: readConstructionEvidence(source.constructionEvidence),
     fieldEvidence: normalizeFieldEvidence(source.fieldEvidence),
     category,
     subcategory: source.subcategory ?? "",
@@ -406,6 +422,10 @@ function normalizeAnalysis(value: unknown): DocumentAnalysis {
     boqItems: Array.isArray(source.boqItems)
       ? source.boqItems.slice(0, 500).map((item) => ({
           itemNumber: String(item.itemNumber ?? ""),
+          numberFromSource: Boolean(item.itemNumber && item.quote && (String(item.quote).trim().startsWith(String(item.itemNumber) + " |") || new RegExp("^" + String(item.itemNumber).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?:[.)]|\\s|$)").test(String(item.quote).trim()))),
+          productCode: item.productCode && valueInQuote(item.productCode, String(item.quote ?? "")) ? item.productCode : "",
+          variant: item.variant && valueInQuote(item.variant, String(item.quote ?? "")) ? item.variant : "",
+          location: item.location && valueInQuote(item.location, String(item.quote ?? "")) ? item.location : "",
           description: String(item.description ?? ""),
           quantity: Number(item.quantity) || 0,
           unit: String(item.unit ?? ""),
@@ -519,6 +539,8 @@ Przeanalizuj dokument ${input.fileName}. Rozpoznaj jego rzeczywisty kontekst, ni
 Pracuj jak zestaw wyspecjalizowanych analizatorów:
 - Kosztorys/BOQ: przepisz rzeczywiste wiersze bez łączenia pozycji. Zachowaj numer, opis, ilość, jednostkę, ceny, WBS oraz źródło w locator i quote.
 - Materiały i urządzenia: w materialRequirements zapisuj nazwę, instalację, producenta/model tylko gdy występuje, parametry, normy, dokumenty wymagane do akceptacji i informację o dopuszczeniu zamienników.
+- W constructionEvidence wstaw tylko dosłowne dane z lokalizatorem i cytatem. kind=product dla karty wyrobu: code (kod katalogowy), variant i unit. kind=criterion dla specyfikacji: scope (odcinek), metric (np. ciśnienie próby lub spadek ciśnienia), valueText (dosłowny warunek np. ≥ 5 bar), unit, reference (punkt), itemNumber i wbs, gdy widoczne. Uwzględnij też jakościowe warunki odbioru do harmonogramu. kind=measurement dla faktycznego pomiaru w protokole; przepisz wartość, jednostkę, rodzaj pomiaru, odcinek i odniesienie. Brakujące pola pomiń. Cytat ma zawierać identyfikatory, zakres i wartości dokładnie jak w źródle. Nie zamieniaj projektowanej wartości w pomiar ani pojedynczego parametru w decyzję odbiorową.
+- BOQ: wpisuj kod produktu, wariant i lokalizację tylko wprost z wiersza; zacznij cytat od widocznego numeru pozycji, gdy rzeczywiście otwiera wiersz.
 - Harmonogram: w scheduleItems zapisuj każdą czynność, daty, czas, poprzedniki, kamienie milowe, krytyczność, WBS i ograniczenia. Nie wymyślaj brakujących dat.
 - Protokoły i odbiory: w protocolRequirementsDetailed zapisuj wymagany rodzaj próby/odbioru, kryteria akceptacji, normy, dowody, lokalizację i moment uruchomienia obowiązku. Nie wpisuj wyniku faktycznej próby, jeżeli dokument tylko jej wymaga.
 - Raporty z budowy: w siteEvents zapisuj zdarzenia, a w progressItems wyłącznie jawnie podane ilości wykonane lub odebrane. Dostawa materiału, faktura ani plan nie są wykonaniem robót.

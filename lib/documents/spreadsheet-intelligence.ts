@@ -2,6 +2,7 @@ import "server-only";
 
 import { createRequire } from "node:module";
 import type { FieldEvidence } from "./field-evidence";
+import { correctableFields, applyWorkbookCorrections, type WorkbookCorrection } from "./workbook-corrections";
 import { validIsoDay } from "./field-quality";
 import { parseDocumentNumber } from "./numeric-source";
 import type { DocumentAnalysis } from "../ai/gemini-document";
@@ -11,16 +12,22 @@ const XLSX = requireNode("xlsx") as typeof import("xlsx");
 
 type SpecialistResult = Pick<DocumentAnalysis,
   "boqItems" | "materialRequirements" | "scheduleItems" | "progressItems"
-> & { warnings: string[]; fieldEvidence: FieldEvidence[] };
+> & { warnings: string[]; hasCorrections: boolean; workbookReview: string[]; fieldEvidence: FieldEvidence[] };
 
 type ColumnKind =
   | "itemNumber" | "description" | "quantity" | "unit" | "unitPrice" | "totalPrice" | "wbsCode"
   | "title" | "plannedStart" | "plannedFinish" | "durationDays" | "predecessors" | "critical"
   | "quantityExecuted" | "quantityAccepted" | "period"
+  | "revision" | "location" | "productCode" | "variant" | "changeMode"
   | "installation" | "manufacturer" | "model" | "specification" | "standards" | "requiredDocuments";
 
 const ALIASES: Record<ColumnKind, string[]> = {
-  itemNumber: ["lp", "l p", "nr", "numer", "pozycja", "item", "item no", "item number"],
+  revision: ["rewizja", "revision", "wersja", "rev"],
+  location: ["kondygnacja", "lokalizacja", "piętro", "floor", "location"],
+  productCode: ["kod wyrobu", "kod produktu", "kod katalogowy", "nr katalogowy", "sku", "product code"],
+  variant: ["wariant", "variant"],
+  changeMode: ["rodzaj zmiany", "typ korekty", "tryb", "operation"],
+  itemNumber: ["nr pozycji", "id pozycji", "lp", "l p", "nr", "numer", "pozycja", "item", "item no", "item number"],
   description: ["opis", "opis pozycji", "nazwa", "nazwa pozycji", "roboty", "element", "description"],
   quantity: ["ilość", "ilosc", "obmiar", "qty", "quantity"],
   unit: ["j m", "jm", "jednostka", "unit"],
@@ -114,28 +121,58 @@ function rowQuote(row: unknown[]) {
 
 export function extractSpreadsheetIntelligence(buffer: Buffer): SpecialistResult {
   const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true, sheetRows: MAX_ROWS_PER_SHEET });
-  const result: SpecialistResult = { boqItems: [], materialRequirements: [], scheduleItems: [], progressItems: [], warnings: [], fieldEvidence: [] };
+  const result: SpecialistResult = { boqItems: [], materialRequirements: [], scheduleItems: [], progressItems: [], warnings: [], hasCorrections: false, workbookReview: [], fieldEvidence: [] };
 
+  const corrections: WorkbookCorrection[] = [];
   for (const sheetName of workbook.SheetNames.slice(0, MAX_SHEETS)) {
     const sheet = workbook.Sheets[sheetName];
     if (!sheet) continue;
     const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "", blankrows: true }) as unknown[][];
     const header = findHeader(rows);
-    if (!header) continue;
+    const correctionSheet = /^(?:korekt[ay]|corrections?)(?: |$)/.test(normalize(sheetName));
+    if (correctionSheet) result.hasCorrections = true;
+    if (!header) {
+      if (correctionSheet) result.workbookReview.push(`Arkusz: ${sheetName} — nie rozpoznano kolumn korekty.`);
+      continue;
+    }
     const mapping = header.mapping;
     const headerRow = header.row;
     const hasBoq = mapping.description !== undefined && (mapping.quantity !== undefined || mapping.unitPrice !== undefined || mapping.totalPrice !== undefined);
     const hasSchedule = (mapping.title !== undefined || mapping.description !== undefined) && (mapping.plannedStart !== undefined || mapping.plannedFinish !== undefined || mapping.durationDays !== undefined);
     const hasProgress = (mapping.description !== undefined || mapping.itemNumber !== undefined) && (mapping.quantityExecuted !== undefined || mapping.quantityAccepted !== undefined);
-    const hasMaterials = (mapping.description !== undefined || mapping.title !== undefined) && (mapping.manufacturer !== undefined || mapping.model !== undefined || mapping.specification !== undefined || mapping.installation !== undefined);
+    const hasMaterials = (mapping.description !== undefined || mapping.title !== undefined) && (mapping.manufacturer !== undefined || mapping.model !== undefined || mapping.specification !== undefined || mapping.installation !== undefined || mapping.productCode !== undefined);
 
     for (let rowIndex = header.row + 1; rowIndex < rows.length; rowIndex += 1) {
       const row = rows[rowIndex];
       const description = text(value(row, mapping, "description") ?? value(row, mapping, "title"));
-      if (!description || /^razem|^suma|^podsumowanie/i.test(description)) continue;
+      if (/^(razem|suma|podsumowanie)/i.test(description)) continue;
+      if (!correctionSheet && !description) continue;
       const locator = `Arkusz: ${sheetName}, wiersz ${range.s.r + rowIndex + 1}`;
       const quote = rowQuote(row);
+      if (correctionSheet) {
+        if (!row.some(v => text(v))) continue;
+        const mode = normalize(value(row, mapping, "changeMode"));
+        const patch: WorkbookCorrection = {
+          itemNumber: text(value(row, mapping, "itemNumber")), wbs: text(value(row, mapping, "wbsCode")),
+          location: text(value(row, mapping, "location")), revision: text(value(row, mapping, "revision")),
+          locator, fields: {}, unsupported: (mode !== "" && !["zastap", "wartosc docelowa", "replace"].includes(mode))
+            || rows[headerRow].some(v => /(?:^| )(?:delta|roznica|przyrost)(?: |$)/.test(normalize(v)))
+        };
+        for (const key of correctableFields) {
+          const col = mapping[key];
+          if (col === undefined) continue;
+          const address = XLSX.utils.encode_cell({ r: range.s.r + rowIndex, c: range.s.c + col });
+          const cell = sheet[address], raw = row[col];
+          if (!text(raw) && !cell?.f && cell?.t !== "e") continue;
+          patch.fields[key] = { raw, evidence: { path: "", quote: text(raw), cell: address, origin: "native",
+            locator: `${locator}, komórka ${address} (${text(rows[headerRow][col])})`, formula: cell?.f,
+            missingValue: cell?.t === "e" || !text(raw) || (key !== "unit" && parseDocumentNumber(raw) === null) } };
+        }
+        if (corrections.length < MAX_OUTPUT_ROWS) corrections.push(patch);
+        else if (corrections.length === MAX_OUTPUT_ROWS && !result.workbookReview.includes("Przekroczono limit korekt.")) result.workbookReview.push("Przekroczono limit korekt.");
+        continue;
+      }
       function addEvidence(collection: string, index: number, keys: ColumnKind[]) {
         for (const key of keys) {
           const column = mapping[key];
@@ -163,6 +200,9 @@ export function extractSpreadsheetIntelligence(buffer: Buffer): SpecialistResult
         addEvidence("boqItems", result.boqItems.length, ["quantity", "unit", "unitPrice", "totalPrice"]);
         result.boqItems.push({
           itemNumber: text(value(row, mapping, "itemNumber")) || String(rowIndex - header.row),
+          numberFromSource: Boolean(text(value(row, mapping, "itemNumber"))),
+          location: text(value(row, mapping, "location")), revision: text(value(row, mapping, "revision")),
+          productCode: text(value(row, mapping, "productCode")), variant: text(value(row, mapping, "variant")),
           description,
           quantity,
           unit: text(value(row, mapping, "unit")),
@@ -216,6 +256,7 @@ export function extractSpreadsheetIntelligence(buffer: Buffer): SpecialistResult
 
       if (hasMaterials && result.materialRequirements.length < MAX_OUTPUT_ROWS) result.materialRequirements.push({
         name: description,
+        productCode: text(value(row, mapping, "productCode")), variant: text(value(row, mapping, "variant")),
         installation: text(value(row, mapping, "installation")),
         manufacturer: text(value(row, mapping, "manufacturer")),
         model: text(value(row, mapping, "model")),
@@ -232,6 +273,8 @@ export function extractSpreadsheetIntelligence(buffer: Buffer): SpecialistResult
     }
   }
 
+  result.workbookReview.push(...applyWorkbookCorrections(result.boqItems, result.fieldEvidence, corrections));
+  result.warnings.push(...result.workbookReview);
   if (workbook.SheetNames.length > MAX_SHEETS) result.warnings.push(`Pominięto arkusze powyżej limitu ${MAX_SHEETS}.`);
   for (const key of ["boqItems", "scheduleItems", "progressItems", "materialRequirements"] as const) {
     if (result[key].length >= MAX_OUTPUT_ROWS) result.warnings.push(`${key}: osiągnięto limit ${MAX_OUTPUT_ROWS} wierszy.`);
