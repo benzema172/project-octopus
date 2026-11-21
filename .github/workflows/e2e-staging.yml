@@ -37,4 +37,8 @@ jobs:
       - name: Black-box tenant isolation and IDOR audit
         run: node scripts/e2e-live-security.mjs
       - name: Live source fields and mixed PDF regression
-        run: node scripts/e2e-document-quality.mjs
+        run: |
+          chromedriver --port=9515 > "$RUNNER_TEMP/octopus-chromedriver.log" 2>&1 &
+          driver_pid=$!
+          trap 'kill "$driver_pid" 2>/dev/null || true' EXIT
+          node scripts/e2e-document-quality.mjs --browser

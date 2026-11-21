@@ -1,5 +1,6 @@
 /** Live integration fixtures run only in the existing dedicated guest audit workspace. */
 import { createHash } from "node:crypto";
+import { verifyConstructionPanels } from "./e2e-construction-browser.mjs";
 import { createServerClient } from "@supabase/ssr";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import * as XLSX from "xlsx";
@@ -233,5 +234,6 @@ async function checkConstructionFlow() {
     }
   }
   console.log("Authenticated production views verified: project, cost estimate, schedule, materials, protocols.");
+  if (process.argv.includes("--browser")) await verifyConstructionPanels(base, projectId, browserCookies);
   summary.push({fixture:"cross_document_construction",matchedRevision:"R2",boqRows:2,heldScheduleDrafts:2,materialVariant:"DN50",approvedSpec:reference,pressure:"0.5 MPa",scopedFootnote:true});
 }
