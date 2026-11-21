@@ -1,0 +1,67 @@
+-- Backend-only reliability repair: legacy extraction state, redundant indexes
+-- and the one reported unindexed StandLoop foreign key. No UI or business
+-- accounting records are changed.
+begin;
+
+-- Older versions predate stage tracking. Reconstruct only the extract stage
+-- when we have three independently persisted proofs: approved extraction,
+-- nonempty searchable text and a successful processing job.
+-- Keep module routing/finance stages untouched: their correctness is separate.
+insert into public.document_pipeline_stages
+  (workspace_id, document_id, document_version_id, stage, status, details, updated_at)
+select d.workspace_id, v.document_id, v.id, 'extract', 'complete',
+       jsonb_build_object('source', 'legacy_approved_context_and_text', 'backfilled', true), now()
+from public.document_versions v
+join public.documents d on d.id = v.document_id
+where v.extraction_status = 'queued'
+  and exists (
+    select 1 from public.document_extractions e
+    where e.document_version_id = v.id
+      and e.extraction_type = 'document_context'
+      and e.status = 'approved'
+  )
+  and exists (
+    select 1 from public.document_texts t
+    where t.document_version_id = v.id
+      and length(btrim(t.extracted_text)) > 0
+  )
+  and exists (
+    select 1 from public.processing_jobs j
+    where j.document_version_id = v.id
+      and j.status = 'succeeded'
+  )
+  and not exists (
+    select 1 from public.document_pipeline_stages s
+    where s.document_version_id = v.id and s.stage = 'extract'
+  )
+on conflict (document_version_id, stage) do nothing;
+
+-- Only backfill versions with durable proof that extraction completed.
+-- A successful processing job alone is insufficient, since downstream
+-- routing can still require review.
+update public.document_versions as version
+set extraction_status = 'completed'
+from public.document_pipeline_stages as stage
+where stage.document_version_id = version.id
+  and stage.document_id = version.document_id
+  and stage.stage = 'extract'
+  and stage.status = 'complete'
+  and version.extraction_status = 'queued';
+
+-- Identical btree indexes add unnecessary write and vacuum overhead.
+-- Preserve the existing unique fuel guard and the newer SHA-256 index.
+drop index if exists public.document_versions_sha256_cross_import_idx;
+drop index if exists public.fuel_entries_one_invoice_line_tanking_20261030;
+
+-- Cover both columns of the foreign key without changing its semantics.
+do $audit_index$
+begin
+  -- This table exists in the shared production database but is not part
+  -- of Octopus's isolated migration test schema.
+  if to_regclass('public.sl_damages_v5') is not null then
+    execute 'create index if not exists sl_damages_v5_company_asset_fk_idx on public.sl_damages_v5(company_id, asset_id)';
+  end if;
+end
+$audit_index$;
+
+commit;

@@ -594,6 +594,12 @@ export async function processDocumentVersion(input: {
         fieldQuality: { fields: fieldQuality.fields.length, issues: fieldQuality.issues.length, requiresReview: fieldQuality.requiresReview }, visualVerification
       }
     });
+    // The read model document_processing_state_v uses extraction_status.
+    // Keep its status aligned with the successfully persisted extraction.
+    const { error: extractionStateError } = await supabase.from("document_versions")
+      .update({ extraction_status: "completed" })
+      .eq("id", version.id).eq("document_id", version.document_id);
+    if (extractionStateError) throw new Error(`Nie udało się zatwierdzić statusu ekstrakcji: ${extractionStateError.message}`);
     await supabase.from("processing_jobs").update({
       status: "succeeded",
       stage: "complete",
@@ -650,6 +656,11 @@ export async function processDocumentVersion(input: {
       || normalizedMessage.includes("paczka nie zawiera żadnego obsługiwanego dokumentu")
       || normalizedMessage.includes("malware_detected");
     const deadLetter = permanent || attemptCount >= maxAttempts;
+    // A failed re-analysis must not retain a previous successful extraction state.
+    const { error: failureStateError } = await supabase.from("document_versions")
+      .update({ extraction_status: deadLetter ? "failed" : "queued" })
+      .eq("id", version.id).eq("document_id", version.document_id);
+    if (failureStateError) console.warn("[document-extraction-status] Failed to persist retry state:", failureStateError.message);
     await supabase.from("documents").update({ ai_status: deadLetter ? "error" : "queued" }).eq("id", version.document_id);
     await supabase.from("document_intakes").update({ status: deadLetter ? "error" : "queued" }).eq("document_id", version.document_id);
     await supabase.from("processing_jobs").update({

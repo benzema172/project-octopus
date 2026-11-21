@@ -9,8 +9,12 @@ export function summarizePipelineStages(
 ): "pending"|"running"|"review"|"error"|"complete" {
   if(stages.some(s=>s.status==="error")) return "error";
   if(stages.some(s=>s.status==="review")) return "review";
-  if(stages.length<PIPELINE_STAGES.length) return "pending";
   if(stages.some(s=>s.status==="running")) return "running";
   if(stages.some(s=>s.status==="pending")) return "pending";
+  // A count of six is not proof of six distinct stages. Malformed or
+  // duplicated responses must never mark an incomplete pipeline as ready.
+  if(stages.length!==PIPELINE_STAGES.length) return "pending";
+  const presentStages=new Set(stages.map(s=>s.stage));
+  if(!PIPELINE_STAGES.every(stage=>presentStages.has(stage))) return "pending";
   return "complete";
 }
