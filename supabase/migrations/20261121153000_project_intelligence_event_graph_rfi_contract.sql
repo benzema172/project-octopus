@@ -197,7 +197,7 @@ begin
   from public.document_change_impacts ci
   where ci.workspace_id=p_workspace_id and ci.project_id=v_document.project_id
     and ci.document_id=v_document.id and ci.to_version_id=v_version.id
-    and ci.status not in ('rejected')
+    and ci.status not in ('approved','rejected')
   on conflict(workspace_id,finding_key) do update set
     title=excluded.title,description=excluded.description,evidence=excluded.evidence,
     updated_at=now()
@@ -236,7 +236,7 @@ begin
     'contract:'||ci.id::text,'contract_risk',
     case when ci.risk_level='critical' then 'critical' else 'high' end,
     'Możliwe ryzyko kontraktowe po zmianie dokumentu',
-    'Sprawdź wpływ zatwierdzonej rewizji na zobowiązania, harmonogram i rozliczenia. Nie jest to stwierdzenie naruszenia umowy.',
+    'Sprawdź wpływ wykrytej rewizji na zobowiązania, harmonogram i rozliczenia. Nie jest to stwierdzenie naruszenia umowy.',
     jsonb_build_object('impact_id',ci.id,'summary',ci.summary,
       'source_evidence',coalesce(ci.evidence,'[]'::jsonb),
       'contract_document_id',v_document.id),now()
@@ -244,7 +244,7 @@ begin
   where ci.workspace_id=p_workspace_id and ci.project_id=v_document.project_id
     and ci.document_id=v_document.id and ci.to_version_id=v_version.id
     and lower(coalesce(v_document.category,'')) in ('contract','agreement','umowa')
-    and ci.risk_level in ('high','critical') and ci.status not in ('rejected')
+    and ci.risk_level in ('high','critical') and ci.status not in ('approved','rejected')
   on conflict(workspace_id,finding_key) do update set
     evidence=excluded.evidence,updated_at=now()
   where public.project_intelligence_findings.status='pending';
