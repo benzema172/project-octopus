@@ -42,7 +42,7 @@ function parseRow(line: string, page: number): ConstructionEvidence | null {
 export async function nativeSpecificationCriteria(bytes: Uint8Array): Promise<ConstructionEvidence[]> {
   const { extractText, getDocumentProxy } = await import("unpdf");
   // PDF.js may take ownership of its input. The original bytes are still needed by the pipeline.
-  const pdf = await getDocumentProxy(new Uint8Array(bytes), { isEvalSupported: false });
+  const pdf = await getDocumentProxy(new Uint8Array(bytes));
   try {
     if (pdf.numPages > 120) return [];
     const { text } = await extractText(pdf);
