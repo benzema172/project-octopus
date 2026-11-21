@@ -21,7 +21,14 @@ drop index if exists public.document_versions_sha256_cross_import_idx;
 drop index if exists public.fuel_entries_one_invoice_line_tanking_20261030;
 
 -- Cover both columns of the foreign key without changing its semantics.
-create index if not exists sl_damages_v5_company_asset_fk_idx
-  on public.sl_damages_v5(company_id, asset_id);
+do $
+begin
+  -- This table exists in the shared production database but is not part
+  -- of Octopus's isolated migration test schema.
+  if to_regclass('public.sl_damages_v5') is not null then
+    execute 'create index if not exists sl_damages_v5_company_asset_fk_idx on public.sl_damages_v5(company_id, asset_id)';
+  end if;
+end
+$;
 
 commit;
