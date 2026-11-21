@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createRequire } from "node:module";
+import { readWordDocument } from "../documents/word-tables";
 import { inflateRawSync } from "node:zlib";
 
 const MAX_ENTRY_BYTES = 12 * 1024 * 1024;
@@ -65,31 +66,16 @@ function extractZipEntry(buffer: Buffer, entry: ZipEntry) {
   throw new Error(`Nieobsługiwana metoda kompresji ZIP: ${entry.method}.`);
 }
 
-function decodeXml(value: string) {
-  return value
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16)));
+export function extractDocxDocument(buffer: Buffer) {
+  const entries = new Map(readZipEntries(buffer).map(entry => [entry.name, entry]));
+  return readWordDocument(path => {
+    const entry = entries.get(path);
+    return entry ? extractZipEntry(buffer, entry).toString("utf8") : undefined;
+  });
 }
 
 export function extractDocxText(buffer: Buffer) {
-  const entries = readZipEntries(buffer);
-  const documentEntry = entries.find((entry) => entry.name === "word/document.xml");
-  if (!documentEntry) throw new Error("DOCX nie zawiera word/document.xml.");
-  const xml = extractZipEntry(buffer, documentEntry).toString("utf8");
-  return decodeXml(
-    xml
-      .replace(/<\/w:tc>/g, "\t")
-      .replace(/<\/w:tr>/g, "\n")
-      .replace(/<w:tab\s*\/>/g, "\t")
-      .replace(/<w:br[^>]*\/>/g, "\n")
-      .replace(/<\/w:p>/g, "\n")
-      .replace(/<[^>]+>/g, "")
-  ).replace(/\n{3,}/g, "\n\n").trim();
+  return extractDocxDocument(buffer).text;
 }
 
 export function extractXlsxText(buffer: Buffer) {

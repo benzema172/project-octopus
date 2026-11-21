@@ -99,3 +99,17 @@ dziesiętną; dokumenty o niejednoznacznej konwencji liczb wymagają sprawdzenia
 Nie przeliczano formuł bez zapisanej wartości. Poprawny zapis liczby nie potwierdza
 jej znaczenia biznesowego, wykonania robót ani podpisu protokołu. Testy syntetyczne
 nie stanowią gwarancji poprawności wszystkich rzeczywistych dokumentów.
+
+## 21 listopada 2026 — raport z 20 listopada
+
+Punkt wyjścia: `b5abd4a`. Zmiany działają na nowych i ponownie analizowanych wersjach. Panel inwestycji odczytuje aktualne, dostępne dla niej źródła na żądanie. Nie ma migracji ani dodatkowego płatnego API.
+
+| Źródło | Wynik lub ograniczenie autorów | Zastosowanie w Octopusie |
+| --- | --- | --- |
+| [Mihić i Vilibić, Buildings, 16.11](https://doi.org/10.3390/buildings16224570) | 90 map z dziesięciu przetargów. Większa liczba kroków nie rozstrzyga o poprawności harmonogramu. | Numerowane pozycje przedmiaru dają propozycje bez dat. Porównanie kodów z zatwierdzonym dokumentem harmonogramu i punktów zatwierdzonej specyfikacji. |
+| [Buecheler i in., arXiv, 18.11](https://arxiv.org/abs/2611.24998) | Wypełnianie paszportów produktów z dokumentacji. Poprawność składni JSON wyniosła 97,4%, a pól 30,8% w ocenie deterministycznej. | Dopasowanie karty do źródłowej pozycji tylko przy zgodnym kodzie, wariancie i jednostce. Wiele kandydatów wymaga decyzji użytkownika. |
+| [Garre i in., arXiv, 13.11](https://arxiv.org/abs/2611.17766) | 41 z 70 zadań wymagało pracy między zakładkami. Wynik całości nie stanowi miary dla kosztorysów Octopusa. | Zakładka Korekta/Korekty/Corrections, identyfikator pozycji, WBS lub kondygnacja, kontrola kolejności rewizji i fizycznej komórki. Nierozstrzygnięte zmiany wstrzymują automatyczną publikację BOQ. |
+| [Lee i in., Buildings, 16.11](https://doi.org/10.3390/buildings16224562) | Wykonywalne progi badano m.in. na 67 sztucznych przypadkach. | Porównanie ciśnienia próby i spadku ciśnienia z jednym właściwym punktem bieżącej zatwierdzonej specyfikacji. Obsługiwane Pa, kPa, MPa i bar. Wynik nie zatwierdza protokołu. |
+| [Docling v2.150.1, 14.11](https://github.com/docling-project/docling/releases/tag/v2.150.1) | Poprawki struktury tabel Word i adresów odsyłaczy w przypisach. | Odczyt DOCX w istniejącym procesie Node, zachowanie uwagi, właściwego wiersza i linku w przypisie. Bez serwisu Docling. |
+
+Kontrole przed publikacją: poprzednia wersja 11 120 poprawnych testów; nowa 11 126, w tym sześć nowych scenariuszy z przypadkami granicznymi. Walidacja 238 migracji. Aktualizacja Next.js i konfiguracji lint z 16.4.3 do 16.4.6 usuwała wykryte ostrzeżenie audytu zależności i blokadę wcześniejszego buildu. Scenariusz produkcyjny jest częścią `scripts/e2e-document-quality.mjs` i korzysta z wydzielonej inwestycji gościa. Wynik każdego wykonania przechowuje GitHub Actions w przebiegu powiązanym z konkretnym SHA.

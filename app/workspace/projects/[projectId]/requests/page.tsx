@@ -1,3 +1,4 @@
+import { ConstructionSourceReview } from "@/components/projects/construction-source-review";
 import { FileText, Link2, PackageCheck, Plus } from "lucide-react";
 import { notFound } from "next/navigation";
 import { MaterialRequestIntegrityPanel } from "@/components/projects/material-request-integrity-panel";
@@ -66,6 +67,7 @@ export default async function RequestsPage({ params }: Props) {
     <MaterialRequestIntelligence130 projectId={project.id} workflow={materialIntelligence.workflow} gaps={materialIntelligence.gaps} canWrite={canWrite} />
     <details className="pw-submodule-tool"><summary><Plus size={17} aria-hidden="true" />Dodaj wymaganie materiałowe</summary><ProjectOperationPanel projectId={projectId} mode="requirement" /></details>
     <MaterialRequestsWorkflow projectId={projectId} canWrite={canWrite} requirements={requirements} requests={requests} />
+    <ConstructionSourceReview workspaceId={project.workspace_id} projectId={project.id} kind="materials" />
     <details className="pw-submodule-tool"><summary><Link2 size={16} aria-hidden="true" />Powiązania materiału, BOQ i śladu zakupowego</summary><MaterialRequestIntegrityPanel projectId={projectId} canWrite={canWrite} requests={requests} stockItems={stockItems} boqItems={boqItems} /></details>
     <details className="pw-submodule-sources"><summary><FileText size={16} aria-hidden="true" />Źródła i rozpoznane materiały <span>{documents.length + knowledge.length}</span></summary>
       {documents.length || knowledge.length ? <div className="pw-submodule-sources__list">

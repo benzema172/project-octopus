@@ -1,3 +1,4 @@
+import { ConstructionSourceReview } from "@/components/projects/construction-source-review";
 import { CalendarDays, FileText, Plus } from "lucide-react";
 import { notFound } from "next/navigation";
 import { ProjectLiveRecords } from "@/components/projects/project-live-records";
@@ -44,6 +45,7 @@ export default async function SchedulePage({ params }: Props) {
         <ProjectOperationPanel projectId={projectId} mode="schedule" />
       </details>
 
+    <ConstructionSourceReview workspaceId={project.workspace_id} projectId={project.id} kind="schedule" />
       <ProjectLiveRecords projectId={projectId} kind="schedule" />
 
       <details className="pw-schedule-sources">

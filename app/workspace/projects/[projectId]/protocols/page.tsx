@@ -1,3 +1,4 @@
+import { ConstructionSourceReview } from "@/components/projects/construction-source-review";
 import { ClipboardCheck, FileText, Plus } from "lucide-react";
 import { notFound } from "next/navigation";
 import { ProjectCompactShell } from "@/components/projects/project-compact-module-page";
@@ -51,6 +52,7 @@ export default async function ProtocolsPage({ params }: Props) {
     ]}
   >
     <details className="pw-submodule-tool"><summary><Plus size={17} aria-hidden="true" />Dodaj wymagany protokół</summary><ProjectOperationPanel projectId={projectId} mode="protocol" /></details>
+    <ConstructionSourceReview workspaceId={project.workspace_id} projectId={project.id} kind="protocols" />
     <ProtocolsProPanel projectId={projectId} canWrite={canWrite} requirements={requirements} documents={allDocuments.map((document) => ({ id: document.id, name: document.name }))} protocols={protocols} />
     <details className="pw-submodule-sources"><summary><FileText size={16} aria-hidden="true" />Dokumenty źródłowe <span>{documents.length}</span></summary>
       {documents.length ? <div className="pw-submodule-sources__list">{documents.map((document) => <div key={document.id}><FileText size={15} aria-hidden="true" /><span><strong>{document.name}</strong><small>{document.category ?? "protokół"}</small></span></div>)}</div> : <p>Brak przypisanych dokumentów protokołów i odbiorów.</p>}

@@ -95,7 +95,7 @@ function businessDocumentsForAnalysis(analysis: DocumentAnalysis) {
   return hasLegacy ? [legacy] : [];
 }
 
-export function buildDocumentModuleProposals(analysis: DocumentAnalysis) {
+export function buildDocumentModuleProposals(analysis: DocumentAnalysis, category = analysis.category) {
   const proposals: ModuleProposalDraft[] = [];
 
   analysis.facts.forEach((fact, index) => proposals.push({
@@ -113,7 +113,7 @@ export function buildDocumentModuleProposals(analysis: DocumentAnalysis) {
   analysis.boqItems.forEach((item, index) => proposals.push({
     module: "cost_estimate",
     proposalType: "boq_item",
-    naturalKey: naturalKey("boq", [item.itemNumber || index + 1, item.description, item.wbsCode]),
+    naturalKey: naturalKey("boq", [item.itemNumber || index + 1, item.description, item.wbsCode, item.location]),
     title: `${item.itemNumber ? `${item.itemNumber} · ` : ""}${item.description}`,
     payload: { ...item, sourceRow: index + 1 },
     confidence: bounded(item.confidence),
@@ -197,6 +197,21 @@ export function buildDocumentModuleProposals(analysis: DocumentAnalysis) {
       requiresFormalApproval: true
     });
   });
+  if (category === "estimate") {
+    const scheduleIdentities = new Set(analysis.scheduleItems.map(row => naturalKey("source", [row.code, row.wbsCode])));
+    analysis.boqItems.forEach((item, index) => {
+      if (!item.numberFromSource || !item.locator || !item.quote || scheduleIdentities.has(naturalKey("source", [item.itemNumber, item.wbsCode]))) return;
+      scheduleTitles.add(normalize(item.description));
+      proposals.push({
+        module: "schedule", proposalType: "schedule_activity",
+        naturalKey: naturalKey("boq-schedule", [item.itemNumber, item.wbsCode, item.location, item.description]),
+        title: item.description, payload: { derivedFromBoq: true, code: item.itemNumber, title: item.description, wbsCode: item.wbsCode,
+          location: item.location ?? "", plannedStart: "", plannedFinish: "", predecessors: [], requiresBaseline: true },
+        confidence: item.confidence, sourceLocator: { ...locator(item.locator), analysisPath: `boqItems.${index}` },
+        sourceQuote: quote(item.quote), requiresFormalApproval: true
+      });
+    });
+  }
   analysis.workStages.forEach((title, index) => {
     if (scheduleTitles.has(normalize(title))) return;
     proposals.push({

@@ -82,6 +82,10 @@ export function assessFieldQuality(analysis: DocumentAnalysis, context: {
       fail(`${prefix}.totalPrice`, "Ilość × cena jednostkowa nie zgadza się z wartością pozycji.");
     }
   });
+  for (const message of analysis.workbookReview ?? []) fail("workbookReview", message);
+  analysis.boqItems.forEach((row, i) => {
+    for (const message of row.revisionIssues ?? []) fail(`boqItems.${i}.revision`, message);
+  });
   const codes = new Set(analysis.scheduleItems.map(row => row.code).filter(Boolean));
   const codeCounts = new Map<string, number>();
   for (const row of analysis.scheduleItems) if (row.code) codeCounts.set(row.code, (codeCounts.get(row.code) ?? 0) + 1);
@@ -145,7 +149,8 @@ export function attachProposalQuality(proposals: ModuleProposalDraft[], analysis
     rowIndexes.set(collection, byKey);
   }
   return proposals.map(proposal => {
-    const collection = indexes[proposal.proposalType];
+    const fromBoq = proposal.proposalType === "schedule_activity" && proposal.payload.derivedFromBoq === true;
+    const collection = fromBoq ? "boqItems" : indexes[proposal.proposalType];
     const pointer = proposal.sourceLocator.analysisPath;
     const match = typeof pointer === "string" && collection ? new RegExp(`^${collection}\\.(\\d+)$`).exec(pointer) : null;
     const candidate = pointer === undefined ? rowIndexes.get(collection)?.get(rowKey({ ...proposal.payload, locator: proposal.payload.locator ?? proposal.sourceLocator.label })) : match ? Number(match[1]) : undefined;
@@ -157,10 +162,10 @@ export function attachProposalQuality(proposals: ModuleProposalDraft[], analysis
     const needsEvidence = ["boq_item", "schedule_activity", "progress_claim", "protocol_requirement"].includes(proposal.proposalType);
     const sourceMissing = needsEvidence && (!proposal.sourceQuote || !proposal.sourceLocator.label);
     const unresolvedSource = Boolean(collection && index === undefined && (pointer !== undefined || ["boq_item", "progress_claim", "project_fact"].includes(proposal.proposalType)));
-    const requiresReview = sourceMissing || unresolvedSource || fields.some(row => ["missing", "conflict"].includes(row.status)) || issues.length > 0;
+    const requiresReview = fromBoq || (proposal.proposalType === "boq_item" && Boolean(analysis.workbookReview?.length)) || sourceMissing || unresolvedSource || fields.some(row => ["missing", "conflict"].includes(row.status)) || issues.length > 0;
     return { ...proposal, payload: { ...proposal.payload, fieldQuality: {
       version: report.version, rulesVersion: report.rulesVersion, scoreKind: report.scoreKind, requiresReview,
-      fields, issues, ...(sourceMissing ? { reason: "Brak cytatu lub lokalizacji źródła." } : unresolvedSource ? { reason: "Nie można jednoznacznie powiązać propozycji z wierszem analizy." } : {})
+      fields, issues: proposal.proposalType === "boq_item" && analysis.workbookReview?.length ? [...issues, { path: "workbookReview", message: analysis.workbookReview[0] }] : issues, ...(fromBoq ? { reason: "Zadanie z przedmiaru wymaga potwierdzenia w harmonogramie." } : sourceMissing ? { reason: "Brak cytatu lub lokalizacji źródła." } : unresolvedSource ? { reason: "Nie można jednoznacznie powiązać propozycji z wierszem analizy." } : {})
     } }, sourceLocator: { ...proposal.sourceLocator, documentId: report.documentId, documentVersionId: report.documentVersionId } };
   });
 }

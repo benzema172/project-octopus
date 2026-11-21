@@ -20,7 +20,7 @@ const projects = await db.from("projects").select("id,name").eq("workspace_id", 
 if (projects.error || !projects.data?.length) throw Error("Missing dedicated audit project");
 const projectId = projects.data[0].id;
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
-async function upload(fileName, mimeType, bytes) {
+async function upload(fileName, mimeType, bytes, category) {
   // AI may rename documents; the immutable uploaded filename identifies the fixture.
   const existing = await db.from("document_versions").select("document_id,documents!document_versions_document_id_fkey!inner(workspace_id)")
     .eq("documents.workspace_id", workspaceId).eq("project_id", projectId).eq("file_name", fileName)
@@ -33,7 +33,7 @@ async function upload(fileName, mimeType, bytes) {
     if (document.data.deleted_at) await api("/api/storage/document-state", token, { workspaceId, projectId, documentId, state: "active" });
   }
   console.log(`Checking live fixture: ${fileName}`);
-  const url = await api("/api/storage/upload-url", token, { workspaceId, projectId, ...(documentId ? { documentId } : {}), fileName, mimeType, fileSize: bytes.length });
+  const url = await api("/api/storage/upload-url", token, { workspaceId, projectId, ...(documentId ? { documentId } : {}), fileName, mimeType, fileSize: bytes.length, ...(category ? {category,categoryLocked:true} : {}) });
   const stored = await fetch(url.uploadUrl, { method: "PUT", headers: url.headers, body: bytes });
   if (!stored.ok) throw Error(`R2 fixture upload failed: ${stored.status}`);
   return api("/api/storage/complete", token, { token: url.token, sha256: sha(bytes) });
@@ -138,4 +138,70 @@ const signedUrl = await api("/api/storage/download-url", token, { workspaceId, v
 const original = Buffer.from(await (await fetch(signedUrl.downloadUrl)).arrayBuffer());
 if (sha(original) !== sha(bytes)) throw Error("Original PDF changed during segmentation");
 summary.push({ fixture: "mixed_pdf", children, originalPreserved: true });
+await checkConstructionFlow();
 console.log("LIVE FIELD QUALITY E2E OK"); console.log(JSON.stringify(summary));
+
+async function checkConstructionFlow() {
+  const xlsxMime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  const docxMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const prefix = "octopus-live-construction-v1";
+  const tag = "OCT-NOV-B17", scope = "OCT-PIPE-17", reference = "SPEC-17";
+  async function file(label, mime, bytes, category) {
+    const fixture = await upload(prefix + "-" + label, mime, bytes, category);
+    await processVersion(fixture.versionId);
+    return {...fixture,data:await extraction(fixture.versionId)};
+  }
+  function workbook(sheets) {
+    const book = XLSX.utils.book_new();
+    for (const [name,rows] of sheets) XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet(rows),name);
+    return Buffer.from(XLSX.write(book,{type:"buffer",bookType:"xlsx"}));
+  }
+  const boq = await file("przedmiar.xlsx",xlsxMime,workbook([
+    ["Przedmiar",[["Nr pozycji","Opis","Kondygnacja","WBS","Kod produktu","Wariant","Ilość","Jm","Cena","Wartość"],
+      [tag,"Pompa","Parter","W1","OCT-P17","DN40",1,"szt",10,10],[tag,"Pompa","Piętro","W2","OCT-P17","DN50",2,"szt",10,20]]],
+    ["Korekty",[["Nr pozycji","Kondygnacja","Rewizja","Ilość","Wartość"],[tag,"Piętro","R2",3,30]]]
+  ]),"estimate");
+  if (boq.data.boqItems.length !== 2 || boq.data.boqItems[0].totalPrice !== 10 || boq.data.boqItems[1].totalPrice !== 30 ||
+      !boq.data.fieldEvidence.some(e => e.path === "boqItems.1.totalPrice" && e.locator.includes("Korekty") && e.cell === "E2")) throw Error("Incorrect cross-sheet revision provenance");
+  const drafts = await db.from("document_module_proposals").select("payload,status").eq("document_version_id",boq.versionId).eq("proposal_type","schedule_activity");
+  const inferred = drafts.data?.filter(r => r.payload.derivedFromBoq);
+  if (drafts.error || inferred?.length !== 2 || inferred.some(r => r.status === "published" || r.payload.plannedStart || !r.payload.fieldQuality.requiresReview)) throw Error("Missing or prematurely published BOQ schedule drafts");
+  const card = await file("karta.xlsx",xlsxMime,workbook([["Karta materiałowa",[["Opis","Kod produktu","Wariant","Jm","Producent"],["Pompa","OCT-P17","DN50","szt","Octopus Test"]]]]),"application");
+  const section = await PDFDocument.create();
+  const font = await section.embedFont(StandardFonts.Helvetica);
+  const page = section.addPage();
+  ["TECHNICAL SPECIFICATION - ACCEPTANCE CRITERION",reference+" | "+scope+" | test pressure >= 5 bar",
+    "BOQ "+tag+" | WBS W2 | "+scope+" | "+reference+" | test pressure >= 5 bar"].forEach((line,i)=>page.drawText(line,{x:30,y:760-i*35,size:11,font}));
+  const spec = await file("specification.pdf","application/pdf",Buffer.from(await section.save()),"specification");
+  await api("/api/brain/review",token,{workspaceId,projectId,entityType:"document",entityId:spec.documentId,action:"approve",category:"specification",note:"Synthetic acceptance fixture"});
+  const z = XLSX.CFB.utils.cfb_new();
+  const add = (path,xml) => XLSX.CFB.utils.cfb_add(z,path,Buffer.from(xml));
+  const w="http://schemas.openxmlformats.org/wordprocessingml/2006/main",rel="http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+  const p=t=>"<w:p><w:r><w:t>"+t+"</w:t></w:r></w:p>", cells=xs=>"<w:tr>"+xs.map(x=>"<w:tc>"+x+"</w:tc>").join("")+"</w:tr>";
+  add("[Content_Types].xml",'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/></Types>');
+  const relationships=items=>'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+items+'</Relationships>';
+  add("_rels/.rels",relationships('<Relationship Id="r1" Type="'+rel+'/officeDocument" Target="word/document.xml"/>'));
+  add("word/_rels/document.xml.rels",relationships('<Relationship Id="f" Type="'+rel+'/footnotes" Target="footnotes.xml"/>'));
+  add("word/footnotes.xml",'<w:footnotes xmlns:w="'+w+'" xmlns:r="'+rel+'"><w:footnote w:id="1"><w:p><w:hyperlink r:id="photo"><w:r><w:t>Zdjęcie próby</w:t></w:r></w:hyperlink></w:p></w:footnote></w:footnotes>');
+  add("word/_rels/footnotes.xml.rels",relationships('<Relationship Id="photo" Type="'+rel+'/hyperlink" Target="https://example.org/fixture.pdf" TargetMode="External"/>'));
+  add("word/document.xml",'<w:document xmlns:w="'+w+'"><w:body>'+p("Protokół próby szczelności")+'<w:tbl>'+
+    cells(["Odcinek","Ciśnienie próby","Jednostka","Punkt specyfikacji","Uwagi"].map(p))+
+    cells([p("OCT-OTHER"),p("5"),p(""),p(reference),p("Sprawdzić")])+
+    cells([p(scope),p("0,5"),p("MPa"),p(reference),'<w:tbl>'+cells([p("nie odebrano")])+'</w:tbl><w:p><w:r><w:footnoteReference w:id="1"/></w:r></w:p>'])+'</w:tbl></w:body></w:document>');
+  const protocol=await file("protokol.docx",docxMime,Buffer.from(XLSX.CFB.write(z,{type:"buffer",fileType:"zip"})),"protocol");
+  async function findings(kind) {
+    const result=[]; let total;
+    do { const page=await api("/api/projects/construction-review?projectId="+projectId+"&kind="+kind+"&offset="+result.length,token); result.push(...page.items); total=page.total; if (!page.items.length) break; } while(result.length<total);
+    return result;
+  }
+  const matches=await findings("materials"), measures=await findings("protocols"), tasks=await findings("schedule");
+  const linked=(row,version)=>row.sources.some(s=>s.versionId===version);
+  if (!matches.some(r=>linked(r,card.versionId)&&linked(r,boq.versionId)&&r.status.startsWith("Proponowane powiązanie"))) throw Error("Real product card not linked to BOQ");
+  if (!tasks.some(r=>linked(r,boq.versionId)&&linked(r,spec.versionId))) throw Error("Missing specification clause on BOQ task");
+  if (!measures.some(r=>linked(r,protocol.versionId)&&linked(r,spec.versionId)&&r.status==="Pomiar spełnia kryterium")) throw Error("Pressure boundary not linked to approved specification");
+  if (!measures.some(r=>r.title.startsWith("OCT-OTHER")&&r.status.startsWith("Do weryfikacji"))) throw Error("Missing-unit pressure accepted");
+  if (!measures.some(r=>r.title===scope&&r.status.includes("nie odebrano")&&r.links?.[0]?.href==="https://example.org/fixture.pdf")) throw Error("Nested DOCX note or attached footnote lost");
+  const anonymous=await fetch(base+"/api/projects/construction-review?projectId="+projectId+"&kind=materials");
+  if (anonymous.status!==401) throw Error("Construction review requires a session");
+  summary.push({fixture:"cross_document_construction",matchedRevision:"R2",boqRows:2,heldScheduleDrafts:2,materialVariant:"DN50",approvedSpec:reference,pressure:"0.5 MPa",scopedFootnote:true});
+}
