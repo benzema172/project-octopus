@@ -53,7 +53,15 @@ export async function verifyConstructionPanels(base, projectId, cookies) {
         if (state === "ready") { ready = true; break; }
         await new Promise(resolve => setTimeout(resolve, 250));
       }
-      if (!ready) throw Error("No source rows appeared in browser: " + path);
+      if (!ready) {
+        const detail = await execute(`
+          const label = Array.from(document.querySelectorAll("summary")).find(el => el.textContent.startsWith(arguments[0]));
+          const panel = label?.closest("details");
+          return {open:panel?.open, count:panel?.querySelectorAll("li").length, heading:label?.textContent,
+            loading:Boolean(panel?.querySelector('[role="status"]')), empty:panel?.textContent.includes('Brak danych do porównania')};
+        `, title);
+        throw Error("No source rows appeared in browser: " + path + " " + JSON.stringify(detail));
+      }
     }
     const logs = await command("POST", session + "/se/log", { type: "browser" });
     const errors = logs.filter(entry => entry.level === "SEVERE");

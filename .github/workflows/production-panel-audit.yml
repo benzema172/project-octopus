@@ -24,6 +24,20 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --no-audit --no-fund
+      - name: Render tab icon from the existing Octopus SVG
+        run: |
+          node --input-type=module <<'JS'
+          import sharp from "sharp";
+          const sizes = [16,32,48];
+          const images = await Promise.all(sizes.map(size => sharp("public/octopus-intake-sitting.svg").resize(size,size,{fit:"contain",background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer()));
+          const header=Buffer.alloc(6+sizes.length*16);
+          header.writeUInt16LE(1,2);header.writeUInt16LE(sizes.length,4);
+          let offset=header.length;
+          for(const [i,img] of images.entries()) {
+            const p=6+i*16; header[p]=sizes[i];header[p+1]=sizes[i];header.writeUInt16LE(1,p+4);header.writeUInt16LE(32,p+6);header.writeUInt32LE(img.length,p+8);header.writeUInt32LE(offset,p+12);offset+=img.length;
+          }
+          console.log("OCTOPUS_SOURCE_ICON="+Buffer.concat([header,...images]).toString("base64"));
+          JS
       - name: Verify the three expanded production panels
         run: |
           chromedriver --port=9515 > "$RUNNER_TEMP/octopus-chromedriver.log" 2>&1 &

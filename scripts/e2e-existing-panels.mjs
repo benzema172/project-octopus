@@ -13,6 +13,9 @@ const client = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.
 }});
 const signed = await client.auth.signInWithPassword({email: guest.email, password: guest.password});
 if (signed.error || !signed.data.session) throw Error("Dedicated guest sign-in failed");
-const projects = await client.from("projects").select("id").eq("workspace_id",guest.workspaceId).eq("status","active").limit(1);
-if (projects.error || !projects.data?.[0]) throw Error("Missing audit investment");
-await verifyConstructionPanels(base, projects.data[0].id, cookies);
+const fixture = await client.from("document_versions")
+  .select("project_id,documents!document_versions_document_id_fkey!inner(workspace_id)")
+  .eq("documents.workspace_id",guest.workspaceId).eq("file_name","octopus-live-construction-v1-przedmiar.xlsx")
+  .order("created_at",{ascending:false}).limit(1).single();
+if (fixture.error || !fixture.data?.project_id) throw Error("Missing source fixture in the audit workspace");
+await verifyConstructionPanels(base, fixture.data.project_id, cookies);
