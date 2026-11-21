@@ -10,6 +10,7 @@ import { analyzeDocumentWithGemini, analyzeFileWithGemini } from "@/lib/ai/gemin
 import { analyzeWarehouseDocumentWithGemini } from "@/lib/ai/gemini-warehouse-document";
 import { buildDocumentModuleProposals, proposalCounts } from "@/lib/ai/module-proposals";
 import { buildConstructionSource } from "../documents/construction-evidence";
+import { mergeSpecificationCriteria, nativeSpecificationCriteria } from "../documents/native-specification";
 import { extractDocxDocument, extractLegacyDocText, extractLegacyXlsText, extractXlsxText } from "@/lib/ai/office-extractor";
 import { getR2Config } from "@/lib/env";
 import { createR2Client } from "@/lib/r2/client";
@@ -360,6 +361,14 @@ export async function processDocumentVersion(input: {
       }
     }
     const nativeText = "extractedText" in prepared && typeof prepared.extractedText === "string" ? prepared.extractedText : undefined;
+    if (effectiveCategory === "specification" && version.mime_type === "application/pdf") {
+      try {
+        const native = await nativeSpecificationCriteria(bytes);
+        analysis.constructionEvidence = mergeSpecificationCriteria(native, analysis.constructionEvidence);
+      } catch {
+        analysis.warnings.push("Warstwa tekstowa PDF nie uzupełniła kryteriów specyfikacji. Sprawdź cytaty w oryginale.");
+      }
+    }
     const constructionSource = buildConstructionSource(analysis, effectiveCategory, nativeText, "wordRows" in prepared && Array.isArray(prepared.wordRows) ? prepared.wordRows : undefined);
     let fieldQuality = assessFieldQuality(analysis, { documentId: version.document_id, documentVersionId: version.id, nativeText });
     const visualVerification = await verifyUncertainVisualFields({ analysis, quality: fieldQuality, bytes, mimeType: version.mime_type });

@@ -41,6 +41,7 @@ const octopusBuildCommit = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITH
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   agentRules: false,
+  serverExternalPackages: ["unpdf"],
   reactStrictMode: true,
   poweredByHeader: false,
   env: {
