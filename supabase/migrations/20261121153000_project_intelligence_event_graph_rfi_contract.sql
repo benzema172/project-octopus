@@ -359,3 +359,34 @@ drop trigger if exists project_intelligence_change_event on public.document_chan
 create trigger project_intelligence_change_event
   after insert or update of status,risk_level,summary,evidence on public.document_change_impacts
   for each row execute function public.trg_refresh_project_intelligence_impact();
+
+-- The review decision and audit log must commit or fail together.
+create or replace function public.trg_project_intelligence_review_audit()
+returns trigger language plpgsql security definer
+set search_path=public,pg_temp
+as $octopus_intelligence_review_audit$
+begin
+  if old.status='pending' and new.status in ('accepted','dismissed') then
+    if new.reviewed_by is null then
+      raise exception 'The reviewer identity is required';
+    end if;
+    insert into public.audit_events(
+      workspace_id,project_id,actor_id,actor_type,event_type,entity_type,
+      entity_id,before_value,after_value
+    ) values (
+      new.workspace_id,new.project_id,new.reviewed_by,'user',
+      'project.intelligence_finding_reviewed','project_intelligence_finding',
+      new.id::text,
+      jsonb_build_object('kind',old.kind,'status',old.status),
+      jsonb_build_object('kind',new.kind,'status',new.status,'sentExternally',false)
+    );
+  end if;
+  return new;
+end;
+$octopus_intelligence_review_audit$;
+revoke all on function public.trg_project_intelligence_review_audit()
+  from public,anon,authenticated;
+drop trigger if exists project_intelligence_review_audit on public.project_intelligence_findings;
+create trigger project_intelligence_review_audit
+  after update of status on public.project_intelligence_findings
+  for each row execute function public.trg_project_intelligence_review_audit();
