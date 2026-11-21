@@ -11,6 +11,19 @@ async function command(method, path, body) {
   return value;
 }
 
+async function browserErrors(session) {
+  const logs = await command("POST", session + "/se/log", { type: "browser" });
+  return logs.filter(entry => entry.level === "SEVERE").map(entry => {
+    const raw = entry.message?.match(/https?:\/\/[^\s]+/)?.[0];
+    let route = "";
+    if (raw) {
+      try { const url = new URL(raw); route = url.origin + url.pathname; } catch { /* Avoid logging query parameters. */ }
+    }
+    const reason = entry.message?.match(/status of \d{3}|net::ERR_[A-Z_]+|Uncaught [A-Za-z]+/i)?.[0] || "";
+    return [entry.source || "browser", route, reason].filter(Boolean).join(" ");
+  });
+}
+
 export async function verifyConstructionPanels(base, projectId, cookies) {
   const { sessionId } = await command("POST", "/session", { capabilities: { alwaysMatch: {
     browserName: "chrome", "goog:loggingPrefs": { browser: "ALL" },
@@ -53,11 +66,19 @@ export async function verifyConstructionPanels(base, projectId, cookies) {
         if (state === "ready") { ready = true; break; }
         await new Promise(resolve => setTimeout(resolve, 250));
       }
-      if (!ready) throw Error("No source rows appeared in browser: " + path);
+      if (!ready) {
+        const detail = await execute(`
+          const label = Array.from(document.querySelectorAll("summary")).find(el => el.textContent.startsWith(arguments[0]));
+          const panel = label?.closest("details");
+          return {open:panel?.open, count:panel?.querySelectorAll("li").length, heading:label?.textContent,
+            loading:Boolean(panel?.querySelector('[role="status"]')), empty:panel?.textContent.includes('Brak danych do porównania')};
+        `, title);
+        const errors = await browserErrors(session);
+        throw Error("No source rows appeared in browser: " + path + " " + JSON.stringify(detail) + " " + errors.join(", "));
+      }
     }
-    const logs = await command("POST", session + "/se/log", { type: "browser" });
-    const errors = logs.filter(entry => entry.level === "SEVERE");
-    if (errors.length) throw Error("Production browser errors: " + errors.length + " (" + errors.map(e => e.source || "browser").join(", ") + ")");
+    const errors = await browserErrors(session);
+    if (errors.length) throw Error("Production browser errors: " + errors.join(", "));
     console.log("Chrome verified 3 expanded source panels with live rows; zero severe browser errors.");
   } finally {
     await command("DELETE", session);
