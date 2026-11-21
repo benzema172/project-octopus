@@ -22,6 +22,11 @@ async function access(request: Request, workspaceId: string, projectId: string) 
     .select("id").eq("workspace_id", workspace.id).eq("id", projectId).maybeSingle<{ id: string }>();
   if (projectError) return { error: NextResponse.json({ error: "Błąd weryfikacji inwestycji." }, { status: 500 }) };
   if (!project) return { error: NextResponse.json({ error: "Nie znaleziono inwestycji." }, { status: 404 }) };
+  const allowed = await hasDomainAccess({
+    workspaceId: workspace.id, userId: user.id, projectId,
+    domain: "investments", level: "read"
+  });
+  if (!allowed) return { error: NextResponse.json({ error: "Brak dostępu do tej inwestycji." }, { status: 403 }) };
   return { db, workspace, user, project };
 }
 
@@ -90,12 +95,6 @@ export async function POST(request: Request) {
     .eq("status", "pending").select("id,kind,status").maybeSingle();
   if (error) return NextResponse.json({ error: "Nie można zapisać decyzji." }, { status: 500 });
   if (!finding) return NextResponse.json({ error: "Decyzja została już rozpatrzona lub nie istnieje." }, { status: 409 });
-  await db.from("audit_events").insert({
-    workspace_id: workspace.id, project_id: projectId, actor_id: user.id, actor_type: "user",
-    event_type: "project.intelligence_finding_reviewed",
-    entity_type: "project_intelligence_finding", entity_id: findingId,
-    after_value: { kind: finding.kind, decision, sentExternally: false }
-  });
   return NextResponse.json({
     ok: true, id: findingId, status: decision, sentExternally: false
   }, { headers: { "Cache-Control": "no-store" } });
