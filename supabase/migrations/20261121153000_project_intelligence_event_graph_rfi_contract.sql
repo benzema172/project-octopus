@@ -287,9 +287,10 @@ set search_path=public,pg_temp
 as $octopus_intelligence_source$
 declare v_version uuid; v_workspace uuid; v_document uuid;
 begin
-  v_document := new.document_id;
   if tg_table_name='stock_movements' then
     v_document := new.source_document_id;
+  else
+    v_document := new.document_id;
   end if;
   if v_document is null then return new; end if;
   select d.current_version_id,d.workspace_id into v_version,v_workspace
