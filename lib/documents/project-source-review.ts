@@ -1,4 +1,4 @@
-import { identity, meetsCriterion, metricKind, pressure, type ConstructionSource } from "./construction-evidence";
+import { folded, identity, meetsCriterion, metricKind, pressure, type ConstructionEvidence, type ConstructionSource } from "./construction-evidence";
 import type { WordLink } from "./word-tables";
 
 export type SourceDocument = { name: string; versionId: string; category: string; approved: boolean; source: ConstructionSource };
@@ -14,6 +14,32 @@ function group<T>(items: T[], getKey: (item: T) => string) {
     if (bucket) bucket.push(item); else groups.set(key,[item]);
   }
   return groups;
+}
+
+// Some specifications print the clause, section and threshold as adjacent table cells.
+// Only a fully accounted-for row may supply an omitted section identifier.
+function criterionTableScope(row: ConstructionEvidence) {
+  if (!row.reference || !metricKind(row.metric)) return "";
+  const cells = row.quote.split(/[|\t]/).map(cell => cell.trim()).filter(Boolean);
+  const references = cells.filter(cell => same(cell, row.reference));
+  const expected = pressure(row.valueText, row.unit, true);
+  if (references.length !== 1 || !expected) return "";
+
+  const candidates: string[] = [];
+  let thresholds = 0;
+  const prefix = folded(row.metric);
+  for (const cell of cells) {
+    if (same(cell, row.reference) || /^(?:boq|wbs)\s+\S+$/i.test(cell)) continue;
+    const label = folded(cell);
+    if (label.startsWith(prefix)) {
+      const threshold = pressure(label.slice(prefix.length).trim().replace(/^:\s*/, ""), "", true);
+      if (!threshold || threshold.operator !== expected.operator || !meetsCriterion(threshold.value, { operator: "=", value: expected.value })) return "";
+      thresholds++;
+    } else {
+      candidates.push(cell.replace(/^(?:odcinek|zakres|section|scope)\s*:\s*/i, "").trim());
+    }
+  }
+  return thresholds === 1 && candidates.length === 1 ? candidates[0] : "";
 }
 
 export function projectSourceReview(docs: SourceDocument[], kind: ReviewKind): Finding[] {
@@ -42,11 +68,27 @@ export function projectSourceReview(docs: SourceDocument[], kind: ReviewKind): F
     const exact = matches.length === 1 && !matches[0].row.review;
     return { title: [row.code, row.variant, row.unit].filter(Boolean).join(" · ") || doc.name, status: exact ? "Proponowane powiązanie z pozycją " + matches[0].row.id : "Do weryfikacji — brak jednoznacznej pozycji", sources: [ref(doc,row), ...matches.map(x => ref(x.doc,x.row))] };
   });
-  const byScope = group(rules,x => x.row.scope);
+  const indexedRules = rules.map(rule => ({ ...rule, tableScope: criterionTableScope(rule.row) }))
+    .filter(rule => !rule.row.scope || !rule.tableScope || same(rule.row.scope, rule.tableScope));
+  const byScope = group(indexedRules, rule => rule.row.scope || rule.tableScope);
   const findings: Finding[] = claims.filter(x => x.doc.category === "protocol" && x.row.kind === "measurement").map(({ doc,row }) => {
     const metric = metricKind(row.metric);
-    const matches = (byScope.get(identity(row.scope)) ?? []).filter(x => metric && same(x.row.scope,row.scope) && metricKind(x.row.metric) === metric && x.row.reference && (!row.reference || same(x.row.reference,row.reference)));
-    const actual = pressure(row.valueText,row.unit,false), rule = matches.length === 1 ? pressure(matches[0].row.valueText,matches[0].row.unit,true) : null;
+    const matches = (byScope.get(identity(row.scope)) ?? []).filter(candidate =>
+      row.scope && metric && metricKind(candidate.row.metric) === metric && candidate.row.reference &&
+      (row.reference ? same(candidate.row.reference, row.reference) : Boolean(candidate.row.scope)));
+    const actual = pressure(row.valueText, row.unit, false);
+    const first = matches[0];
+    const firstRule = first && pressure(first.row.valueText, first.row.unit, true);
+    // A table can repeat the same requirement alongside a BOQ/WBS cross-reference.
+    // Preserve both citations. Distinct clauses, versions and conflicting thresholds require review.
+    const equivalent = firstRule && matches.slice(1).every(candidate => {
+      if (candidate.doc.versionId !== first.doc.versionId || !same(candidate.row.reference, first.row.reference)) return false;
+      const samePassage = same(candidate.row.locator, first.row.locator) && same(candidate.row.quote, first.row.quote);
+      if (!samePassage && !same(candidate.tableScope, first.tableScope)) return false;
+      const other = pressure(candidate.row.valueText, candidate.row.unit, true);
+      return other !== null && other.operator === firstRule.operator && meetsCriterion(other.value, { operator: "=", value: firstRule.value });
+    });
+    const rule = equivalent ? firstRule : null;
     const status = !actual || !rule ? "Do weryfikacji — sprawdź pomiar, jednostkę i punkt specyfikacji" : meetsCriterion(actual.value,rule) ? "Pomiar spełnia kryterium" : "Pomiar poza kryterium";
     return { title: [row.scope,row.metric,row.valueText,row.unit].filter(Boolean).join(" · "), status, sources: [ref(doc,row), ...matches.map(x => ref(x.doc,x.row))] };
   });
