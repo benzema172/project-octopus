@@ -3,6 +3,39 @@
 -- accounting records are changed.
 begin;
 
+-- Older versions predate stage tracking. Reconstruct only the extract stage
+-- when we have three independently persisted proofs: approved extraction,
+-- nonempty searchable text and a successful processing job.
+-- Keep module routing/finance stages untouched: their correctness is separate.
+insert into public.document_pipeline_stages
+  (workspace_id, document_id, document_version_id, stage, status, details, updated_at)
+select d.workspace_id, v.document_id, v.id, 'extract', 'complete',
+       jsonb_build_object('source', 'legacy_approved_context_and_text', 'backfilled', true), now()
+from public.document_versions v
+join public.documents d on d.id = v.document_id
+where v.extraction_status = 'queued'
+  and exists (
+    select 1 from public.document_extractions e
+    where e.document_version_id = v.id
+      and e.extraction_type = 'document_context'
+      and e.status = 'approved'
+  )
+  and exists (
+    select 1 from public.document_texts t
+    where t.document_version_id = v.id
+      and length(btrim(t.extracted_text)) > 0
+  )
+  and exists (
+    select 1 from public.processing_jobs j
+    where j.document_version_id = v.id
+      and j.status = 'succeeded'
+  )
+  and not exists (
+    select 1 from public.document_pipeline_stages s
+    where s.document_version_id = v.id and s.stage = 'extract'
+  )
+on conflict (document_version_id, stage) do nothing;
+
 -- Only backfill versions with durable proof that extraction completed.
 -- A successful processing job alone is insufficient, since downstream
 -- routing can still require review.
