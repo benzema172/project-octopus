@@ -38,7 +38,7 @@ create table if not exists public.project_intelligence_findings (
   description text not null,
   draft_text text,
   evidence jsonb not null default '{}'::jsonb,
-  status text not null default 'pending' check (status in ('pending','accepted','dismissed')),
+  status text not null default 'pending' check (status in ('pending','accepted','dismissed','resolved')),
   reviewed_by uuid,
   reviewed_at timestamptz,
   created_at timestamptz not null default now(),
@@ -104,6 +104,41 @@ begin
   if v_document.deleted_at is not null or v_document.project_id is null then
     return jsonb_build_object('skipped','no_active_project');
   end if;
+
+  -- Prevent stale lineage when a proposal is superseded, or an invoice/stock
+  -- movement is reassigned or deleted. Edges never become a second ledger.
+  delete from public.project_intelligence_edges e
+  where e.workspace_id=p_workspace_id
+    and e.source_version_id=v_version.id
+    and (
+      (e.relation='source_supports_module' and not exists(
+        select 1 from public.document_module_proposals p
+        where p.workspace_id=p_workspace_id and p.document_id=v_document.id
+          and p.document_version_id=v_version.id
+          and p.project_id=v_document.project_id
+          and p.status in ('published','approved','proposed')
+          and e.edge_key='proposal:'||p.id::text
+      ))
+      or (e.relation='document_records_invoice' and not exists(
+        select 1 from public.invoices i
+        where i.workspace_id=p_workspace_id and i.document_id=v_document.id and i.id=e.target_id
+      ))
+      or (e.relation='document_records_stock' and not exists(
+        select 1 from public.stock_movements m
+        where m.workspace_id=p_workspace_id and m.source_document_id=v_document.id and m.id=e.target_id
+      ))
+    );
+
+  -- Existing approval of a change resolves, rather than reopens, warnings.
+  -- A historical user decision is never silently reclassified as a new alert.
+  update public.project_intelligence_findings f
+  set status='resolved',updated_at=now()
+  from public.document_change_impacts ci
+  where ci.workspace_id=p_workspace_id and ci.project_id=v_document.project_id
+    and ci.document_id=v_document.id and ci.to_version_id=v_version.id
+    and ci.status in ('approved','rejected') and f.workspace_id=p_workspace_id
+    and f.source_version_id=v_version.id and f.status='pending'
+    and f.finding_key in ('change:'||ci.id::text,'rfi:'||ci.id::text,'contract:'||ci.id::text);
 
   -- Documents -> native project modules, with actual source quotes and locators.
   insert into public.project_intelligence_edges(
@@ -295,19 +330,30 @@ create or replace function public.trg_refresh_project_intelligence_source()
 returns trigger language plpgsql security definer
 set search_path=public,pg_temp
 as $octopus_intelligence_source$
-declare v_version uuid; v_workspace uuid; v_document uuid;
+declare v_version uuid; v_workspace uuid; v_old_document uuid; v_new_document uuid;
 begin
   if tg_table_name='stock_movements' then
-    v_document := new.source_document_id;
+    if tg_op in ('UPDATE','DELETE') then v_old_document := old.source_document_id; end if;
+    if tg_op in ('INSERT','UPDATE') then v_new_document := new.source_document_id; end if;
   else
-    v_document := new.document_id;
+    if tg_op in ('UPDATE','DELETE') then v_old_document := old.document_id; end if;
+    if tg_op in ('INSERT','UPDATE') then v_new_document := new.document_id; end if;
   end if;
-  if v_document is null then return new; end if;
-  select d.current_version_id,d.workspace_id into v_version,v_workspace
-  from public.documents d where d.id=v_document;
-  if v_version is not null and v_workspace is not null then
-    perform public.refresh_project_intelligence_for_version(v_workspace,v_version);
+  if v_old_document is distinct from v_new_document and v_old_document is not null then
+    select d.current_version_id,d.workspace_id into v_version,v_workspace
+    from public.documents d where d.id=v_old_document;
+    if v_version is not null and v_workspace is not null then
+      perform public.refresh_project_intelligence_for_version(v_workspace,v_version);
+    end if;
   end if;
+  if v_new_document is not null then
+    select d.current_version_id,d.workspace_id into v_version,v_workspace
+    from public.documents d where d.id=v_new_document;
+    if v_version is not null and v_workspace is not null then
+      perform public.refresh_project_intelligence_for_version(v_workspace,v_version);
+    end if;
+  end if;
+  if tg_op='DELETE' then return old; end if;
   return new;
 end;
 $octopus_intelligence_source$;
@@ -315,11 +361,11 @@ revoke all on function public.trg_refresh_project_intelligence_source()
   from public,anon,authenticated;
 drop trigger if exists project_intelligence_invoice_event on public.invoices;
 create trigger project_intelligence_invoice_event
-  after insert or update of document_id on public.invoices
+  after insert or update of document_id or delete on public.invoices
   for each row execute function public.trg_refresh_project_intelligence_source();
 drop trigger if exists project_intelligence_warehouse_event on public.stock_movements;
 create trigger project_intelligence_warehouse_event
-  after insert or update of source_document_id on public.stock_movements
+  after insert or update of source_document_id or delete on public.stock_movements
   for each row execute function public.trg_refresh_project_intelligence_source();
 
 -- Proposals and detected revisions may be persisted after the route stage;
@@ -329,6 +375,12 @@ returns trigger language plpgsql security definer
 set search_path=public,pg_temp
 as $octopus_intelligence_proposal$
 begin
+  if tg_op='DELETE' then
+    if old.document_version_id is not null and old.workspace_id is not null then
+      perform public.refresh_project_intelligence_for_version(old.workspace_id,old.document_version_id);
+    end if;
+    return old;
+  end if;
   if new.document_version_id is not null and new.workspace_id is not null then
     perform public.refresh_project_intelligence_for_version(new.workspace_id,new.document_version_id);
   end if;
@@ -339,7 +391,7 @@ revoke all on function public.trg_refresh_project_intelligence_proposal()
   from public,anon,authenticated;
 drop trigger if exists project_intelligence_proposal_event on public.document_module_proposals;
 create trigger project_intelligence_proposal_event
-  after insert or update of status,published_entity_id,published_entity_type on public.document_module_proposals
+  after insert or update of status,published_entity_id,published_entity_type or delete on public.document_module_proposals
   for each row execute function public.trg_refresh_project_intelligence_proposal();
 
 create or replace function public.trg_refresh_project_intelligence_impact()
