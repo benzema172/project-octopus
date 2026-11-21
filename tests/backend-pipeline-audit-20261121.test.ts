@@ -61,6 +61,15 @@ describe("Project Octopus backend audit: extraction source of truth", () => {
     expect(migration).toContain("version.extraction_status = 'queued'");
   });
 
+  it("reconstructs legacy stages only from approved extraction, text and successful job", () => {
+    expect(migration).toContain("insert into public.document_pipeline_stages");
+    expect(migration).toContain("e.extraction_type = 'document_context'");
+    expect(migration).toContain("e.status = 'approved'");
+    expect(migration).toContain("length(btrim(t.extracted_text)) > 0");
+    expect(migration).toContain("j.status = 'succeeded'");
+    expect(migration).toContain("on conflict (document_version_id, stage) do nothing");
+  });
+
   it("keeps unique fuel protection while dropping duplicate indexes", () => {
     expect(migration).toContain("drop index if exists public.fuel_entries_one_invoice_line_tanking_20261030");
     expect(migration).not.toContain("drop index if exists public.fuel_entries_invoice_line_uidx");
