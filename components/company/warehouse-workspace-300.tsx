@@ -684,13 +684,14 @@ function ItemDrawer({ workspaceId, item, itemId, catalogItems, balances, reserva
     <Panel title="Ostatnie zakupy i ceny" icon={<History size={15} />}>
       {prices.slice(0, 16).map((row) => {
         const directInvoiceLineId = String(row.invoice_line_id ?? "").trim();
-        const sourceInvoiceLineId = String(row.source_type ?? "") === "invoice_line" ? String(row.source_id ?? "").trim() : "";
-        const invoiceLineId = directInvoiceLineId || sourceInvoiceLineId || null;
+        // Only use the server-verified line. Historical source_id may refer to a deleted invoice line.
+        const invoiceLineId = directInvoiceLineId || null;
+        const missingInvoiceLine = String(row.source_type ?? "") === "invoice_line" && !invoiceLineId;
         const invoiceId = String(row.invoice_id ?? "").trim() || null;
         const invoiceNumber = String(row.invoice_number ?? "").trim() || null;
         return <div className={styles.simpleRow} key={String(row.id)}><span>
           <strong>{money(row.unit_price_net, text(row.currency,"PLN"))} / {text(row.unit,item.unit as string)}</strong>
-          <small>{text(counterparties.get(String(row.counterparty_id))?.name)} · {dateLabel(row.observed_at)}{invoiceLineId ? <> · faktura <InvoiceQuickPreview workspaceId={workspaceId} domain="warehouse" invoiceLineId={invoiceLineId} invoiceId={invoiceId} invoiceNumber={invoiceNumber} stockItemId={itemId}>{invoiceNumber ? `FV ${invoiceNumber.replace(/^FV\s+/i, "")}` : "podgląd"}</InvoiceQuickPreview></> : null}</small>
+          <small>{text(counterparties.get(String(row.counterparty_id))?.name)} · {dateLabel(row.observed_at)}{invoiceLineId ? <> · faktura <InvoiceQuickPreview workspaceId={workspaceId} domain="warehouse" invoiceLineId={invoiceLineId} invoiceId={invoiceId} invoiceNumber={invoiceNumber} stockItemId={itemId}>{invoiceNumber ? `FV ${invoiceNumber.replace(/^FV\s+/i, "")}` : "podgląd"}</InvoiceQuickPreview></> : missingInvoiceLine ? <> · faktura niedostępna (brak pozycji źródłowej)</> : null}</small>
         </span></div>;
       })}
       {!prices.length ? <Empty label="Historia cen pojawi się po rozpoznanych zakupach." /> : null}
