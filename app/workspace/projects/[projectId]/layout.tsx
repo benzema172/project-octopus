@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Archive, ArrowLeft, Building2, LockKeyhole, MapPin } from "lucide-react";
 import { notFound } from "next/navigation";
+import { AppReleaseBadge } from "@/components/app-release-badge";
 import { CompanyShell } from "@/components/layout/company-shell";
 import { ProjectAutopilotDock } from "@/components/projects/project-autopilot-dock";
 import { ProjectAutopilotRouteGate } from "@/components/projects/project-autopilot-route-gate";
@@ -74,7 +75,7 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
   const header = getProjectHeaderModel560(project, profile);
 
   return (
-    <CompanyShell workspaceId={workspace.id} companyName={workspace.name} userEmail={user.email ?? "Project Octopus"} allowedDomains={allowedCompanyDomains}>
+    <CompanyShell workspaceId={workspace.id} companyName={workspace.name} userEmail={user.email ?? "Project Octopus"} allowedDomains={allowedCompanyDomains} releaseBadge={<AppReleaseBadge sidebar />}>
       <main className="workspace-page project-workspace co-project-workspace project-workspace-v2" data-project-lifecycle-status={String(project.status)}>
         <section className="pw-project-top-shell" aria-label="Nagłówek i nawigacja inwestycji">
           <header className="pw-project-header pw-project-header--contract pw-project-header--compact pw-project-header--with-intake">
