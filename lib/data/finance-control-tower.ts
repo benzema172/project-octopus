@@ -53,7 +53,7 @@ export async function getFinanceControlTower(workspaceId: string): Promise<Finan
     db.from("finance_payment_matches").select("id,bank_transaction_id,invoice_id,match_score,status,reasons,created_at").eq("workspace_id", workspaceId).eq("status", "suggested").order("match_score", { ascending: false }).limit(50),
     db.from("finance_scenarios").select("id,name,scenario_type,horizon_weeks,assumptions,status,created_at").eq("workspace_id", workspaceId).eq("status", "active").order("created_at", { ascending: false }).limit(30),
     db.from("business_inbox_items").select("id,status,received_at").eq("workspace_id", workspaceId).eq("source_channel", "ksef").order("received_at", { ascending: false }).limit(100),
-    db.from("procurement_matches").select("id,invoice_line_id,purchase_order_line_id,receipt_line_id,boq_item_id,status,match_confidence,updated_at").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(50),
+    db.from("procurement_matches").select("id,invoice_line_id,purchase_order_line_id,receipt_line_id,boq_item_id,status,match_confidence,updated_at,ordered_quantity,received_quantity,invoiced_quantity,ordered_unit_price,planned_unit_price").eq("workspace_id", workspaceId).order("updated_at", { ascending: false }).limit(50),
     db.from("projects").select("id,name").eq("workspace_id", workspaceId).limit(500)
   ]);
 
@@ -79,7 +79,7 @@ export async function getFinanceControlTower(workspaceId: string): Promise<Finan
     invoiceIds.length ? db.from("invoices").select("id,invoice_number,gross_amount").eq("workspace_id", workspaceId).in("id", invoiceIds) : Promise.resolve({ data: [] as Row[] }),
     txIds.length ? db.from("finance_bank_transactions").select("id,amount,title").eq("workspace_id", workspaceId).in("id", txIds) : Promise.resolve({ data: [] as Row[] }),
     invoiceLineIds.length ? db.from("invoice_lines").select("id,invoice_id,description").eq("workspace_id", workspaceId).in("id", invoiceLineIds) : Promise.resolve({ data: [] as Row[] }),
-    invoiceLineIds.length ? db.from("financial_allocations").select("source_line_id,project_id,status").eq("workspace_id", workspaceId).eq("source_type", "invoice").in("source_line_id", invoiceLineIds) : Promise.resolve({ data: [] as Row[] })
+    invoiceLineIds.length ? db.from("financial_allocations").select("source_line_id,project_id,status,amount,allocation_percent").eq("workspace_id", workspaceId).eq("source_type", "invoice").in("source_line_id", invoiceLineIds) : Promise.resolve({ data: [] as Row[] })
   ]);
 
   for (const [label, result] of [
@@ -100,7 +100,7 @@ export async function getFinanceControlTower(workspaceId: string): Promise<Finan
       ? db.from("invoices").select("id,invoice_number").eq("workspace_id", workspaceId).in("id", graphInvoiceIds)
       : Promise.resolve({ data: [] as Row[], error: null }),
     graphInvoiceIds.length
-      ? db.from("payments").select("invoice_id,status").eq("workspace_id", workspaceId).in("invoice_id", graphInvoiceIds)
+      ? db.from("payments").select("invoice_id,status,payment_date,amount,currency").eq("workspace_id", workspaceId).in("invoice_id", graphInvoiceIds)
       : Promise.resolve({ data: [] as Row[], error: null })
   ]);
   if (graphInvoiceResult.error) throw new Error(`Nie udało się pobrać faktur w grafie kosztów: ${graphInvoiceResult.error.message}`);
@@ -196,25 +196,38 @@ export async function getFinanceControlTower(workspaceId: string): Promise<Finan
     created_at: text(row.created_at)
   }));
 
+  const graphPayments = (paymentResult.data ?? []) as Row[];
+  const detailValue = (label: string, value: unknown) => value == null ? null : `${label}: ${value}`;
+  const details = (...values: (string | null)[]) => values.filter((value): value is string => value !== null);
   const moneyGraph: MoneyGraphItem[] = procurementRows.map((match) => {
     const line = lines.get(text(match.invoice_line_id)) ?? {};
     const invoice = graphInvoices.get(text(line.invoice_id)) ?? {};
     const lineAllocations = allocations.get(text(match.invoice_line_id)) ?? [];
-    const firstProject = lineAllocations.find((row) => row.project_id)?.project_id;
+    const projectAllocations = lineAllocations.filter((row) => row.project_id && projects.has(text(row.project_id)) && !["cancelled", "void", "rejected"].includes(text(row.status)));
+    const projectNames = [...new Set(projectAllocations.map((row) => projects.get(text(row.project_id)) ?? ""))];
+    const invoicePayments = graphPayments.filter((row) => text(row.invoice_id) === text(line.invoice_id) && !["cancelled", "void", "rejected"].includes(text(row.status)));
     return {
       id: text(match.id),
       status: text(match.status, "review"),
       confidence: Math.round(number(match.match_confidence) * 100),
       description: text(line.description, "Pozycja faktury"),
-      invoiceId: line.invoice_id ? text(line.invoice_id) : null,
+      invoiceId: invoice.id ? text(invoice.id) : null,
+      invoiceLineId: invoice.id && line.id ? text(line.id) : null,
       invoiceNumber: text(invoice.invoice_number, "Faktura"),
       boq: Boolean(match.boq_item_id),
       purchaseOrder: Boolean(match.purchase_order_line_id),
       receipt: Boolean(match.receipt_line_id),
-      invoice: Boolean(line.id),
+      invoice: Boolean(line.id && invoice.id),
       payment: paidInvoices.has(text(line.invoice_id)),
-      allocation: lineAllocations.length > 0,
-      projectName: firstProject ? projects.get(text(firstProject)) ?? "Inwestycja" : "Nieprzypisane"
+      allocation: projectAllocations.length > 0,
+      projectName: projectNames.join(", ") || "Nieprzypisane",
+      nodeDetails: {
+        boq: match.boq_item_id ? details("Powiązana pozycja kosztorysu", detailValue("Planowana cena jednostkowa", match.planned_unit_price)) : ["Brak powiązania z kosztorysem."],
+        purchaseOrder: match.purchase_order_line_id ? details("Powiązana pozycja zamówienia", detailValue("Zamówiona ilość", match.ordered_quantity), detailValue("Cena jednostkowa", match.ordered_unit_price)) : ["Brak powiązania z zamówieniem."],
+        receipt: match.receipt_line_id ? details("Powiązana pozycja przyjęcia", detailValue("Przyjęta ilość", match.received_quantity)) : ["Brak powiązania z przyjęciem magazynowym."],
+        payment: invoicePayments.length ? invoicePayments.map((row) => `${text(row.payment_date, "Brak daty")} · ${text(row.amount, "—")} ${text(row.currency)} · status: ${text(row.status, "nieznany")}`) : ["Brak zarejestrowanej płatności."],
+        allocation: projectAllocations.length ? projectAllocations.map((row) => `${projects.get(text(row.project_id))} · ${text(row.amount, "—")} · ${text(row.allocation_percent, "—")}% · status: ${text(row.status, "nieznany")}`) : [lineAllocations.length ? "Istnieje alokacja kosztu, ale brak przypisania do inwestycji." : "Brak alokacji do inwestycji."]
+      }
     };
   });
 

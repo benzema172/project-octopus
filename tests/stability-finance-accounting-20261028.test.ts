@@ -11,6 +11,21 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = (path: string) => readFileSync(resolve(root, path), "utf8");
 
 describe("Octopus production stability regression", () => {
+  it("offers a source invoice preview and details on every cost-chain node", () => {
+    const component = source("components/company/finance-control-tower.tsx");
+    const loader = source("lib/data/finance-control-tower.ts");
+    expect(component).toContain("<CostChainNodes workspaceId={workspaceId} item={item}/>");
+    expect(component).toContain('domain="finance" invoiceId={item.invoiceId} invoiceLineId={item.invoiceLineId}');
+    expect(component).toContain('role="tooltip"');
+    expect(component).toContain("onMouseEnter");
+    expect(component).toContain("onFocus");
+    expect(loader).toContain("invoice: Boolean(line.id && invoice.id)");
+    expect(loader).toContain("allocation: projectAllocations.length > 0");
+    expect(loader).toContain("row.project_id && projects.has(text(row.project_id))");
+    expect(loader).not.toContain("allocation: lineAllocations.length > 0");
+    expect(loader).toContain("Istnieje alokacja kosztu, ale brak przypisania do inwestycji.");
+  });
+
   it("bounds read-only Supabase calls while never replaying ambiguous writes", () => {
     const client = source("lib/supabase/service.ts");
     expect(client).toContain("SERVICE_READ_TIMEOUT_MS = 10_000");
