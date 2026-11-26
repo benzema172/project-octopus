@@ -25,6 +25,15 @@ describe("Warehouse price history 4.5", () => {
     expect(component).not.toContain("source_type");
   });
 
+  it("does not offer an invoice preview for historical observations whose source line no longer exists", () => {
+    const loader = read("lib/data/warehouse-price-history-450.ts");
+    const drawer = read("components/company/warehouse-workspace-300.tsx");
+    expect(loader).toContain("invoice_line_id: line ? sourceId : null");
+    expect(drawer).toContain("const invoiceLineId = directInvoiceLineId || null");
+    expect(drawer).not.toContain("directInvoiceLineId || sourceInvoiceLineId");
+    expect(drawer).toContain("faktura niedostępna (brak pozycji źródłowej)");
+  });
+
   it("enriches every supported price source with the original invoice number", () => {
     const loader = read("lib/data/warehouse-price-history-450.ts");
     const market = read("lib/data/warehouse-market-400.ts");
