@@ -103,6 +103,8 @@ export type MoneyGraphItem = {
   payment: boolean;
   allocation: boolean;
   projectName: string;
+  invoiceLineId?: string | null;
+  nodeDetails?: Record<"boq" | "purchaseOrder" | "receipt" | "payment" | "allocation", string[]>;
 };
 
 export type FinanceControlData = {
