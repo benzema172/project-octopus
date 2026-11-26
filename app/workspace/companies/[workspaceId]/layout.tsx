@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { AppReleaseBadge } from "@/components/app-release-badge";
 import { CompanyShell } from "@/components/layout/company-shell";
 import { requireCurrentUser } from "@/lib/auth";
 import { getWorkspaceForUser } from "@/lib/data/workspace";
@@ -30,6 +31,7 @@ export default async function CompanyLayout({ children, params }: CompanyLayoutP
       companyName={workspace.name}
       userEmail={user.email ?? "Project Octopus"}
       allowedDomains={allowedDomains}
+      releaseBadge={<AppReleaseBadge sidebar />}
     >
       {children}
     </CompanyShell>
