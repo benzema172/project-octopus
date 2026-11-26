@@ -37,14 +37,21 @@
   padding: 3px;
 }
 .co-investment-filters button {
-  min-height: 28px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 36px;
   border: 0;
   border-radius: 5px;
   background: transparent;
   color: #766c7e;
-  padding: 5px 9px;
-  font-size: 9px;
-  font-weight: 800;
+  padding: 8px 13px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
   cursor: pointer;
 }
 .co-investment-filters button.is-active { background: #fff; color: #6335a4; box-shadow: 0 1px 4px rgba(54, 42, 67, .1); }
