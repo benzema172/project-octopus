@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
+import { useId, useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { InvoiceQuickPreview } from "@/components/documents/invoice-quick-preview";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -20,7 +22,7 @@ import {
   WalletCards
 } from "lucide-react";
 import { ModuleDropzoneLink } from "@/components/documents/module-dropzone-link";
-import type { FinanceCashflowWeek, FinanceControlData, FinanceScenario } from "@/lib/types/finance-control";
+import type { FinanceCashflowWeek, FinanceControlData, FinanceScenario, MoneyGraphItem } from "@/lib/types/finance-control";
 
 type Tab = "cockpit" | "cashflow" | "projects" | "settlements" | "documents" | "accounting" | "control" | "reports";
 type Props = { workspaceId: string; data: FinanceControlData; canWrite: boolean; canApprove: boolean; initialTab?: string; accountingContent?: ReactNode };
@@ -85,6 +87,43 @@ function scenarioResult(weeks: FinanceCashflowWeek[], scenario: FinanceScenario 
   const outflowFactor = Number(assumptions.outflowFactor ?? 1);
   const includeUnknown = Boolean(assumptions.includeUnknown ?? false);
   return weeks.reduce((sum, week) => sum + week.inflow * inflowFactor - week.outflow * outflowFactor - (includeUnknown ? week.unknown_outflow : 0), 0);
+}
+
+function CostNodePreview({ label, ok, arrow, details }: { label: string; ok: boolean; arrow: boolean; details: string[] }) {
+  const id = useId();
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const show = (element: HTMLElement) => {
+    const rect = element.getBoundingClientRect();
+    setPosition({ top: Math.max(8, rect.top - 6), left: Math.max(8, Math.min(rect.left, window.innerWidth - 300)) });
+  };
+  return <span className={ok ? "is-ok" : "is-missing"} tabIndex={0} aria-describedby={position ? id : undefined}
+    onMouseEnter={(event) => show(event.currentTarget)} onMouseLeave={() => setPosition(null)}
+    onFocus={(event) => show(event.currentTarget)} onBlur={() => setPosition(null)}
+    onClick={(event) => show(event.currentTarget)}
+    onKeyDown={(event) => { if (event.key === "Escape") setPosition(null); }}>
+    {ok ? <CheckCircle2 size={14}/> : <AlertTriangle size={14}/>} {label}{arrow ? <ArrowRight size={12}/> : null}
+    {position && typeof document !== "undefined" ? createPortal(
+      <div id={id} role="tooltip" style={{ position: "fixed", top: position.top, left: position.left, transform: "translateY(-100%)", width: 280, maxWidth: "calc(100vw - 16px)", background: "#fff", color: "#17212d", padding: "10px 12px", border: "1px solid #dce3e9", borderRadius: 8, boxShadow: "0 8px 24px #15203120", zIndex: 10000, fontSize: 12, pointerEvents: "none" }}>
+        <strong>{label}</strong>
+        {details.map((detail, index) => <div key={index} style={{ marginTop: 5, overflowWrap: "anywhere" }}>{detail}</div>)}
+      </div>, document.body) : null}
+  </span>;
+}
+
+function CostChainNodes({ workspaceId, item }: { workspaceId: string; item: MoneyGraphItem }) {
+  const nodes = [
+    { label: "BOQ", key: "boq", ok: item.boq },
+    { label: "PO", key: "purchaseOrder", ok: item.purchaseOrder },
+    { label: "PZ", key: "receipt", ok: item.receipt },
+    { label: "FV", key: "invoice", ok: item.invoice },
+    { label: "Płatność", key: "payment", ok: item.payment },
+    { label: "Inwestycja", key: "allocation", ok: item.allocation }
+  ] as const;
+  return <div className="fct-money-row__nodes">{nodes.map(({ label, key, ok }, index) => {
+    if (key === "invoice" && ok && item.invoiceId) return <span key={key} className="is-ok"><InvoiceQuickPreview workspaceId={workspaceId} domain="finance" invoiceId={item.invoiceId} invoiceLineId={item.invoiceLineId} invoiceNumber={item.invoiceNumber}><CheckCircle2 size={14}/> {label}<ArrowRight size={12}/></InvoiceQuickPreview></span>;
+    const details = key === "invoice" ? [ok ? item.invoiceNumber : "Brak dostępnej faktury źródłowej."] : item.nodeDetails?.[key] ?? [ok ? "Powiązanie zapisane." : "Brak powiązania."];
+    return <CostNodePreview key={key} label={label} ok={ok} arrow={index < 5} details={details}/>;
+  })}</div>;
 }
 
 function normalizedTab(value?: string): Tab {
@@ -273,7 +312,7 @@ export function FinanceControlTower({ workspaceId, data, canWrite, canApprove, i
       <article className="fct-panel"><div className="fct-panel__heading"><div><span>Obieg</span><h2>Jedna prawda dokumentowa</h2></div></div><ol className="fct-pipeline"><li><b>1</b><span><strong>Źródło</strong><small>KSeF · Wrzutnia · ERP · e-mail</small></span></li><li><b>2</b><span><strong>AI / walidacja</strong><small>typ · kontrahent · pozycje</small></span></li><li><b>3</b><span><strong>Kontrola</strong><small>BOQ · PO · PZ · FV</small></span></li><li><b>4</b><span><strong>Finanse</strong><small>alokacja · payment truth · dekret</small></span></li></ol></article>
     </div> : null}
 
-    {activeTab === "control" ? <article className="fct-panel"><div className="fct-panel__heading"><div><span>Money Graph</span><h2>Skąd powstał koszt i gdzie trafił</h2></div></div><p className="fct-intro">Każdy wiersz pokazuje łańcuch dowodowy kosztu. Brak ogniwa nie znika — jest jawnie oznaczony i może trafić do centrum decyzji.</p><div className="fct-money-graph">{data.moneyGraph.map((item) => <div className="fct-money-row" key={item.id}><div className="fct-money-row__title"><span>{item.status} · {item.confidence}%</span><strong>{item.description}</strong><small>{item.invoiceNumber} · {item.projectName}</small></div><div className="fct-money-row__nodes">{[["BOQ",item.boq],["PO",item.purchaseOrder],["PZ",item.receipt],["FV",item.invoice],["Płatność",item.payment],["Inwestycja",item.allocation]].map(([label, ok], index) => <span key={String(label)} className={ok ? "is-ok" : "is-missing"}>{ok ? <CheckCircle2 size={14}/> : <AlertTriangle size={14}/>} {label}{index < 5 ? <ArrowRight size={12}/> : null}</span>)}</div></div>)}{!data.moneyGraph.length ? <div className="fct-empty"><FileCheck2 size={22}/><strong>Brak pełnych łańcuchów zakupowych</strong><span>Pojawią się automatycznie po odczytaniu pozycji faktur i powiązaniu ich z PO/PZ/BOQ.</span></div> : null}</div></article> : null}
+    {activeTab === "control" ? <article className="fct-panel"><div className="fct-panel__heading"><div><span>Money Graph</span><h2>Skąd powstał koszt i gdzie trafił</h2></div></div><p className="fct-intro">Każdy wiersz pokazuje łańcuch dowodowy kosztu. Brak ogniwa nie znika — jest jawnie oznaczony i może trafić do centrum decyzji.</p><div className="fct-money-graph">{data.moneyGraph.map((item) => <div className="fct-money-row" key={item.id}><div className="fct-money-row__title"><span>{item.status} · {item.confidence}%</span><strong>{item.description}</strong><small>{item.invoiceNumber} · {item.projectName}</small></div><CostChainNodes workspaceId={workspaceId} item={item}/></div>)}{!data.moneyGraph.length ? <div className="fct-empty"><FileCheck2 size={22}/><strong>Brak pełnych łańcuchów zakupowych</strong><span>Pojawią się automatycznie po odczytaniu pozycji faktur i powiązaniu ich z PO/PZ/BOQ.</span></div> : null}</div></article> : null}
 
     {activeTab === "reports" ? <div className="fct-grid fct-grid--wide-left">
       <article className="fct-panel"><div className="fct-panel__heading"><div><span>Financial Twin</span><h2>Scenariusze płynności</h2></div></div><div className="fct-scenarios">{builtInScenarios.map((scenario) => <div key={scenario.type}><span>{scenario.name}</span><strong>{money(scenarioResult(data.cashflow, scenario))}</strong><small>bilans 13 tygodni{scenario.type === "stress" ? " z nierozpoznanymi wypływami" : ""}</small></div>)}{data.scenarios.map((scenario) => <div key={scenario.id}><span>{scenario.name}</span><strong>{money(scenarioResult(data.cashflow, scenario))}</strong><small>zapisany scenariusz · {scenario.scenario_type}</small></div>)}</div>{canWrite ? <form className="fct-form fct-form--inline" onSubmit={saveScenario}><label>Nazwa<input name="name" required placeholder="np. Opóźnienie klienta"/></label><label>Wpływy %<input name="inflowFactor" type="number" defaultValue="100" min="0" max="200"/></label><label>Wydatki %<input name="outflowFactor" type="number" defaultValue="100" min="0" max="300"/></label><label className="fct-checkbox"><input type="checkbox" name="includeUnknown"/>Uwzględnij niezweryfikowane faktury</label><button className="secondary-button" disabled={pending}>Zapisz scenariusz</button></form> : null}</article>
