@@ -42,6 +42,19 @@ describe("global authenticated section rhythm", () => {
     expect(css).toContain("padding: 0 !important");
   });
 
+  it("removes the legacy width cap only for the dashboard, investment portfolio and project workspace", () => {
+    const css = read("app/global-section-rhythm.css");
+    const selector = ".octopus-app-light .co-main > :is(.co-dashboard-simplified, .co-investments-page, .project-workspace-v2)";
+    const rule = css.split(selector)[1]?.split("}")[0] ?? "";
+    expect(rule).toContain("width: 100% !important");
+    expect(rule).toContain("max-width: none !important");
+    expect(rule).toContain("margin-inline: 0 !important");
+    expect(rule).toContain("box-sizing: border-box");
+    expect(read("app/workspace/companies/[workspaceId]/page.tsx")).toContain("co-page co-dashboard-simplified");
+    expect(read("components/projects/company-investments-view.tsx")).toContain("co-page co-investments-page");
+    expect(read("app/workspace/projects/[projectId]/layout.tsx")).toContain("project-workspace-v2");
+  });
+
   it("removes competing margins from top-level sections without changing login", () => {
     const css = read("app/global-section-rhythm.css");
     expect(css).toContain("margin-block: 0 !important");
