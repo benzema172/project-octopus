@@ -4,6 +4,17 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("global authenticated section rhythm", () => {
+  it("matches investment filter typography and height to readable module tabs", () => {
+    const css = read("app/investments-refinement.css");
+    const rule = css.split(".co-investment-filters button {")[1]?.split("}")[0] ?? "";
+    expect(rule).toContain("font-size: 13px");
+    expect(rule).toContain("min-height: 36px");
+    expect(rule).toContain("align-items: center");
+    expect(rule).toContain("flex: 0 0 auto");
+    expect(rule).toContain("white-space: nowrap");
+    expect(css).toContain("overflow-x: auto; max-width: 100%");
+  });
+
   it("loads the rhythm layer after legacy density styles", () => {
     const layout = read("app/workspace/layout.tsx");
     const density = layout.indexOf('import "../layout-density-audit.css"');
