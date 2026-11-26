@@ -23,7 +23,10 @@ describe("automatic application release badge", () => {
     expect(config).toContain("NEXT_PUBLIC_OCTOPUS_BUILD_TIMESTAMP");
     expect(config).toContain("NEXT_PUBLIC_OCTOPUS_BUILD_COMMIT");
 
-    expect(badge).toContain("APP_RELEASE.displayVersion");
+    expect(badge).toContain("v{APP_RELEASE.version}");
+    expect(badge).not.toContain("v{APP_RELEASE.displayVersion}");
+    expect(badge).toContain("APP_RELEASE_LABEL");
+    expect(badge).toContain("title={title}");
     expect(badge).toContain("APP_RELEASE.deployedAt");
     expect(badge).toContain("APP_RELEASE.commit");
   });
