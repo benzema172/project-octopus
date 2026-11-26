@@ -90,3 +90,13 @@
     --app-section-gap: 10px;
   }
 }
+
+/* Dashboard and investment workspaces use the entire available company content
+   column, not the legacy 1440px page cap. Keep co-main's responsive padding. */
+.octopus-app-light .co-main > :is(.co-dashboard-simplified, .co-investments-page, .project-workspace-v2) {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0;
+  margin-inline: 0 !important;
+  box-sizing: border-box;
+}
