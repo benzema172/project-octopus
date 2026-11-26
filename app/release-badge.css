@@ -96,3 +96,36 @@ body:has(.octopus-login) .app-release-badge__date {
   right: max(8px, env(safe-area-inset-right));
   bottom: max(8px, env(safe-area-inset-bottom));
 }
+
+
+/* In the authenticated company/project shell, the release belongs to the sidebar. */
+body:has(.co-shell) .app-release-badge--floating {
+  display: none;
+}
+
+.co-sidebar .app-release-badge--sidebar {
+  position: static;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 3px;
+  max-width: 100%;
+  padding: 8px 4px 0;
+  margin-top: 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  line-height: 1.35;
+  pointer-events: auto;
+  user-select: text;
+}
+
+.co-sidebar .app-release-badge--sidebar .app-release-badge__date {
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.co-sidebar .app-release-badge--sidebar + .co-sidebar-footer {
+  margin-top: 6px;
+}

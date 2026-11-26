@@ -35,6 +35,7 @@ type CompanyShellProps = {
   userEmail: string;
   allowedDomains: Domain[];
   children: React.ReactNode;
+  releaseBadge?: React.ReactNode;
 };
 
 type NavItem = {
@@ -48,7 +49,7 @@ type NavItem = {
   group: "primary" | "tools";
 };
 
-export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomains, children }: CompanyShellProps) {
+export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomains, children, releaseBadge }: CompanyShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -169,6 +170,7 @@ export function CompanyShell({ workspaceId, companyName, userEmail, allowedDomai
           ) : null}
         </div>
 
+        {releaseBadge}
         <div className="co-sidebar-footer">
           <div><small>Zalogowano jako</small><span title={userEmail}>{userEmail}</span></div>
           <form action="/auth/sign-out" method="post"><button type="submit" className="co-icon-button" aria-label="Wyloguj"><LogOut size={18} aria-hidden="true" /></button></form>

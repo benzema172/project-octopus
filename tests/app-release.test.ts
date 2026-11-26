@@ -13,12 +13,21 @@ describe("application release badge", () => {
     expect(APP_RELEASE_LABEL).toContain(APP_RELEASE.deployedAt);
   });
 
-  it("is mounted globally and styled for login and workspace screens", () => {
+  it("keeps the fallback badge for login and moves company and project release info above the sidebar footer", () => {
     const layout = readFileSync("app/layout.tsx", "utf8");
     const css = readFileSync("app/release-badge.css", "utf8");
     expect(layout).toContain("<AppReleaseBadge />");
     expect(layout).toContain('import "./release-badge.css"');
     expect(css).toContain("body:has(.octopus-login) .app-release-badge");
     expect(css).toContain(".app-release-badge");
+    expect(css).toContain("body:has(.co-shell) .app-release-badge--floating");
+    const badge = readFileSync("components/app-release-badge.tsx", "utf8");
+    expect(badge).toContain("v{APP_RELEASE.version}");
+    expect(badge).not.toContain("v{APP_RELEASE.displayVersion}");
+    const shell = readFileSync("components/layout/company-shell.tsx", "utf8");
+    expect(shell.indexOf("{releaseBadge}")).toBeLessThan(shell.indexOf('className="co-sidebar-footer"'));
+    for (const path of ["app/workspace/companies/[workspaceId]/layout.tsx", "app/workspace/projects/[projectId]/layout.tsx"]) {
+      expect(readFileSync(path, "utf8")).toContain("releaseBadge={<AppReleaseBadge sidebar />}");
+    }
   });
 });
