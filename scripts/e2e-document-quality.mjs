@@ -96,6 +96,14 @@ XLSX.utils.book_append_sheet(signedBook, XLSX.utils.aoa_to_sheet([
   ["N2", "Zawór testowy DN50", 2, "szt.", "1.234,56", "2.469,12"],
   ["N3", "Rura z nieczytelną ilością", "0 nieczytelne", "m", 20, 0]
 ]), "Kosztorys");
+const signedSheet = signedBook.Sheets.Kosztorys;
+XLSX.utils.sheet_add_aoa(signedSheet, [
+  ["N4", "Zwrot materiału", -1, "szt.", 1250, -1250],
+  ["N5", "Korekta w euro", -1, "szt.", 12, -12]
+], { origin: "A5" });
+for (const [row, currency] of [[5, "PLN"], [6, "EUR"]]) {
+  for (const col of ["E", "F"]) signedSheet[col + row].z = '#,##0.00 "' + currency + '";(#,##0.00 "' + currency + '")';
+}
 const signedFixture = await upload("octopus-live-field-quality-typed-spans.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Buffer.from(XLSX.write(signedBook, { type: "buffer", bookType: "xlsx" })));
 await processVersion(signedFixture.versionId);
 const signedData = await extraction(signedFixture.versionId);
@@ -107,7 +115,14 @@ for (const [path, value, cell] of [["boqItems.0.quantity", -10, "C2"], ["boqItem
 if (findField("boqItems.2.quantity")?.status !== "missing" || !signedData.fieldQuality.requiresReview) throw Error("Unreadable numeric text was accepted as a native zero");
 const typedProposals = await db.from("document_module_proposals").select("status,payload,source_locator").eq("document_version_id", signedFixture.versionId).eq("proposal_type", "boq_item");
 if (typedProposals.error) throw typedProposals.error;
-if (typedProposals.data.length !== 3) throw Error("Native typed-span fixture did not produce the expected BOQ proposals");
+for (const [index, amount, currency, cell] of [[3, -1250, "PLN", "F5"], [4, -12, "EUR", "F6"]]) {
+  const field = findField(`boqItems.${index}.totalPrice`);
+  if (field?.value !== amount || field.source?.currency !== currency || field.source?.cell !== cell || field.status !== "verified")
+    throw Error("Incorrect accounting amount or currency at " + cell);
+}
+if (!signedData.workbookReview?.some(reason => reason.includes("EUR")) || typedProposals.data.some(row => row.status === "published"))
+  throw Error("Foreign-currency BOQ escaped review");
+if (typedProposals.data.length !== 5) throw Error("Native typed-span fixture did not produce the expected BOQ proposals");
 const unreadable = typedProposals.data.find(row => row.source_locator?.analysisPath === "boqItems.2");
 if (!unreadable?.payload.fieldQuality?.requiresReview || unreadable.status === "published") throw Error("Unreadable cell reached publication or lost its source row identity");
 if (typedProposals.data.some(row => !row.source_locator?.analysisPath || row.payload.fieldQuality.rulesVersion !== "typed-spans-20261114")) throw Error("Published proposal lost its typed-span provenance");
@@ -126,32 +141,50 @@ const progressProposals = await db.from("document_module_proposals").select("sta
 if (progressProposals.error) throw progressProposals.error;
 if (progressProposals.data.length !== 1 || !progressProposals.data[0].payload.fieldQuality?.requiresReview || progressProposals.data[0].status === "published" || progressProposals.data[0].source_locator?.analysisPath !== "progressItems.0") throw Error("Unreadable progress was not held with its original row identity");
 summary.push({ fixture: "unreadable_progress_excel", cell: "C2", rowPreserved: true, publicationGuarded: true });
-const pdf = await PDFDocument.create(); const font = await pdf.embedFont(StandardFonts.Helvetica);
-for (const lines of [
-  ["INDEPENDENT DOCUMENT 1 - COST ESTIMATE EST-QA-01", "Project Octopus test investment", "Item | Description | Quantity | Unit | Unit price PLN | Total PLN", "1 | Steel pipe DN50 | 10 | m | 20 | 200", "END OF COST ESTIMATE"],
-  ["INDEPENDENT DOCUMENT 2 - CONSTRUCTION SCHEDULE SCH-QA-02", "Project Octopus test investment", "Task S1: Pipe installation", "Planned start: 2026-11-10", "Planned finish: 2026-11-12", "END OF SCHEDULE"],
-  ["INDEPENDENT DOCUMENT 3 - ACCEPTANCE PROTOCOL PV-QA-03", "Date: 2026-11-12", "Scope: pipe pressure test", "Installation: water supply DN50", "Result: NOT ACCEPTED - leak at joint", "Repair deadline: 2026-11-15", "END OF PROTOCOL"]
-]) {
-  const page = pdf.addPage([612, 792]); lines.forEach((line, i) => page.drawText(line, { x: 35, y: 740 - i * 35, size: i ? 10 : 12, font }));
-}
-const bytes = Buffer.from(await pdf.save());
-const fixture = await upload("octopus-live-field-quality-mixed.pdf", "application/pdf", bytes);
-const processed = await processVersion(fixture.versionId);
-if (processed.package?.acceptedEntries !== 3 || processed.package.queuedVersionIds?.length !== 3) throw Error(`Mixed PDF was not split into three documents: ${JSON.stringify(processed.package ?? processed.status)}`);
-const children = [];
-for (const versionId of processed.package.queuedVersionIds) {
-  await processVersion(versionId); const data = await extraction(versionId);
-  children.push({ category: data.category, fields: data.fieldQuality.fields.length });
-  const origin = await db.from("document_intakes").select("source_metadata").eq("workspace_id", workspaceId).eq("document_id", data.fieldQuality.documentId).single();
-  if (origin.error || origin.data.source_metadata.parentVersionId !== fixture.versionId || origin.data.source_metadata.pdfLogicalChild !== true) throw Error("Child lost its original PDF lineage");
-}
-if (new Set(children.map(child => child.category)).size < 2) throw Error("Independent children were routed as one document type");
-const signedUrl = await api("/api/storage/download-url", token, { workspaceId, versionId: fixture.versionId, disposition: "inline" });
-const original = Buffer.from(await (await fetch(signedUrl.downloadUrl)).arrayBuffer());
-if (sha(original) !== sha(bytes)) throw Error("Original PDF changed during segmentation");
-summary.push({ fixture: "mixed_pdf", children, originalPreserved: true });
+await checkPdfLayout(false);
+await checkPdfLayout(true);
 await checkConstructionFlow();
 console.log("LIVE FIELD QUALITY E2E OK"); console.log(JSON.stringify(summary));
+
+async function checkPdfLayout(split) {
+  const pdf = await PDFDocument.create(); const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const pages = [
+    ["INDEPENDENT DOCUMENT 1 - COST ESTIMATE EST-QA-01", "Project Octopus test investment", "Item | Description | Quantity | Unit | Unit price PLN | Total PLN", "1 | Steel pipe DN50 | 10 | m | 20 | 200", "2 | Steel elbow DN50"],
+    ["EST-QA-01 - continuation", "Quantity | Unit | Unit price PLN | Total PLN", "1 | pc | 15 | 15", "END OF COST ESTIMATE"],
+    ["INDEPENDENT DOCUMENT 2 - CONSTRUCTION SCHEDULE SCH-QA-02", "Project Octopus test investment", "Task S1: Pipe installation", "Planned start: 2026-11-10"],
+    ["SCH-QA-02 - schedule continuation", "Task S1: Pipe installation", "Planned finish: 2026-11-12", "END OF SCHEDULE"],
+    ["INDEPENDENT DOCUMENT 3 - ACCEPTANCE PROTOCOL PV-QA-03", "Date: 2026-11-12", "Scope: pipe pressure test", "Installation: water supply DN50", "Result: NOT ACCEPTED - leak at joint", "Repair deadline: 2026-11-15", "END OF PROTOCOL"]
+
+  ];
+  const layout = split ? pages : [[...pages[0], ...pages[1]], [...pages[2], ...pages[3]], pages[4]];
+  for (const lines of layout) {
+    const page = pdf.addPage([612, 792]); lines.forEach((line, i) => page.drawText(line, { x: 35, y: 740 - i * 35, size: i ? 10 : 12, font }));
+  }
+  const bytes = Buffer.from(await pdf.save());
+  const fixture = await upload(split ? "octopus-live-field-quality-continuation.pdf" : "octopus-live-field-quality-mixed.pdf", "application/pdf", bytes);
+  const processed = await processVersion(fixture.versionId);
+  if (processed.package?.acceptedEntries !== 3 || processed.package.queuedVersionIds?.length !== 3) throw Error(`Mixed PDF was not split into three documents: ${JSON.stringify(processed.package ?? processed.status)}`);
+  const children = [];
+  const originalRanges = [];
+  for (const versionId of processed.package.queuedVersionIds) {
+    await processVersion(versionId); const data = await extraction(versionId);
+    children.push({ category: data.category, fields: data.fieldQuality.fields.length });
+    const origin = await db.from("document_intakes").select("source_metadata").eq("workspace_id", workspaceId).eq("document_id", data.fieldQuality.documentId).single();
+    const start = origin.data?.source_metadata.originalPageStart;
+    originalRanges.push([start, origin.data?.source_metadata.originalPageEnd].join("-"));
+    if (start === 1 && !data.boqItems?.some(row => row.itemNumber === "2" && row.quantity === 1 && row.unit === "pc"))
+      throw Error("BOQ item 2 lost its quantity or unit in layout " + split);
+    if (start === (split ? 3 : 2) && !data.scheduleItems?.some(row => row.plannedStart === "2026-11-10" && row.plannedFinish === "2026-11-12"))
+      throw Error("Schedule lost its dates in layout " + split);
+    if (origin.error || origin.data.source_metadata.parentVersionId !== fixture.versionId || origin.data.source_metadata.pdfLogicalChild !== true) throw Error("Child lost its original PDF lineage");
+  }
+  if (originalRanges.sort().join(",") !== (split ? "1-2,3-4,5-5" : "1-1,2-2,3-3")) throw Error("Broken continuation or merged adjacent documents: " + originalRanges);
+  if (new Set(children.map(child => child.category)).size < 2) throw Error("Independent children were routed as one document type");
+  const signedUrl = await api("/api/storage/download-url", token, { workspaceId, versionId: fixture.versionId, disposition: "inline" });
+  const original = Buffer.from(await (await fetch(signedUrl.downloadUrl)).arrayBuffer());
+  if (sha(original) !== sha(bytes)) throw Error("Original PDF changed during segmentation");
+  summary.push({ fixture: split ? "continued_pdf" : "mixed_pdf", children, originalRanges, originalPreserved: true });
+}
 
 async function checkConstructionFlow() {
   const xlsxMime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -196,17 +229,22 @@ async function checkConstructionFlow() {
   const add = (path,xml) => XLSX.CFB.utils.cfb_add(z,path,Buffer.from(xml));
   const w="http://schemas.openxmlformats.org/wordprocessingml/2006/main",rel="http://schemas.openxmlformats.org/officeDocument/2006/relationships";
   const p=t=>"<w:p><w:r><w:t>"+t+"</w:t></w:r></w:p>", cells=xs=>"<w:tr>"+xs.map(x=>"<w:tc>"+x+"</w:tc>").join("")+"</w:tr>";
-  add("[Content_Types].xml",'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/></Types>');
+  add("[Content_Types].xml",'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/></Types>');
   const relationships=items=>'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+items+'</Relationships>';
   add("_rels/.rels",relationships('<Relationship Id="r1" Type="'+rel+'/officeDocument" Target="word/document.xml"/>'));
-  add("word/_rels/document.xml.rels",relationships('<Relationship Id="f" Type="'+rel+'/footnotes" Target="footnotes.xml"/>'));
+  add("word/_rels/document.xml.rels",relationships('<Relationship Id="f" Type="'+rel+'/footnotes" Target="footnotes.xml"/><Relationship Id="image" Type="'+rel+'/image" Target="media/test.png"/>'));
   add("word/footnotes.xml",'<w:footnotes xmlns:w="'+w+'" xmlns:r="'+rel+'"><w:footnote w:id="1"><w:p><w:hyperlink r:id="photo"><w:r><w:t>Zdjęcie próby</w:t></w:r></w:hyperlink></w:p></w:footnote></w:footnotes>');
   add("word/_rels/footnotes.xml.rels",relationships('<Relationship Id="photo" Type="'+rel+'/hyperlink" Target="https://example.org/fixture.pdf" TargetMode="External"/>'));
-  add("word/document.xml",'<w:document xmlns:w="'+w+'"><w:body>'+p("Protokół próby szczelności")+'<w:tbl>'+
+  add("word/media/test.png", Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aSA0AAAAASUVORK5CYII=", "base64"));
+  const drawing = '<w:r><w:drawing><wp:inline><wp:extent cx="9525" cy="9525"/><wp:docPr id="1" name="Próba"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="test.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="image"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
+  const condition = '<w:p>'+drawing+'<w:r><w:sym w:font="Symbol" w:char="F0A3"/></w:r><m:oMath><m:r><m:t> 5 bar</m:t></m:r></m:oMath></w:p>';
+  add("word/document.xml",'<w:document xmlns:w="'+w+'" xmlns:r="'+rel+'" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>'+p("Protokół próby szczelności")+'<w:tbl>'+
     cells(["Odcinek","Ciśnienie próby","Jednostka","Punkt specyfikacji","Uwagi"].map(p))+
-    cells([p("OCT-OTHER"),p("5"),p(""),p(reference),p("Sprawdzić")])+
+    cells([p("OCT-OTHER"),p("5"),p(""),p(reference),p("Sprawdzić")+condition])+
     cells([p(scope),p("0,5"),p("MPa"),p(reference),'<w:tbl>'+cells([p("nie odebrano")])+'</w:tbl><w:p><w:r><w:footnoteReference w:id="1"/></w:r></w:p>'])+'</w:tbl></w:body></w:document>');
   const protocol=await file("protokol.docx",docxMime,Buffer.from(XLSX.CFB.write(z,{type:"buffer",fileType:"zip"})),"protocol");
+  if (!protocol.data.constructionSource?.observations?.some(row => row.scope === "OCT-OTHER" && row.locator === "Tabela 1, wiersz 2" && row.note.includes("≤ 5 bar")))
+    throw Error("Word lost the pressure condition, source row or scope beside the image");
   async function findings(kind) {
     const result=[]; let total;
     do { const page=await api("/api/projects/construction-review?projectId="+projectId+"&kind="+kind+"&offset="+result.length,token); result.push(...page.items); total=page.total; if (!page.items.length) break; } while(result.length<total);

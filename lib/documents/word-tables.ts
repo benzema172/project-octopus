@@ -30,6 +30,15 @@ function relationships(xml?: string) {
   return links;
 }
 
+// These codes use the Adobe Symbol encoding, including Word's F000 offset.
+const symbolGlyphs: Record<string, string> = { A3: "≤", B1: "±", B3: "≥", B9: "≠" };
+function wordSymbol(attributes: Record<string, string>) {
+  const code = (attributes["w:char"] ?? "").toUpperCase();
+  if (/^symbol$/i.test(attributes["w:font"] ?? "") && /^(?:F0|00)?[A-F0-9]{2}$/.test(code))
+    return symbolGlyphs[code.slice(-2)] ?? "�";
+  return "�";
+}
+
 type Cell = { text: string; links: WordLink[] };
 function readNotes(xml: string | undefined, rels: Map<string, string>) {
   const notes = new Map<string, Cell>();
@@ -43,6 +52,11 @@ function readNotes(xml: string | undefined, rels: Map<string, string>) {
       notes.set(String(attributes["w:id"] ?? attributes.id), note);
     }
     if (tag === "hyperlink") link = { label: "", target: rels.get(String(attributes["r:id"])) ?? "" };
+    if (name === "w:sym" && note) {
+      const glyph = wordSymbol(attributes);
+      note.text += glyph;
+      if (link) link.label += glyph;
+    }
     if (tag === "t") inText = true;
   });
   parser.on("text", value => { if (note && inText) { note.text += value; if (link) link.label += value; } });
@@ -79,6 +93,11 @@ export function readWordDocument(part: (path: string) => string | undefined) {
     if (tag === "tbl") { if (depth++ === 0) { finishParagraph(); table++; row = 0; } }
     if (tag === "tr" && depth === 1) { row++; cells = []; }
     if (tag === "tc" && depth === 1) { cell = { text: "", links: [] }; cells.push(cell); }
+    if (name === "w:sym") {
+      const glyph = wordSymbol(attributes);
+      append(glyph);
+      if (link) link.label += glyph;
+    }
     if (tag === "t" || tag === "delText") inText = true;
     if (tag === "tab" || tag === "br") append(cell ? " " : tag === "br" ? "\n" : "\t");
     if (tag === "hyperlink") link = { label: "", target: links.get(String(attributes["r:id"])) ?? "" };

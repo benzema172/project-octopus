@@ -65,7 +65,7 @@ export function applyWorkbookCorrections(boq: Boq[], evidence: FieldEvidence[], 
         const path = `boqItems.${index}.${field}`;
         const source = { ...entry.evidence, path };
         const old = evidenceByPath.get(path);
-        if (old) Object.assign(old, source, { formula: source.formula });
+        if (old) Object.assign(old, source, { formula: source.formula, currency: source.currency });
         else { evidence.push(source); evidenceByPath.set(path, source); }
       }
       (row.corrections ??= []).push({ locator: patch.locator, revision: patch.revision });

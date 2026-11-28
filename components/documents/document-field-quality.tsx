@@ -41,7 +41,7 @@ export function DocumentFieldQuality({ workspaceId, documentId }: { workspaceId:
         {data.report.fields.map(field => <tr key={field.path}>
           <td>{labels[field.path.split(".").at(-1) ?? ""] ?? field.path}<small> · {field.path.match(/\.\d+/)?.[0]?.slice(1) ? `pozycja ${Number(field.path.match(/\.\d+/)?.[0]?.slice(1)) + 1}` : "nagłówek"}</small></td>
           <td>{String(field.value ?? "—")}</td>
-          <td>{field.source ? <button type="button" onClick={() => void source(field.source?.page)}>{field.source.locator || "Pokaż źródło"}</button> : "Brak dowodu"}{field.source?.quote ? <q>{field.source.quote}</q> : null}</td>
+          <td>{field.source ? <button type="button" onClick={() => void source(field.source?.page)}>{field.source.locator || "Pokaż źródło"}</button> : "Brak dowodu"}{field.source?.quote ? <q>{field.source.quote}</q> : null}{field.source?.currency && <small> Waluta źródłowa: {field.source.currency}</small>}</td>
           <td>{statuses[field.status]}{field.reasons.map(reason => <small key={reason}> · {reason}</small>)}</td>
         </tr>)}
       </tbody></table></div>
