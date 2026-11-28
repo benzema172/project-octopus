@@ -69,6 +69,15 @@ function text(value: unknown) {
   return String(value ?? "").replace(/[\t\r\n]+/g, " ").trim();
 }
 
+function moneySource(key: ColumnKind, cell?: import("xlsx").CellObject): { currency?: string } {
+  if (!cell || (key !== "unitPrice" && key !== "totalPrice")) return {};
+  const display = text(cell.w ?? cell.v);
+  const marker = display.match(/\b(?:PLN|EUR|GBP|USD)\b|zł|[€£$]/iu)?.[0];
+  if (!marker) return {};
+  const symbols: Record<string, string> = { "€": "EUR", "£": "GBP", "ZŁ": "PLN" };
+  return { currency: symbols[marker.toUpperCase()] ?? marker.toUpperCase() };
+}
+
 function numeric(value: unknown) {
   return parseDocumentNumber(value) ?? 0;
 }
@@ -165,7 +174,7 @@ export function extractSpreadsheetIntelligence(buffer: Buffer): SpecialistResult
           const address = XLSX.utils.encode_cell({ r: range.s.r + rowIndex, c: range.s.c + col });
           const cell = sheet[address], raw = row[col];
           if (!text(raw) && !cell?.f && cell?.t !== "e") continue;
-          patch.fields[key] = { raw, evidence: { path: "", quote: text(raw), cell: address, origin: "native",
+          patch.fields[key] = { raw, evidence: { path: "", quote: text(raw), cell: address, origin: "native", ...moneySource(key, cell),
             locator: `${locator}, komórka ${address} (${text(rows[headerRow][col])})`, formula: cell?.f,
             missingValue: cell?.t === "e" || !text(raw) || (key !== "unit" && parseDocumentNumber(raw) === null) } };
         }
@@ -186,7 +195,7 @@ export function extractSpreadsheetIntelligence(buffer: Buffer): SpecialistResult
           const raw = row[column];
           result.fieldEvidence.push({ path: `${collection}.${index}.${key}`,
             quote: ["plannedStart", "plannedFinish", "period"].includes(key) ? isoDate(raw) || text(raw) : text(raw), locator: `${locator}, komórka ${address} (${headerValue})`, cell: address,
-            origin: "native", ...(cell?.f ? { formula: String(cell.f) } : {}),
+            origin: "native", ...moneySource(key, cell), ...(cell?.f ? { formula: String(cell.f) } : {}),
             missingValue: raw === "" || raw === undefined || cell?.t === "e"
               || (["quantity", "unitPrice", "totalPrice", "durationDays", "quantityExecuted", "quantityAccepted"].includes(key) && parseDocumentNumber(raw) === null) });
           if (cell?.f && (cell.v === undefined || cell.t === "e")) result.warnings.push(`${locator}, ${address}: formuła nie ma poprawnej zapisanej wartości; wymagane przeliczenie w Excelu.`);
@@ -274,6 +283,8 @@ export function extractSpreadsheetIntelligence(buffer: Buffer): SpecialistResult
   }
 
   result.workbookReview.push(...applyWorkbookCorrections(result.boqItems, result.fieldEvidence, corrections));
+  const foreign = result.fieldEvidence.find(field => field.currency && field.currency !== "PLN");
+  if (foreign) result.workbookReview.push(`${foreign.locator} — kwota w ${foreign.currency}. Sprawdź walutę przed publikacją kosztorysu w PLN.`);
   result.warnings.push(...result.workbookReview);
   if (workbook.SheetNames.length > MAX_SHEETS) result.warnings.push(`Pominięto arkusze powyżej limitu ${MAX_SHEETS}.`);
   for (const key of ["boqItems", "scheduleItems", "progressItems", "materialRequirements"] as const) {

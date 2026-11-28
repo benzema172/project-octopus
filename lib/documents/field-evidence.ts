@@ -7,6 +7,7 @@ export type FieldEvidence = {
   bounds?: number[];
   cell?: string;
   formula?: string;
+  currency?: string;
   missingValue?: boolean;
   origin?: "native" | "model";
   verification?: "agrees" | "disagrees" | "unavailable";
